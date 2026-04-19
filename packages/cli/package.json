@@ -1,0 +1,36 @@
+{
+  "name": "dynobox",
+  "version": "0.0.2",
+  "description": "Placeholder - Dynobox is under active development. Docs to come at https://dynobox.dev",
+  "keywords": [
+    "agent",
+    "testing",
+    "llm",
+    "claude-code",
+    "codex",
+    "evals"
+  ],
+  "homepage": "https://dynobox.dev",
+  "bugs": {
+    "url": "https://github.com/dynobox/dynobox/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dynobox/dynobox.git",
+    "directory": "packages/cli"
+  },
+  "license": "Apache-2.0",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo 'no tests yet'"
+  },
+  "author": "dynobox (https://dynobox.dev)",
+  "bin": {
+    "dynobox": "index.js"
+  },
+  "files": [
+    "index.js",
+    "README.md"
+  ]
+}

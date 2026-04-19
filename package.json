@@ -1,35 +1,11 @@
 {
-  "name": "dynobox",
-  "version": "0.0.1",
-  "description": "Placeholder - Dynobox is under active development. Docs to come at https://dynobox.dev",
-  "keywords": [
-    "agent",
-    "testing",
-    "llm",
-    "claude-code",
-    "codex",
-    "evals"
-  ],
-  "homepage": "https://dynobox.dev",
-  "bugs": {
-    "url": "https://github.com/dynobox/dynobox/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/dynobox/dynobox.git"
-  },
-  "license": "MIT",
-  "type": "commonjs",
-  "main": "index.js",
+  "name": "dynobox-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "dynobox monorepo — cross-harness testing for multi-step agent flows",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "test": "echo 'no tests yet'"
-  },
-  "author": "dynobox (https://dynobox.dev)",
-  "bin": {
-    "dynobox": "index.js"
-  },
-  "files": [
-    "index.js",
-    "README.md"
-  ]
+    "typecheck": "pnpm -r typecheck"
+  }
 }

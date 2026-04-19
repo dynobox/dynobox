@@ -1,1 +1,28 @@
+# Dependencies
 node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Turborepo
+.turbo/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Editors
+.vscode/
+.idea/
+*.swp
