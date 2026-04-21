@@ -20,6 +20,7 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "echo 'no tests yet'"
   },
   "author": "dynobox (https://dynobox.dev)",
