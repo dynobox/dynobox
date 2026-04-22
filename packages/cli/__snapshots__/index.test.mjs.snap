@@ -1,0 +1,15 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`packages/cli placeholder > matches the placeholder output snapshot 1`] = `
+"
+  dynobox
+
+  Cross-harness testing for multi-step agent flows.
+
+  This package is a placeholder. Dynobox is under active development.
+
+  Follow along:  https://dynobox.dev
+  GitHub:        https://github.com/dynobox/dynobox
+
+"
+`;
