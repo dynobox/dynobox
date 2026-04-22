@@ -6,10 +6,19 @@
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
+    "format": "prettier --write \"**/*.{js,cjs,mjs,ts,cts,mts,tsx,jsx,json}\" && eslint --fix .",
+    "lint": "prettier --check \"**/*.{js,cjs,mjs,ts,cts,mts,tsx,jsx,json}\" && eslint .",
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.2.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-simple-import-sort": "^13.0.0",
+    "globals": "^17.5.0",
+    "prettier": "^3.8.3",
     "tsx": "^4.21.0",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.0"
   }
 }
