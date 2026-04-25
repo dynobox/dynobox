@@ -17,18 +17,27 @@
     "directory": "packages/cli"
   },
   "license": "Apache-2.0",
-  "type": "commonjs",
-  "main": "index.js",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
+    "build": "tsup src/index.ts src/bin.ts --format esm --splitting false --clean && tsc -p tsconfig.json --emitDeclarationOnly --declaration",
+    "prepack": "pnpm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "pnpm run build && vitest run"
   },
   "author": "dynobox (https://dynobox.dev)",
   "bin": {
-    "dynobox": "index.js"
+    "dynobox": "dist/bin.js"
   },
   "files": [
-    "index.js",
+    "dist",
     "README.md",
     "LICENSE"
   ]

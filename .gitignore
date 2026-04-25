@@ -26,3 +26,6 @@ pnpm-debug.log*
 .vscode/
 .idea/
 *.swp
+
+# Local planning docs
+plans/

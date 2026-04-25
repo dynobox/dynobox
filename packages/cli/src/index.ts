@@ -1,11 +1,12 @@
-#!/usr/bin/env node
-
 const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
 const PURPLE = '\x1b[38;5;141m';
 const DIM = '\x1b[2m';
 
-console.error(`
+export const placeholderExitCode = 1;
+
+export function renderPlaceholderMessage(): string {
+  return `
   ${BOLD}${PURPLE}dynobox${RESET}
 
   Cross-harness testing for multi-step agent flows.
@@ -14,6 +15,10 @@ console.error(`
 
   Follow along:  ${PURPLE}https://dynobox.dev${RESET}
   GitHub:        ${PURPLE}https://github.com/dynobox/dynobox${RESET}
-`);
+`;
+}
 
-process.exit(1);
+export function runCli(): number {
+  process.stderr.write(renderPlaceholderMessage());
+  return placeholderExitCode;
+}

@@ -12,12 +12,14 @@
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
+    "@types/node": "^24.9.1",
     "@eslint/js": "^10.0.1",
     "eslint": "^10.2.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-simple-import-sort": "^13.0.0",
     "globals": "^17.5.0",
     "prettier": "^3.8.3",
+    "tsup": "^8.5.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.0",
