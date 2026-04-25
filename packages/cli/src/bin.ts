@@ -2,4 +2,4 @@
 
 import {runCli} from './index.js';
 
-process.exit(runCli());
+process.exit(await runCli());
