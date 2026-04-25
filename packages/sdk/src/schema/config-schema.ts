@@ -55,6 +55,7 @@ export const scenarioSchema = z.object({
   name: z.string().min(1),
   prompt: z.string().min(1),
   harness: z.enum(HARNESS_IDS).optional(),
+  setup: z.array(z.string().min(1)).optional(),
   endpoints: z.record(z.string(), endpointSchema).optional(),
   assertions: z.array(assertionSchema).optional(),
 });
@@ -63,6 +64,7 @@ export const configSchema = z.object({
   name: z.string().optional(),
   version: z.string().optional(),
   harness: z.enum(HARNESS_IDS).optional(),
+  setup: z.array(z.string().min(1)).optional(),
   endpoints: z.record(z.string(), endpointSchema).optional(),
   scenarios: z.array(scenarioSchema).min(1),
 });

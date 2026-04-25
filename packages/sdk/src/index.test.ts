@@ -180,6 +180,7 @@ describe('packages/sdk', () => {
             "id": "scenario.lookup-package-metadata",
             "name": "lookup package metadata",
             "prompt": "Find the latest published version of the npm package prettier and tell me its license.",
+            "setup": [],
           },
           {
             "assertions": [
@@ -213,6 +214,7 @@ describe('packages/sdk', () => {
             "id": "scenario.avoid-unrelated-lookup",
             "name": "avoid unrelated lookup",
             "prompt": "Find the latest published version of prettier. Do not look up unrelated packages.",
+            "setup": [],
           },
           {
             "assertions": [
@@ -253,6 +255,7 @@ describe('packages/sdk', () => {
             "id": "scenario.compare-two-packages",
             "name": "compare two packages",
             "prompt": "Compare the latest versions of prettier and typescript.",
+            "setup": [],
           },
         ],
         "version": "0.1",
@@ -287,6 +290,63 @@ describe('packages/sdk', () => {
       'endpoint.admin-path.getUser',
       'endpoint.admin-path.deleteUser',
     ]);
+  });
+
+  it('compiles global and scenario setup commands into a merged array', () => {
+    const config = defineConfig({
+      setup: ['git clone https://example.com/repo.git .'],
+      scenarios: [
+        {
+          name: 'with local setup',
+          prompt: 'p',
+          setup: ['npm install'],
+        },
+      ],
+    });
+
+    const ir = compile(config);
+    expect(ir.scenarios[0]!.setup).toEqual([
+      'git clone https://example.com/repo.git .',
+      'npm install',
+    ]);
+  });
+
+  it('compiles global-only setup into each scenario', () => {
+    const config = defineConfig({
+      setup: ['npm install'],
+      scenarios: [
+        {name: 'a', prompt: 'p'},
+        {name: 'b', prompt: 'q'},
+      ],
+    });
+
+    const ir = compile(config);
+    expect(ir.scenarios[0]!.setup).toEqual(['npm install']);
+    expect(ir.scenarios[1]!.setup).toEqual(['npm install']);
+  });
+
+  it('compiles scenario-only setup without global', () => {
+    const config = defineConfig({
+      scenarios: [
+        {
+          name: 'local only',
+          prompt: 'p',
+          setup: ['echo hello'],
+        },
+      ],
+    });
+
+    const ir = compile(config);
+    expect(ir.scenarios[0]!.setup).toEqual(['echo hello']);
+  });
+
+  it('produces an empty setup array when setup is omitted', () => {
+    const config = defineConfig({
+      scenarios: [{name: 'no setup', prompt: 'p'}],
+    });
+
+    const ir = compile(config);
+    expect(ir.scenarios[0]!.setup).toEqual([]);
   });
 
   it('disambiguates colliding scenario slugs deterministically', () => {

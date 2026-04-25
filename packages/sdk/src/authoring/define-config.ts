@@ -37,6 +37,7 @@ export function defineConfig<
   name?: string;
   version?: string;
   harness?: HarnessId;
+  setup?: string[];
   endpoints?: GE;
   scenarios: S & ConstrainScenarios<GE, S>;
 }): DynoboxConfig {

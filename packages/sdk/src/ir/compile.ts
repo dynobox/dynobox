@@ -63,11 +63,17 @@ export function compile(config: DynoboxConfig): Ir {
     const harness: HarnessId =
       scenario.harness ?? parsed.harness ?? 'claude-code';
 
+    const setup: string[] = [
+      ...(parsed.setup ?? []),
+      ...(scenario.setup ?? []),
+    ];
+
     return {
       id: scenarioId,
       name: scenario.name,
       prompt: scenario.prompt,
       harness,
+      setup,
       endpoints: irEndpoints,
       assertions: irAssertions,
     };

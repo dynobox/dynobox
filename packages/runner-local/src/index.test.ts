@@ -10,6 +10,7 @@ const job: LocalRunnerJob = {
     name: 'lookup package metadata',
     prompt: 'Find the latest published version of prettier.',
     harness: 'claude-code',
+    setup: [],
     endpoints: [
       {
         id: 'endpoint.lookup-package-metadata.getPrettierMetadata',
