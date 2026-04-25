@@ -27,7 +27,7 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts src/bin.ts --format esm --splitting false --clean && tsc -p tsconfig.json --emitDeclarationOnly --declaration",
+    "build": "tsup src/index.ts src/bin.ts --format esm --splitting false --clean && tsc -p tsconfig.build.json --emitDeclarationOnly --declaration",
     "prepack": "pnpm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm run build && vitest run"
