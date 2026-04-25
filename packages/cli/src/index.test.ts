@@ -18,6 +18,12 @@ const EXPECTED_STDERR = `
   GitHub:        https://github.com/dynobox/dynobox
 `;
 
+/**
+ * Removes ANSI escape sequences so test assertions can compare plain text.
+ *
+ * @param text The terminal output to normalize.
+ * @returns The input string without ANSI escape codes.
+ */
 function stripAnsi(text: string): string {
   return text.replaceAll('\x1B', '').replace(ANSI_ESCAPE_PATTERN, '');
 }

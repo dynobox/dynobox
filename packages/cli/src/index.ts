@@ -5,6 +5,11 @@ const DIM = '\x1b[2m';
 
 export const placeholderExitCode = 1;
 
+/**
+ * Renders the current placeholder CLI message with ANSI styling.
+ *
+ * @returns The formatted message written by the placeholder CLI.
+ */
 export function renderPlaceholderMessage(): string {
   return `
   ${BOLD}${PURPLE}dynobox${RESET}
@@ -18,6 +23,11 @@ export function renderPlaceholderMessage(): string {
 `;
 }
 
+/**
+ * Executes the current placeholder CLI behavior.
+ *
+ * @returns The exit code for the placeholder CLI process.
+ */
 export function runCli(): number {
   process.stderr.write(renderPlaceholderMessage());
   return placeholderExitCode;
