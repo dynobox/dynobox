@@ -1,17 +1,34 @@
 # dynobox
 
-Cross-harness testing for multi-step agent flows.
+CLI for authoring and running Dynobox scenario configs.
 
-This package is a placeholder. Dynobox is under active development.
+Dynobox is under active development and not ready for external use.
 
 - Site: [dynobox.dev](https://dynobox.dev)
 - GitHub: [github.com/dynobox/dynobox](https://github.com/dynobox/dynobox)
 
 ## Current status
 
-The CLI currently builds and runs as a real TypeScript package, but its runtime behavior is still the placeholder message while Milestone 1 is in progress.
+The CLI currently loads an explicit config path, resolves the config module's default export, compiles it with `@dynobox/sdk`, and prints a compile preview.
 
-Running the CLI currently prints the placeholder message and exits with code `1`.
+Local runner execution is not wired in yet.
+
+Example:
+
+```bash
+node packages/cli/dist/bin.js run examples/npm-package-research/dynobox.config.ts
+```
+
+Expected preview:
+
+```text
+dynobox run
+
+config: examples/npm-package-research/dynobox.config.ts
+scenarios: 3
+harnesses: 1
+assertions: 4
+```
 
 ## Local development
 
@@ -20,7 +37,7 @@ Run from the repository root:
 ```bash
 pnpm --filter dynobox test
 pnpm --filter dynobox typecheck
-pnpm --filter dynobox build
+pnpm --filter dynobox... build
 node packages/cli/dist/bin.js
 ```
 

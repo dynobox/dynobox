@@ -2,7 +2,7 @@
 
 TypeScript SDK for authoring Dynobox scenario configs.
 
-This package is an early scaffold for Milestone 1. It currently provides the initial config contract and placeholder exports that the CLI will build on next.
+This package provides the Milestone 1 authoring contract, helper functions, config module resolver, and canonical IR compiler used by the CLI and local runner scaffold.
 
 - Site: [dynobox.dev](https://dynobox.dev)
 - GitHub: [github.com/dynobox/dynobox](https://github.com/dynobox/dynobox)
@@ -10,11 +10,13 @@ This package is an early scaffold for Milestone 1. It currently provides the ini
 ## Current exports
 
 - `defineConfig(config)`
+- `defineScenario(scenario)`
 - `compile(config)`
 - `resolveConfigModule(moduleExport)`
-- `http.endpoint()` placeholder
-- `http.called()` placeholder
-- `http.notCalled()` placeholder
+- `http.endpoint()`
+- `http.called()`
+- `http.notCalled()`
+- IR schemas and derived IR types
 
 ## Config contract
 
@@ -29,7 +31,7 @@ Run from the repository root:
 ```bash
 pnpm --filter @dynobox/sdk test
 pnpm --filter @dynobox/sdk typecheck
-pnpm --filter @dynobox/sdk build
+pnpm --filter @dynobox/sdk... build
 ```
 
 Run from `packages/sdk`:
