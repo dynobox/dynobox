@@ -6,10 +6,14 @@
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "format": "prettier --write \"**/*.{js,cjs,mjs,ts,cts,mts,tsx,jsx,json}\" && eslint --fix .",
-    "lint": "prettier --check \"**/*.{js,cjs,mjs,ts,cts,mts,tsx,jsx,json}\" && eslint .",
+    "check": "npm run format && npm run lint",
+    "format": "prettier --check \"**/*.{js,cjs,mjs,ts,cts,mts,tsx,jsx,json}\"",
+    "format:write": "prettier --write \"**/*.{js,cjs,mjs,ts,cts,mts,tsx,jsx,json}\"",
+    "lint": "eslint .",
+    "lint:write": "eslint . --fix",
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "write": "npm run format:write && npm run lint:write"
   },
   "devDependencies": {
     "@types/node": "^24.9.1",

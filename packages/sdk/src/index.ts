@@ -1,71 +1,35 @@
-import {z} from 'zod';
-
 export const version = '0.0.1';
 
-const scenarioSchema = z.object({
-  name: z.string(),
-  prompt: z.string(),
-});
-
-export const configSchema = z.object({
-  scenarios: z.array(scenarioSchema),
-});
-
-const configModuleSchema = z.object({
-  default: configSchema,
-});
-
-export type DynoboxScenarioConfig = z.infer<typeof scenarioSchema>;
-export type DynoboxConfig = z.infer<typeof configSchema>;
-
-type HttpPlaceholder = (...args: unknown[]) => never;
-
-/**
- * Creates a placeholder helper that throws until the real SDK helper API exists.
- *
- * @param name The helper name to include in the error message.
- * @returns A function that throws when invoked.
- */
-function createNotImplementedHelper(name: string): HttpPlaceholder {
-  return () => {
-    throw new Error(`${name} is not implemented yet.`);
-  };
-}
-
-export const http = {
-  endpoint: createNotImplementedHelper('http.endpoint'),
-  called: createNotImplementedHelper('http.called'),
-  notCalled: createNotImplementedHelper('http.notCalled'),
-};
-
-/**
- * Provides a typed passthrough for authoring Dynobox configs in TypeScript.
- *
- * @param config The config object authored by the user.
- * @returns The same config object, preserving its inferred type.
- */
-export function defineConfig<TConfig extends DynoboxConfig>(
-  config: TConfig,
-): TConfig {
-  return config;
-}
-
-/**
- * Validates a Dynobox config at runtime using the current scaffold schema.
- *
- * @param config The config object to validate.
- * @returns The validated config object.
- */
-export function compile(config: DynoboxConfig): DynoboxConfig {
-  return configSchema.parse(config);
-}
-
-/**
- * Resolves a loaded config module and enforces the default-export contract.
- *
- * @param moduleExport The raw module namespace object returned by the loader.
- * @returns The validated Dynobox config from the module default export.
- */
-export function resolveConfigModule(moduleExport: unknown): DynoboxConfig {
-  return configModuleSchema.parse(moduleExport).default;
-}
+export {defineConfig} from './authoring/define-config.js';
+export {defineScenario} from './authoring/define-scenario.js';
+export {DynoboxConfigError} from './errors.js';
+export {http} from './http/index.js';
+export {compile} from './ir/compile.js';
+export {slugify} from './ir/ids.js';
+export {
+  irAssertionSchema,
+  irEndpointSchema,
+  irScenarioSchema,
+  irSchema,
+  irVersionSchema,
+} from './ir/schema.js';
+export {
+  type Ir,
+  IR_VERSION,
+  type IrAssertion,
+  type IrEndpoint,
+  type IrScenario,
+  type IrVersion,
+} from './ir/types.js';
+export {configSchema} from './schema/config-schema.js';
+export {resolveConfigModule} from './schema/resolve-module.js';
+export type {
+  Assertion,
+  CalledAssertion,
+  Endpoint,
+  NotCalledAssertion,
+} from './types/brands.js';
+export type {DynoboxConfig, ScenarioInput} from './types/config.js';
+export type {EndpointSpec} from './types/endpoint-spec.js';
+export {HARNESS_IDS, type HarnessId} from './types/harness.js';
+export {HTTP_METHODS, type HttpMethod} from './types/http-method.js';
