@@ -1,5 +1,13 @@
 import type {IrScenario} from '@dynobox/sdk';
 
+export {FakeHarness} from './harnesses/index.js';
+export type {
+  Harness,
+  HarnessInput,
+  HarnessResult,
+  HarnessRunOutput,
+} from './harnesses/index.js';
+
 export type LocalRunnerJob = {
   id: string;
   scenario: IrScenario;
