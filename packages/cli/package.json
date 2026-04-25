@@ -40,5 +40,8 @@
     "dist",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "dependencies": {
+    "commander": "^14.0.3"
+  }
 }
