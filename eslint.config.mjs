@@ -28,7 +28,7 @@ export default [
     rules: {
       '@typescript-eslint/no-unused-vars': [
         'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+        {argsIgnorePattern: '^_', varsIgnorePattern: '^_'},
       ],
       'simple-import-sort/imports': 'error',
       'simple-import-sort/exports': 'error',

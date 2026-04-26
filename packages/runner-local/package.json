@@ -19,7 +19,8 @@
     "test": "pnpm run build && vitest run"
   },
   "dependencies": {
-    "@dynobox/sdk": "workspace:*"
+    "@dynobox/sdk": "workspace:*",
+    "execa": "^9.6.1"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",
