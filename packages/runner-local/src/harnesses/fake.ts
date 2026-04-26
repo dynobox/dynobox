@@ -11,6 +11,7 @@ import type {
  * spawn a real agent process.
  */
 export class FakeHarness implements Harness {
+  // This is a tempoorary hard coded id value
   readonly id = 'claude-code' as const;
 
   private readonly response: HarnessRunOutput;

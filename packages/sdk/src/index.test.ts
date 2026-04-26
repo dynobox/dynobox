@@ -428,7 +428,6 @@ describe('packages/sdk', () => {
   // Pure type-level smoke test: this code should not type-check if the
   // assertion key constraint is broken. Wrapped in a never-called function
   // so it has zero runtime cost but participates in `tsc`.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function _typeCheck() {
     defineConfig({
       endpoints: {
