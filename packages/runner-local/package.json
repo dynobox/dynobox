@@ -19,6 +19,7 @@
     "test": "pnpm run build && vitest run"
   },
   "dependencies": {
+    "@dynobox/evaluators": "workspace:*",
     "@dynobox/sdk": "workspace:*",
     "execa": "^9.6.1"
   },

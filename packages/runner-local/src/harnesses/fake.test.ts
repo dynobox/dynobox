@@ -3,7 +3,12 @@ import {describe, expect, it} from 'vitest';
 
 import {FakeHarness} from './fake.js';
 import {normalizeToolKind} from './tool-events.js';
-import type {HarnessInput, HarnessRunOutput, ToolEvent} from './types.js';
+import type {
+  HarnessInput,
+  HarnessRunOutput,
+  ShellToolEvent,
+  ToolEvent,
+} from './types.js';
 
 const input: HarnessInput = {
   prompt: 'Find the latest version of prettier.',
@@ -11,14 +16,16 @@ const input: HarnessInput = {
   env: {HTTPS_PROXY: 'http://localhost:8080'},
 };
 
+const shellToolEvent: ShellToolEvent = {
+  kind: 'shell',
+  rawName: 'Bash',
+  input: {command: 'pnpm test'},
+  command: 'pnpm test',
+  status: 'success',
+};
+
 const toolEvents: ToolEvent[] = [
-  {
-    kind: 'shell',
-    rawName: 'Bash',
-    input: {command: 'pnpm test'},
-    command: 'pnpm test',
-    status: 'success',
-  },
+  shellToolEvent,
   {
     kind: 'edit_file',
     rawName: 'Edit',

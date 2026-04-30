@@ -91,6 +91,9 @@ importers:
 
   packages/runner-local:
     dependencies:
+      '@dynobox/evaluators':
+        specifier: workspace:*
+        version: link:../evaluators
       '@dynobox/sdk':
         specifier: workspace:*
         version: link:../sdk
