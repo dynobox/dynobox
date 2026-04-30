@@ -1,6 +1,7 @@
 import {mkdirSync, rmSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 
+import {FakeHarness, type ShellToolEvent} from '@dynobox/runner-local';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 
 import {
@@ -9,8 +10,9 @@ import {
   placeholderExitCode,
   renderPlaceholderMessage,
   renderRunConfigErrorMessage,
-  renderRunPreviewMessage,
+  renderRunHeader,
   runCli,
+  runFailureExitCode,
 } from './index.js';
 
 const ANSI_ESCAPE_PATTERN = /\x5B[0-9;]*m/g;
@@ -27,32 +29,17 @@ const EXPECTED_STDERR = `
 const FIXTURE_DIR = join(process.cwd(), '.tmp-dynobox-cli-tests');
 const VALID_CONFIG_PATH = join(FIXTURE_DIR, 'valid.config.ts');
 const INVALID_CONFIG_PATH = join(FIXTURE_DIR, 'invalid.config.ts');
-const VALID_CONFIG = `import {defineConfig, http} from '@dynobox/sdk';
+const VALID_CONFIG = `import {defineConfig, tool} from '@dynobox/sdk';
 
 export default defineConfig({
-  name: 'cli-preview',
-  endpoints: {
-    prettier: http.endpoint({
-      method: 'GET',
-      url: 'https://registry.npmjs.org/prettier',
-    }),
-    typescript: http.endpoint({
-      method: 'GET',
-      url: 'https://registry.npmjs.org/typescript',
-    }),
-  },
+  name: 'cli-local-runner',
   scenarios: [
     {
-      name: 'lookup package metadata',
-      prompt: 'Find the latest published version of prettier.',
-      assertions: [http.called('prettier', {status: 200})],
-    },
-    {
-      name: 'compare package metadata',
-      prompt: 'Compare prettier and typescript.',
+      name: 'uses shell',
+      prompt: 'Run pnpm test and summarize the result.',
       assertions: [
-        http.called('prettier', {status: 200}),
-        http.called('typescript', {status: 200}),
+        tool.called('shell'),
+        tool.called('shell', {includes: 'pnpm test'}),
       ],
     },
   ],
@@ -62,6 +49,25 @@ const INVALID_CONFIG = `export default {
   scenarios: [{name: 'missing prompt'}],
 };
 `;
+const SHELL_EVENT: ShellToolEvent = {
+  kind: 'shell',
+  rawName: 'Bash',
+  input: {command: 'pnpm test'},
+  command: 'pnpm test',
+};
+
+function createPassingHarness(): FakeHarness {
+  return new FakeHarness(undefined, {toolEvents: [SHELL_EVENT]});
+}
+
+function expectedPassingRunOutput(configPath: string): string {
+  return `${renderRunHeader(configPath, 1)}[1/1] uses shell claude-code iter 1 PASS
+
+Assertions:
+PASS tool.called(shell)
+PASS tool.called(shell, includes: pnpm test)
+`;
+}
 
 /**
  * Removes ANSI escape sequences so test assertions can compare plain text.
@@ -89,19 +95,12 @@ describe('packages/cli', () => {
     expect(stripAnsi(renderPlaceholderMessage())).toBe(EXPECTED_STDERR);
   });
 
-  it('renders the run preview message', () => {
-    expect(
-      renderRunPreviewMessage('./config.ts', {
-        scenarios: 2,
-        harnesses: 1,
-        assertions: 3,
-      }),
-    ).toBe(`dynobox run
+  it('renders the run header', () => {
+    expect(renderRunHeader('./config.ts', 2)).toBe(`dynobox run
 
 config: ./config.ts
-scenarios: 2
-harnesses: 1
-assertions: 3
+jobs: 2
+
 `);
   });
 
@@ -133,16 +132,49 @@ error: bad config
     );
   });
 
-  it('loads and compiles an explicit config path', async () => {
-    await expect(executeCli(['run', VALID_CONFIG_PATH])).resolves.toEqual({
-      exitCode: 0,
-      stdout: renderRunPreviewMessage(VALID_CONFIG_PATH, {
-        scenarios: 2,
-        harnesses: 1,
-        assertions: 3,
+  it('runs an explicit config path', async () => {
+    await expect(
+      executeCli(['run', VALID_CONFIG_PATH], {
+        harnesses: [createPassingHarness()],
       }),
+    ).resolves.toEqual({
+      exitCode: 0,
+      stdout: expectedPassingRunOutput(VALID_CONFIG_PATH),
       stderr: '',
     });
+  });
+
+  it('exits nonzero when assertions fail', async () => {
+    const result = await executeCli(['run', VALID_CONFIG_PATH], {
+      harnesses: [new FakeHarness()],
+    });
+
+    expect(result.exitCode).toBe(runFailureExitCode);
+    expect(result.stdout)
+      .toBe(`${renderRunHeader(VALID_CONFIG_PATH, 1)}[1/1] uses shell claude-code iter 1 FAIL
+
+Assertions:
+FAIL tool.called(shell)
+FAIL tool.called(shell, includes: pnpm test)
+`);
+    expect(result.stderr).toBe('');
+  });
+
+  it('exits nonzero with diagnostics when local execution fails', async () => {
+    const result = await executeCli(['run', VALID_CONFIG_PATH], {
+      harnesses: [],
+    });
+
+    expect(result.exitCode).toBe(runFailureExitCode);
+    expect(result.stdout)
+      .toBe(`${renderRunHeader(VALID_CONFIG_PATH, 1)}[1/1] uses shell claude-code iter 1 FAIL
+
+Assertions:
+(none)
+`);
+    expect(result.stderr).toBe(`Diagnostics:
+scenario.uses-shell.iteration.0: No harness registered for scenario harness "claude-code".
+`);
   });
 
   it('exits nonzero when config validation fails', async () => {
@@ -188,19 +220,19 @@ error: bad config
     stderrWrite.mockRestore();
   });
 
-  it('writes run preview output to stdout and returns the exit code', async () => {
+  it('writes run output to stdout and returns the exit code', async () => {
     const stdoutWrite = vi
       .spyOn(process.stdout, 'write')
       .mockImplementation(() => true);
 
-    await expect(runCli(['run', VALID_CONFIG_PATH])).resolves.toBe(0);
+    await expect(
+      runCli(['run', VALID_CONFIG_PATH], {
+        harnesses: [createPassingHarness()],
+      }),
+    ).resolves.toBe(0);
     expect(stdoutWrite).toHaveBeenCalledOnce();
     expect(stdoutWrite.mock.calls[0]?.[0]).toBe(
-      renderRunPreviewMessage(VALID_CONFIG_PATH, {
-        scenarios: 2,
-        harnesses: 1,
-        assertions: 3,
-      }),
+      expectedPassingRunOutput(VALID_CONFIG_PATH),
     );
 
     stdoutWrite.mockRestore();

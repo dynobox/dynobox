@@ -9,25 +9,29 @@ Dynobox is under active development and not ready for external use.
 
 ## Current status
 
-The CLI currently loads an explicit config path, resolves the config module's default export, compiles it with `@dynobox/sdk`, and prints a compile preview.
+The CLI currently loads an explicit config path, resolves the config module's default export, compiles it with `@dynobox/sdk`, and runs local jobs with `@dynobox/runner-local`.
 
-Local runner execution is not wired in yet.
+Local execution currently supports harness tool assertions. HTTP capture and HTTP assertion evaluation are not wired in yet.
 
 Example:
 
 ```bash
-node packages/cli/dist/bin.js run examples/npm-package-research/dynobox.config.ts
+node packages/cli/dist/bin.js run examples/local-observability/dynobox.config.ts
 ```
 
-Expected preview:
+Expected output shape:
 
 ```text
 dynobox run
 
-config: examples/npm-package-research/dynobox.config.ts
-scenarios: 3
-harnesses: 1
-assertions: 4
+config: examples/local-observability/dynobox.config.ts
+jobs: 1
+
+[1/1] inspect package scripts claude-code iter 1 PASS
+
+Assertions:
+PASS tool.called(shell)
+PASS tool.called(shell, includes: package.json)
 ```
 
 ## Local development

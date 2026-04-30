@@ -53,6 +53,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@dynobox/runner-local':
+        specifier: workspace:*
+        version: link:../runner-local
       '@dynobox/sdk':
         specifier: workspace:*
         version: link:../sdk
