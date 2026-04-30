@@ -20,6 +20,32 @@ export type HarnessRunOutput = {
   durationMs: number;
 };
 
+export type ToolKind =
+  | 'shell'
+  | 'read_file'
+  | 'write_file'
+  | 'edit_file'
+  | 'search_files'
+  | 'web_fetch'
+  | 'web_search'
+  | 'mcp'
+  | 'task'
+  | 'unknown';
+
+export type ToolEvent = {
+  kind: ToolKind;
+  rawName: string;
+  input: unknown;
+  status?: 'success' | 'failure';
+  startedAt?: string;
+  completedAt?: string;
+};
+
+export type ShellToolEvent = ToolEvent & {
+  kind: 'shell';
+  command: string;
+};
+
 /** Structured result after extracting transcript and final message. */
 export type HarnessResult = {
   exitCode: number;
@@ -28,6 +54,8 @@ export type HarnessResult = {
   transcript: string;
   /** The final assistant message, if extractable. */
   finalMessage: string | undefined;
+  /** Canonicalized harness tool events observed during the run. */
+  toolEvents: ToolEvent[];
 };
 
 /**

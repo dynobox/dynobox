@@ -5,8 +5,11 @@ export type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
+  ShellToolEvent,
+  ToolEvent,
+  ToolKind,
 } from './harnesses/index.js';
-export {FakeHarness} from './harnesses/index.js';
+export {FakeHarness, normalizeToolKind} from './harnesses/index.js';
 export type {RunSetupOptions, SetupCommandLog, SetupResult} from './setup.js';
 export {runScenarioSetup, runSetup} from './setup.js';
 

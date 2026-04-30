@@ -3,6 +3,7 @@ import type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
+  ToolEvent,
 } from './types.js';
 
 /**
@@ -15,8 +16,12 @@ export class FakeHarness implements Harness {
   readonly id = 'claude-code' as const;
 
   private readonly response: HarnessRunOutput;
+  private readonly toolEvents: ToolEvent[];
 
-  constructor(response?: Partial<HarnessRunOutput>) {
+  constructor(
+    response?: Partial<HarnessRunOutput>,
+    options?: {toolEvents?: ToolEvent[]},
+  ) {
     this.response = {
       exitCode: 0,
       stdout: 'fake output',
@@ -24,6 +29,7 @@ export class FakeHarness implements Harness {
       durationMs: 100,
       ...response,
     };
+    this.toolEvents = options?.toolEvents ?? [];
   }
 
   async run(_input: HarnessInput): Promise<HarnessRunOutput> {
@@ -36,6 +42,7 @@ export class FakeHarness implements Harness {
       durationMs: raw.durationMs,
       transcript: raw.stdout,
       finalMessage: raw.stdout || undefined,
+      toolEvents: this.toolEvents,
     };
   }
 }
