@@ -10,6 +10,8 @@ import {
   IR_VERSION,
   irSchema,
   resolveConfigModule,
+  tool,
+  type ToolCalledAssertion,
   version,
 } from './index.js';
 
@@ -23,12 +25,19 @@ describe('packages/sdk', () => {
     expect(typeof http.endpoint).toBe('function');
     expect(typeof http.called).toBe('function');
     expect(typeof http.notCalled).toBe('function');
+    expect(typeof tool.called).toBe('function');
   });
 
   it('preserves the endpoint key as a literal type on assertion helpers', () => {
     const a = http.called('getUser');
     expectTypeOf(a).toEqualTypeOf<CalledAssertion<'getUser'>>();
     expectTypeOf(a.endpoint).toEqualTypeOf<'getUser'>();
+  });
+
+  it('preserves the tool kind as a literal type on assertion helpers', () => {
+    const a = tool.called('shell', {includes: 'pnpm test'});
+    expectTypeOf(a).toEqualTypeOf<ToolCalledAssertion<'shell'>>();
+    expectTypeOf(a.toolKind).toEqualTypeOf<'shell'>();
   });
 
   it('compile returns a deterministic IR for a minimal config', () => {
@@ -86,6 +95,98 @@ describe('packages/sdk', () => {
     });
 
     expect(irSchema.parse(compile(config))).toEqual(compile(config));
+  });
+
+  it('compiles tool assertions to canonical IR', () => {
+    const config = defineConfig({
+      scenarios: [
+        {
+          name: 'uses shell',
+          prompt: 'Run pnpm test.',
+          assertions: [
+            tool.called('shell'),
+            tool.called('shell', {includes: 'pnpm test'}),
+            tool.called('edit_file'),
+          ],
+        },
+      ],
+    });
+
+    const ir = compile(config);
+
+    expect(ir.scenarios[0]!.assertions).toEqual([
+      {
+        id: 'assertion.uses-shell.0',
+        kind: 'tool.called',
+        toolKind: 'shell',
+      },
+      {
+        id: 'assertion.uses-shell.1',
+        kind: 'tool.called',
+        toolKind: 'shell',
+        matcher: {includes: 'pnpm test'},
+      },
+      {
+        id: 'assertion.uses-shell.2',
+        kind: 'tool.called',
+        toolKind: 'edit_file',
+      },
+    ]);
+    expect(irSchema.parse(ir)).toEqual(ir);
+  });
+
+  it('rejects invalid tool kinds in runtime config validation', () => {
+    const bad = {
+      scenarios: [
+        {
+          name: 'bad tool kind',
+          prompt: 'p',
+          assertions: [{kind: 'tool.called', toolKind: 'not_real'}],
+        },
+      ],
+    } as unknown as Parameters<typeof compile>[0];
+
+    expect(() => compile(bad)).toThrow(/Invalid option/);
+  });
+
+  it('rejects invalid shell matcher shapes in runtime config validation', () => {
+    const bad = {
+      scenarios: [
+        {
+          name: 'bad shell matcher',
+          prompt: 'p',
+          assertions: [
+            {
+              kind: 'tool.called',
+              toolKind: 'shell',
+              matcher: {contains: 'pnpm'},
+            },
+          ],
+        },
+      ],
+    } as unknown as Parameters<typeof compile>[0];
+
+    expect(() => compile(bad)).toThrow(/Shell tool matcher/);
+  });
+
+  it('rejects matchers on non-shell tool assertions', () => {
+    const bad = {
+      scenarios: [
+        {
+          name: 'bad non-shell matcher',
+          prompt: 'p',
+          assertions: [
+            {
+              kind: 'tool.called',
+              toolKind: 'edit_file',
+              matcher: {includes: 'src/index.ts'},
+            },
+          ],
+        },
+      ],
+    } as unknown as Parameters<typeof compile>[0];
+
+    expect(() => compile(bad)).toThrow(/only supported/);
   });
 
   it('rejects malformed canonical IR shapes', () => {
@@ -286,7 +387,14 @@ describe('packages/sdk', () => {
       'deleteUser',
       'getUser',
     ]);
-    expect(scenario.assertions.map((a) => a.endpointId)).toEqual([
+    expect(
+      scenario.assertions.map((a) => {
+        if (a.kind === 'tool.called') {
+          throw new Error('Unexpected tool assertion');
+        }
+        return a.endpointId;
+      }),
+    ).toEqual([
       'endpoint.admin-path.getUser',
       'endpoint.admin-path.deleteUser',
     ]);
@@ -456,5 +564,27 @@ describe('packages/sdk', () => {
         },
       ],
     });
+
+    // Tool assertions are endpoint-independent, but shell matchers only apply
+    // to the canonical shell tool kind.
+    defineConfig({
+      scenarios: [
+        {
+          name: 'tools',
+          prompt: 'p',
+          assertions: [
+            tool.called('shell'),
+            tool.called('shell', {includes: 'pnpm test'}),
+            tool.called('edit_file'),
+          ],
+        },
+      ],
+    });
+
+    // @ts-expect-error matchers are only valid for tool.called('shell', matcher)
+    tool.called('edit_file', {includes: 'src/index.ts'});
+
+    // @ts-expect-error invalid tool kinds are rejected at authoring time
+    tool.called('not_real');
   }
 });

@@ -23,11 +23,15 @@ export {
 } from './ir/types.js';
 export {configSchema} from './schema/config-schema.js';
 export {resolveConfigModule} from './schema/resolve-module.js';
+export {tool} from './tool/index.js';
 export type {
   Assertion,
   CalledAssertion,
   Endpoint,
   NotCalledAssertion,
+  ShellToolMatcher,
+  ToolCalledAssertion,
+  ToolKind,
 } from './types/brands.js';
 export type {DynoboxConfig, ScenarioInput} from './types/config.js';
 export type {EndpointSpec} from './types/endpoint-spec.js';

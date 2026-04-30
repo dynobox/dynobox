@@ -1,6 +1,11 @@
 import {z} from 'zod';
 
-import type {Endpoint} from '../types/brands.js';
+import {
+  isShellToolMatcher,
+  TOOL_KINDS,
+  type Endpoint,
+  type ShellToolMatcher,
+} from '../types/brands.js';
 import {HARNESS_IDS} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/http-method.js';
 
@@ -46,10 +51,39 @@ const notCalledAssertionSchema = z
   })
   .loose();
 
-export const assertionSchema = z.discriminatedUnion('kind', [
-  calledAssertionSchema,
-  notCalledAssertionSchema,
-]);
+const shellToolMatcherSchema = z.custom<ShellToolMatcher>(isShellToolMatcher, {
+  message:
+    'Shell tool matcher must specify exactly one string field: equals, includes, startsWith, or matches.',
+});
+
+const toolCalledAssertionSchema = z
+  .object({
+    kind: z.literal('tool.called'),
+    toolKind: z.enum(TOOL_KINDS),
+    matcher: shellToolMatcherSchema.optional(),
+  })
+  .loose();
+
+export const assertionSchema = z
+  .discriminatedUnion('kind', [
+    calledAssertionSchema,
+    notCalledAssertionSchema,
+    toolCalledAssertionSchema,
+  ])
+  .superRefine((assertion, ctx) => {
+    if (
+      assertion.kind === 'tool.called' &&
+      assertion.matcher !== undefined &&
+      assertion.toolKind !== 'shell'
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['matcher'],
+        message:
+          'Tool assertion matchers are only supported for tool.called("shell", matcher).',
+      });
+    }
+  });
 
 export const scenarioSchema = z.object({
   name: z.string().min(1),

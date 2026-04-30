@@ -9,6 +9,56 @@ import type {EndpointSpec} from './endpoint-spec.js';
 const ENDPOINT_BRAND = Symbol.for('@dynobox/sdk/endpoint');
 const ASSERTION_BRAND = Symbol.for('@dynobox/sdk/assertion');
 
+export const TOOL_KINDS = [
+  'shell',
+  'read_file',
+  'write_file',
+  'edit_file',
+  'search_files',
+  'web_fetch',
+  'web_search',
+  'mcp',
+  'task',
+  'unknown',
+] as const;
+
+export type ToolKind = (typeof TOOL_KINDS)[number];
+
+const SHELL_TOOL_MATCHER_KEYS = [
+  'equals',
+  'includes',
+  'startsWith',
+  'matches',
+] as const;
+
+type ShellToolMatcherKey = (typeof SHELL_TOOL_MATCHER_KEYS)[number];
+
+type SingleShellToolMatcher<K extends ShellToolMatcherKey> = {
+  readonly [P in K]: string;
+} & {
+  readonly [P in Exclude<ShellToolMatcherKey, K>]?: never;
+};
+
+export type ShellToolMatcher = {
+  [K in ShellToolMatcherKey]: SingleShellToolMatcher<K>;
+}[ShellToolMatcherKey];
+
+const shellToolMatcherKeys = new Set<string>(SHELL_TOOL_MATCHER_KEYS);
+
+export function isShellToolMatcher(value: unknown): value is ShellToolMatcher {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length !== 1) {
+    return false;
+  }
+
+  const [key, matcherValue] = entries[0]!;
+  return shellToolMatcherKeys.has(key) && typeof matcherValue === 'string';
+}
+
 export type Endpoint = EndpointSpec & {
   readonly [ENDPOINT_BRAND]: true;
 };
@@ -26,9 +76,24 @@ export type NotCalledAssertion<K extends string = string> = {
   readonly endpoint: K;
 };
 
+export type ToolCalledAssertion<K extends ToolKind = ToolKind> =
+  K extends 'shell'
+    ? {
+        readonly [ASSERTION_BRAND]: true;
+        readonly kind: 'tool.called';
+        readonly toolKind: 'shell';
+        readonly matcher?: ShellToolMatcher;
+      }
+    : {
+        readonly [ASSERTION_BRAND]: true;
+        readonly kind: 'tool.called';
+        readonly toolKind: K;
+      };
+
 export type Assertion<K extends string = string> =
   | CalledAssertion<K>
-  | NotCalledAssertion<K>;
+  | NotCalledAssertion<K>
+  | ToolCalledAssertion;
 
 /**
  * Constructs a branded endpoint. Internal — call via `http.endpoint`.
@@ -77,4 +142,18 @@ export function brandNotCalled<K extends string>(
     kind: 'http.notCalled' as const,
     endpoint,
   };
+}
+
+export function brandToolCalled<K extends ToolKind>(
+  toolKind: K,
+  matcher?: ShellToolMatcher,
+): ToolCalledAssertion<K> {
+  const base = {
+    [ASSERTION_BRAND]: true as const,
+    kind: 'tool.called' as const,
+    toolKind,
+  };
+  return (matcher === undefined
+    ? base
+    : {...base, matcher}) as unknown as ToolCalledAssertion<K>;
 }

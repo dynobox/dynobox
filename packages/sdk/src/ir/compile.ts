@@ -48,16 +48,14 @@ export function compile(config: DynoboxConfig): Ir {
     );
 
     const irAssertions: IrAssertion[] = (scenario.assertions ?? []).map(
-      (assertion, index) => {
-        const endpointId = endpointIdByKey.get(assertion.endpoint);
-        if (endpointId === undefined) {
-          throw new DynoboxConfigError(
-            `Scenario "${scenario.name}" assertion #${index} references unknown endpoint "${assertion.endpoint}". ` +
-              `Known endpoints: ${[...endpointIdByKey.keys()].join(', ') || '(none)'}`,
-          );
-        }
-        return buildIrAssertion(scenarioSlug, index, endpointId, assertion);
-      },
+      (assertion, index) =>
+        buildIrAssertion(
+          scenario.name,
+          scenarioSlug,
+          index,
+          endpointIdByKey,
+          assertion,
+        ),
     );
 
     const harness: HarnessId =
@@ -105,12 +103,33 @@ function buildIrEndpoint(
 }
 
 function buildIrAssertion(
+  scenarioName: string,
   scenarioSlug: string,
   index: number,
-  endpointId: string,
+  endpointIdByKey: Map<string, string>,
   assertion: z.infer<typeof assertionSchema>,
 ): IrAssertion {
   const id = `assertion.${scenarioSlug}.${index}`;
+  if (assertion.kind === 'tool.called') {
+    const base: IrAssertion = {
+      id,
+      kind: 'tool.called',
+      toolKind: assertion.toolKind,
+    };
+    if (assertion.matcher !== undefined) {
+      return {...base, matcher: assertion.matcher};
+    }
+    return base;
+  }
+
+  const endpointId = endpointIdByKey.get(assertion.endpoint);
+  if (endpointId === undefined) {
+    throw new DynoboxConfigError(
+      `Scenario "${scenarioName}" assertion #${index} references unknown endpoint "${assertion.endpoint}". ` +
+        `Known endpoints: ${[...endpointIdByKey.keys()].join(', ') || '(none)'}`,
+    );
+  }
+
   if (assertion.kind === 'http.called') {
     const base: IrAssertion = {id, kind: 'http.called', endpointId};
     if (assertion.status !== undefined) {
