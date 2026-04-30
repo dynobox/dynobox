@@ -22,7 +22,12 @@ export type {
   ToolEvent,
   ToolKind,
 } from './harnesses/index.js';
-export {FakeHarness, normalizeToolKind} from './harnesses/index.js';
+export {
+  ClaudeCodeHarness,
+  FakeHarness,
+  normalizeToolKind,
+} from './harnesses/index.js';
+export type {ClaudeCodeHarnessOptions} from './harnesses/index.js';
 export type {RunSetupOptions, SetupCommandLog, SetupResult} from './setup.js';
 export {runScenarioSetup, runSetup} from './setup.js';
 
