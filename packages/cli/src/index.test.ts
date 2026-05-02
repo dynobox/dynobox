@@ -80,11 +80,11 @@ export default defineConfig({
     {
       name: 'modalities',
       prompt: 'Test assertion modalities.',
-      setup: ['printf dynobox@0.0.4 > CHANGELOG.md'],
+      setup: ['printf dynobox@0.0.5 > CHANGELOG.md'],
       assertions: [
         tool.notCalled('shell', {includes: 'npm publish'}),
         artifact.exists('CHANGELOG.md'),
-        artifact.contains('CHANGELOG.md', 'dynobox@0.0.4'),
+        artifact.contains('CHANGELOG.md', 'dynobox@0.0.5'),
         transcript.contains('EOTP'),
         finalMessage.contains('working tree is dirty'),
         sequence.inOrder([
