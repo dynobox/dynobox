@@ -1,0 +1,11 @@
+{
+  "name": "skill-release-smoke",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "test": "pnpm --filter mylib test"
+  },
+  "devDependencies": {
+    "mylib": "workspace:*"
+  }
+}
