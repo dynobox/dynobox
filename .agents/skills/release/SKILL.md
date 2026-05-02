@@ -48,8 +48,22 @@ Use these package names for public releases:
 - `dynobox` for `packages/cli`
 - `@dynobox/sdk` for `packages/sdk`
 
+Current package policy:
+
+- Publish `dynobox` and `@dynobox/sdk` to npm.
+- Keep `@dynobox/runner-local` and `@dynobox/evaluators` private.
+- The `dynobox` CLI bundles private runtime workspace packages instead of
+  exposing them as public npm dependencies.
+
 If releasing multiple packages, identify workspace dependencies and plan to publish
 dependencies first. For example, publish `@dynobox/sdk` before `dynobox`.
+
+Before publishing `dynobox`, verify the `@dynobox/sdk` version it depends on is
+already published:
+
+```bash
+npm view @dynobox/sdk@<version> version
+```
 
 If the user did not specify a version or bump type, ask whether to use `patch`,
 `minor`, or `major`. Do not guess.
@@ -70,11 +84,26 @@ pnpm --filter <package-name> exec node -p "require('./package.json').version"
 
 Confirm the package and new version with the user before committing.
 
+When releasing `dynobox`, update the hardcoded CLI display version in
+`packages/cli/src/index.ts`:
+
+```ts
+const CLI_VERSION = '<version>';
+```
+
+Search for stale references to the previous version before committing:
+
+```bash
+rg '<previous-version>' packages/cli/src packages/cli/package.json CHANGELOG.md
+```
+
 Update `CHANGELOG.md`:
 
 - Move the package's `[Unreleased]` entries into a new release section.
 - Use `## <package-name>@<version> — YYYY-MM-DD`.
 - Place the new section immediately below the `---` separator after `[Unreleased]`.
+
+Run the pre-publish verification below before committing, tagging, or publishing.
 
 Commit and tag after the user confirms:
 
@@ -122,6 +151,37 @@ When releasing packages that depend on each other:
    pnpm --filter dynobox publish --access public --no-git-checks
    ```
 
+## Pre-publish verification
+
+After version and changelog updates, but before committing, tagging, or
+publishing, inspect the package tarball:
+
+```bash
+pnpm --filter <package-name> pack --pack-destination /tmp
+tar tf /tmp/<tarball-name>.tgz
+tar -xOf /tmp/<tarball-name>.tgz package/package.json
+```
+
+For `dynobox`, confirm the packed `package.json` runtime dependencies include
+only public npm packages. It must not include private workspace packages:
+
+```bash
+rg '@dynobox/(runner-local|evaluators)' packages/cli/dist
+```
+
+Expected result: no matches.
+
+The packed `dynobox` dependencies should include `@dynobox/sdk`, `commander`,
+`execa`, and `tsx`, but not `@dynobox/runner-local` or `@dynobox/evaluators`.
+
+Optionally smoke-test local tarballs before publishing:
+
+```bash
+tmpdir="$(mktemp -d)"
+npm install --prefix "$tmpdir" /tmp/dynobox-sdk-<sdk-version>.tgz /tmp/dynobox-<cli-version>.tgz
+"$tmpdir/node_modules/.bin/dynobox"
+```
+
 ## Dry run mode
 
 If the user says "dry run", "what would happen", or asks to verify publish
@@ -130,8 +190,8 @@ contents without publishing, do not run `pnpm publish`.
 Build a tarball instead:
 
 ```bash
-pnpm --filter <package-name> pack
-tar tf packages/<dir>/*.tgz
+pnpm --filter <package-name> pack --pack-destination /tmp
+tar tf /tmp/<tarball-name>.tgz
 ```
 
 Show the tarball contents and summarize whether only intended files are included.
@@ -143,6 +203,27 @@ Verify each published package:
 
 ```bash
 npm view <package-name>@<version>
+```
+
+If `npm view` briefly returns a stale `404` for a newly published scoped package,
+cross-check npm access and the registry document before treating the publish as
+failed:
+
+```bash
+npm access get status <package-name>
+```
+
+For scoped packages, the registry document URL uses an encoded slash, for example:
+
+```text
+https://registry.npmjs.org/@dynobox%2fsdk
+```
+
+If `pnpm publish` fails with `EOTP`, do not re-bump, re-commit, or re-tag. Retry
+only the publish command with a fresh one-time password:
+
+```bash
+pnpm --filter <package-name> publish --access public --no-git-checks --otp <code>
 ```
 
 Then report:
