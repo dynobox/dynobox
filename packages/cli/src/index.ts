@@ -1135,11 +1135,15 @@ function describeToolEvent(toolEvent: ToolEvent): string {
   if (toolEvent.kind === 'shell') {
     const command = (toolEvent as {command?: unknown}).command;
     return typeof command === 'string'
-      ? `${toolEvent.rawName}: ${truncate(command, 42)}`
+      ? `${toolEvent.rawName}: ${truncate(oneLine(command), 42)}`
       : toolEvent.rawName;
   }
 
   return toolEvent.rawName;
+}
+
+function oneLine(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
 }
 
 function setupDurationMs(

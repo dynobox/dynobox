@@ -154,6 +154,14 @@ const GIT_COMMIT_EVENT: ShellToolEvent = {
   input: {command: 'git commit -m test'},
   command: 'git commit -m test',
 };
+const MULTILINE_GIT_COMMIT_EVENT: ShellToolEvent = {
+  kind: 'shell',
+  rawName: 'Bash',
+  input: {
+    command: `pnpm test && git commit -m "$(cat <<'EOF'\nmessage\nEOF\n)"`,
+  },
+  command: `pnpm test && git commit -m "$(cat <<'EOF'\nmessage\nEOF\n)"`,
+};
 
 function createPassingHarness(): FakeHarness {
   return new FakeHarness(undefined, {toolEvents: [SHELL_EVENT]});
@@ -162,8 +170,10 @@ function createPassingHarness(): FakeHarness {
 class StreamingHarness implements Harness {
   readonly id = 'claude-code' as const;
 
+  constructor(private readonly toolEvent: ShellToolEvent = SHELL_EVENT) {}
+
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
-    input.onToolEvent?.(SHELL_EVENT);
+    input.onToolEvent?.(this.toolEvent);
     return {
       exitCode: 0,
       stdout: 'fake output',
@@ -178,7 +188,7 @@ class StreamingHarness implements Harness {
       durationMs: raw.durationMs,
       transcript: raw.stdout,
       finalMessage: raw.stdout,
-      toolEvents: [SHELL_EVENT],
+      toolEvents: [this.toolEvent],
     };
   }
 }
@@ -330,6 +340,22 @@ error: bad config
     expect(writes.join('')).toContain('Bash: pnpm test 1 tool');
     expect(writes.join('')).toContain('✓ tool.called(shell)');
     expect(writes.join('')).toContain('1 passed');
+  });
+
+  it('keeps multiline live shell progress on one rendered row', async () => {
+    const writes: string[] = [];
+    const result = await executeCli(['run', VALID_CONFIG_PATH, '--verbose'], {
+      harnesses: [new StreamingHarness(MULTILINE_GIT_COMMIT_EVENT)],
+      live: true,
+      color: true,
+      writeStdout: (value) => writes.push(value),
+    });
+
+    const toolWrites = writes.filter((value) => value.includes('Bash:'));
+    expect(result.exitCode).toBe(0);
+    expect(toolWrites).toHaveLength(1);
+    expect(toolWrites[0]).toContain(`Bash: pnpm test && git commit -m`);
+    expect(toolWrites[0]).not.toContain('\n');
   });
 
   it('collapses passing scenarios to a one-liner in default mode', async () => {
