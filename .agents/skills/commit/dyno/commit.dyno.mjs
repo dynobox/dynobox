@@ -1,15 +1,6 @@
-import {artifact, defineConfig, sequence, tool} from '@dynobox/sdk';
+import {artifact, defineConfig, dyno, sequence, tool} from '@dynobox/sdk';
 
-const fixturesDir = fsPath(new URL('fixtures/repo/', import.meta.url));
-const skillFile = fsPath(new URL('../SKILL.md', import.meta.url));
-
-function fsPath(url: URL): string {
-  return decodeURIComponent(url.pathname);
-}
-
-function q(path: string): string {
-  return JSON.stringify(path);
-}
+const here = dyno.here(import.meta.url);
 
 export default defineConfig({
   name: 'commit-skill-smoke-test',
@@ -19,12 +10,12 @@ export default defineConfig({
       prompt:
         'Use the commit skill to commit the README.md change in this scratch repository. Do not push. Do not amend any commit.',
       setup: [
-        `cp -R ${q(`${fixturesDir}.`)} .`,
+        `cp -R ${here.q('fixtures/repo/.')} .`,
         'git init',
         'git config user.email dynobox@example.com',
         'git config user.name Dynobox Test',
         'mkdir -p .agents/skills/commit',
-        `cp ${q(skillFile)} .agents/skills/commit/SKILL.md`,
+        `cp ${here.q('../SKILL.md')} .agents/skills/commit/SKILL.md`,
         'git add .',
         'git commit -m "chore: initial commit"',
         'printf "\nCommit skill smoke change.\n" >> README.md',

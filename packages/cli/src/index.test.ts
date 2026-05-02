@@ -39,6 +39,7 @@ const INVALID_CONFIG_PATH = join(FIXTURE_DIR, 'invalid.config.ts');
 const SETUP_FAIL_CONFIG_PATH = join(FIXTURE_DIR, 'setup-fail.config.ts');
 const MODALITIES_CONFIG_PATH = join(FIXTURE_DIR, 'modalities.config.ts');
 const SEQUENCE_FAIL_CONFIG_PATH = join(FIXTURE_DIR, 'sequence-fail.config.ts');
+const DYNO_MJS_CONFIG_PATH = join(FIXTURE_DIR, 'typed.dyno.mjs');
 const VALID_CONFIG = `import {defineConfig, tool} from '@dynobox/sdk';
 
 export default defineConfig({
@@ -108,6 +109,23 @@ export default defineConfig({
           tool.called('shell', {includes: 'git commit'}),
         ]),
       ],
+    },
+  ],
+});
+`;
+const DYNO_MJS_CONFIG = `import {defineConfig, dyno, tool} from '@dynobox/sdk';
+
+const here = dyno.here(import.meta.url);
+
+export default defineConfig({
+  scenarios: [
+    {
+      name: 'uses dyno mjs',
+      prompt: 'Run pnpm test.',
+      setup: [
+        'cp ' + here.q('fixtures/repo/marker.txt') + ' marker.txt',
+      ],
+      assertions: [tool.called('shell')],
     },
   ],
 });
@@ -202,6 +220,9 @@ describe('packages/cli', () => {
     writeFileSync(SETUP_FAIL_CONFIG_PATH, SETUP_FAIL_CONFIG);
     writeFileSync(MODALITIES_CONFIG_PATH, MODALITIES_CONFIG);
     writeFileSync(SEQUENCE_FAIL_CONFIG_PATH, SEQUENCE_FAIL_CONFIG);
+    mkdirSync(join(FIXTURE_DIR, 'fixtures/repo'), {recursive: true});
+    writeFileSync(join(FIXTURE_DIR, 'fixtures/repo/marker.txt'), 'ready');
+    writeFileSync(DYNO_MJS_CONFIG_PATH, DYNO_MJS_CONFIG);
   });
 
   afterAll(() => {
@@ -268,6 +289,18 @@ error: bad config
     ).resolves.toEqual({
       exitCode: 0,
       stdout: expect.stringContaining('✓  uses shell'),
+      stderr: '',
+    });
+  });
+
+  it('runs a dyno mjs config with SDK helpers', async () => {
+    await expect(
+      executeCli(['run', DYNO_MJS_CONFIG_PATH], {
+        harnesses: [createPassingHarness()],
+      }),
+    ).resolves.toEqual({
+      exitCode: 0,
+      stdout: expect.stringContaining('✓  uses dyno mjs'),
       stderr: '',
     });
   });

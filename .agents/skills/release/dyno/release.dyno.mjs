@@ -1,18 +1,6 @@
-import {artifact, defineConfig, sequence, tool} from '@dynobox/sdk';
+import {artifact, defineConfig, dyno, sequence, tool} from '@dynobox/sdk';
 
-const fixturesDir = fsPath(new URL('fixtures/repo/', import.meta.url));
-const skillFile = fsPath(new URL('../SKILL.md', import.meta.url));
-const releasesFile = fsPath(
-  new URL('../../../../RELEASES.md', import.meta.url),
-);
-
-function fsPath(url: URL): string {
-  return decodeURIComponent(url.pathname);
-}
-
-function q(path: string): string {
-  return JSON.stringify(path);
-}
+const here = dyno.here(import.meta.url);
 
 export default defineConfig({
   name: 'release-skill-smoke-test',
@@ -22,13 +10,13 @@ export default defineConfig({
       prompt:
         'Use the release skill for a dry-run release of the local mylib package from 1.0.0 to 1.0.1 in this scratch repository. Run tests, bump the version, update CHANGELOG.md, inspect the package tarball, commit, and tag mylib@1.0.1. Do not publish. Do not push.',
       setup: [
-        `cp -R ${q(`${fixturesDir}.`)} .`,
+        `cp -R ${here.q('fixtures/repo/.')} .`,
         'git init',
         'git config user.email dynobox@example.com',
         'git config user.name Dynobox Test',
         'mkdir -p .agents/skills/release',
-        `cp ${q(skillFile)} .agents/skills/release/SKILL.md`,
-        `cp ${q(releasesFile)} RELEASES.md`,
+        `cp ${here.q('../SKILL.md')} .agents/skills/release/SKILL.md`,
+        `cp ${here.q('../../../../RELEASES.md')} RELEASES.md`,
         'git add .',
         'git commit -m "chore: initial release fixture"',
       ],

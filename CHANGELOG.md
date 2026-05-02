@@ -15,6 +15,7 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 ### `@dynobox/sdk`
 
 - Added assertion helpers for negative tool calls, artifacts, transcripts, final messages, and ordered tool sequences.
+- Added `dyno` helpers for config-relative fixture paths and shell quoting.
 
 ---
 

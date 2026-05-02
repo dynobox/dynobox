@@ -3,6 +3,7 @@ export const version = '0.0.1';
 export {artifact} from './artifact/index.js';
 export {defineConfig} from './authoring/define-config.js';
 export {defineScenario} from './authoring/define-scenario.js';
+export {dyno} from './dyno/index.js';
 export {DynoboxConfigError} from './errors.js';
 export {finalMessage} from './final-message/index.js';
 export {http} from './http/index.js';

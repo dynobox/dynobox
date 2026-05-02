@@ -8,6 +8,7 @@ import {
   compile,
   defineConfig,
   defineScenario,
+  dyno,
   DynoboxConfigError,
   finalMessage,
   type FinalMessageContainsAssertion,
@@ -30,6 +31,11 @@ describe('packages/sdk', () => {
     expect(version).toBe('0.0.1');
     expect(typeof defineConfig).toBe('function');
     expect(typeof defineScenario).toBe('function');
+    expect(typeof dyno.fromUrl).toBe('function');
+    expect(typeof dyno.fsPath).toBe('function');
+    expect(typeof dyno.here).toBe('function');
+    expect(typeof dyno.q).toBe('function');
+    expect(typeof dyno.shellQuote).toBe('function');
     expect(typeof compile).toBe('function');
     expect(typeof resolveConfigModule).toBe('function');
     expect(typeof http.endpoint).toBe('function');
@@ -42,6 +48,22 @@ describe('packages/sdk', () => {
     expect(typeof transcript.contains).toBe('function');
     expect(typeof finalMessage.contains).toBe('function');
     expect(typeof sequence.inOrder).toBe('function');
+  });
+
+  it('provides dyno config path and shell quoting helpers', () => {
+    expect(
+      dyno.fromUrl('file:///tmp/dyno/test.dyno.mjs', 'fixtures/repo/'),
+    ).toBe('/tmp/dyno/fixtures/repo/');
+    expect(dyno.fsPath(new URL('file:///tmp/dyno/fixtures%20repo/'))).toBe(
+      '/tmp/dyno/fixtures repo/',
+    );
+    const here = dyno.here('file:///tmp/dyno/test.dyno.mjs');
+    expect(here.path('fixtures/repo/')).toBe('/tmp/dyno/fixtures/repo/');
+    expect(here.q('fixtures/repo/.')).toBe('"/tmp/dyno/fixtures/repo/."');
+    expect(dyno.shellQuote('/tmp/path with spaces')).toBe(
+      '"/tmp/path with spaces"',
+    );
+    expect(dyno.q('/tmp/path with spaces')).toBe('"/tmp/path with spaces"');
   });
 
   it('preserves the endpoint key as a literal type on assertion helpers', () => {
