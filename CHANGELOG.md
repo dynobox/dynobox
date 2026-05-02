@@ -14,6 +14,12 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ---
 
+## dynobox@0.0.4 — 2026-05-01
+
+### `dynobox`
+
+- Bundled private runner and evaluator workspace packages into the CLI package so `dynobox` installs without unpublished internal dependencies.
+
 ## dynobox@0.0.3 — 2026-05-01
 
 ### `dynobox`

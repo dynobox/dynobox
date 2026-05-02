@@ -32,7 +32,7 @@ const ANSI_ESCAPE_PATTERN = new RegExp(
   `${String.fromCharCode(27)}\\[[0-9;]*m`,
   'g',
 );
-const CLI_VERSION = '0.0.3';
+const CLI_VERSION = '0.0.4';
 const DEFAULT_WIDTH = 72;
 const SPINNER_FRAMES = [
   '⠋',
