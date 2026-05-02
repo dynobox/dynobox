@@ -219,12 +219,17 @@ For scoped packages, the registry document URL uses an encoded slash, for exampl
 https://registry.npmjs.org/@dynobox%2fsdk
 ```
 
-If `pnpm publish` fails with `EOTP`, do not re-bump, re-commit, or re-tag. Retry
-only the publish command with a fresh one-time password:
+If `pnpm publish` fails with `EOTP`, do not re-bump, re-commit, re-tag, or ask
+the user for an OTP. Stop and present the final publish commands for the user to
+run locally, in dependency order, without an `--otp` argument. For example:
 
 ```bash
-pnpm --filter <package-name> publish --access public --no-git-checks --otp <code>
+pnpm --filter @dynobox/sdk publish --access public --no-git-checks
+pnpm --filter dynobox publish --access public --no-git-checks
 ```
+
+Tell the user to run only the commands for packages that have not already been
+published, and then verify with `npm view`.
 
 Then report:
 
