@@ -17,7 +17,7 @@ This repository is a monorepo. Published packages live under `packages/`.
 | Package                                            | npm                                                | Description                                            |
 | -------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------ |
 | [`dynobox`](./packages/cli)                        | [`dynobox`](https://www.npmjs.com/package/dynobox) | CLI for loading configs and running local scenarios    |
-| [`@dynobox/sdk`](./packages/sdk)                   | Not published yet                                  | SDK for authoring configs and compiling canonical IR   |
+| [`@dynobox/sdk`](./packages/sdk)                   | [`@dynobox/sdk`](https://www.npmjs.com/package/@dynobox/sdk) | SDK for authoring configs and compiling canonical IR   |
 | [`@dynobox/runner-local`](./packages/runner-local) | Unpublished                                        | Local runner for harness execution and tool assertions |
 
 ## Current Capabilities

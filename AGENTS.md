@@ -9,3 +9,10 @@
 - use pnpm's workspace graph from the caller/root for dependency ordering, e.g. `pnpm build` for the repo or `pnpm --filter <package>... build` for a package plus its dependencies
 - examples are user-facing only; do not use files in `examples/` as test fixtures or production code inputs
 - when suggesting git commit messages, prefer Conventional Commit style with a scope when appropriate, for example `chore(cli): convert placeholder package to TypeScript`
+
+## Releases
+
+- Follow the procedure in `RELEASES.md` for all npm publishes.
+- Git tags use the per-package convention: `<npm-package-name>@<version>` (e.g. `dynobox@0.0.4`).
+- Changelog entries go in the root `CHANGELOG.md`, grouped under the package name.
+- Never use bare `vX.Y.Z` tags.
