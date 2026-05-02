@@ -1,17 +1,27 @@
 import {describe, expect, expectTypeOf, it} from 'vitest';
 
 import {
+  artifact,
+  type ArtifactContainsAssertion,
+  type ArtifactExistsAssertion,
   type CalledAssertion,
   compile,
   defineConfig,
   defineScenario,
   DynoboxConfigError,
+  finalMessage,
+  type FinalMessageContainsAssertion,
   http,
   IR_VERSION,
   irSchema,
   resolveConfigModule,
+  sequence,
+  type SequenceInOrderAssertion,
   tool,
   type ToolCalledAssertion,
+  type ToolNotCalledAssertion,
+  transcript,
+  type TranscriptContainsAssertion,
   version,
 } from './index.js';
 
@@ -26,6 +36,12 @@ describe('packages/sdk', () => {
     expect(typeof http.called).toBe('function');
     expect(typeof http.notCalled).toBe('function');
     expect(typeof tool.called).toBe('function');
+    expect(typeof tool.notCalled).toBe('function');
+    expect(typeof artifact.exists).toBe('function');
+    expect(typeof artifact.contains).toBe('function');
+    expect(typeof transcript.contains).toBe('function');
+    expect(typeof finalMessage.contains).toBe('function');
+    expect(typeof sequence.inOrder).toBe('function');
   });
 
   it('preserves the endpoint key as a literal type on assertion helpers', () => {
@@ -38,6 +54,30 @@ describe('packages/sdk', () => {
     const a = tool.called('shell', {includes: 'pnpm test'});
     expectTypeOf(a).toEqualTypeOf<ToolCalledAssertion<'shell'>>();
     expectTypeOf(a.toolKind).toEqualTypeOf<'shell'>();
+  });
+
+  it('preserves the tool kind as a literal type on negative tool helpers', () => {
+    const a = tool.notCalled('shell', {includes: 'npm publish'});
+    expectTypeOf(a).toEqualTypeOf<ToolNotCalledAssertion<'shell'>>();
+    expectTypeOf(a.toolKind).toEqualTypeOf<'shell'>();
+  });
+
+  it('types non-tool assertion helpers', () => {
+    expectTypeOf(
+      artifact.exists('CHANGELOG.md'),
+    ).toEqualTypeOf<ArtifactExistsAssertion>();
+    expectTypeOf(
+      artifact.contains('CHANGELOG.md', 'dynobox@0.0.4'),
+    ).toEqualTypeOf<ArtifactContainsAssertion>();
+    expectTypeOf(
+      transcript.contains('EOTP'),
+    ).toEqualTypeOf<TranscriptContainsAssertion>();
+    expectTypeOf(
+      finalMessage.contains('dirty'),
+    ).toEqualTypeOf<FinalMessageContainsAssertion>();
+    expectTypeOf(
+      sequence.inOrder([tool.called('shell')]),
+    ).toEqualTypeOf<SequenceInOrderAssertion>();
   });
 
   it('compile returns a deterministic IR for a minimal config', () => {
@@ -135,6 +175,77 @@ describe('packages/sdk', () => {
     expect(irSchema.parse(ir)).toEqual(ir);
   });
 
+  it('compiles additional assertion helpers to canonical IR', () => {
+    const config = defineConfig({
+      scenarios: [
+        {
+          name: 'skill flow',
+          prompt: 'Test a skill.',
+          assertions: [
+            tool.notCalled('shell', {includes: 'git push'}),
+            artifact.exists('CHANGELOG.md'),
+            artifact.contains('CHANGELOG.md', 'dynobox@0.0.4'),
+            transcript.contains('EOTP'),
+            finalMessage.contains('working tree is dirty'),
+            sequence.inOrder([
+              tool.called('shell', {includes: 'git status'}),
+              tool.called('shell', {includes: 'git commit'}),
+            ]),
+          ],
+        },
+      ],
+    });
+
+    const ir = compile(config);
+
+    expect(ir.scenarios[0]!.assertions).toEqual([
+      {
+        id: 'assertion.skill-flow.0',
+        kind: 'tool.notCalled',
+        toolKind: 'shell',
+        matcher: {includes: 'git push'},
+      },
+      {
+        id: 'assertion.skill-flow.1',
+        kind: 'artifact.exists',
+        path: 'CHANGELOG.md',
+      },
+      {
+        id: 'assertion.skill-flow.2',
+        kind: 'artifact.contains',
+        path: 'CHANGELOG.md',
+        text: 'dynobox@0.0.4',
+      },
+      {
+        id: 'assertion.skill-flow.3',
+        kind: 'transcript.contains',
+        text: 'EOTP',
+      },
+      {
+        id: 'assertion.skill-flow.4',
+        kind: 'finalMessage.contains',
+        text: 'working tree is dirty',
+      },
+      {
+        id: 'assertion.skill-flow.5',
+        kind: 'sequence.inOrder',
+        steps: [
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+            matcher: {includes: 'git status'},
+          },
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+            matcher: {includes: 'git commit'},
+          },
+        ],
+      },
+    ]);
+    expect(irSchema.parse(ir)).toEqual(ir);
+  });
+
   it('rejects invalid tool kinds in runtime config validation', () => {
     const bad = {
       scenarios: [
@@ -187,6 +298,45 @@ describe('packages/sdk', () => {
     } as unknown as Parameters<typeof compile>[0];
 
     expect(() => compile(bad)).toThrow(/only supported/);
+  });
+
+  it('rejects matchers on non-shell negative tool assertions', () => {
+    const bad = {
+      scenarios: [
+        {
+          name: 'bad non-shell negative matcher',
+          prompt: 'p',
+          assertions: [
+            {
+              kind: 'tool.notCalled',
+              toolKind: 'edit_file',
+              matcher: {includes: 'src/index.ts'},
+            },
+          ],
+        },
+      ],
+    } as unknown as Parameters<typeof compile>[0];
+
+    expect(() => compile(bad)).toThrow(/only supported/);
+  });
+
+  it('rejects unsupported sequence child assertion kinds', () => {
+    const bad = {
+      scenarios: [
+        {
+          name: 'bad sequence child',
+          prompt: 'p',
+          assertions: [
+            {
+              kind: 'sequence.inOrder',
+              steps: [{kind: 'artifact.exists', path: 'CHANGELOG.md'}],
+            },
+          ],
+        },
+      ],
+    } as unknown as Parameters<typeof compile>[0];
+
+    expect(() => compile(bad)).toThrow(/tool.called|Invalid/);
   });
 
   it('rejects malformed canonical IR shapes', () => {
@@ -389,8 +539,8 @@ describe('packages/sdk', () => {
     ]);
     expect(
       scenario.assertions.map((a) => {
-        if (a.kind === 'tool.called') {
-          throw new Error('Unexpected tool assertion');
+        if (a.kind !== 'http.called' && a.kind !== 'http.notCalled') {
+          throw new Error('Unexpected non-HTTP assertion');
         }
         return a.endpointId;
       }),
@@ -576,6 +726,12 @@ describe('packages/sdk', () => {
             tool.called('shell'),
             tool.called('shell', {includes: 'pnpm test'}),
             tool.called('edit_file'),
+            tool.notCalled('shell', {includes: 'git push'}),
+            artifact.exists('CHANGELOG.md'),
+            artifact.contains('CHANGELOG.md', 'dynobox@0.0.4'),
+            transcript.contains('EOTP'),
+            finalMessage.contains('dirty'),
+            sequence.inOrder([tool.called('shell', {includes: 'git status'})]),
           ],
         },
       ],
@@ -583,6 +739,12 @@ describe('packages/sdk', () => {
 
     // @ts-expect-error matchers are only valid for tool.called('shell', matcher)
     tool.called('edit_file', {includes: 'src/index.ts'});
+
+    // @ts-expect-error matchers are only valid for tool.notCalled('shell', matcher)
+    tool.notCalled('edit_file', {includes: 'src/index.ts'});
+
+    // @ts-expect-error sequence.inOrder v0 only accepts tool.called steps
+    sequence.inOrder([artifact.exists('CHANGELOG.md')]);
 
     // @ts-expect-error invalid tool kinds are rejected at authoring time
     tool.called('not_real');

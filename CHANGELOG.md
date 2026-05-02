@@ -10,7 +10,11 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Added rendering for artifact, transcript, final message, negative tool, and ordered sequence assertion results.
+
 ### `@dynobox/sdk`
+
+- Added assertion helpers for negative tool calls, artifacts, transcripts, final messages, and ordered tool sequences.
 
 ---
 

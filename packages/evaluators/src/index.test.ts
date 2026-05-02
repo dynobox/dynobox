@@ -1,3 +1,7 @@
+import {mkdtempSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+
 import type {IrAssertion} from '@dynobox/sdk';
 import {describe, expect, it} from 'vitest';
 
@@ -26,8 +30,20 @@ function toolAssertion(
 function evaluateOne(
   assertion: IrAssertion,
   toolEvents: readonly ToolEvent[],
+  options?: Omit<
+    Parameters<typeof evaluateAssertions>[0],
+    'assertions' | 'toolEvents'
+  >,
 ): AssertionResult {
-  return evaluateAssertions({assertions: [assertion], toolEvents})[0]!;
+  return evaluateAssertions({
+    assertions: [assertion],
+    toolEvents,
+    ...options,
+  })[0]!;
+}
+
+function createWorkDir(): string {
+  return mkdtempSync(join(tmpdir(), 'dynobox-evaluator-test-'));
 }
 
 describe('evaluateAssertions', () => {
@@ -132,6 +148,270 @@ describe('evaluateAssertions', () => {
     expect(results.map((result) => result.passed)).toEqual([true, true, true]);
   });
 
+  it('passes tool.notCalled when no matching event exists', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'tool.notCalled',
+        toolKind: 'shell',
+        matcher: {includes: 'npm publish'},
+      },
+      [shellEvent],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: 'Observed no shell command matching includes "npm publish".',
+    });
+  });
+
+  it('fails tool.notCalled when a matching event exists', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'tool.notCalled',
+        toolKind: 'shell',
+        matcher: {includes: 'pnpm test'},
+      },
+      [shellEvent],
+    );
+
+    expect(result).toMatchObject({
+      passed: false,
+      message:
+        'Expected no shell command matching includes "pnpm test", but observed a matching command.',
+      evidence: shellEvent,
+    });
+  });
+
+  it('passes sequence.inOrder with unrelated events between steps', () => {
+    const first: ToolEvent = {
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {command: 'git status'},
+      command: 'git status',
+    };
+    const unrelated: ToolEvent = {
+      kind: 'read_file',
+      rawName: 'Read',
+      input: {filePath: 'README.md'},
+    };
+    const second: ToolEvent = {
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {command: 'git commit -m test'},
+      command: 'git commit -m test',
+    };
+
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'sequence.inOrder',
+        steps: [
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+            matcher: {includes: 'git status'},
+          },
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+            matcher: {includes: 'git commit'},
+          },
+        ],
+      },
+      [first, unrelated, second],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: 'Observed 2 ordered tool steps.',
+      evidence: [first, second],
+    });
+  });
+
+  it('fails sequence.inOrder when events are out of order', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'sequence.inOrder',
+        steps: [
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+            matcher: {includes: 'git status'},
+          },
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+            matcher: {includes: 'git commit'},
+          },
+        ],
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'git commit -m test'},
+          command: 'git commit -m test',
+        },
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'git status'},
+          command: 'git status',
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({
+      passed: false,
+      message:
+        'Expected ordered step #2 (tool.called(shell, includes "git commit")) to match an observed tool event, but none was observed after the previous step.',
+    });
+  });
+
+  it('does not reuse one event for multiple sequence steps', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'sequence.inOrder',
+        steps: [
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+            matcher: {includes: 'pnpm test'},
+          },
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+            matcher: {includes: 'pnpm test'},
+          },
+        ],
+      },
+      [shellEvent],
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.message).toContain('ordered step #2');
+  });
+
+  it('evaluates artifact.exists pass and fail cases', () => {
+    const workDir = createWorkDir();
+    writeFileSync(join(workDir, 'CHANGELOG.md'), 'release notes');
+
+    const pass = evaluateOne(
+      {id: 'assertion.test.0', kind: 'artifact.exists', path: 'CHANGELOG.md'},
+      [],
+      {workDir},
+    );
+    const fail = evaluateOne(
+      {id: 'assertion.test.1', kind: 'artifact.exists', path: 'missing.txt'},
+      [],
+      {workDir},
+    );
+
+    expect(pass.passed).toBe(true);
+    expect(fail).toMatchObject({
+      passed: false,
+      message: 'Expected artifact "missing.txt" to exist.',
+    });
+  });
+
+  it('evaluates artifact.contains pass and fail cases', () => {
+    const workDir = createWorkDir();
+    writeFileSync(join(workDir, 'CHANGELOG.md'), 'dynobox@0.0.4');
+
+    const pass = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'artifact.contains',
+        path: 'CHANGELOG.md',
+        text: 'dynobox@0.0.4',
+      },
+      [],
+      {workDir},
+    );
+    const fail = evaluateOne(
+      {
+        id: 'assertion.test.1',
+        kind: 'artifact.contains',
+        path: 'CHANGELOG.md',
+        text: 'missing',
+      },
+      [],
+      {workDir},
+    );
+
+    expect(pass.passed).toBe(true);
+    expect(fail).toMatchObject({
+      passed: false,
+      message: 'Expected artifact "CHANGELOG.md" to contain "missing".',
+    });
+  });
+
+  it('rejects artifact path traversal and absolute paths', () => {
+    const workDir = createWorkDir();
+    const traversal = evaluateOne(
+      {id: 'assertion.test.0', kind: 'artifact.exists', path: '../outside.txt'},
+      [],
+      {workDir},
+    );
+    const absolute = evaluateOne(
+      {
+        id: 'assertion.test.1',
+        kind: 'artifact.exists',
+        path: join(workDir, 'x'),
+      },
+      [],
+      {workDir},
+    );
+
+    expect(traversal.message).toBe(
+      'Artifact path "../outside.txt" must stay within the work directory.',
+    );
+    expect(absolute.message).toContain('must be relative');
+  });
+
+  it('evaluates transcript.contains pass and fail cases', () => {
+    const pass = evaluateOne(
+      {id: 'assertion.test.0', kind: 'transcript.contains', text: 'EOTP'},
+      [],
+      {transcript: 'hello EOTP'},
+    );
+    const fail = evaluateOne(
+      {id: 'assertion.test.1', kind: 'transcript.contains', text: 'missing'},
+      [],
+      {transcript: 'hello'},
+    );
+
+    expect(pass.passed).toBe(true);
+    expect(fail).toMatchObject({
+      passed: false,
+      message: 'Expected transcript to contain "missing".',
+    });
+  });
+
+  it('evaluates finalMessage.contains pass and fail cases', () => {
+    const pass = evaluateOne(
+      {id: 'assertion.test.0', kind: 'finalMessage.contains', text: 'dirty'},
+      [],
+      {finalMessage: 'working tree is dirty'},
+    );
+    const fail = evaluateOne(
+      {id: 'assertion.test.1', kind: 'finalMessage.contains', text: 'dirty'},
+      [],
+      {},
+    );
+
+    expect(pass.passed).toBe(true);
+    expect(fail).toMatchObject({
+      passed: false,
+      message:
+        'Expected final message to contain "dirty", but final message text is unavailable.',
+    });
+  });
+
   it('returns a clear unsupported result for HTTP assertions', () => {
     const result = evaluateOne(
       {
@@ -155,18 +435,17 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'artifact.exists',
-        path: 'result.txt',
+        kind: 'custom.assertion',
       } as unknown as IrAssertion,
       [],
     );
 
     expect(result).toEqual({
       assertionId: 'assertion.test.0',
-      kind: 'artifact.exists',
+      kind: 'custom.assertion',
       passed: false,
       message:
-        'Assertion kind "artifact.exists" is not supported by this evaluator.',
+        'Assertion kind "custom.assertion" is not supported by this evaluator.',
     });
   });
 });

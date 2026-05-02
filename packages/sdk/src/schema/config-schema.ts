@@ -1,10 +1,10 @@
 import {z} from 'zod';
 
 import {
-  isShellToolMatcher,
-  TOOL_KINDS,
   type Endpoint,
+  isShellToolMatcher,
   type ShellToolMatcher,
+  TOOL_KINDS,
 } from '../types/brands.js';
 import {HARNESS_IDS} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/http-method.js';
@@ -64,15 +64,66 @@ const toolCalledAssertionSchema = z
   })
   .loose();
 
+const toolNotCalledAssertionSchema = z
+  .object({
+    kind: z.literal('tool.notCalled'),
+    toolKind: z.enum(TOOL_KINDS),
+    matcher: shellToolMatcherSchema.optional(),
+  })
+  .loose();
+
+const artifactExistsAssertionSchema = z
+  .object({
+    kind: z.literal('artifact.exists'),
+    path: z.string().min(1),
+  })
+  .loose();
+
+const artifactContainsAssertionSchema = z
+  .object({
+    kind: z.literal('artifact.contains'),
+    path: z.string().min(1),
+    text: z.string(),
+  })
+  .loose();
+
+const transcriptContainsAssertionSchema = z
+  .object({
+    kind: z.literal('transcript.contains'),
+    text: z.string(),
+  })
+  .loose();
+
+const finalMessageContainsAssertionSchema = z
+  .object({
+    kind: z.literal('finalMessage.contains'),
+    text: z.string(),
+  })
+  .loose();
+
+const sequenceInOrderAssertionSchema = z
+  .object({
+    kind: z.literal('sequence.inOrder'),
+    steps: z.array(toolCalledAssertionSchema).min(1),
+  })
+  .loose();
+
 export const assertionSchema = z
   .discriminatedUnion('kind', [
     calledAssertionSchema,
     notCalledAssertionSchema,
     toolCalledAssertionSchema,
+    toolNotCalledAssertionSchema,
+    artifactExistsAssertionSchema,
+    artifactContainsAssertionSchema,
+    transcriptContainsAssertionSchema,
+    finalMessageContainsAssertionSchema,
+    sequenceInOrderAssertionSchema,
   ])
   .superRefine((assertion, ctx) => {
     if (
-      assertion.kind === 'tool.called' &&
+      (assertion.kind === 'tool.called' ||
+        assertion.kind === 'tool.notCalled') &&
       assertion.matcher !== undefined &&
       assertion.toolKind !== 'shell'
     ) {
@@ -80,7 +131,20 @@ export const assertionSchema = z
         code: 'custom',
         path: ['matcher'],
         message:
-          'Tool assertion matchers are only supported for tool.called("shell", matcher).',
+          'Tool assertion matchers are only supported for shell tool assertions.',
+      });
+    }
+
+    if (assertion.kind === 'sequence.inOrder') {
+      assertion.steps.forEach((step, index) => {
+        if (step.matcher !== undefined && step.toolKind !== 'shell') {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['steps', index, 'matcher'],
+            message:
+              'Tool assertion matchers are only supported for shell tool assertions.',
+          });
+        }
       });
     }
   });

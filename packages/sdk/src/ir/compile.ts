@@ -111,15 +111,47 @@ function buildIrAssertion(
 ): IrAssertion {
   const id = `assertion.${scenarioSlug}.${index}`;
   if (assertion.kind === 'tool.called') {
+    return {id, ...buildIrToolCalledStep(assertion)};
+  }
+
+  if (assertion.kind === 'tool.notCalled') {
     const base: IrAssertion = {
       id,
-      kind: 'tool.called',
+      kind: 'tool.notCalled',
       toolKind: assertion.toolKind,
     };
-    if (assertion.matcher !== undefined) {
-      return {...base, matcher: assertion.matcher};
-    }
-    return base;
+    return assertion.matcher === undefined
+      ? base
+      : {...base, matcher: assertion.matcher};
+  }
+
+  if (assertion.kind === 'artifact.exists') {
+    return {id, kind: 'artifact.exists', path: assertion.path};
+  }
+
+  if (assertion.kind === 'artifact.contains') {
+    return {
+      id,
+      kind: 'artifact.contains',
+      path: assertion.path,
+      text: assertion.text,
+    };
+  }
+
+  if (assertion.kind === 'transcript.contains') {
+    return {id, kind: 'transcript.contains', text: assertion.text};
+  }
+
+  if (assertion.kind === 'finalMessage.contains') {
+    return {id, kind: 'finalMessage.contains', text: assertion.text};
+  }
+
+  if (assertion.kind === 'sequence.inOrder') {
+    return {
+      id,
+      kind: 'sequence.inOrder',
+      steps: assertion.steps.map(buildIrToolCalledStep),
+    };
   }
 
   const endpointId = endpointIdByKey.get(assertion.endpoint);
@@ -138,4 +170,18 @@ function buildIrAssertion(
     return base;
   }
   return {id, kind: 'http.notCalled', endpointId};
+}
+
+function buildIrToolCalledStep(
+  assertion: Extract<z.infer<typeof assertionSchema>, {kind: 'tool.called'}>,
+): Omit<Extract<IrAssertion, {kind: 'tool.called'}>, 'id'> {
+  const base = {
+    kind: 'tool.called' as const,
+    toolKind: assertion.toolKind,
+  };
+  return (
+    assertion.matcher === undefined
+      ? base
+      : {...base, matcher: assertion.matcher}
+  ) as Omit<Extract<IrAssertion, {kind: 'tool.called'}>, 'id'>;
 }

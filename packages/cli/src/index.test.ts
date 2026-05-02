@@ -37,6 +37,8 @@ const FIXTURE_DIR = join(process.cwd(), '.tmp-dynobox-cli-tests');
 const VALID_CONFIG_PATH = join(FIXTURE_DIR, 'valid.config.ts');
 const INVALID_CONFIG_PATH = join(FIXTURE_DIR, 'invalid.config.ts');
 const SETUP_FAIL_CONFIG_PATH = join(FIXTURE_DIR, 'setup-fail.config.ts');
+const MODALITIES_CONFIG_PATH = join(FIXTURE_DIR, 'modalities.config.ts');
+const SEQUENCE_FAIL_CONFIG_PATH = join(FIXTURE_DIR, 'sequence-fail.config.ts');
 const VALID_CONFIG = `import {defineConfig, tool} from '@dynobox/sdk';
 
 export default defineConfig({
@@ -70,6 +72,46 @@ export default defineConfig({
   ],
 });
 `;
+const MODALITIES_CONFIG = `import {artifact, defineConfig, finalMessage, sequence, tool, transcript} from '@dynobox/sdk';
+
+export default defineConfig({
+  scenarios: [
+    {
+      name: 'modalities',
+      prompt: 'Test assertion modalities.',
+      setup: ['printf dynobox@0.0.4 > CHANGELOG.md'],
+      assertions: [
+        tool.notCalled('shell', {includes: 'npm publish'}),
+        artifact.exists('CHANGELOG.md'),
+        artifact.contains('CHANGELOG.md', 'dynobox@0.0.4'),
+        transcript.contains('EOTP'),
+        finalMessage.contains('working tree is dirty'),
+        sequence.inOrder([
+          tool.called('shell', {includes: 'git status'}),
+          tool.called('shell', {includes: 'git commit'}),
+        ]),
+      ],
+    },
+  ],
+});
+`;
+const SEQUENCE_FAIL_CONFIG = `import {defineConfig, sequence, tool} from '@dynobox/sdk';
+
+export default defineConfig({
+  scenarios: [
+    {
+      name: 'sequence fails',
+      prompt: 'Commit safely.',
+      assertions: [
+        sequence.inOrder([
+          tool.called('shell', {includes: 'git status'}),
+          tool.called('shell', {includes: 'git commit'}),
+        ]),
+      ],
+    },
+  ],
+});
+`;
 const SHELL_EVENT: ShellToolEvent = {
   kind: 'shell',
   rawName: 'Bash',
@@ -81,6 +123,18 @@ const MISMATCHED_SHELL_EVENT: ShellToolEvent = {
   rawName: 'Bash',
   input: {command: 'npm test'},
   command: 'npm test',
+};
+const GIT_STATUS_EVENT: ShellToolEvent = {
+  kind: 'shell',
+  rawName: 'Bash',
+  input: {command: 'git status'},
+  command: 'git status',
+};
+const GIT_COMMIT_EVENT: ShellToolEvent = {
+  kind: 'shell',
+  rawName: 'Bash',
+  input: {command: 'git commit -m test'},
+  command: 'git commit -m test',
 };
 
 function createPassingHarness(): FakeHarness {
@@ -146,6 +200,8 @@ describe('packages/cli', () => {
     writeFileSync(VALID_CONFIG_PATH, VALID_CONFIG);
     writeFileSync(INVALID_CONFIG_PATH, INVALID_CONFIG);
     writeFileSync(SETUP_FAIL_CONFIG_PATH, SETUP_FAIL_CONFIG);
+    writeFileSync(MODALITIES_CONFIG_PATH, MODALITIES_CONFIG);
+    writeFileSync(SEQUENCE_FAIL_CONFIG_PATH, SEQUENCE_FAIL_CONFIG);
   });
 
   afterAll(() => {
@@ -310,6 +366,49 @@ error: bad config
     expect(result.stdout).toContain('1. npm test');
     expect(result.stdout).toContain('0 passed   1 failed');
     expect(result.stderr).toBe('');
+  });
+
+  it('describes new assertion kinds in verbose output', async () => {
+    const result = await executeCli(
+      ['run', MODALITIES_CONFIG_PATH, '--verbose'],
+      {
+        harnesses: [
+          new FakeHarness(
+            {stdout: 'transcript EOTP\nworking tree is dirty'},
+            {toolEvents: [GIT_STATUS_EVENT, GIT_COMMIT_EVENT]},
+          ),
+        ],
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(
+      '✓ tool.notCalled(shell, includes: npm publish)',
+    );
+    expect(result.stdout).toContain('✓ artifact.exists(CHANGELOG.md)');
+    expect(result.stdout).toContain('✓ artifact.contains(CHANGELOG.md)');
+    expect(result.stdout).toContain('✓ transcript.contains');
+    expect(result.stdout).toContain('✓ finalMessage.contains');
+    expect(result.stdout).toContain('✓ sequence.inOrder(2 steps)');
+  });
+
+  it('renders failed sequence expectations and observed shell commands', async () => {
+    const result = await executeCli(['run', SEQUENCE_FAIL_CONFIG_PATH], {
+      harnesses: [
+        new FakeHarness(undefined, {
+          toolEvents: [GIT_COMMIT_EVENT, GIT_STATUS_EVENT],
+        }),
+      ],
+    });
+
+    expect(result.exitCode).toBe(runFailureExitCode);
+    expect(result.stdout).toContain('✗ sequence.inOrder(2 steps)');
+    expect(result.stdout).toContain(
+      'expected  shell command including "git status" before shell command including "git commit"',
+    );
+    expect(result.stdout).toContain('observed shell commands during this run:');
+    expect(result.stdout).toContain('1. git commit -m test');
+    expect(result.stdout).toContain('2. git status');
   });
 
   it('shows skipped phases when setup fails', async () => {

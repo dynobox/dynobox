@@ -598,9 +598,7 @@ function renderHeadline(
   const title = `${icon}  ${job.scenario.name}`;
   const meta = `${job.scenario.harness}  iter ${job.iteration + 1}`;
   const right =
-    durationMs === undefined
-      ? meta
-      : `${meta}   ${formatDuration(durationMs)}`;
+    durationMs === undefined ? meta : `${meta}   ${formatDuration(durationMs)}`;
   return `  ${leftRight(title, right, ctx.width)}`;
 }
 
@@ -1005,9 +1003,7 @@ function renderPhaseRow(
   const formatter =
     input.status === 'running' ? formatLiveDuration : formatDuration;
   const right =
-    input.durationMs === undefined
-      ? ''
-      : dim(ctx, formatter(input.durationMs));
+    input.durationMs === undefined ? '' : dim(ctx, formatter(input.durationMs));
   return `  ${leftRight(left, right, ctx.width)}`;
 }
 
@@ -1109,8 +1105,22 @@ function shouldShowObservedShellCommands(
   return result.assertionResults.some((assertionResult) => {
     if (assertionResult.passed) return false;
     const assertion = assertionById.get(assertionResult.assertionId);
-    return assertion?.kind === 'tool.called' && assertion.toolKind === 'shell';
+    return assertionMentionsShell(assertion);
   });
+}
+
+function assertionMentionsShell(assertion: IrAssertion | undefined): boolean {
+  if (assertion === undefined) return false;
+  if (
+    (assertion.kind === 'tool.called' || assertion.kind === 'tool.notCalled') &&
+    assertion.toolKind === 'shell'
+  ) {
+    return true;
+  }
+  return (
+    assertion.kind === 'sequence.inOrder' &&
+    assertion.steps.some((step) => step.toolKind === 'shell')
+  );
 }
 
 function observedShellCommands(toolEvents: readonly ToolEvent[]): string[] {
@@ -1157,6 +1167,34 @@ function describeAssertion(assertion: IrAssertion): string {
     return `tool.called(${assertion.toolKind}, ${describeShellMatcher(assertion.matcher)})`;
   }
 
+  if (assertion.kind === 'tool.notCalled') {
+    if (assertion.matcher === undefined) {
+      return `tool.notCalled(${assertion.toolKind})`;
+    }
+
+    return `tool.notCalled(${assertion.toolKind}, ${describeShellMatcher(assertion.matcher)})`;
+  }
+
+  if (assertion.kind === 'sequence.inOrder') {
+    return `sequence.inOrder(${assertion.steps.length} steps)`;
+  }
+
+  if (assertion.kind === 'artifact.exists') {
+    return `artifact.exists(${assertion.path})`;
+  }
+
+  if (assertion.kind === 'artifact.contains') {
+    return `artifact.contains(${assertion.path})`;
+  }
+
+  if (assertion.kind === 'transcript.contains') {
+    return 'transcript.contains';
+  }
+
+  if (assertion.kind === 'finalMessage.contains') {
+    return 'finalMessage.contains';
+  }
+
   if (assertion.kind === 'http.called') {
     if (assertion.status === undefined) {
       return `http.called(${assertion.endpointId})`;
@@ -1169,18 +1207,56 @@ function describeAssertion(assertion: IrAssertion): string {
 }
 
 function describeExpectation(assertion: IrAssertion): string {
+  if (assertion.kind === 'tool.notCalled') {
+    if (assertion.matcher === undefined) {
+      return `no ${assertion.toolKind} tool call`;
+    }
+    return `no ${describeShellMatcherExpectation(assertion.matcher)}`;
+  }
+
+  if (assertion.kind === 'sequence.inOrder') {
+    return assertion.steps.map(describeToolStepExpectation).join(' before ');
+  }
+
+  if (assertion.kind === 'artifact.exists') {
+    return `artifact "${assertion.path}" to exist`;
+  }
+
+  if (assertion.kind === 'artifact.contains') {
+    return `artifact "${assertion.path}" containing "${assertion.text}"`;
+  }
+
+  if (assertion.kind === 'transcript.contains') {
+    return `transcript containing "${assertion.text}"`;
+  }
+
+  if (assertion.kind === 'finalMessage.contains') {
+    return `final message containing "${assertion.text}"`;
+  }
+
   if (assertion.kind !== 'tool.called') return describeAssertion(assertion);
   if (assertion.matcher === undefined) return `${assertion.toolKind} tool call`;
-  if ('equals' in assertion.matcher) {
-    return `shell command equal to "${assertion.matcher.equals}"`;
+  return describeShellMatcherExpectation(assertion.matcher);
+}
+
+function describeToolStepExpectation(
+  step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
+): string {
+  if (step.matcher === undefined) return `${step.toolKind} tool call`;
+  return describeShellMatcherExpectation(step.matcher);
+}
+
+function describeShellMatcherExpectation(matcher: ShellToolMatcher): string {
+  if ('equals' in matcher) {
+    return `shell command equal to "${matcher.equals}"`;
   }
-  if ('includes' in assertion.matcher) {
-    return `shell command including "${assertion.matcher.includes}"`;
+  if ('includes' in matcher) {
+    return `shell command including "${matcher.includes}"`;
   }
-  if ('startsWith' in assertion.matcher) {
-    return `shell command starting with "${assertion.matcher.startsWith}"`;
+  if ('startsWith' in matcher) {
+    return `shell command starting with "${matcher.startsWith}"`;
   }
-  return `shell command matching /${assertion.matcher.matches}/`;
+  return `shell command matching /${matcher.matches}/`;
 }
 
 function describeShellMatcher(matcher: ShellToolMatcher): string {

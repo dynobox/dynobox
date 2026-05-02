@@ -302,6 +302,9 @@ export async function runJob(
   const assertionResults = evaluateAssertions({
     assertions: job.scenario.assertions,
     toolEvents: harnessResult.toolEvents,
+    workDir,
+    transcript: harnessResult.transcript,
+    finalMessage: harnessResult.finalMessage,
   });
   const assertionsMs = Date.now() - assertionsStartedAt;
   emitProgress(options, {

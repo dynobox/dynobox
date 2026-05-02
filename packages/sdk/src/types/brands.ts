@@ -90,10 +90,61 @@ export type ToolCalledAssertion<K extends ToolKind = ToolKind> =
         readonly toolKind: K;
       };
 
+export type ToolNotCalledAssertion<K extends ToolKind = ToolKind> =
+  K extends 'shell'
+    ? {
+        readonly [ASSERTION_BRAND]: true;
+        readonly kind: 'tool.notCalled';
+        readonly toolKind: 'shell';
+        readonly matcher?: ShellToolMatcher;
+      }
+    : {
+        readonly [ASSERTION_BRAND]: true;
+        readonly kind: 'tool.notCalled';
+        readonly toolKind: K;
+      };
+
+export type ArtifactExistsAssertion = {
+  readonly [ASSERTION_BRAND]: true;
+  readonly kind: 'artifact.exists';
+  readonly path: string;
+};
+
+export type ArtifactContainsAssertion = {
+  readonly [ASSERTION_BRAND]: true;
+  readonly kind: 'artifact.contains';
+  readonly path: string;
+  readonly text: string;
+};
+
+export type TranscriptContainsAssertion = {
+  readonly [ASSERTION_BRAND]: true;
+  readonly kind: 'transcript.contains';
+  readonly text: string;
+};
+
+export type FinalMessageContainsAssertion = {
+  readonly [ASSERTION_BRAND]: true;
+  readonly kind: 'finalMessage.contains';
+  readonly text: string;
+};
+
+export type SequenceInOrderAssertion = {
+  readonly [ASSERTION_BRAND]: true;
+  readonly kind: 'sequence.inOrder';
+  readonly steps: readonly ToolCalledAssertion[];
+};
+
 export type Assertion<K extends string = string> =
   | CalledAssertion<K>
   | NotCalledAssertion<K>
-  | ToolCalledAssertion;
+  | ToolCalledAssertion
+  | ToolNotCalledAssertion
+  | ArtifactExistsAssertion
+  | ArtifactContainsAssertion
+  | TranscriptContainsAssertion
+  | FinalMessageContainsAssertion
+  | SequenceInOrderAssertion;
 
 /**
  * Constructs a branded endpoint. Internal — call via `http.endpoint`.
@@ -156,4 +207,68 @@ export function brandToolCalled<K extends ToolKind>(
   return (matcher === undefined
     ? base
     : {...base, matcher}) as unknown as ToolCalledAssertion<K>;
+}
+
+export function brandToolNotCalled<K extends ToolKind>(
+  toolKind: K,
+  matcher?: ShellToolMatcher,
+): ToolNotCalledAssertion<K> {
+  const base = {
+    [ASSERTION_BRAND]: true as const,
+    kind: 'tool.notCalled' as const,
+    toolKind,
+  };
+  return (matcher === undefined
+    ? base
+    : {...base, matcher}) as unknown as ToolNotCalledAssertion<K>;
+}
+
+export function brandArtifactExists(path: string): ArtifactExistsAssertion {
+  return {
+    [ASSERTION_BRAND]: true as const,
+    kind: 'artifact.exists' as const,
+    path,
+  };
+}
+
+export function brandArtifactContains(
+  path: string,
+  text: string,
+): ArtifactContainsAssertion {
+  return {
+    [ASSERTION_BRAND]: true as const,
+    kind: 'artifact.contains' as const,
+    path,
+    text,
+  };
+}
+
+export function brandTranscriptContains(
+  text: string,
+): TranscriptContainsAssertion {
+  return {
+    [ASSERTION_BRAND]: true as const,
+    kind: 'transcript.contains' as const,
+    text,
+  };
+}
+
+export function brandFinalMessageContains(
+  text: string,
+): FinalMessageContainsAssertion {
+  return {
+    [ASSERTION_BRAND]: true as const,
+    kind: 'finalMessage.contains' as const,
+    text,
+  };
+}
+
+export function brandSequenceInOrder(
+  steps: readonly ToolCalledAssertion[],
+): SequenceInOrderAssertion {
+  return {
+    [ASSERTION_BRAND]: true as const,
+    kind: 'sequence.inOrder' as const,
+    steps,
+  };
 }

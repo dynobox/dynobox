@@ -230,6 +230,107 @@ describe('runJob', () => {
     expect(result.harnessResult?.toolEvents).toEqual([shellEvent]);
   });
 
+  it('evaluates artifact assertions against the job work directory', async () => {
+    const scratchRoot = createScratchRoot();
+
+    const result = await runJob(
+      createJob({
+        setup: [
+          "node -e \"require('node:fs').writeFileSync('CHANGELOG.md', 'dynobox@0.0.4')\"",
+        ],
+        assertions: [
+          {
+            id: 'assertion.uses-shell.0',
+            kind: 'artifact.contains',
+            path: 'CHANGELOG.md',
+            text: 'dynobox@0.0.4',
+          },
+        ],
+      }),
+      {scratchRoot, harnesses: [new FakeHarness()]},
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.assertionResults[0]).toMatchObject({passed: true});
+  });
+
+  it('evaluates harness transcript and final message assertions', async () => {
+    const scratchRoot = createScratchRoot();
+
+    const result = await runJob(
+      createJob({
+        assertions: [
+          {
+            id: 'assertion.uses-shell.0',
+            kind: 'transcript.contains',
+            text: 'EOTP',
+          },
+          {
+            id: 'assertion.uses-shell.1',
+            kind: 'finalMessage.contains',
+            text: 'working tree is dirty',
+          },
+        ],
+      }),
+      {
+        scratchRoot,
+        harnesses: [
+          new FakeHarness({stdout: 'transcript EOTP\nworking tree is dirty'}),
+        ],
+      },
+    );
+
+    expect(result.status).toBe('passed');
+    expect(
+      result.assertionResults.map((assertion) => assertion.passed),
+    ).toEqual([true, true]);
+  });
+
+  it('evaluates ordered shell sequences through runJob', async () => {
+    const scratchRoot = createScratchRoot();
+    const toolEvents: ShellToolEvent[] = [
+      {
+        kind: 'shell',
+        rawName: 'Bash',
+        input: {command: 'git status'},
+        command: 'git status',
+      },
+      {
+        kind: 'shell',
+        rawName: 'Bash',
+        input: {command: 'git commit -m test'},
+        command: 'git commit -m test',
+      },
+    ];
+
+    const result = await runJob(
+      createJob({
+        assertions: [
+          {
+            id: 'assertion.uses-shell.0',
+            kind: 'sequence.inOrder',
+            steps: [
+              {
+                kind: 'tool.called',
+                toolKind: 'shell',
+                matcher: {includes: 'git status'},
+              },
+              {
+                kind: 'tool.called',
+                toolKind: 'shell',
+                matcher: {includes: 'git commit'},
+              },
+            ],
+          },
+        ],
+      }),
+      {scratchRoot, harnesses: [new FakeHarness(undefined, {toolEvents})]},
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.assertionResults[0]).toMatchObject({passed: true});
+  });
+
   it('emits progress events for a passing job', async () => {
     const scratchRoot = createScratchRoot();
     const events: RunJobProgressEvent[] = [];
