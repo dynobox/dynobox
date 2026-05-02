@@ -2,16 +2,17 @@ import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import {evaluateAssertions, type AssertionResult} from '@dynobox/evaluators';
+import {type AssertionResult, evaluateAssertions} from '@dynobox/evaluators';
 import type {IrScenario} from '@dynobox/sdk';
 
 import type {
   Harness,
   HarnessResult,
   HarnessRunOutput,
+  ToolEvent,
 } from './harnesses/index.js';
-import {runScenarioSetup} from './setup.js';
 import type {SetupResult} from './setup.js';
+import {runScenarioSetup} from './setup.js';
 
 export type {
   Harness,
@@ -22,12 +23,12 @@ export type {
   ToolEvent,
   ToolKind,
 } from './harnesses/index.js';
+export type {ClaudeCodeHarnessOptions} from './harnesses/index.js';
 export {
   ClaudeCodeHarness,
   FakeHarness,
   normalizeToolKind,
 } from './harnesses/index.js';
-export type {ClaudeCodeHarnessOptions} from './harnesses/index.js';
 export type {RunSetupOptions, SetupCommandLog, SetupResult} from './setup.js';
 export {runScenarioSetup, runSetup} from './setup.js';
 
@@ -37,11 +38,55 @@ export type LocalRunnerJob = {
   iteration: number;
 };
 
+export type RunJobProgressEvent =
+  | {
+      type: 'setup.started';
+      job: LocalRunnerJob;
+      commandCount: number;
+    }
+  | {
+      type: 'setup.completed';
+      job: LocalRunnerJob;
+      setupResult: SetupResult;
+    }
+  | {
+      type: 'harness.started';
+      job: LocalRunnerJob;
+      harnessId: string;
+    }
+  | {
+      type: 'harness.completed';
+      job: LocalRunnerJob;
+      harnessId: string;
+      success: boolean;
+      toolCount: number;
+      exitCode?: number;
+      durationMs?: number;
+    }
+  | {
+      type: 'harness.tool';
+      job: LocalRunnerJob;
+      harnessId: string;
+      toolEvent: ToolEvent;
+      toolCount: number;
+    }
+  | {
+      type: 'assertions.started';
+      job: LocalRunnerJob;
+      assertionCount: number;
+    }
+  | {
+      type: 'assertions.completed';
+      job: LocalRunnerJob;
+      assertionResults: AssertionResult[];
+    };
+
 export type RunJobOptions = {
   harnesses?: readonly Harness[];
   scratchRoot?: string;
   env?: Record<string, string>;
   timeoutMs?: number;
+  onProgress?: (event: RunJobProgressEvent) => void;
 };
 
 export type LocalRunnerStatus =
@@ -53,6 +98,13 @@ export type LocalRunnerStatus =
 export type LocalArtifact = {
   kind: 'work_dir';
   path: string;
+};
+
+export type LocalRunnerTiming = {
+  setupMs: number;
+  harnessMs: number;
+  assertionsMs: number;
+  totalMs: number;
 };
 
 export type LocalRunnerResult = {
@@ -68,6 +120,7 @@ export type LocalRunnerResult = {
   artifacts: LocalArtifact[];
   assertionResults: AssertionResult[];
   diagnostics: string[];
+  timing: LocalRunnerTiming;
 };
 
 export async function runJob(
@@ -83,7 +136,14 @@ export async function runJob(
   };
   if (options.env !== undefined) setupOptions.env = options.env;
 
+  emitProgress(options, {
+    type: 'setup.started',
+    job,
+    commandCount: job.scenario.setup.length,
+  });
   const setupResult = await runScenarioSetup(setupOptions);
+  const setupMs = setupDurationMs(setupResult);
+  emitProgress(options, {type: 'setup.completed', job, setupResult});
   if (!setupResult.success) {
     return buildResult(job, {
       status: 'setup_failed',
@@ -91,13 +151,26 @@ export async function runJob(
       setupResult,
       artifacts,
       diagnostics: [setupFailureDiagnostic(setupResult)],
+      timing: buildTiming({setupMs}),
     });
   }
 
+  emitProgress(options, {
+    type: 'harness.started',
+    job,
+    harnessId: job.scenario.harness,
+  });
   const harness = options.harnesses?.find(
     (candidate) => candidate.id === job.scenario.harness,
   );
   if (harness === undefined) {
+    emitProgress(options, {
+      type: 'harness.completed',
+      job,
+      harnessId: job.scenario.harness,
+      success: false,
+      toolCount: 0,
+    });
     return buildResult(job, {
       status: 'harness_failed',
       workDir,
@@ -106,15 +179,28 @@ export async function runJob(
       diagnostics: [
         `No harness registered for scenario harness "${job.scenario.harness}".`,
       ],
+      timing: buildTiming({setupMs}),
     });
   }
 
   let harnessOutput: HarnessRunOutput;
+  const harnessStartedAt = Date.now();
+  let liveToolCount = 0;
   try {
     const harnessInput = {
       prompt: job.scenario.prompt,
       workDir,
       env: options.env ?? {},
+      onToolEvent: (toolEvent: ToolEvent) => {
+        liveToolCount += 1;
+        emitProgress(options, {
+          type: 'harness.tool',
+          job,
+          harnessId: harness.id,
+          toolEvent,
+          toolCount: liveToolCount,
+        });
+      },
     };
     harnessOutput = await harness.run(
       options.timeoutMs === undefined
@@ -122,6 +208,13 @@ export async function runJob(
         : {...harnessInput, timeoutMs: options.timeoutMs},
     );
   } catch (error) {
+    emitProgress(options, {
+      type: 'harness.completed',
+      job,
+      harnessId: harness.id,
+      success: false,
+      toolCount: liveToolCount,
+    });
     return buildResult(job, {
       status: 'harness_failed',
       workDir,
@@ -130,6 +223,10 @@ export async function runJob(
       diagnostics: [
         `Harness "${harness.id}" failed to run: ${errorMessage(error)}`,
       ],
+      timing: buildTiming({
+        setupMs,
+        harnessMs: Date.now() - harnessStartedAt,
+      }),
     });
   }
 
@@ -137,6 +234,15 @@ export async function runJob(
   try {
     harnessResult = harness.extractResult(harnessOutput);
   } catch (error) {
+    emitProgress(options, {
+      type: 'harness.completed',
+      job,
+      harnessId: harness.id,
+      success: false,
+      toolCount: liveToolCount,
+      exitCode: harnessOutput.exitCode,
+      durationMs: harnessOutput.durationMs,
+    });
     return buildResult(job, {
       status: 'harness_failed',
       workDir,
@@ -146,10 +252,23 @@ export async function runJob(
       diagnostics: [
         `Harness "${harness.id}" failed to extract result: ${errorMessage(error)}`,
       ],
+      timing: buildTiming({
+        setupMs,
+        harnessMs: harnessOutput.durationMs,
+      }),
     });
   }
 
   if (harnessResult.exitCode !== 0) {
+    emitProgress(options, {
+      type: 'harness.completed',
+      job,
+      harnessId: harness.id,
+      success: false,
+      toolCount: liveToolCount,
+      exitCode: harnessResult.exitCode,
+      durationMs: harnessResult.durationMs,
+    });
     return buildResult(job, {
       status: 'harness_failed',
       workDir,
@@ -158,12 +277,37 @@ export async function runJob(
       harnessOutput,
       harnessResult,
       diagnostics: [harnessExitDiagnostic(harnessResult, harnessOutput)],
+      timing: buildTiming({
+        setupMs,
+        harnessMs: harnessResult.durationMs,
+      }),
     });
   }
 
+  emitProgress(options, {
+    type: 'harness.completed',
+    job,
+    harnessId: harness.id,
+    success: true,
+    toolCount: harnessResult.toolEvents.length,
+    exitCode: harnessResult.exitCode,
+    durationMs: harnessResult.durationMs,
+  });
+  emitProgress(options, {
+    type: 'assertions.started',
+    job,
+    assertionCount: job.scenario.assertions.length,
+  });
+  const assertionsStartedAt = Date.now();
   const assertionResults = evaluateAssertions({
     assertions: job.scenario.assertions,
     toolEvents: harnessResult.toolEvents,
+  });
+  const assertionsMs = Date.now() - assertionsStartedAt;
+  emitProgress(options, {
+    type: 'assertions.completed',
+    job,
+    assertionResults,
   });
   const passed = assertionResults.every((result) => result.passed);
 
@@ -175,11 +319,23 @@ export async function runJob(
     harnessOutput,
     harnessResult,
     assertionResults,
+    timing: buildTiming({
+      setupMs,
+      harnessMs: harnessResult.durationMs,
+      assertionsMs,
+    }),
   });
 }
 
 async function createWorkDir(scratchRoot: string | undefined): Promise<string> {
   return mkdtemp(join(scratchRoot ?? tmpdir(), 'dynobox-job-'));
+}
+
+function emitProgress(
+  options: RunJobOptions,
+  event: RunJobProgressEvent,
+): void {
+  options.onProgress?.(event);
 }
 
 function buildResult(
@@ -192,9 +348,11 @@ function buildResult(
     | 'passed'
     | 'assertionResults'
     | 'diagnostics'
+    | 'timing'
   > & {
     assertionResults?: AssertionResult[];
     diagnostics?: string[];
+    timing: LocalRunnerTiming;
   },
 ): LocalRunnerResult {
   const assertionResults = result.assertionResults ?? [];
@@ -216,6 +374,26 @@ function buildResult(
     artifacts: result.artifacts,
     assertionResults,
     diagnostics,
+    timing: result.timing,
+  };
+}
+
+function setupDurationMs(setupResult: SetupResult): number {
+  return setupResult.logs.reduce((total, log) => total + log.durationMs, 0);
+}
+
+function buildTiming(input: {
+  setupMs: number;
+  harnessMs?: number;
+  assertionsMs?: number;
+}): LocalRunnerTiming {
+  const harnessMs = input.harnessMs ?? 0;
+  const assertionsMs = input.assertionsMs ?? 0;
+  return {
+    setupMs: input.setupMs,
+    harnessMs,
+    assertionsMs,
+    totalMs: input.setupMs + harnessMs + assertionsMs,
   };
 }
 

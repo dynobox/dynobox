@@ -1,5 +1,6 @@
 import {execa} from 'execa';
 
+import {normalizeToolKind} from './tool-events.js';
 import type {
   Harness,
   HarnessInput,
@@ -8,7 +9,6 @@ import type {
   ShellToolEvent,
   ToolEvent,
 } from './types.js';
-import {normalizeToolKind} from './tool-events.js';
 
 export type ClaudeCodeHarnessOptions = {
   executable?: string;
@@ -20,6 +20,12 @@ type JsonObject = Record<string, unknown>;
 export type ClaudeCodeParsedOutput = {
   finalMessage: string | undefined;
   toolEvents: ToolEvent[];
+};
+
+export type ClaudeCodeParsedLine = {
+  toolEvents: ToolEvent[];
+  resultMessage?: string;
+  assistantMessage?: string;
 };
 
 export class ClaudeCodeHarness implements Harness {
@@ -41,16 +47,35 @@ export class ClaudeCodeHarness implements Harness {
       ...(input.timeoutMs === undefined ? {} : {timeout: input.timeoutMs}),
     };
 
-    const result = await execa(
+    const subprocess = execa(
       this.executable,
       buildClaudeCodeArgs(input.prompt, this.extraArgs),
       options,
     );
+    const stdoutChunks: string[] = [];
+    const stderrChunks: string[] = [];
+    const streamParser = new ClaudeCodeToolEventStream((toolEvent) => {
+      input.onToolEvent?.(toolEvent);
+    });
+
+    subprocess.stdout?.on('data', (chunk: Buffer | string) => {
+      const text = chunk.toString();
+      stdoutChunks.push(text);
+      streamParser.write(text);
+    });
+    subprocess.stderr?.on('data', (chunk: Buffer | string) => {
+      stderrChunks.push(chunk.toString());
+    });
+
+    const result = await subprocess;
+    streamParser.flush();
+    const stdout = result.stdout ?? '';
+    const stderr = result.stderr ?? '';
 
     return {
       exitCode: result.exitCode ?? 1,
-      stdout: result.stdout ?? '',
-      stderr: result.stderr ?? '',
+      stdout: stdout.length === 0 ? stdoutChunks.join('') : stdout,
+      stderr: stderr.length === 0 ? stderrChunks.join('') : stderr,
       durationMs: result.durationMs,
     };
   }
@@ -90,21 +115,15 @@ export function parseClaudeCodeStreamJson(
   const toolEvents: ToolEvent[] = [];
 
   for (const {line, lineNumber} of jsonLines(stdout)) {
-    const event = parseJsonObjectLine(line, lineNumber);
-    const toolEvent = parseToolEvent(event);
-    if (toolEvent !== undefined) {
-      toolEvents.push(toolEvent);
-    }
-    toolEvents.push(...parseAssistantToolEvents(event));
+    const parsed = parseClaudeCodeStreamJsonLine(line, lineNumber);
+    toolEvents.push(...parsed.toolEvents);
 
-    const result = parseResultMessage(event);
-    if (result !== undefined) {
-      resultMessage = result;
+    if (parsed.resultMessage !== undefined) {
+      resultMessage = parsed.resultMessage;
     }
 
-    const assistantMessage = parseAssistantMessage(event);
-    if (assistantMessage !== undefined) {
-      lastAssistantMessage = assistantMessage;
+    if (parsed.assistantMessage !== undefined) {
+      lastAssistantMessage = parsed.assistantMessage;
     }
   }
 
@@ -112,6 +131,68 @@ export function parseClaudeCodeStreamJson(
     finalMessage: resultMessage ?? lastAssistantMessage,
     toolEvents,
   };
+}
+
+export function parseClaudeCodeStreamJsonLine(
+  line: string,
+  lineNumber = 1,
+): ClaudeCodeParsedLine {
+  const event = parseJsonObjectLine(line, lineNumber);
+  const toolEvents = parseToolEvents(event);
+  const resultMessage = parseResultMessage(event);
+  const assistantMessage = parseAssistantMessage(event);
+
+  return {
+    toolEvents,
+    ...(resultMessage === undefined ? {} : {resultMessage}),
+    ...(assistantMessage === undefined ? {} : {assistantMessage}),
+  };
+}
+
+class ClaudeCodeToolEventStream {
+  private buffer = '';
+  private lineNumber = 0;
+
+  constructor(private readonly onToolEvent: (event: ToolEvent) => void) {}
+
+  write(chunk: string): void {
+    this.buffer += chunk;
+
+    while (true) {
+      const newlineIndex = this.buffer.search(/\r?\n/);
+      if (newlineIndex === -1) return;
+
+      const line = this.buffer.slice(0, newlineIndex);
+      const newlineLength =
+        this.buffer[newlineIndex] === '\r' &&
+        this.buffer[newlineIndex + 1] === '\n'
+          ? 2
+          : 1;
+      this.buffer = this.buffer.slice(newlineIndex + newlineLength);
+      this.parseLine(line);
+    }
+  }
+
+  flush(): void {
+    if (this.buffer.trim().length === 0) return;
+    this.parseLine(this.buffer);
+    this.buffer = '';
+  }
+
+  private parseLine(rawLine: string): void {
+    const line = rawLine.trim();
+    if (line.length === 0) return;
+
+    this.lineNumber += 1;
+    try {
+      const parsed = parseClaudeCodeStreamJsonLine(line, this.lineNumber);
+      for (const toolEvent of parsed.toolEvents) {
+        this.onToolEvent(toolEvent);
+      }
+    } catch {
+      // Final extraction reports malformed stdout with a precise line number.
+    }
+  }
 }
 
 function* jsonLines(
@@ -133,6 +214,7 @@ function parseJsonObjectLine(line: string, lineNumber: number): JsonObject {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
       `Failed to parse Claude Code stream JSON line ${lineNumber}: ${message}`,
+      {cause: error},
     );
   }
 
@@ -142,6 +224,14 @@ function parseJsonObjectLine(line: string, lineNumber: number): JsonObject {
     );
   }
   return parsed;
+}
+
+function parseToolEvents(event: JsonObject): ToolEvent[] {
+  const toolEvent = parseToolEvent(event);
+  const assistantEvents = parseAssistantToolEvents(event);
+  return toolEvent === undefined
+    ? assistantEvents
+    : [toolEvent, ...assistantEvents];
 }
 
 function parseToolEvent(event: JsonObject): ToolEvent | undefined {

@@ -1,7 +1,14 @@
 import {mkdirSync, rmSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 
-import {FakeHarness, type ShellToolEvent} from '@dynobox/runner-local';
+import {
+  FakeHarness,
+  type Harness,
+  type HarnessInput,
+  type HarnessResult,
+  type HarnessRunOutput,
+  type ShellToolEvent,
+} from '@dynobox/runner-local';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 
 import {
@@ -29,6 +36,7 @@ const EXPECTED_STDERR = `
 const FIXTURE_DIR = join(process.cwd(), '.tmp-dynobox-cli-tests');
 const VALID_CONFIG_PATH = join(FIXTURE_DIR, 'valid.config.ts');
 const INVALID_CONFIG_PATH = join(FIXTURE_DIR, 'invalid.config.ts');
+const SETUP_FAIL_CONFIG_PATH = join(FIXTURE_DIR, 'setup-fail.config.ts');
 const VALID_CONFIG = `import {defineConfig, tool} from '@dynobox/sdk';
 
 export default defineConfig({
@@ -49,24 +57,76 @@ const INVALID_CONFIG = `export default {
   scenarios: [{name: 'missing prompt'}],
 };
 `;
+const SETUP_FAIL_CONFIG = `import {defineConfig, tool} from '@dynobox/sdk';
+
+export default defineConfig({
+  scenarios: [
+    {
+      name: 'setup breaks',
+      prompt: 'Run pnpm test.',
+      setup: ['echo setup failed >&2 && exit 7'],
+      assertions: [tool.called('shell')],
+    },
+  ],
+});
+`;
 const SHELL_EVENT: ShellToolEvent = {
   kind: 'shell',
   rawName: 'Bash',
   input: {command: 'pnpm test'},
   command: 'pnpm test',
 };
+const MISMATCHED_SHELL_EVENT: ShellToolEvent = {
+  kind: 'shell',
+  rawName: 'Bash',
+  input: {command: 'npm test'},
+  command: 'npm test',
+};
 
 function createPassingHarness(): FakeHarness {
   return new FakeHarness(undefined, {toolEvents: [SHELL_EVENT]});
 }
 
-function expectedPassingRunOutput(configPath: string): string {
-  return `${renderRunHeader(configPath, 1)}[1/1] uses shell claude-code iter 1 PASS
+class StreamingHarness implements Harness {
+  readonly id = 'claude-code' as const;
 
-Assertions:
-PASS tool.called(shell)
-PASS tool.called(shell, includes: pnpm test)
-`;
+  async run(input: HarnessInput): Promise<HarnessRunOutput> {
+    input.onToolEvent?.(SHELL_EVENT);
+    return {
+      exitCode: 0,
+      stdout: 'fake output',
+      stderr: '',
+      durationMs: 100,
+    };
+  }
+
+  extractResult(raw: HarnessRunOutput): HarnessResult {
+    return {
+      exitCode: raw.exitCode,
+      durationMs: raw.durationMs,
+      transcript: raw.stdout,
+      finalMessage: raw.stdout,
+      toolEvents: [SHELL_EVENT],
+    };
+  }
+}
+
+function expectedPassingRunOutput(configPath: string): string {
+  return renderRunHeader(configPath, [
+    {
+      id: 'scenario.uses-shell.iteration.0',
+      iteration: 0,
+      scenario: {
+        id: 'scenario.uses-shell',
+        name: 'uses shell',
+        prompt: 'Run pnpm test and summarize the result.',
+        harness: 'claude-code',
+        setup: [],
+        endpoints: [],
+        assertions: [],
+      },
+    },
+  ]);
 }
 
 /**
@@ -85,6 +145,7 @@ describe('packages/cli', () => {
     mkdirSync(FIXTURE_DIR, {recursive: true});
     writeFileSync(VALID_CONFIG_PATH, VALID_CONFIG);
     writeFileSync(INVALID_CONFIG_PATH, INVALID_CONFIG);
+    writeFileSync(SETUP_FAIL_CONFIG_PATH, SETUP_FAIL_CONFIG);
   });
 
   afterAll(() => {
@@ -96,12 +157,23 @@ describe('packages/cli', () => {
   });
 
   it('renders the run header', () => {
-    expect(renderRunHeader('./config.ts', 2)).toBe(`dynobox run
-
-config: ./config.ts
-jobs: 2
-
-`);
+    expect(
+      renderRunHeader('./config.ts', [
+        {
+          id: 'scenario.test.iteration.0',
+          iteration: 0,
+          scenario: {
+            id: 'scenario.test',
+            name: 'test',
+            prompt: 'Run a test.',
+            harness: 'claude-code',
+            setup: [],
+            endpoints: [],
+            assertions: [],
+          },
+        },
+      ]),
+    ).toContain('plan     1 scenario · 1 harness · 1 iteration');
   });
 
   it('renders the run config error message', () => {
@@ -139,25 +211,120 @@ error: bad config
       }),
     ).resolves.toEqual({
       exitCode: 0,
-      stdout: expectedPassingRunOutput(VALID_CONFIG_PATH),
+      stdout: expect.stringContaining('✓  uses shell'),
       stderr: '',
     });
   });
 
+  it('prints quiet output for CI-style runs', async () => {
+    const result = await executeCli(['run', VALID_CONFIG_PATH, '--quiet'], {
+      harnesses: [createPassingHarness()],
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(
+      'dynobox  1 scenario · 1 harness · 1 iteration',
+    );
+    expect(result.stdout).toContain('\n  .\n');
+    expect(result.stdout).toContain('1 passed, 0 failed in 0.1s');
+  });
+
+  it('prints live tool progress when live output is enabled', async () => {
+    const writes: string[] = [];
+    const result = await executeCli(['run', VALID_CONFIG_PATH, '--verbose'], {
+      harnesses: [new StreamingHarness()],
+      live: true,
+      writeStdout: (value) => writes.push(value),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(writes.join('')).toContain('Bash: pnpm test 1 tool');
+    expect(writes.join('')).toContain('✓ tool.called(shell)');
+    expect(writes.join('')).toContain('1 passed');
+  });
+
+  it('collapses passing scenarios to a one-liner in default mode', async () => {
+    const result = await executeCli(['run', VALID_CONFIG_PATH], {
+      harnesses: [createPassingHarness()],
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('✓  uses shell');
+    expect(result.stdout).not.toContain('✓ setup');
+    expect(result.stdout).not.toContain('✓ harness');
+    expect(result.stdout).not.toContain('tool.called(shell)');
+  });
+
+  it('expands all phase rows in verbose mode', async () => {
+    const result = await executeCli(['run', VALID_CONFIG_PATH, '--verbose'], {
+      harnesses: [createPassingHarness()],
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('✓  uses shell');
+    expect(result.stdout).toContain('setup      0 commands');
+    expect(result.stdout).toContain('harness    ran prompt');
+    expect(result.stdout).toContain('assertions 2 of 2 passed');
+    expect(result.stdout).toContain('✓ tool.called(shell)');
+  });
+
+  it('can render plain fallback symbols', async () => {
+    const result = await executeCli(['run', VALID_CONFIG_PATH, '--verbose'], {
+      harnesses: [createPassingHarness()],
+      usePlainSymbols: true,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('[ ok ]  uses shell');
+    expect(result.stdout).toContain('[ ok ] tool.called(shell)');
+    expect(result.stdout).not.toContain('✓');
+  });
+
+  it('includes work directory details in debug mode', async () => {
+    const result = await executeCli(['run', VALID_CONFIG_PATH, '--debug'], {
+      harnesses: [createPassingHarness()],
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('work dir');
+    expect(result.stdout).toContain('artifact  work_dir');
+  });
+
   it('exits nonzero when assertions fail', async () => {
     const result = await executeCli(['run', VALID_CONFIG_PATH], {
-      harnesses: [new FakeHarness()],
+      harnesses: [
+        new FakeHarness(undefined, {toolEvents: [MISMATCHED_SHELL_EVENT]}),
+      ],
     });
 
     expect(result.exitCode).toBe(runFailureExitCode);
-    expect(result.stdout)
-      .toBe(`${renderRunHeader(VALID_CONFIG_PATH, 1)}[1/1] uses shell claude-code iter 1 FAIL
-
-Assertions:
-FAIL tool.called(shell)
-FAIL tool.called(shell, includes: pnpm test)
-`);
+    expect(result.stdout).toContain('✗  uses shell');
+    expect(result.stdout).toContain('✗ assertions 1 of 2 passed');
+    expect(result.stdout).toContain(
+      '✗ tool.called(shell, includes: pnpm test)',
+    );
+    expect(result.stdout).toContain(
+      'expected  shell command including "pnpm test"',
+    );
+    expect(result.stdout).toContain('observed shell commands during this run:');
+    expect(result.stdout).toContain('1. npm test');
+    expect(result.stdout).toContain('0 passed   1 failed');
     expect(result.stderr).toBe('');
+  });
+
+  it('shows skipped phases when setup fails', async () => {
+    const result = await executeCli(['run', SETUP_FAIL_CONFIG_PATH], {
+      harnesses: [createPassingHarness()],
+    });
+
+    expect(result.exitCode).toBe(runFailureExitCode);
+    expect(result.stdout).toContain('✗  setup breaks');
+    expect(result.stdout).toContain('✗ setup      1 command');
+    expect(result.stdout).toContain('$ echo setup failed >&2 && exit 7');
+    expect(result.stdout).toContain('exit code 7');
+    expect(result.stdout).toContain('setup failed');
+    expect(result.stdout).toContain('– harness    skipped');
+    expect(result.stdout).toContain('– assertions skipped');
   });
 
   it('exits nonzero with diagnostics when local execution fails', async () => {
@@ -166,15 +333,13 @@ FAIL tool.called(shell, includes: pnpm test)
     });
 
     expect(result.exitCode).toBe(runFailureExitCode);
-    expect(result.stdout)
-      .toBe(`${renderRunHeader(VALID_CONFIG_PATH, 1)}[1/1] uses shell claude-code iter 1 FAIL
-
-Assertions:
-(none)
-`);
-    expect(result.stderr).toBe(`Diagnostics:
-scenario.uses-shell.iteration.0: No harness registered for scenario harness "claude-code".
-`);
+    expect(result.stdout).toContain('✗  uses shell');
+    expect(result.stdout).toContain('✗ harness    failed');
+    expect(result.stdout).toContain(
+      'No harness registered for scenario harness "claude-code".',
+    );
+    expect(result.stdout).toContain('– assertions skipped');
+    expect(result.stderr).toBe('');
   });
 
   it('exits nonzero when config validation fails', async () => {
@@ -230,8 +395,7 @@ scenario.uses-shell.iteration.0: No harness registered for scenario harness "cla
         harnesses: [createPassingHarness()],
       }),
     ).resolves.toBe(0);
-    expect(stdoutWrite).toHaveBeenCalledOnce();
-    expect(stdoutWrite.mock.calls[0]?.[0]).toBe(
+    expect(stdoutWrite.mock.calls.map((call) => call[0]).join('')).toContain(
       expectedPassingRunOutput(VALID_CONFIG_PATH),
     );
 

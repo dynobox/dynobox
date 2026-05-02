@@ -10,6 +10,8 @@ export type HarnessInput = {
   env: Record<string, string>;
   /** Optional invocation timeout in milliseconds. */
   timeoutMs?: number;
+  /** Optional live callback for tool events observed while the harness runs. */
+  onToolEvent?: (event: ToolEvent) => void;
 };
 
 /** Raw output from a harness invocation, before any extraction. */

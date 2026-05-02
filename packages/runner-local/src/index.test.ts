@@ -14,7 +14,11 @@ import type {
   ShellToolEvent,
   ToolEvent,
 } from './harnesses/index.js';
-import {type LocalRunnerJob, runJob} from './index.js';
+import {
+  type LocalRunnerJob,
+  runJob,
+  type RunJobProgressEvent,
+} from './index.js';
 
 const scratchRoots: string[] = [];
 
@@ -92,6 +96,43 @@ class ThrowingHarness implements Harness {
   }
 }
 
+class ToolStreamingHarness implements Harness {
+  readonly id = 'claude-code' as const;
+
+  async run(input: HarnessInput): Promise<HarnessRunOutput> {
+    input.onToolEvent?.({
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {command: 'pnpm test'},
+      command: 'pnpm test',
+    } as ShellToolEvent);
+
+    return {
+      exitCode: 0,
+      stdout: 'fake output',
+      stderr: '',
+      durationMs: 100,
+    };
+  }
+
+  extractResult(raw: HarnessRunOutput): HarnessResult {
+    return {
+      exitCode: raw.exitCode,
+      durationMs: raw.durationMs,
+      transcript: raw.stdout,
+      finalMessage: raw.stdout,
+      toolEvents: [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'pnpm test'},
+          command: 'pnpm test',
+        } as ShellToolEvent,
+      ],
+    };
+  }
+}
+
 describe('runJob', () => {
   it('creates a work directory under scratchRoot and returns it as an artifact', async () => {
     const scratchRoot = createScratchRoot();
@@ -102,6 +143,11 @@ describe('runJob', () => {
 
     expect(result.status).toBe('passed');
     expect(result.passed).toBe(true);
+    expect(result.timing).toMatchObject({
+      setupMs: 0,
+      harnessMs: 100,
+    });
+    expect(result.timing.totalMs).toBeGreaterThanOrEqual(100);
     expect(existsSync(result.workDir)).toBe(true);
     expect(relative(scratchRoot, result.workDir)).toMatch(/^dynobox-job-/);
     expect(result.artifacts).toEqual([
@@ -177,7 +223,104 @@ describe('runJob', () => {
     expect(result.status).toBe('passed');
     expect(result.assertionResults).toHaveLength(1);
     expect(result.assertionResults[0]).toMatchObject({passed: true});
+    expect(result.timing).toMatchObject({
+      setupMs: 0,
+      harnessMs: 100,
+    });
     expect(result.harnessResult?.toolEvents).toEqual([shellEvent]);
+  });
+
+  it('emits progress events for a passing job', async () => {
+    const scratchRoot = createScratchRoot();
+    const events: RunJobProgressEvent[] = [];
+    const shellEvent: ShellToolEvent = {
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {command: 'pnpm test'},
+      command: 'pnpm test',
+    };
+
+    const result = await runJob(
+      createJob({
+        setup: ['node --version'],
+        assertions: [
+          {
+            id: 'assertion.uses-shell.0',
+            kind: 'tool.called',
+            toolKind: 'shell',
+          },
+        ],
+      }),
+      {
+        scratchRoot,
+        harnesses: [new FakeHarness(undefined, {toolEvents: [shellEvent]})],
+        onProgress: (event) => events.push(event),
+      },
+    );
+
+    expect(result.status).toBe('passed');
+    expect(events.map((event) => event.type)).toEqual([
+      'setup.started',
+      'setup.completed',
+      'harness.started',
+      'harness.completed',
+      'assertions.started',
+      'assertions.completed',
+    ]);
+    expect(events[0]).toMatchObject({commandCount: 1});
+    expect(events[3]).toMatchObject({
+      harnessId: 'claude-code',
+      success: true,
+      exitCode: 0,
+      durationMs: 100,
+    });
+    expect(events[4]).toMatchObject({assertionCount: 1});
+    expect(events[5]).toMatchObject({
+      assertionResults: [{passed: true}],
+    });
+  });
+
+  it('re-emits live harness tool events with a running count', async () => {
+    const scratchRoot = createScratchRoot();
+    const events: RunJobProgressEvent[] = [];
+
+    const result = await runJob(
+      createJob({
+        assertions: [
+          {
+            id: 'assertion.uses-shell.0',
+            kind: 'tool.called',
+            toolKind: 'shell',
+          },
+        ],
+      }),
+      {
+        scratchRoot,
+        harnesses: [new ToolStreamingHarness()],
+        onProgress: (event) => events.push(event),
+      },
+    );
+
+    expect(result.status).toBe('passed');
+    expect(events.map((event) => event.type)).toEqual([
+      'setup.started',
+      'setup.completed',
+      'harness.started',
+      'harness.tool',
+      'harness.completed',
+      'assertions.started',
+      'assertions.completed',
+    ]);
+    expect(events[3]).toMatchObject({
+      type: 'harness.tool',
+      harnessId: 'claude-code',
+      toolCount: 1,
+      toolEvent: {kind: 'shell', command: 'pnpm test'},
+    });
+    expect(events[4]).toMatchObject({
+      type: 'harness.completed',
+      toolCount: 1,
+    });
   });
 
   it('returns assertion_failed when assertions fail', async () => {
@@ -255,6 +398,8 @@ describe('runJob', () => {
     expect(result.passed).toBe(false);
     expect(result.setupResult.success).toBe(false);
     expect(result.setupResult.logs[0]?.exitCode).toBe(7);
+    expect(result.timing.harnessMs).toBe(0);
+    expect(result.timing.assertionsMs).toBe(0);
     expect(result.diagnostics[0]).toContain('setup failed');
     expect(harness.inputs).toHaveLength(0);
     expect(result.harnessOutput).toBeUndefined();
@@ -262,14 +407,34 @@ describe('runJob', () => {
 
   it('returns harness_failed when no harness is registered', async () => {
     const scratchRoot = createScratchRoot();
+    const events: RunJobProgressEvent[] = [];
 
-    const result = await runJob(createJob(), {scratchRoot});
+    const result = await runJob(createJob(), {
+      scratchRoot,
+      onProgress: (event) => events.push(event),
+    });
 
     expect(result.status).toBe('harness_failed');
     expect(result.passed).toBe(false);
+    expect(result.timing).toMatchObject({
+      setupMs: 0,
+      harnessMs: 0,
+      assertionsMs: 0,
+      totalMs: 0,
+    });
     expect(result.diagnostics).toEqual([
       'No harness registered for scenario harness "claude-code".',
     ]);
+    expect(events.map((event) => event.type)).toEqual([
+      'setup.started',
+      'setup.completed',
+      'harness.started',
+      'harness.completed',
+    ]);
+    expect(events[3]).toMatchObject({
+      harnessId: 'claude-code',
+      success: false,
+    });
   });
 
   it('returns harness_failed when harness invocation throws', async () => {
@@ -308,6 +473,12 @@ describe('runJob', () => {
       stderr: 'agent failed',
     });
     expect(result.harnessResult).toMatchObject({exitCode: 2});
+    expect(result.timing).toMatchObject({
+      setupMs: 0,
+      harnessMs: 50,
+      assertionsMs: 0,
+      totalMs: 50,
+    });
     expect(result.diagnostics).toEqual([
       'Harness exited with code 2: agent failed',
     ]);

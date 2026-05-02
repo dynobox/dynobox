@@ -1,11 +1,30 @@
-import {describe, expect, it} from 'vitest';
+import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+
+import {afterEach, describe, expect, it} from 'vitest';
 
 import {
   buildClaudeCodeArgs,
   ClaudeCodeHarness,
   parseClaudeCodeStreamJson,
+  parseClaudeCodeStreamJsonLine,
 } from './claude-code.js';
-import type {HarnessRunOutput} from './types.js';
+import type {HarnessRunOutput, ToolEvent} from './types.js';
+
+const scratchRoots: string[] = [];
+
+function createScratchRoot(): string {
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'dynobox-claude-test-'));
+  scratchRoots.push(scratchRoot);
+  return scratchRoot;
+}
+
+afterEach(() => {
+  for (const scratchRoot of scratchRoots.splice(0)) {
+    rmSync(scratchRoot, {force: true, recursive: true});
+  }
+});
 
 function jsonl(...events: unknown[]): string {
   return events.map((event) => JSON.stringify(event)).join('\n');
@@ -68,6 +87,41 @@ describe('ClaudeCodeHarness', () => {
       },
     ]);
   });
+
+  it('emits tool events while run streams stdout', async () => {
+    const scratchRoot = createScratchRoot();
+    const executable = join(scratchRoot, 'fake-claude');
+    writeFileSync(
+      executable,
+      `#!/bin/sh
+cat <<'JSONL'
+{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"pnpm test"}}
+{"type":"result","result":"Tests passed."}
+JSONL
+`,
+      {mode: 0o755},
+    );
+    const harness = new ClaudeCodeHarness({executable});
+    const toolEvents: ToolEvent[] = [];
+
+    const result = await harness.run({
+      prompt: 'Run tests.',
+      workDir: scratchRoot,
+      env: {},
+      onToolEvent: (toolEvent) => toolEvents.push(toolEvent),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Tests passed.');
+    expect(toolEvents).toEqual([
+      {
+        kind: 'shell',
+        rawName: 'Bash',
+        input: {command: 'pnpm test'},
+        command: 'pnpm test',
+      },
+    ]);
+  });
 });
 
 describe('parseClaudeCodeStreamJson', () => {
@@ -83,6 +137,25 @@ describe('parseClaudeCodeStreamJson', () => {
     );
 
     expect(parsed.finalMessage).toBe('Final result.');
+  });
+
+  it('parses a single stream line for incremental consumers', () => {
+    const parsed = parseClaudeCodeStreamJsonLine(
+      JSON.stringify({
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: {command: 'cat package.json'},
+      }),
+    );
+
+    expect(parsed.toolEvents).toEqual([
+      {
+        kind: 'shell',
+        rawName: 'Bash',
+        input: {command: 'cat package.json'},
+        command: 'cat package.json',
+      },
+    ]);
   });
 
   it('falls back to the last assistant text when no result event exists', () => {
