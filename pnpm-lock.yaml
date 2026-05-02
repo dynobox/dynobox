@@ -53,19 +53,22 @@ importers:
 
   packages/cli:
     dependencies:
-      '@dynobox/runner-local':
-        specifier: workspace:*
-        version: link:../runner-local
       '@dynobox/sdk':
         specifier: workspace:*
         version: link:../sdk
       commander:
         specifier: ^14.0.3
         version: 14.0.3
+      execa:
+        specifier: ^9.6.1
+        version: 9.6.1
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
     devDependencies:
+      '@dynobox/runner-local':
+        specifier: workspace:*
+        version: link:../runner-local
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(postcss@8.5.10)(tsx@4.21.0)(typescript@6.0.3)

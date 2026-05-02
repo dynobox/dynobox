@@ -18,16 +18,8 @@
   },
   "license": "Apache-2.0",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
   "scripts": {
-    "build": "tsup src/index.ts src/bin.ts --format esm --splitting false --clean && tsc -p tsconfig.build.json --emitDeclarationOnly --declaration",
+    "build": "tsup && tsc -p tsconfig.build.json --noEmit",
     "prepack": "pnpm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm run build && vitest run"
@@ -42,12 +34,13 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@dynobox/runner-local": "workspace:*",
     "@dynobox/sdk": "workspace:*",
     "commander": "^14.0.3",
+    "execa": "^9.6.1",
     "tsx": "^4.21.0"
   },
   "devDependencies": {
+    "@dynobox/runner-local": "workspace:*",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"

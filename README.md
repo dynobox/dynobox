@@ -20,6 +20,8 @@ This repository is a monorepo. Published packages live under `packages/`.
 | [`@dynobox/sdk`](./packages/sdk)                   | [`@dynobox/sdk`](https://www.npmjs.com/package/@dynobox/sdk) | SDK for authoring configs and compiling canonical IR   |
 | [`@dynobox/runner-local`](./packages/runner-local) | Unpublished                                        | Local runner for harness execution and tool assertions |
 
+`@dynobox/runner-local` and `@dynobox/evaluators` are private workspace packages. They stay separate so the same runtime code can be reused by future hosted runners, but they are bundled into the published `dynobox` CLI instead of exposed as public npm dependencies.
+
 ## Current Capabilities
 
 - Author configs with `@dynobox/sdk` helpers.
