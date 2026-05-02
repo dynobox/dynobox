@@ -10,11 +10,15 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
-- Fixed live progress rendering for multiline shell commands so spinner updates stay on one row.
-
 ### `@dynobox/sdk`
 
 ---
+
+## dynobox@0.0.6 — 2026-05-02
+
+### `dynobox`
+
+- Fixed live progress rendering for multiline shell commands so spinner updates stay on one row.
 
 ## @dynobox/sdk@0.0.2 — 2026-05-02
 
