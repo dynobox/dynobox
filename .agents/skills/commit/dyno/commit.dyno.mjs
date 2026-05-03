@@ -11,6 +11,7 @@ export default defineConfig({
         'Use the commit skill to commit the README.md change in this scratch repository. Do not push. Do not amend any commit.',
       setup: [
         `cp -R ${here.q('fixtures/repo/.')} .`,
+        `cp -r ${here.q('fixtures/.codex/')} ./`,
         'git init',
         'git config user.email dynobox@example.com',
         'git config user.name Dynobox Test',
