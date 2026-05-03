@@ -3,6 +3,7 @@ import {pathToFileURL} from 'node:url';
 
 import {
   ClaudeCodeHarness,
+  CodexHarness,
   type Harness,
   type LocalRunnerJob,
   type LocalRunnerResult,
@@ -536,7 +537,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function buildRunJobOptions(options: ExecuteCliOptions): RunJobOptions {
   const runOptions: RunJobOptions = {
-    harnesses: options.harnesses ?? [new ClaudeCodeHarness()],
+    harnesses: options.harnesses ?? [
+      new ClaudeCodeHarness(),
+      new CodexHarness(),
+    ],
   };
 
   if (options.scratchRoot !== undefined)

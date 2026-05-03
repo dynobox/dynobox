@@ -5,5 +5,6 @@ import releaseSkillConfig from './.agents/skills/release/dyno/release.dyno.mjs';
 
 export default defineConfig({
   name: 'dynobox-skill-smoke-tests',
+  harnesses: ['codex'],
   scenarios: [...commitSkillConfig.scenarios, ...releaseSkillConfig.scenarios],
 });

@@ -10,6 +10,7 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Added Codex local harness registration.
 - Added `--harness` run overrides for selecting config harnesses at runtime.
 
 ### `@dynobox/sdk`

@@ -25,9 +25,11 @@ export type {
 } from './harnesses/index.js';
 export type {
   ClaudeCodeHarnessOptions,
+  CodexHarnessOptions,
 } from './harnesses/index.js';
 export {
   ClaudeCodeHarness,
+  CodexHarness,
   FakeHarness,
   normalizeToolKind,
 } from './harnesses/index.js';
