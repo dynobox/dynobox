@@ -1,4 +1,5 @@
 import {execa} from 'execa';
+import {realpathSync} from 'fs';
 
 import {normalizeToolKind} from './tool-events.js';
 import type {
@@ -40,7 +41,7 @@ export class CodexHarness implements Harness {
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
     const options = {
-      cwd: input.workDir,
+      cwd: realpathSync(input.workDir),
       env: {...process.env, ...input.env},
       reject: false,
       stdin: 'ignore' as const,
@@ -104,7 +105,9 @@ export function buildCodexArgs(
     'never',
     '--skip-git-repo-check',
     '--sandbox',
-    'workspace-write',
+    'danger-full-access',
+    '-c',
+    'approval_policy="never"',
     ...(model === undefined ? [] : ['--model', model]),
     ...extraArgs,
     prompt,
@@ -144,6 +147,7 @@ export function parseCodexJsonLine(
 class CodexToolEventStream {
   private buffer = '';
   private lineNumber = 0;
+  private seenItemIds = new Set<string>();
 
   constructor(private readonly onToolEvent: (event: ToolEvent) => void) {}
 
@@ -178,12 +182,31 @@ class CodexToolEventStream {
     this.lineNumber += 1;
     try {
       const parsed = parseCodexJsonLine(line, this.lineNumber);
+      const itemId = this.extractItemId(line);
       for (const toolEvent of parsed.toolEvents) {
+        if (!this.shouldEmit(toolEvent, itemId)) continue;
         this.onToolEvent(toolEvent);
       }
     } catch {
       // Final extraction reports malformed stdout with a precise line number.
     }
+  }
+
+  private extractItemId(line: string): string | undefined {
+    try {
+      const parsed = JSON.parse(line);
+      if (isRecord(parsed) && isRecord(parsed.item)) {
+        return typeof parsed.item.id === 'string' ? parsed.item.id : undefined;
+      }
+    } catch {}
+    return undefined;
+  }
+
+  private shouldEmit(toolEvent: ToolEvent, itemId: string | undefined): boolean {
+    if (typeof itemId !== 'string') return true;
+    if (this.seenItemIds.has(itemId)) return false;
+    this.seenItemIds.add(itemId);
+    return true;
   }
 }
 
@@ -221,6 +244,7 @@ function parseJsonObjectLine(line: string, lineNumber: number): JsonObject {
 }
 
 function parseToolEvents(event: JsonObject): ToolEvent[] {
+  if (event.type !== 'item.completed') return [];
   const item = isRecord(event.item) ? event.item : undefined;
   const toolEvent = parseToolEvent(item ?? event, event);
   return toolEvent === undefined ? [] : [toolEvent];
