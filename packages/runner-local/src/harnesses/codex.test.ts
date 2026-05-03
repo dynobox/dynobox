@@ -43,7 +43,9 @@ describe('CodexHarness', () => {
       'never',
       '--skip-git-repo-check',
       '--sandbox',
-      'workspace-write',
+      'danger-full-access',
+      '-c',
+      'approval_policy="never"',
       '--model',
       'gpt-5.1-codex',
       'Say hello.',
@@ -99,7 +101,8 @@ describe('CodexHarness', () => {
       executable,
       `#!/bin/sh
 cat <<'JSONL'
-{"type":"item.started","item":{"type":"command_execution","command":"pnpm test"}}
+{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"pnpm test","status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"pnpm test","exit_code":0,"status":"completed"}}
 {"type":"item.completed","item":{"type":"agent_message","text":"Tests passed."}}
 JSONL
 `,
@@ -122,6 +125,7 @@ JSONL
         kind: 'shell',
         rawName: 'command_execution',
         input: {command: 'pnpm test'},
+        status: 'success',
         command: 'pnpm test',
       },
     ]);
@@ -146,7 +150,7 @@ describe('parseCodexJson', () => {
   it('parses a single JSONL line for incremental consumers', () => {
     const parsed = parseCodexJsonLine(
       JSON.stringify({
-        type: 'item.started',
+        type: 'item.completed',
         item: {type: 'command_execution', command: 'cat package.json'},
       }),
     );
