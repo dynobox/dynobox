@@ -12,6 +12,7 @@ import {
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 
 import {
+  buildLocalRunnerJobs,
   configErrorExitCode,
   executeCli,
   placeholderExitCode,
@@ -193,16 +194,40 @@ class StreamingHarness implements Harness {
   }
 }
 
+class PassingHarness implements Harness {
+  constructor(readonly id: 'claude-code' | 'codex') {}
+
+  async run(_input: HarnessInput): Promise<HarnessRunOutput> {
+    return {
+      exitCode: 0,
+      stdout: 'fake output',
+      stderr: '',
+      durationMs: 100,
+    };
+  }
+
+  extractResult(raw: HarnessRunOutput): HarnessResult {
+    return {
+      exitCode: raw.exitCode,
+      durationMs: raw.durationMs,
+      transcript: raw.stdout,
+      finalMessage: raw.stdout,
+      toolEvents: [SHELL_EVENT],
+    };
+  }
+}
+
 function expectedPassingRunOutput(configPath: string): string {
   return renderRunHeader(configPath, [
     {
       id: 'scenario.uses-shell.iteration.0',
       iteration: 0,
+      harness: 'claude-code',
       scenario: {
         id: 'scenario.uses-shell',
         name: 'uses shell',
         prompt: 'Run pnpm test and summarize the result.',
-        harness: 'claude-code',
+        harnesses: ['claude-code'],
         setup: [],
         endpoints: [],
         assertions: [],
@@ -249,11 +274,12 @@ describe('packages/cli', () => {
         {
           id: 'scenario.test.iteration.0',
           iteration: 0,
+          harness: 'claude-code',
           scenario: {
             id: 'scenario.test',
             name: 'test',
             prompt: 'Run a test.',
-            harness: 'claude-code',
+            harnesses: ['claude-code'],
             setup: [],
             endpoints: [],
             assertions: [],
@@ -261,6 +287,28 @@ describe('packages/cli', () => {
         },
       ]),
     ).toContain('plan     1 scenario · 1 harness · 1 iteration');
+  });
+
+  it('expands jobs across scenario harnesses', () => {
+    expect(
+      buildLocalRunnerJobs({
+        version: '0.1',
+        scenarios: [
+          {
+            id: 'scenario.test',
+            name: 'test',
+            prompt: 'Run a test.',
+            harnesses: ['claude-code', 'codex'],
+            setup: [],
+            endpoints: [],
+            assertions: [],
+          },
+        ],
+      }).map((job) => ({id: job.id, harness: job.harness})),
+    ).toEqual([
+      {id: 'scenario.test.claude-code.iteration.0', harness: 'claude-code'},
+      {id: 'scenario.test.codex.iteration.0', harness: 'codex'},
+    ]);
   });
 
   it('renders the run config error message', () => {
@@ -326,6 +374,32 @@ error: bad config
     );
     expect(result.stdout).toContain('\n  .\n');
     expect(result.stdout).toContain('1 passed, 0 failed in 0.1s');
+  });
+
+  it('can override config harnesses from the CLI', async () => {
+    const result = await executeCli(
+      ['run', VALID_CONFIG_PATH, '--harness', 'codex', '--quiet'],
+      {
+        harnesses: [new PassingHarness('codex')],
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(
+      'dynobox  1 scenario · 1 harness · 1 iteration',
+    );
+  });
+
+  it('rejects invalid CLI harness overrides', async () => {
+    const result = await executeCli([
+      'run',
+      VALID_CONFIG_PATH,
+      '--harness',
+      'nope',
+    ]);
+
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(result.stderr).toContain('Invalid harness "nope"');
   });
 
   it('prints live tool progress when live output is enabled', async () => {

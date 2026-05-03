@@ -4,7 +4,6 @@ import {DynoboxConfigError} from '../errors.js';
 import {assertionSchema, configSchema} from '../schema/config-schema.js';
 import type {Endpoint} from '../types/brands.js';
 import type {DynoboxConfig} from '../types/config.js';
-import type {HarnessId} from '../types/harness.js';
 import {slugify, uniquify} from './ids.js';
 import {
   type Ir,
@@ -58,8 +57,7 @@ export function compile(config: DynoboxConfig): Ir {
         ),
     );
 
-    const harness: HarnessId =
-      scenario.harness ?? parsed.harness ?? 'claude-code';
+    const harnesses = scenario.harnesses ?? parsed.harnesses ?? ['claude-code'];
 
     const setup: string[] = [
       ...(parsed.setup ?? []),
@@ -70,7 +68,7 @@ export function compile(config: DynoboxConfig): Ir {
       id: scenarioId,
       name: scenario.name,
       prompt: scenario.prompt,
-      harness,
+      harnesses,
       setup,
       endpoints: irEndpoints,
       assertions: irAssertions,

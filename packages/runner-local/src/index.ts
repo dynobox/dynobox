@@ -3,7 +3,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
 import {type AssertionResult, evaluateAssertions} from '@dynobox/evaluators';
-import type {IrScenario} from '@dynobox/sdk';
+import type {HarnessId, IrScenario} from '@dynobox/sdk';
 
 import type {
   Harness,
@@ -23,7 +23,9 @@ export type {
   ToolEvent,
   ToolKind,
 } from './harnesses/index.js';
-export type {ClaudeCodeHarnessOptions} from './harnesses/index.js';
+export type {
+  ClaudeCodeHarnessOptions,
+} from './harnesses/index.js';
 export {
   ClaudeCodeHarness,
   FakeHarness,
@@ -35,6 +37,7 @@ export {runScenarioSetup, runSetup} from './setup.js';
 export type LocalRunnerJob = {
   id: string;
   scenario: IrScenario;
+  harness: HarnessId;
   iteration: number;
 };
 
@@ -110,6 +113,7 @@ export type LocalRunnerTiming = {
 export type LocalRunnerResult = {
   jobId: string;
   scenarioId: string;
+  harness: HarnessId;
   iteration: number;
   status: LocalRunnerStatus;
   passed: boolean;
@@ -158,16 +162,16 @@ export async function runJob(
   emitProgress(options, {
     type: 'harness.started',
     job,
-    harnessId: job.scenario.harness,
+    harnessId: job.harness,
   });
   const harness = options.harnesses?.find(
-    (candidate) => candidate.id === job.scenario.harness,
+    (candidate) => candidate.id === job.harness,
   );
   if (harness === undefined) {
     emitProgress(options, {
       type: 'harness.completed',
       job,
-      harnessId: job.scenario.harness,
+      harnessId: job.harness,
       success: false,
       toolCount: 0,
     });
@@ -177,7 +181,7 @@ export async function runJob(
       setupResult,
       artifacts,
       diagnostics: [
-        `No harness registered for scenario harness "${job.scenario.harness}".`,
+        `No harness registered for scenario harness "${job.harness}".`,
       ],
       timing: buildTiming({setupMs}),
     });
@@ -347,6 +351,7 @@ function buildResult(
     LocalRunnerResult,
     | 'jobId'
     | 'scenarioId'
+    | 'harness'
     | 'iteration'
     | 'passed'
     | 'assertionResults'
@@ -363,6 +368,7 @@ function buildResult(
   return {
     jobId: job.id,
     scenarioId: job.scenario.id,
+    harness: job.harness,
     iteration: job.iteration,
     status: result.status,
     passed: result.status === 'passed',

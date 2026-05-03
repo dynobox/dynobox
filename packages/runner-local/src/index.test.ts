@@ -38,11 +38,12 @@ function createJob(scenario: Partial<IrScenario> = {}): LocalRunnerJob {
   return {
     id: 'job.uses-shell.0',
     iteration: 0,
+    harness: 'claude-code',
     scenario: {
       id: 'scenario.uses-shell',
       name: 'uses shell',
       prompt: 'Run pnpm test.',
-      harness: 'claude-code',
+      harnesses: ['claude-code'],
       setup: [],
       endpoints: [],
       assertions: [],

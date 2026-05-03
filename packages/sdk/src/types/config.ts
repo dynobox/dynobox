@@ -19,7 +19,7 @@ export type ScenarioInput<
 > = {
   name: string;
   prompt: string;
-  harness?: HarnessId;
+  harnesses?: HarnessId[];
   setup?: string[];
   endpoints?: E;
   assertions?: ReadonlyArray<Assertion<EKeys>>;
@@ -33,7 +33,7 @@ export type ScenarioInput<
 export type DynoboxConfig = {
   name?: string;
   version?: string;
-  harness?: HarnessId;
+  harnesses?: HarnessId[];
   setup?: string[];
   endpoints?: Record<string, Endpoint>;
   scenarios: ScenarioInput[];

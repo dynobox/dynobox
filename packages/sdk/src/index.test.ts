@@ -126,7 +126,7 @@ describe('packages/sdk', () => {
     expect(ir.scenarios).toHaveLength(1);
     const scenario = ir.scenarios[0]!;
     expect(scenario.id).toBe('scenario.happy-path');
-    expect(scenario.harness).toBe('claude-code');
+    expect(scenario.harnesses).toEqual(['claude-code']);
     expect(scenario.endpoints[0]!.id).toBe('endpoint.happy-path.getUser');
     expect(scenario.assertions[0]).toMatchObject({
       id: 'assertion.happy-path.0',
@@ -157,6 +157,20 @@ describe('packages/sdk', () => {
     });
 
     expect(irSchema.parse(compile(config))).toEqual(compile(config));
+  });
+
+  it('accepts codex as a scenario harnesses entry', () => {
+    const config = defineConfig({
+      scenarios: [
+        {
+          name: 'codex path',
+          prompt: 'Run pnpm test.',
+          harnesses: ['codex'],
+        },
+      ],
+    });
+
+    expect(compile(config).scenarios[0]!.harnesses).toEqual(['codex']);
   });
 
   it('compiles tool assertions to canonical IR', () => {
@@ -449,7 +463,9 @@ describe('packages/sdk', () => {
                 "url": "https://registry.npmjs.org/left-pad",
               },
             ],
-            "harness": "claude-code",
+            "harnesses": [
+              "claude-code",
+            ],
             "id": "scenario.lookup-package-metadata",
             "name": "lookup package metadata",
             "prompt": "Find the latest published version of the npm package prettier and tell me its license.",
@@ -483,7 +499,9 @@ describe('packages/sdk', () => {
                 "url": "https://registry.npmjs.org/left-pad",
               },
             ],
-            "harness": "claude-code",
+            "harnesses": [
+              "claude-code",
+            ],
             "id": "scenario.avoid-unrelated-lookup",
             "name": "avoid unrelated lookup",
             "prompt": "Find the latest published version of prettier. Do not look up unrelated packages.",
@@ -524,7 +542,9 @@ describe('packages/sdk', () => {
                 "url": "https://registry.npmjs.org/left-pad",
               },
             ],
-            "harness": "claude-code",
+            "harnesses": [
+              "claude-code",
+            ],
             "id": "scenario.compare-two-packages",
             "name": "compare two packages",
             "prompt": "Compare the latest versions of prettier and typescript.",

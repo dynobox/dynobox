@@ -13,6 +13,8 @@ import {
 } from '@dynobox/runner-local';
 import {
   compile,
+  HARNESS_IDS,
+  type HarnessId,
   type Ir,
   type IrAssertion,
   resolveConfigModule,
@@ -76,6 +78,7 @@ export type ExecuteCliOptions = {
 };
 
 type RunCommandOptions = {
+  harness?: string[];
   quiet?: boolean;
   verbose?: boolean;
   debug?: boolean;
@@ -259,7 +262,7 @@ export function buildRunMatrix(
   results: readonly LocalRunnerResult[],
 ): RunMatrix {
   const scenarios = unique(jobs.map((job) => job.scenario.name));
-  const harnesses = unique(jobs.map((job) => job.scenario.harness));
+  const harnesses = unique(jobs.map((job) => job.harness));
   const iterations = unique(jobs.map((job) => job.iteration + 1));
   const cells = jobs.flatMap((job, index): RunMatrixCell[] => {
     const result = results[index];
@@ -268,7 +271,7 @@ export function buildRunMatrix(
       {
         scenarioId: job.scenario.id,
         scenarioName: job.scenario.name,
-        harness: job.scenario.harness,
+        harness: job.harness,
         iteration: job.iteration + 1,
         passed: result.passed,
         failedAssertions: result.assertionResults
@@ -328,12 +331,20 @@ export async function executeCli(
     .command('run')
     .argument('<config>', 'path to dynobox config')
     .description('run a dynobox config')
+    .option(
+      '--harness <id>',
+      'override config harnesses for this run; repeat for multiple harnesses',
+      collectOption,
+      [],
+    )
     .option('--quiet', 'print compact CI-friendly output')
     .option('--verbose', 'expand scenario details even when passing')
     .option('--debug', 'include debug paths and artifacts')
     .action(async (configPath: string, commandOptions: RunCommandOptions) => {
       let ir: Ir;
+      let overrideHarnesses: HarnessId[] | undefined;
       try {
+        overrideHarnesses = validateHarnessOverrides(commandOptions.harness);
         const moduleExport = await loadConfigModule(configPath);
         const config = resolveConfigModule(normalizeLoadedModule(moduleExport));
         ir = compile(config);
@@ -347,7 +358,10 @@ export async function executeCli(
         );
       }
 
-      const jobs = buildLocalRunnerJobs(ir);
+      const jobs = buildLocalRunnerJobs(
+        ir,
+        overrideHarnesses === undefined ? {} : {harnesses: overrideHarnesses},
+      );
       const runOptions = buildRunJobOptions(options);
       const results: LocalRunnerResult[] = [];
       const ctx = createRenderContext(options, commandOptions);
@@ -458,12 +472,46 @@ export async function runCli(
   return result.exitCode;
 }
 
-export function buildLocalRunnerJobs(ir: Ir): LocalRunnerJob[] {
-  return ir.scenarios.map((scenario) => ({
-    id: `${scenario.id}.iteration.0`,
-    scenario,
-    iteration: 0,
-  }));
+export function buildLocalRunnerJobs(
+  ir: Ir,
+  options: {harnesses?: readonly HarnessId[]} = {},
+): LocalRunnerJob[] {
+  return ir.scenarios.flatMap((scenario) =>
+    (options.harnesses ?? scenario.harnesses).map((harness) => ({
+      id: `${scenario.id}.${harness}.iteration.0`,
+      scenario,
+      harness,
+      iteration: 0,
+    })),
+  );
+}
+
+function collectOption(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
+function validateHarnessOverrides(
+  values: readonly string[] | undefined,
+): HarnessId[] | undefined {
+  const harnesses = values?.flatMap((value) =>
+    value
+      .split(',')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0),
+  );
+  if (harnesses === undefined || harnesses.length === 0) return undefined;
+
+  const validHarnesses = new Set<string>(HARNESS_IDS);
+  const invalid = harnesses.find((harness) => !validHarnesses.has(harness));
+  if (invalid !== undefined) {
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.harness',
+      `Invalid harness "${invalid}". Expected one of: ${HARNESS_IDS.join(', ')}`,
+    );
+  }
+
+  return unique(harnesses) as HarnessId[];
 }
 
 async function loadConfigModule(configPath: string): Promise<unknown> {
@@ -560,7 +608,7 @@ function renderQuietRun(
   if (failed.length > 0) {
     lines.push('\n');
     for (const {result, job} of failed) {
-      lines.push(`  FAIL  ${job.scenario.name} [${job.scenario.harness}]\n`);
+      lines.push(`  FAIL  ${job.scenario.name} [${job.harness}]\n`);
       for (const assertionResult of result.assertionResults.filter(
         (assertionResult) => !assertionResult.passed,
       )) {
@@ -596,7 +644,7 @@ function renderHeadline(
     status === 'running' ? 'plain' : status,
   );
   const title = `${icon}  ${job.scenario.name}`;
-  const meta = `${job.scenario.harness}  iter ${job.iteration + 1}`;
+  const meta = `${job.harness}  iter ${job.iteration + 1}`;
   const right =
     durationMs === undefined ? meta : `${meta}   ${formatDuration(durationMs)}`;
   return `  ${leftRight(title, right, ctx.width)}`;

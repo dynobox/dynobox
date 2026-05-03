@@ -10,7 +10,11 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Added `--harness` run overrides for selecting config harnesses at runtime.
+
 ### `@dynobox/sdk`
+
+- Replaced single-harness config fields with `harnesses: [...]` in authored configs and compiled IR.
 
 ---
 
