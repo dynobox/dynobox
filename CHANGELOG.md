@@ -8,6 +8,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.0.7 — 2026-05-03
+
 ### `dynobox` (CLI)
 
 - Added Codex local harness registration.
@@ -15,12 +19,12 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Added model-specific harness labels in run output.
 - Fixed ordered shell sequence assertions so multiple steps can match one compound shell command.
 
+## @dynobox/sdk@0.0.3 — 2026-05-03
+
 ### `@dynobox/sdk`
 
 - Replaced single-harness config fields with `harnesses: [...]` in authored configs and compiled IR.
 - Added model-specific harness config entries.
-
----
 
 ## dynobox@0.0.6 — 2026-05-02
 
