@@ -5,6 +5,7 @@ import type {IrAssertion, ToolKind} from '@dynobox/sdk';
 
 import {
   describeShellMatcher,
+  shellCommandMatchPosition,
   shellCommandMatches,
   validateRegexMatcher,
 } from './shell-matcher.js';
@@ -42,6 +43,10 @@ type AssertionLike = {
 
 type ToolCalledAssertion = Extract<IrAssertion, {kind: 'tool.called'}>;
 type ToolCalledStep = Omit<ToolCalledAssertion, 'id'>;
+type SequenceCursor = {
+  eventIndex: number;
+  commandOffset: number;
+};
 
 export function evaluateAssertions(input: EvaluationInput): AssertionResult[] {
   return input.assertions.map((assertion) =>
@@ -167,10 +172,10 @@ function evaluateSequenceInOrder(
   toolEvents: readonly ToolEvent[],
 ): AssertionResult {
   const matchedEvents: ToolEvent[] = [];
-  let startIndex = 0;
+  let cursor: SequenceCursor = {eventIndex: 0, commandOffset: 0};
 
   for (const [stepIndex, step] of assertion.steps.entries()) {
-    const match = findMatchingToolEvent(step, toolEvents, startIndex);
+    const match = findMatchingSequenceStep(step, toolEvents, cursor);
     if (match.error !== undefined) {
       return {
         assertionId: assertion.id,
@@ -180,7 +185,7 @@ function evaluateSequenceInOrder(
       };
     }
 
-    if (match.event === undefined || match.index === undefined) {
+    if (match.event === undefined || match.nextCursor === undefined) {
       return {
         assertionId: assertion.id,
         kind: assertion.kind,
@@ -191,7 +196,7 @@ function evaluateSequenceInOrder(
     }
 
     matchedEvents.push(match.event);
-    startIndex = match.index + 1;
+    cursor = match.nextCursor;
   }
 
   return {
@@ -201,6 +206,45 @@ function evaluateSequenceInOrder(
     message: `Observed ${assertion.steps.length} ordered tool steps.`,
     evidence: matchedEvents,
   };
+}
+
+function findMatchingSequenceStep(
+  step: ToolCalledStep,
+  toolEvents: readonly ToolEvent[],
+  cursor: SequenceCursor,
+): {event?: ToolEvent; nextCursor?: SequenceCursor; error?: string} {
+  if (step.matcher !== undefined) {
+    const invalidRegex = validateRegexMatcher(step.matcher);
+    if (invalidRegex !== undefined) return {error: invalidRegex};
+  }
+
+  for (let index = cursor.eventIndex; index < toolEvents.length; index += 1) {
+    const event = toolEvents[index]!;
+    if (event.kind !== step.toolKind) continue;
+
+    if (step.matcher === undefined) {
+      return {
+        event,
+        nextCursor: {eventIndex: index + 1, commandOffset: 0},
+      };
+    }
+
+    if (event.kind !== 'shell' || typeof event.command !== 'string') continue;
+
+    const startAt = index === cursor.eventIndex ? cursor.commandOffset : 0;
+    const match = shellCommandMatchPosition(event.command, step.matcher, startAt);
+    if (!match.passed) {
+      if (match.error !== undefined) return {error: match.error};
+      continue;
+    }
+
+    return {
+      event,
+      nextCursor: {eventIndex: index, commandOffset: match.end},
+    };
+  }
+
+  return {};
 }
 
 type ToolNotCalledStep = Omit<

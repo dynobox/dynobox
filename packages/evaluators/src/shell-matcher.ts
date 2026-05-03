@@ -5,6 +5,17 @@ export type ShellMatcherResult = {
   error?: string;
 };
 
+export type ShellMatcherPositionResult =
+  | {
+      passed: true;
+      start: number;
+      end: number;
+    }
+  | {
+      passed: false;
+      error?: string;
+    };
+
 export function shellCommandMatches(
   command: string,
   matcher: ShellToolMatcher,
@@ -28,6 +39,48 @@ export function shellCommandMatches(
       };
     }
   }
+  return {passed: false};
+}
+
+export function shellCommandMatchPosition(
+  command: string,
+  matcher: ShellToolMatcher,
+  startAt = 0,
+): ShellMatcherPositionResult {
+  const offset = Math.max(0, startAt);
+
+  if ('equals' in matcher && typeof matcher.equals === 'string') {
+    if (offset !== 0 || command !== matcher.equals) return {passed: false};
+    return passedPosition(0, command.length, command.length);
+  }
+
+  if ('includes' in matcher && typeof matcher.includes === 'string') {
+    const start = command.indexOf(matcher.includes, offset);
+    if (start === -1) return {passed: false};
+    return passedPosition(start, start + matcher.includes.length, command.length);
+  }
+
+  if ('startsWith' in matcher && typeof matcher.startsWith === 'string') {
+    if (offset !== 0 || !command.startsWith(matcher.startsWith)) {
+      return {passed: false};
+    }
+    return passedPosition(0, matcher.startsWith.length, command.length);
+  }
+
+  if ('matches' in matcher && typeof matcher.matches === 'string') {
+    try {
+      const match = new RegExp(matcher.matches).exec(command.slice(offset));
+      if (match === null || match.index === undefined) return {passed: false};
+      const start = offset + match.index;
+      return passedPosition(start, start + match[0].length, command.length);
+    } catch (error) {
+      return {
+        passed: false,
+        error: invalidRegexMessage(matcher.matches, error),
+      };
+    }
+  }
+
   return {passed: false};
 }
 
@@ -65,4 +118,16 @@ export function describeShellMatcher(matcher: ShellToolMatcher): string {
 function invalidRegexMessage(pattern: string, error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
   return `Invalid shell matcher regex "${pattern}": ${detail}`;
+}
+
+function passedPosition(
+  start: number,
+  end: number,
+  commandLength: number,
+): ShellMatcherPositionResult {
+  return {
+    passed: true,
+    start,
+    end: end === start ? Math.min(commandLength, end + 1) : end,
+  };
 }

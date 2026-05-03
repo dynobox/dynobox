@@ -2,6 +2,7 @@ import {describe, expect, it} from 'vitest';
 
 import {
   describeShellMatcher,
+  shellCommandMatchPosition,
   shellCommandMatches,
   validateRegexMatcher,
 } from './shell-matcher.js';
@@ -47,6 +48,60 @@ describe('shellCommandMatches', () => {
 
   it('returns an error for invalid regex matchers', () => {
     const result = shellCommandMatches(command, {matches: '('});
+
+    expect(result.passed).toBe(false);
+    expect(result.error).toMatch(/^Invalid shell matcher regex "\("/);
+  });
+});
+
+describe('shellCommandMatchPosition', () => {
+  it('returns positions for includes matchers after an offset', () => {
+    expect(shellCommandMatchPosition(command, {includes: 'pnpm'})).toEqual({
+      passed: true,
+      start: 0,
+      end: 4,
+    });
+    expect(shellCommandMatchPosition(command, {includes: 'test'}, 5)).toEqual({
+      passed: true,
+      start: 5,
+      end: 9,
+    });
+    expect(shellCommandMatchPosition(command, {includes: 'pnpm'}, 4)).toEqual({
+      passed: false,
+    });
+  });
+
+  it('can match repeated includes occurrences in order', () => {
+    const repeated = 'pnpm test && pnpm test';
+    const first = shellCommandMatchPosition(repeated, {includes: 'pnpm test'});
+
+    expect(first).toEqual({passed: true, start: 0, end: 9});
+    expect(
+      shellCommandMatchPosition(
+        repeated,
+        {includes: 'pnpm test'},
+        first.passed ? first.end : 0,
+      ),
+    ).toEqual({passed: true, start: 13, end: 22});
+  });
+
+  it('keeps equals and startsWith command-level', () => {
+    expect(shellCommandMatchPosition(command, {equals: command}, 1)).toEqual({
+      passed: false,
+    });
+    expect(
+      shellCommandMatchPosition(command, {startsWith: 'pnpm'}, 1),
+    ).toEqual({passed: false});
+  });
+
+  it('returns positions for regex matches after an offset', () => {
+    expect(
+      shellCommandMatchPosition(command, {matches: '--runInBand$'}, 5),
+    ).toEqual({passed: true, start: 13, end: 24});
+  });
+
+  it('returns an error for invalid regex position matchers', () => {
+    const result = shellCommandMatchPosition(command, {matches: '('});
 
     expect(result.passed).toBe(false);
     expect(result.error).toMatch(/^Invalid shell matcher regex "\("/);

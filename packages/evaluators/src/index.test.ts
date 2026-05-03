@@ -230,6 +230,122 @@ describe('evaluateAssertions', () => {
     });
   });
 
+  it('passes sequence.inOrder with ordered steps in one shell command', () => {
+    const event: ToolEvent = {
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {command: 'git add README.md && git commit -m test'},
+      command: 'git add README.md && git commit -m test',
+    };
+
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'sequence.inOrder',
+        steps: [
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+            matcher: {includes: 'git add'},
+          },
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+            matcher: {includes: 'git commit'},
+          },
+        ],
+      },
+      [event],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: 'Observed 2 ordered tool steps.',
+      evidence: [event, event],
+    });
+  });
+
+  it('fails sequence.inOrder when one shell command has steps out of order', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'sequence.inOrder',
+        steps: [
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+            matcher: {includes: 'git add'},
+          },
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+            matcher: {includes: 'git commit'},
+          },
+        ],
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'git commit -m test && git add README.md'},
+          command: 'git commit -m test && git add README.md',
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({
+      passed: false,
+      message:
+        'Expected ordered step #2 (tool.called(shell, includes "git commit")) to match an observed tool event, but none was observed after the previous step.',
+    });
+  });
+
+  it('continues sequence.inOrder from one shell command into later events', () => {
+    const first: ToolEvent = {
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {command: 'git status && git diff -- README.md'},
+      command: 'git status && git diff -- README.md',
+    };
+    const second: ToolEvent = {
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {command: 'git commit -m test'},
+      command: 'git commit -m test',
+    };
+
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'sequence.inOrder',
+        steps: [
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+            matcher: {includes: 'git status'},
+          },
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+            matcher: {includes: 'git diff'},
+          },
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+            matcher: {includes: 'git commit'},
+          },
+        ],
+      },
+      [first, second],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: 'Observed 3 ordered tool steps.',
+      evidence: [first, first, second],
+    });
+  });
+
   it('fails sequence.inOrder when events are out of order', () => {
     const result = evaluateOne(
       {
@@ -271,7 +387,7 @@ describe('evaluateAssertions', () => {
     });
   });
 
-  it('does not reuse one event for multiple sequence steps', () => {
+  it('does not reuse one shell command span for repeated sequence steps', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
