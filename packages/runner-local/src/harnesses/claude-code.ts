@@ -49,7 +49,7 @@ export class ClaudeCodeHarness implements Harness {
 
     const subprocess = execa(
       this.executable,
-      buildClaudeCodeArgs(input.prompt, this.extraArgs),
+      buildClaudeCodeArgs(input.prompt, this.extraArgs, input.model),
       options,
     );
     const stdoutChunks: string[] = [];
@@ -95,6 +95,7 @@ export class ClaudeCodeHarness implements Harness {
 export function buildClaudeCodeArgs(
   prompt: string,
   extraArgs: readonly string[] = [],
+  model?: string,
 ): string[] {
   return [
     '-p',
@@ -102,6 +103,7 @@ export function buildClaudeCodeArgs(
     '--output-format',
     'stream-json',
     '--include-hook-events',
+    ...(model === undefined ? [] : ['--model', model]),
     ...extraArgs,
     prompt,
   ];

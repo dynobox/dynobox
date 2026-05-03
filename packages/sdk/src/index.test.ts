@@ -126,7 +126,7 @@ describe('packages/sdk', () => {
     expect(ir.scenarios).toHaveLength(1);
     const scenario = ir.scenarios[0]!;
     expect(scenario.id).toBe('scenario.happy-path');
-    expect(scenario.harnesses).toEqual(['claude-code']);
+    expect(scenario.harnesses).toEqual([{id: 'claude-code'}]);
     expect(scenario.endpoints[0]!.id).toBe('endpoint.happy-path.getUser');
     expect(scenario.assertions[0]).toMatchObject({
       id: 'assertion.happy-path.0',
@@ -170,7 +170,24 @@ describe('packages/sdk', () => {
       ],
     });
 
-    expect(compile(config).scenarios[0]!.harnesses).toEqual(['codex']);
+    expect(compile(config).scenarios[0]!.harnesses).toEqual([{id: 'codex'}]);
+  });
+
+  it('accepts harness model config entries', () => {
+    const config = defineConfig({
+      harnesses: [{id: 'claude-code', model: 'sonnet'}],
+      scenarios: [
+        {
+          name: 'codex path',
+          prompt: 'Run pnpm test.',
+          harnesses: [{id: 'codex', model: 'gpt-5'}],
+        },
+      ],
+    });
+
+    expect(compile(config).scenarios[0]!.harnesses).toEqual([
+      {id: 'codex', model: 'gpt-5'},
+    ]);
   });
 
   it('compiles tool assertions to canonical IR', () => {
@@ -464,7 +481,9 @@ describe('packages/sdk', () => {
               },
             ],
             "harnesses": [
-              "claude-code",
+              {
+                "id": "claude-code",
+              },
             ],
             "id": "scenario.lookup-package-metadata",
             "name": "lookup package metadata",
@@ -500,7 +519,9 @@ describe('packages/sdk', () => {
               },
             ],
             "harnesses": [
-              "claude-code",
+              {
+                "id": "claude-code",
+              },
             ],
             "id": "scenario.avoid-unrelated-lookup",
             "name": "avoid unrelated lookup",
@@ -543,7 +564,9 @@ describe('packages/sdk', () => {
               },
             ],
             "harnesses": [
-              "claude-code",
+              {
+                "id": "claude-code",
+              },
             ],
             "id": "scenario.compare-two-packages",
             "name": "compare two packages",

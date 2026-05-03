@@ -1,6 +1,6 @@
 import type {Endpoint} from '../types/brands.js';
 import type {DynoboxConfig, ScenarioInput} from '../types/config.js';
-import type {HarnessId} from '../types/harness.js';
+import type {HarnessRunConfig} from '../types/harness.js';
 
 type EndpointMap = Record<string, Endpoint>;
 
@@ -36,7 +36,7 @@ export function defineConfig<
 >(config: {
   name?: string;
   version?: string;
-  harness?: HarnessId;
+  harnesses?: HarnessRunConfig[];
   setup?: string[];
   endpoints?: GE;
   scenarios: S & ConstrainScenarios<GE, S>;

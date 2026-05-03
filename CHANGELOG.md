@@ -12,10 +12,12 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 - Added Codex local harness registration.
 - Added `--harness` run overrides for selecting config harnesses at runtime.
+- Added model-specific harness labels in run output.
 
 ### `@dynobox/sdk`
 
 - Replaced single-harness config fields with `harnesses: [...]` in authored configs and compiled IR.
+- Added model-specific harness config entries.
 
 ---
 

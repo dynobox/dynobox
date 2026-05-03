@@ -40,6 +40,7 @@ export type LocalRunnerJob = {
   id: string;
   scenario: IrScenario;
   harness: HarnessId;
+  model?: string;
   iteration: number;
 };
 
@@ -116,6 +117,7 @@ export type LocalRunnerResult = {
   jobId: string;
   scenarioId: string;
   harness: HarnessId;
+  model?: string;
   iteration: number;
   status: LocalRunnerStatus;
   passed: boolean;
@@ -197,6 +199,7 @@ export async function runJob(
       prompt: job.scenario.prompt,
       workDir,
       env: options.env ?? {},
+      ...(job.model === undefined ? {} : {model: job.model}),
       onToolEvent: (toolEvent: ToolEvent) => {
         liveToolCount += 1;
         emitProgress(options, {
@@ -371,6 +374,7 @@ function buildResult(
     jobId: job.id,
     scenarioId: job.scenario.id,
     harness: job.harness,
+    ...(job.model === undefined ? {} : {model: job.model}),
     iteration: job.iteration,
     status: result.status,
     passed: result.status === 'passed',

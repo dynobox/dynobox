@@ -18,6 +18,7 @@ import {
   type HarnessId,
   type Ir,
   type IrAssertion,
+  type IrHarnessConfig,
   resolveConfigModule,
   type ShellToolMatcher,
 } from '@dynobox/sdk';
@@ -263,7 +264,7 @@ export function buildRunMatrix(
   results: readonly LocalRunnerResult[],
 ): RunMatrix {
   const scenarios = unique(jobs.map((job) => job.scenario.name));
-  const harnesses = unique(jobs.map((job) => job.harness));
+  const harnesses = unique(jobs.map(formatJobHarness));
   const iterations = unique(jobs.map((job) => job.iteration + 1));
   const cells = jobs.flatMap((job, index): RunMatrixCell[] => {
     const result = results[index];
@@ -272,7 +273,7 @@ export function buildRunMatrix(
       {
         scenarioId: job.scenario.id,
         scenarioName: job.scenario.name,
-        harness: job.harness,
+        harness: formatJobHarness(job),
         iteration: job.iteration + 1,
         passed: result.passed,
         failedAssertions: result.assertionResults
@@ -478,13 +479,33 @@ export function buildLocalRunnerJobs(
   options: {harnesses?: readonly HarnessId[]} = {},
 ): LocalRunnerJob[] {
   return ir.scenarios.flatMap((scenario) =>
-    (options.harnesses ?? scenario.harnesses).map((harness) => ({
-      id: `${scenario.id}.${harness}.iteration.0`,
-      scenario,
-      harness,
-      iteration: 0,
-    })),
+    (overrideHarnessConfigs(options.harnesses) ?? scenario.harnesses).map(
+      (harness) => ({
+        id: `${scenario.id}.${harnessJobSuffix(harness)}.iteration.0`,
+        scenario,
+        harness: harness.id,
+        ...(harness.model === undefined ? {} : {model: harness.model}),
+        iteration: 0,
+      }),
+    ),
   );
+}
+
+function overrideHarnessConfigs(
+  harnesses: readonly HarnessId[] | undefined,
+): IrHarnessConfig[] | undefined {
+  return harnesses?.map((id) => ({id}));
+}
+
+function harnessJobSuffix(harness: IrHarnessConfig): string {
+  if (harness.model === undefined) return harness.id;
+  return `${harness.id}.${harness.model.replace(/[^a-zA-Z0-9._-]+/g, '-')}`;
+}
+
+function formatJobHarness(
+  job: Pick<LocalRunnerJob, 'harness' | 'model'>,
+): string {
+  return job.model === undefined ? job.harness : `${job.harness}/${job.model}`;
 }
 
 function collectOption(value: string, previous: string[]): string[] {
@@ -612,7 +633,7 @@ function renderQuietRun(
   if (failed.length > 0) {
     lines.push('\n');
     for (const {result, job} of failed) {
-      lines.push(`  FAIL  ${job.scenario.name} [${job.harness}]\n`);
+      lines.push(`  FAIL  ${job.scenario.name} [${formatJobHarness(job)}]\n`);
       for (const assertionResult of result.assertionResults.filter(
         (assertionResult) => !assertionResult.passed,
       )) {
@@ -648,7 +669,7 @@ function renderHeadline(
     status === 'running' ? 'plain' : status,
   );
   const title = `${icon}  ${job.scenario.name}`;
-  const meta = `${job.harness}  iter ${job.iteration + 1}`;
+  const meta = `${formatJobHarness(job)}  iter ${job.iteration + 1}`;
   const right =
     durationMs === undefined ? meta : `${meta}   ${formatDuration(durationMs)}`;
   return `  ${leftRight(title, right, ctx.width)}`;

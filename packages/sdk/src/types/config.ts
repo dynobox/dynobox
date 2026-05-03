@@ -1,5 +1,5 @@
 import type {Assertion, Endpoint} from './brands.js';
-import type {HarnessId} from './harness.js';
+import type {HarnessRunConfig} from './harness.js';
 
 /**
  * The author-facing scenario shape.
@@ -19,7 +19,7 @@ export type ScenarioInput<
 > = {
   name: string;
   prompt: string;
-  harnesses?: HarnessId[];
+  harnesses?: HarnessRunConfig[];
   setup?: string[];
   endpoints?: E;
   assertions?: ReadonlyArray<Assertion<EKeys>>;
@@ -33,7 +33,7 @@ export type ScenarioInput<
 export type DynoboxConfig = {
   name?: string;
   version?: string;
-  harnesses?: HarnessId[];
+  harnesses?: HarnessRunConfig[];
   setup?: string[];
   endpoints?: Record<string, Endpoint>;
   scenarios: ScenarioInput[];

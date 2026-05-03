@@ -21,6 +21,7 @@ export {
   IR_VERSION,
   type IrAssertion,
   type IrEndpoint,
+  type IrHarnessConfig,
   type IrScenario,
   type IrVersion,
 } from './ir/types.js';
@@ -46,5 +47,5 @@ export type {
 } from './types/brands.js';
 export type {DynoboxConfig, ScenarioInput} from './types/config.js';
 export type {EndpointSpec} from './types/endpoint-spec.js';
-export {HARNESS_IDS, type HarnessId} from './types/harness.js';
+export {HARNESS_IDS, type HarnessId, type HarnessRunConfig} from './types/harness.js';
 export {HTTP_METHODS, type HttpMethod} from './types/http-method.js';

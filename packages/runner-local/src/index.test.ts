@@ -43,7 +43,7 @@ function createJob(scenario: Partial<IrScenario> = {}): LocalRunnerJob {
       id: 'scenario.uses-shell',
       name: 'uses shell',
       prompt: 'Run pnpm test.',
-      harnesses: ['claude-code'],
+      harnesses: [{id: 'claude-code'}],
       setup: [],
       endpoints: [],
       assertions: [],
@@ -195,6 +195,20 @@ describe('runJob', () => {
       env,
       timeoutMs: 1234,
     });
+  });
+
+  it('passes the job model to the harness', async () => {
+    const scratchRoot = createScratchRoot();
+    const harness = new RecordingHarness();
+
+    const result = await runJob(
+      {...createJob(), model: 'sonnet'},
+      {scratchRoot, harnesses: [harness]},
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.model).toBe('sonnet');
+    expect(harness.inputs[0]).toMatchObject({model: 'sonnet'});
   });
 
   it('works with FakeHarness and passing tool assertions', async () => {

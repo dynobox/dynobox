@@ -6,3 +6,10 @@
 export const HARNESS_IDS = ['claude-code', 'codex'] as const;
 
 export type HarnessId = (typeof HARNESS_IDS)[number];
+
+export type HarnessRunConfig =
+  | HarnessId
+  | {
+      id: HarnessId;
+      model?: string | undefined;
+    };

@@ -227,7 +227,7 @@ function expectedPassingRunOutput(configPath: string): string {
         id: 'scenario.uses-shell',
         name: 'uses shell',
         prompt: 'Run pnpm test and summarize the result.',
-        harnesses: ['claude-code'],
+        harnesses: [{id: 'claude-code'}],
         setup: [],
         endpoints: [],
         assertions: [],
@@ -279,7 +279,7 @@ describe('packages/cli', () => {
             id: 'scenario.test',
             name: 'test',
             prompt: 'Run a test.',
-            harnesses: ['claude-code'],
+            harnesses: [{id: 'claude-code'}],
             setup: [],
             endpoints: [],
             assertions: [],
@@ -298,7 +298,7 @@ describe('packages/cli', () => {
             id: 'scenario.test',
             name: 'test',
             prompt: 'Run a test.',
-            harnesses: ['claude-code', 'codex'],
+            harnesses: [{id: 'claude-code'}, {id: 'codex', model: 'gpt-5'}],
             setup: [],
             endpoints: [],
             assertions: [],
@@ -307,7 +307,7 @@ describe('packages/cli', () => {
       }).map((job) => ({id: job.id, harness: job.harness})),
     ).toEqual([
       {id: 'scenario.test.claude-code.iteration.0', harness: 'claude-code'},
-      {id: 'scenario.test.codex.iteration.0', harness: 'codex'},
+      {id: 'scenario.test.codex.gpt-5.iteration.0', harness: 'codex'},
     ]);
   });
 

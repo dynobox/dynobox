@@ -4,12 +4,14 @@ import {DynoboxConfigError} from '../errors.js';
 import {assertionSchema, configSchema} from '../schema/config-schema.js';
 import type {Endpoint} from '../types/brands.js';
 import type {DynoboxConfig} from '../types/config.js';
+import type {HarnessRunConfig} from '../types/harness.js';
 import {slugify, uniquify} from './ids.js';
 import {
   type Ir,
   IR_VERSION,
   type IrAssertion,
   type IrEndpoint,
+  type IrHarnessConfig,
   type IrScenario,
 } from './types.js';
 
@@ -57,7 +59,9 @@ export function compile(config: DynoboxConfig): Ir {
         ),
     );
 
-    const harnesses = scenario.harnesses ?? parsed.harnesses ?? ['claude-code'];
+    const harnesses = (scenario.harnesses ?? parsed.harnesses ?? [
+      'claude-code',
+    ]).map(normalizeHarnessConfig);
 
     const setup: string[] = [
       ...(parsed.setup ?? []),
@@ -81,6 +85,10 @@ export function compile(config: DynoboxConfig): Ir {
   };
   if (parsed.name !== undefined) ir.name = parsed.name;
   return ir;
+}
+
+function normalizeHarnessConfig(harness: HarnessRunConfig): IrHarnessConfig {
+  return typeof harness === 'string' ? {id: harness} : harness;
 }
 
 function buildIrEndpoint(

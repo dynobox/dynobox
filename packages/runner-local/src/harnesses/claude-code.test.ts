@@ -37,13 +37,19 @@ describe('ClaudeCodeHarness', () => {
 
   it('builds non-interactive stream-json arguments', () => {
     expect(
-      buildClaudeCodeArgs('Say hello.', ['--permission-mode', 'plan']),
+      buildClaudeCodeArgs(
+        'Say hello.',
+        ['--permission-mode', 'plan'],
+        'sonnet',
+      ),
     ).toEqual([
       '-p',
       '--verbose',
       '--output-format',
       'stream-json',
       '--include-hook-events',
+      '--model',
+      'sonnet',
       '--permission-mode',
       'plan',
       'Say hello.',

@@ -36,6 +36,14 @@ export const endpointSchema: z.ZodType<Endpoint> = z
   })
   .loose() as unknown as z.ZodType<Endpoint>;
 
+const harnessRunConfigSchema = z.union([
+  z.enum(HARNESS_IDS),
+  z.object({
+    id: z.enum(HARNESS_IDS),
+    model: z.string().min(1).optional(),
+  }),
+]);
+
 const calledAssertionSchema = z
   .object({
     kind: z.literal('http.called'),
@@ -152,7 +160,7 @@ export const assertionSchema = z
 export const scenarioSchema = z.object({
   name: z.string().min(1),
   prompt: z.string().min(1),
-  harnesses: z.array(z.enum(HARNESS_IDS)).min(1).optional(),
+  harnesses: z.array(harnessRunConfigSchema).min(1).optional(),
   setup: z.array(z.string().min(1)).optional(),
   endpoints: z.record(z.string(), endpointSchema).optional(),
   assertions: z.array(assertionSchema).optional(),
@@ -161,7 +169,7 @@ export const scenarioSchema = z.object({
 export const configSchema = z.object({
   name: z.string().optional(),
   version: z.string().optional(),
-  harnesses: z.array(z.enum(HARNESS_IDS)).min(1).optional(),
+  harnesses: z.array(harnessRunConfigSchema).min(1).optional(),
   setup: z.array(z.string().min(1)).optional(),
   endpoints: z.record(z.string(), endpointSchema).optional(),
   scenarios: z.array(scenarioSchema).min(1),

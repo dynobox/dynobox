@@ -36,13 +36,14 @@ describe('CodexHarness', () => {
   });
 
   it('builds non-interactive JSONL arguments', () => {
-    expect(buildCodexArgs('Say hello.', ['--model', 'gpt-5.1-codex'])).toEqual([
+    expect(buildCodexArgs('Say hello.', [], 'gpt-5.1-codex')).toEqual([
       'exec',
       '--json',
       '--color',
       'never',
       '--skip-git-repo-check',
-      '--full-auto',
+      '--sandbox',
+      'workspace-write',
       '--model',
       'gpt-5.1-codex',
       'Say hello.',

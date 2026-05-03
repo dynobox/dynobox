@@ -28,6 +28,11 @@ export const irEndpointSchema = z.object({
     .optional(),
 });
 
+export const irHarnessConfigSchema = z.object({
+  id: z.enum(HARNESS_IDS),
+  model: z.string().min(1).optional(),
+});
+
 const shellToolMatcherSchema = z.custom<ShellToolMatcher>(isShellToolMatcher, {
   message:
     'Shell tool matcher must specify exactly one string field: equals, includes, startsWith, or matches.',
@@ -128,7 +133,7 @@ export const irScenarioSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   prompt: z.string().min(1),
-  harnesses: z.array(z.enum(HARNESS_IDS)).min(1),
+  harnesses: z.array(irHarnessConfigSchema).min(1),
   setup: z.array(z.string().min(1)),
   endpoints: z.array(irEndpointSchema),
   assertions: z.array(irAssertionSchema),

@@ -43,12 +43,13 @@ export class CodexHarness implements Harness {
       cwd: input.workDir,
       env: {...process.env, ...input.env},
       reject: false,
+      stdin: 'ignore' as const,
       ...(input.timeoutMs === undefined ? {} : {timeout: input.timeoutMs}),
     };
 
     const subprocess = execa(
       this.executable,
-      buildCodexArgs(input.prompt, this.extraArgs),
+      buildCodexArgs(input.prompt, this.extraArgs, input.model),
       options,
     );
     const stdoutChunks: string[] = [];
@@ -94,6 +95,7 @@ export class CodexHarness implements Harness {
 export function buildCodexArgs(
   prompt: string,
   extraArgs: readonly string[] = [],
+  model?: string,
 ): string[] {
   return [
     'exec',
@@ -101,7 +103,9 @@ export function buildCodexArgs(
     '--color',
     'never',
     '--skip-git-repo-check',
-    '--full-auto',
+    '--sandbox',
+    'workspace-write',
+    ...(model === undefined ? [] : ['--model', model]),
     ...extraArgs,
     prompt,
   ];
