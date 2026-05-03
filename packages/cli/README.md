@@ -11,7 +11,7 @@ Dynobox is under active development and not ready for external use.
 
 The CLI currently loads an explicit config path, resolves the config module's default export, compiles it with `@dynobox/sdk`, and runs local jobs with `@dynobox/runner-local`.
 
-Local execution currently supports harness tool assertions. HTTP capture and HTTP assertion evaluation are not wired in yet.
+Local execution supports harness tool assertions (`tool.called`, `tool.notCalled`), shell command matchers, ordered sequences, artifact assertions, transcript and final message assertions. HTTP capture and HTTP assertion evaluation are not wired in yet (returns clear unsupported result).
 
 When stdout is an interactive terminal, `dynobox run` streams phase progress while jobs run and shows live harness tool events as they are observed.
 

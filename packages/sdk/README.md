@@ -16,6 +16,12 @@ This package provides the Milestone 1 authoring contract, helper functions, conf
 - `http.endpoint()`
 - `http.called()`
 - `http.notCalled()`
+- `tool.called()`, `tool.notCalled()`
+- `artifact.exists()`, `artifact.contains()`
+- `transcript.contains()`
+- `finalMessage.contains()`
+- `sequence.inOrder()`
+- `dyno` helpers
 - IR schemas and derived IR types
 
 ## Config contract

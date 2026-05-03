@@ -24,13 +24,19 @@ This repository is a monorepo. Published packages live under `packages/`.
 
 ## Current Capabilities
 
-- Author configs with `@dynobox/sdk` helpers.
+- Author configs with `@dynobox/sdk` helpers (`defineConfig`, `defineScenario`, `http`, `tool`, `artifact`, `transcript`, `finalMessage`, `sequence`, `dyno`).
 - Compile configs into canonical Dynobox IR.
 - Run `dynobox run <config>` to execute local jobs through Claude Code.
-- Assert observed harness tool usage with `tool.called(...)`.
+- Assert observed harness tool usage with `tool.called(...)` and `tool.notCalled(...)`.
+- Assert shell command patterns with matchers (`equals`, `includes`, `startsWith`, `matches`).
+- Assert ordered tool sequences with `sequence.inOrder(...)`.
+- Assert filesystem artifacts with `artifact.exists(...)` and `artifact.contains(...)`.
+- Assert harness transcript and final message content with `transcript.contains(...)` and `finalMessage.contains(...)`.
+- Live tool event streaming in interactive terminals.
+- Output modes: default, `--quiet`, `--verbose`, `--debug`.
 - Use `examples/local-observability` as the fastest local runner smoke test.
 
-HTTP capture, HTTP assertion evaluation, and matrix rendering are still in progress.
+HTTP capture, HTTP assertion evaluation, and multi-harness/multi-iteration matrix rendering are still in progress.
 
 ## Status
 
