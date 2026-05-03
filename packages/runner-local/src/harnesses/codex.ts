@@ -188,7 +188,7 @@ class CodexToolEventStream {
         this.onToolEvent(toolEvent);
       }
     } catch {
-      // Final extraction reports malformed stdout with a precise line number.
+      // Ignore parse errors during streaming - final extraction will report malformed lines with precise line number.
     }
   }
 
@@ -198,7 +198,9 @@ class CodexToolEventStream {
       if (isRecord(parsed) && isRecord(parsed.item)) {
         return typeof parsed.item.id === 'string' ? parsed.item.id : undefined;
       }
-    } catch {}
+    } catch {
+      // Ignore parse errors - return undefined gracefully.
+    }
     return undefined;
   }
 
