@@ -1,0 +1,5 @@
+prefix_rule(
+  pattern = ["git"],
+  decision = "allow",
+  justification = "This fixture is an isolated Dynobox scratch repository and intentionally exercises local git workflows.",
+)

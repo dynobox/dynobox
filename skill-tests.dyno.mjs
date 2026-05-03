@@ -5,6 +5,6 @@ import releaseSkillConfig from './.agents/skills/release/dyno/release.dyno.mjs';
 
 export default defineConfig({
   name: 'dynobox-skill-smoke-tests',
-  harnesses: ['claude-code', 'codex'],
+  harnesses: ['claude-code', {id: 'codex', model: 'gpt-5.4-mini'}],
   scenarios: [...commitSkillConfig.scenarios, ...releaseSkillConfig.scenarios],
 });
