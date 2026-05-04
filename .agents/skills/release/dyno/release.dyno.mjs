@@ -8,11 +8,13 @@ export default defineConfig({
     {
       name: 'release skill dry run workflow',
       prompt:
-        'Use the release skill for a dry-run release of the local mylib package from 1.0.0 to 1.0.1 in this scratch repository. Run tests, bump the version, update CHANGELOG.md, inspect the package tarball, commit, and tag mylib@1.0.1. Do not publish. Do not push.',
+        'Use the release skill for a dry-run release of the local mylib package from 1.0.0 to 1.0.1 in this scratch repository. Run tests, bump the version, update CHANGELOG.md, and inspect the package tarball. Do not publish. Do not push.',
       setup: [
         `cp -R ${here.q('fixtures/repo/.')} .`,
         `cp -r ${here.q('fixtures/.codex')} .codex`,
-        'git init',
+        `cp -r ${here.q('fixtures/.claude')} .claude`,
+        'pnpm install',
+        'git init -b main',
         'git config user.email dynobox@example.com',
         'git config user.name Dynobox Test',
         'mkdir -p .agents/skills/release',
@@ -30,8 +32,9 @@ export default defineConfig({
         artifact.contains('packages/mylib/package.json', '"version": "1.0.1"'),
         artifact.contains('CHANGELOG.md', 'mylib@1.0.1'),
         tool.notCalled('shell', {includes: 'npm publish'}),
+        tool.notCalled('shell', {includes: 'git commit'}),
+        tool.notCalled('shell', {includes: 'git tag'}),
         tool.notCalled('shell', {includes: 'git push'}),
-        tool.notCalled('shell', {includes: 'git push --force'}),
       ],
     },
   ],

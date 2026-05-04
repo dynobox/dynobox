@@ -1,8 +1,8 @@
 ---
 name: release
 description: |
-  Publish dynobox packages to npm. Use this skill whenever the user asks to
-  release, publish, ship, bump, or cut a version of any dynobox package —
+  Prepare dynobox packages for release to npm. Use this skill whenever the user
+  asks to release, publish, ship, bump, or cut a version of any dynobox package —
   including dry runs, version bumps, changelog updates, and git tagging.
   Also trigger when the user asks about the release process or wants to
   verify publish readiness.
@@ -10,7 +10,11 @@ description: |
 
 # Release
 
-This skill executes the dynobox release procedure documented in `RELEASES.md`.
+This skill prepares dynobox packages for release. It handles everything up to
+but not including `npm publish` — tests, version bumps, changelog updates,
+tarball inspection, committing, and tagging. At the end it presents the publish
+commands for the user to run manually.
+
 Read `RELEASES.md` before making release changes. If this skill and
 `RELEASES.md` disagree, follow `RELEASES.md`.
 
@@ -22,7 +26,6 @@ Verify the repository is ready:
 git status --short
 git branch --show-current
 pnpm test
-npm whoami
 ```
 
 Continue only when:
@@ -30,10 +33,8 @@ Continue only when:
 - `git status --short` is empty.
 - The current branch is `main`, unless the user explicitly approves another branch.
 - `pnpm test` passes.
-- `npm whoami` returns the publishing account.
 
-Abort and report the blocker if the working tree is dirty, tests fail, or npm auth
-is unavailable.
+Abort and report the blocker if the working tree is dirty or tests fail.
 
 ## Determine what to release
 
@@ -55,20 +56,13 @@ Current package policy:
 - The `dynobox` CLI bundles private runtime workspace packages instead of
   exposing them as public npm dependencies.
 
-If releasing multiple packages, identify workspace dependencies and plan to publish
-dependencies first. For example, publish `@dynobox/sdk` before `dynobox`.
-
-Before publishing `dynobox`, verify the `@dynobox/sdk` version it depends on is
-already published:
-
-```bash
-npm view @dynobox/sdk@<version> version
-```
+If releasing multiple packages, identify workspace dependencies and plan to
+publish dependencies first. For example, publish `@dynobox/sdk` before `dynobox`.
 
 If the user did not specify a version or bump type, ask whether to use `patch`,
 `minor`, or `major`. Do not guess.
 
-## Execute the release
+## Bump the version
 
 For each package, bump without creating an automatic git tag:
 
@@ -81,8 +75,6 @@ Read the new version:
 ```bash
 pnpm --filter <package-name> exec node -p "require('./package.json').version"
 ```
-
-Confirm the package and new version with the user before committing.
 
 When releasing `dynobox`, update the hardcoded CLI display version in
 `packages/cli/src/index.ts`:
@@ -97,64 +89,15 @@ Search for stale references to the previous version before committing:
 rg '<previous-version>' packages/cli/src packages/cli/package.json CHANGELOG.md
 ```
 
-Update `CHANGELOG.md`:
+## Update CHANGELOG.md
 
 - Move the package's `[Unreleased]` entries into a new release section.
 - Use `## <package-name>@<version> — YYYY-MM-DD`.
-- Place the new section immediately below the `---` separator after `[Unreleased]`.
+- Place the new section immediately below the `[Unreleased]` heading.
 
-Run the pre-publish verification below before committing, tagging, or publishing.
+## Inspect the tarball
 
-Commit and tag after the user confirms:
-
-```bash
-git add -A
-git commit -m "chore(release): <package-name>@<version>"
-git tag <package-name>@<version>
-git push && git push --tags
-```
-
-Publish the package:
-
-```bash
-pnpm --filter <package-name> publish --access public --no-git-checks
-```
-
-Use `--no-git-checks` because pnpm may rewrite workspace protocol versions while
-packing, which can make the working tree appear dirty during publish.
-
-## Multi-package releases
-
-When releasing packages that depend on each other:
-
-1. Run the preflight checks once.
-2. Bump all package versions first.
-3. Update `CHANGELOG.md` for all packages.
-4. Confirm all new versions with the user before committing.
-5. Make one release commit:
-   ```bash
-   git add -A
-   git commit -m "chore(release): dynobox@X.Y.Z, @dynobox/sdk@A.B.C"
-   ```
-6. Create one tag per package:
-   ```bash
-   git tag @dynobox/sdk@A.B.C
-   git tag dynobox@X.Y.Z
-   ```
-7. Push once:
-   ```bash
-   git push && git push --tags
-   ```
-8. Publish in dependency order:
-   ```bash
-   pnpm --filter @dynobox/sdk publish --access public --no-git-checks
-   pnpm --filter dynobox publish --access public --no-git-checks
-   ```
-
-## Pre-publish verification
-
-After version and changelog updates, but before committing, tagging, or
-publishing, inspect the package tarball:
+After version and changelog updates, inspect the package tarball:
 
 ```bash
 pnpm --filter <package-name> pack --pack-destination /tmp
@@ -171,69 +114,74 @@ rg '@dynobox/(runner-local|evaluators)' packages/cli/dist
 
 Expected result: no matches.
 
-The packed `dynobox` dependencies should include `@dynobox/sdk`, `commander`,
-`execa`, and `tsx`, but not `@dynobox/runner-local` or `@dynobox/evaluators`.
-
-Optionally smoke-test local tarballs before publishing:
-
-```bash
-tmpdir="$(mktemp -d)"
-npm install --prefix "$tmpdir" /tmp/dynobox-sdk-<sdk-version>.tgz /tmp/dynobox-<cli-version>.tgz
-"$tmpdir/node_modules/.bin/dynobox"
-```
-
 ## Dry run mode
 
 If the user says "dry run", "what would happen", or asks to verify publish
-contents without publishing, do not run `pnpm publish`.
+contents without actually releasing:
 
-Build a tarball instead:
+1. Run tests.
+2. Bump the version.
+3. Update the changelog.
+4. Inspect the tarball.
+5. Report what the tarball contains and whether it looks correct.
 
-```bash
-pnpm --filter <package-name> pack --pack-destination /tmp
-tar tf /tmp/<tarball-name>.tgz
-```
+Do **not** commit, tag, or push in dry-run mode. Do not present publish commands.
 
-Show the tarball contents and summarize whether only intended files are included.
-Do not create release tags or push in dry-run mode unless the user explicitly asks.
+## Commit, tag, and push (non-dry-run only)
 
-## After publishing
-
-Verify each published package:
+Commit and tag after verifying the tarball:
 
 ```bash
-npm view <package-name>@<version>
+git add -A
+git commit -m "chore(release): <package-name>@<version>"
+git tag <package-name>@<version>
+git push && git push --tags
 ```
 
-If `npm view` briefly returns a stale `404` for a newly published scoped package,
-cross-check npm access and the registry document before treating the publish as
-failed:
+## Present publish commands
+
+After all preparation is complete, present the publish commands for the user to
+run manually. Never run these commands yourself.
+
+For a single package:
 
 ```bash
-npm access get status <package-name>
+pnpm --filter <package-name> publish --access public --no-git-checks
 ```
 
-For scoped packages, the registry document URL uses an encoded slash, for example:
-
-```text
-https://registry.npmjs.org/@dynobox%2fsdk
-```
-
-If `pnpm publish` fails with `EOTP`, do not re-bump, re-commit, re-tag, or ask
-the user for an OTP. Stop and present the final publish commands for the user to
-run locally, in dependency order, without an `--otp` argument. For example:
+For multiple packages, present them in dependency order:
 
 ```bash
 pnpm --filter @dynobox/sdk publish --access public --no-git-checks
 pnpm --filter dynobox publish --access public --no-git-checks
 ```
 
-Tell the user to run only the commands for packages that have not already been
-published, and then verify with `npm view`.
+Then tell the user to verify after publishing:
 
-Then report:
+```bash
+npm view <package-name>@<version>
+```
 
-- The package and version published.
-- The git tag created.
-- The npm URL, e.g. `https://www.npmjs.com/package/dynobox/v/0.0.4`.
-- Any skipped step and why.
+## Multi-package releases
+
+When releasing packages that depend on each other:
+
+1. Run the preflight checks once.
+2. Bump all package versions first.
+3. Update `CHANGELOG.md` for all packages.
+4. Inspect tarballs for all packages.
+5. Make one release commit:
+   ```bash
+   git add -A
+   git commit -m "chore(release): dynobox@X.Y.Z, @dynobox/sdk@A.B.C"
+   ```
+6. Create one tag per package:
+   ```bash
+   git tag @dynobox/sdk@A.B.C
+   git tag dynobox@X.Y.Z
+   ```
+7. Push once:
+   ```bash
+   git push && git push --tags
+   ```
+8. Present publish commands in dependency order.

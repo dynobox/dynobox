@@ -12,6 +12,7 @@ export default defineConfig({
       setup: [
         `cp -R ${here.q('fixtures/repo/.')} .`,
         `cp -r ${here.q('fixtures/.codex')} .codex`,
+        `cp -r ${here.q('fixtures/.claude')} .claude`,
         'git init',
         'git config user.email dynobox@example.com',
         'git config user.name Dynobox Test',
