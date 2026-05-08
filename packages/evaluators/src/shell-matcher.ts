@@ -57,7 +57,11 @@ export function shellCommandMatchPosition(
   if ('includes' in matcher && typeof matcher.includes === 'string') {
     const start = command.indexOf(matcher.includes, offset);
     if (start === -1) return {passed: false};
-    return passedPosition(start, start + matcher.includes.length, command.length);
+    return passedPosition(
+      start,
+      start + matcher.includes.length,
+      command.length,
+    );
   }
 
   if ('startsWith' in matcher && typeof matcher.startsWith === 'string') {

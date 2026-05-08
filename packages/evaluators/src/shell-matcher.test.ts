@@ -2,8 +2,8 @@ import {describe, expect, it} from 'vitest';
 
 import {
   describeShellMatcher,
-  shellCommandMatchPosition,
   shellCommandMatches,
+  shellCommandMatchPosition,
   validateRegexMatcher,
 } from './shell-matcher.js';
 
@@ -89,9 +89,9 @@ describe('shellCommandMatchPosition', () => {
     expect(shellCommandMatchPosition(command, {equals: command}, 1)).toEqual({
       passed: false,
     });
-    expect(
-      shellCommandMatchPosition(command, {startsWith: 'pnpm'}, 1),
-    ).toEqual({passed: false});
+    expect(shellCommandMatchPosition(command, {startsWith: 'pnpm'}, 1)).toEqual(
+      {passed: false},
+    );
   });
 
   it('returns positions for regex matches after an offset', () => {

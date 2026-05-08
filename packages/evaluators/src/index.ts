@@ -5,8 +5,8 @@ import type {IrAssertion, ToolKind} from '@dynobox/sdk';
 
 import {
   describeShellMatcher,
-  shellCommandMatchPosition,
   shellCommandMatches,
+  shellCommandMatchPosition,
   validateRegexMatcher,
 } from './shell-matcher.js';
 
@@ -232,7 +232,11 @@ function findMatchingSequenceStep(
     if (event.kind !== 'shell' || typeof event.command !== 'string') continue;
 
     const startAt = index === cursor.eventIndex ? cursor.commandOffset : 0;
-    const match = shellCommandMatchPosition(event.command, step.matcher, startAt);
+    const match = shellCommandMatchPosition(
+      event.command,
+      step.matcher,
+      startAt,
+    );
     if (!match.passed) {
       if (match.error !== undefined) return {error: match.error};
       continue;

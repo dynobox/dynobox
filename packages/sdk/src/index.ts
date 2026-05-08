@@ -1,3 +1,4 @@
+// TODO: Don't hard code this + its out of date
 export const version = '0.0.1';
 
 export {artifact} from './artifact/index.js';
@@ -47,5 +48,9 @@ export type {
 } from './types/brands.js';
 export type {DynoboxConfig, ScenarioInput} from './types/config.js';
 export type {EndpointSpec} from './types/endpoint-spec.js';
-export {HARNESS_IDS, type HarnessId, type HarnessRunConfig} from './types/harness.js';
+export {
+  HARNESS_IDS,
+  type HarnessId,
+  type HarnessRunConfig,
+} from './types/harness.js';
 export {HTTP_METHODS, type HttpMethod} from './types/http-method.js';

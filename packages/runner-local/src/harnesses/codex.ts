@@ -204,7 +204,10 @@ class CodexToolEventStream {
     return undefined;
   }
 
-  private shouldEmit(toolEvent: ToolEvent, itemId: string | undefined): boolean {
+  private shouldEmit(
+    toolEvent: ToolEvent,
+    itemId: string | undefined,
+  ): boolean {
     if (typeof itemId !== 'string') return true;
     if (this.seenItemIds.has(itemId)) return false;
     this.seenItemIds.add(itemId);

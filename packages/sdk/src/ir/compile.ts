@@ -59,9 +59,10 @@ export function compile(config: DynoboxConfig): Ir {
         ),
     );
 
-    const harnesses = (scenario.harnesses ?? parsed.harnesses ?? [
-      'claude-code',
-    ]).map(normalizeHarnessConfig);
+    const harnesses = (
+      scenario.harnesses ??
+      parsed.harnesses ?? ['claude-code']
+    ).map(normalizeHarnessConfig);
 
     const setup: string[] = [
       ...(parsed.setup ?? []),

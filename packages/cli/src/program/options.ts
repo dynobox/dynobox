@@ -1,0 +1,74 @@
+/**
+ * Option parsing helpers for the `run` subcommand: collecting repeated
+ * `--harness` flags, validating ids against the SDK's allowlist, and
+ * translating `ExecuteCliOptions` into the local runner's `RunJobOptions`.
+ */
+
+import {
+  ClaudeCodeHarness,
+  CodexHarness,
+  type RunJobOptions,
+} from '@dynobox/runner-local';
+import {HARNESS_IDS, type HarnessId} from '@dynobox/sdk';
+import {CommanderError} from 'commander';
+
+import {unique} from '../util/unique.js';
+import type {ExecuteCliOptions} from './execute.js';
+import {configErrorExitCode} from './exitCodes.js';
+
+/** Collect repeated/comma-separated `--harness` values into a flat list. */
+export function collectOption(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
+/**
+ * Parse a list of raw `--harness` values into validated `HarnessId`s, or
+ * `undefined` if no overrides were supplied.
+ *
+ * Throws `CommanderError(configErrorExitCode)` for unknown ids so the
+ * top-level executor can map it to the documented exit code.
+ */
+export function validateHarnessOverrides(
+  values: readonly string[] | undefined,
+): HarnessId[] | undefined {
+  const harnesses = values?.flatMap((value) =>
+    value
+      .split(',')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0),
+  );
+  if (harnesses === undefined || harnesses.length === 0) return undefined;
+
+  const validHarnesses = new Set<string>(HARNESS_IDS);
+  const invalid = harnesses.find((harness) => !validHarnesses.has(harness));
+  if (invalid !== undefined) {
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.harness',
+      `Invalid harness "${invalid}". Expected one of: ${HARNESS_IDS.join(', ')}`,
+    );
+  }
+
+  return unique(harnesses) as HarnessId[];
+}
+
+/**
+ * Translate the options passed to `executeCli` into the shape expected by
+ * `runJob`. Defaults the harness list to the two real harnesses; tests
+ * override with `FakeHarness`.
+ */
+export function buildRunJobOptions(options: ExecuteCliOptions): RunJobOptions {
+  const runOptions: RunJobOptions = {
+    harnesses: options.harnesses ?? [
+      new ClaudeCodeHarness(),
+      new CodexHarness(),
+    ],
+  };
+
+  if (options.scratchRoot !== undefined)
+    runOptions.scratchRoot = options.scratchRoot;
+  if (options.env !== undefined) runOptions.env = options.env;
+  if (options.timeoutMs !== undefined) runOptions.timeoutMs = options.timeoutMs;
+
+  return runOptions;
+}
