@@ -10,6 +10,19 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ---
 
+## @dynobox/sdk@0.0.4 — 2026-05-08
+
+### `@dynobox/sdk`
+
+- Included SDK formatting updates from the CLI runtime refactor release.
+
+## dynobox@0.0.8 — 2026-05-08
+
+### `dynobox` (CLI)
+
+- Refactored CLI runtime internals into focused modules without changing the public CLI behavior.
+- Added focused unit coverage for job building, command execution, option parsing, and render helpers.
+
 ## dynobox@0.0.7 — 2026-05-03
 
 ### `dynobox` (CLI)
