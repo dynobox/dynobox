@@ -16,6 +16,7 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 - Split authoring, compiler, and IR exports into explicit package entrypoints.
 - Tightened SDK helper naming, endpoint key validation, and config path shell quoting.
+- Renamed the authoring helper from `defineConfig` to `defineDyno`.
 
 ---
 

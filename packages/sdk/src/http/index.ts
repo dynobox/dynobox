@@ -8,13 +8,13 @@ import type {
   Endpoint,
   NotCalledAssertion,
 } from '../types/brands.js';
-import type {EndpointSpec} from '../types/endpoint-spec.js';
+import type {EndpointSpec} from '../types/endpointSpec.js';
 
 /**
  * Authoring helpers for HTTP endpoints and assertions.
  *
  * `endpoint` produces a branded endpoint definition. `called` and
- * `notCalled` preserve the endpoint key as a literal type so `defineConfig`
+ * `notCalled` preserve the endpoint key as a literal type so `defineDyno`
  * / `defineScenario` can verify it against the declared endpoint set at
  * compile time.
  */

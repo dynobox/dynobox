@@ -1,9 +1,9 @@
-export type {ClaudeCodeHarnessOptions} from './claude-code.js';
-export {ClaudeCodeHarness} from './claude-code.js';
+export type {ClaudeCodeHarnessOptions} from './claudeCode.js';
+export {ClaudeCodeHarness} from './claudeCode.js';
 export type {CodexHarnessOptions} from './codex.js';
 export {CodexHarness} from './codex.js';
 export {FakeHarness} from './fake.js';
-export {normalizeToolKind} from './tool-events.js';
+export {normalizeToolKind} from './toolEvents.js';
 export type {
   Harness,
   HarnessInput,

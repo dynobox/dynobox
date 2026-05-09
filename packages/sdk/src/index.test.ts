@@ -6,7 +6,7 @@ import {
   type ArtifactContainsAssertion,
   type ArtifactExistsAssertion,
   type CalledAssertion,
-  defineConfig,
+  defineDyno,
   defineScenario,
   dyno,
   finalMessage,
@@ -24,7 +24,7 @@ import {IR_VERSION, irSchema} from './ir.js';
 
 describe('packages/sdk', () => {
   it('exports the SDK surface', () => {
-    expect(typeof defineConfig).toBe('function');
+    expect(typeof defineDyno).toBe('function');
     expect(typeof defineScenario).toBe('function');
     expect(typeof dyno.fromUrl).toBe('function');
     expect(typeof dyno.fsPath).toBe('function');
@@ -103,7 +103,7 @@ describe('packages/sdk', () => {
   });
 
   it('compile returns a deterministic IR for a minimal config', () => {
-    const config = defineConfig({
+    const config = defineDyno({
       name: 'demo',
       endpoints: {
         getUser: http.endpoint({
@@ -140,7 +140,7 @@ describe('packages/sdk', () => {
   });
 
   it('validates compiled output against the canonical IR schema', () => {
-    const config = defineConfig({
+    const config = defineDyno({
       scenarios: [
         {
           name: 'schema check',
@@ -160,7 +160,7 @@ describe('packages/sdk', () => {
   });
 
   it('accepts codex as a scenario harnesses entry', () => {
-    const config = defineConfig({
+    const config = defineDyno({
       scenarios: [
         {
           name: 'codex path',
@@ -174,7 +174,7 @@ describe('packages/sdk', () => {
   });
 
   it('accepts harness model config entries', () => {
-    const config = defineConfig({
+    const config = defineDyno({
       harnesses: [{id: 'claude-code', model: 'sonnet'}],
       scenarios: [
         {
@@ -191,7 +191,7 @@ describe('packages/sdk', () => {
   });
 
   it('compiles tool assertions to canonical IR', () => {
-    const config = defineConfig({
+    const config = defineDyno({
       scenarios: [
         {
           name: 'uses shell',
@@ -229,7 +229,7 @@ describe('packages/sdk', () => {
   });
 
   it('compiles additional assertion helpers to canonical IR', () => {
-    const config = defineConfig({
+    const config = defineDyno({
       scenarios: [
         {
           name: 'skill flow',
@@ -407,7 +407,7 @@ describe('packages/sdk', () => {
   });
 
   it('compiles a sample npm package research config to canonical IR', () => {
-    const config = defineConfig({
+    const config = defineDyno({
       name: 'npm-package-research',
       endpoints: {
         getPrettierMetadata: http.endpoint({
@@ -580,7 +580,7 @@ describe('packages/sdk', () => {
   });
 
   it('merges global and per-scenario endpoints, with local taking precedence', () => {
-    const config = defineConfig({
+    const config = defineDyno({
       endpoints: {
         getUser: http.endpoint({method: 'GET', url: 'https://a/'}),
       },
@@ -616,7 +616,7 @@ describe('packages/sdk', () => {
   });
 
   it('compiles global and scenario setup commands into a merged array', () => {
-    const config = defineConfig({
+    const config = defineDyno({
       setup: ['git clone https://example.com/repo.git .'],
       scenarios: [
         {
@@ -635,7 +635,7 @@ describe('packages/sdk', () => {
   });
 
   it('compiles global-only setup into each scenario', () => {
-    const config = defineConfig({
+    const config = defineDyno({
       setup: ['npm install'],
       scenarios: [
         {name: 'a', prompt: 'p'},
@@ -649,7 +649,7 @@ describe('packages/sdk', () => {
   });
 
   it('compiles scenario-only setup without global', () => {
-    const config = defineConfig({
+    const config = defineDyno({
       scenarios: [
         {
           name: 'local only',
@@ -664,7 +664,7 @@ describe('packages/sdk', () => {
   });
 
   it('produces an empty setup array when setup is omitted', () => {
-    const config = defineConfig({
+    const config = defineDyno({
       scenarios: [{name: 'no setup', prompt: 'p'}],
     });
 
@@ -673,7 +673,7 @@ describe('packages/sdk', () => {
   });
 
   it('disambiguates colliding scenario slugs deterministically', () => {
-    const config = defineConfig({
+    const config = defineDyno({
       scenarios: [
         {name: 'happy path', prompt: 'a'},
         {name: 'Happy Path', prompt: 'b'},
@@ -768,7 +768,7 @@ describe('packages/sdk', () => {
   // assertion key constraint is broken. Wrapped in a never-called function
   // so it has zero runtime cost but participates in `tsc`.
   function _typeCheck() {
-    defineConfig({
+    defineDyno({
       endpoints: {
         getUser: http.endpoint({method: 'GET', url: 'https://a/'}),
       },
@@ -783,7 +783,7 @@ describe('packages/sdk', () => {
     });
 
     // Sanity: the well-typed version compiles cleanly.
-    defineConfig({
+    defineDyno({
       endpoints: {
         getUser: http.endpoint({method: 'GET', url: 'https://a/'}),
       },
@@ -798,7 +798,7 @@ describe('packages/sdk', () => {
 
     // Tool assertions are endpoint-independent, but shell matchers only apply
     // to the canonical shell tool kind.
-    defineConfig({
+    defineDyno({
       scenarios: [
         {
           name: 'tools',

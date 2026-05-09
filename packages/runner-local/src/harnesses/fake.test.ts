@@ -2,7 +2,7 @@ import {HARNESS_IDS} from '@dynobox/sdk';
 import {describe, expect, it} from 'vitest';
 
 import {FakeHarness} from './fake.js';
-import {normalizeToolKind} from './tool-events.js';
+import {normalizeToolKind} from './toolEvents.js';
 import type {
   HarnessInput,
   HarnessRunOutput,

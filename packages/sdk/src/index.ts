@@ -7,8 +7,8 @@
  */
 
 export {artifact} from './artifact/index.js';
-export {defineConfig} from './authoring/define-config.js';
-export {defineScenario} from './authoring/define-scenario.js';
+export {defineDyno} from './authoring/defineDyno.js';
+export {defineScenario} from './authoring/defineScenario.js';
 export {dyno} from './dyno/index.js';
 export {finalMessage} from './final-message/index.js';
 export {http} from './http/index.js';
@@ -31,10 +31,10 @@ export type {
   TranscriptContainsAssertion,
 } from './types/brands.js';
 export type {DynoboxConfig, ScenarioInput} from './types/config.js';
-export type {EndpointSpec} from './types/endpoint-spec.js';
+export type {EndpointSpec} from './types/endpointSpec.js';
 export {
   HARNESS_IDS,
   type HarnessId,
   type HarnessRunConfig,
 } from './types/harness.js';
-export {HTTP_METHODS, type HttpMethod} from './types/http-method.js';
+export {HTTP_METHODS, type HttpMethod} from './types/httpMethod.js';

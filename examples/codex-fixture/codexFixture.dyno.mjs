@@ -1,8 +1,8 @@
-import {artifact, defineConfig, dyno, sequence, tool} from '@dynobox/sdk';
+import {artifact, defineDyno, dyno, sequence, tool} from '@dynobox/sdk';
 
 const here = dyno.here(import.meta.url);
 
-export default defineConfig({
+export default defineDyno({
   name: 'codex-fixture-smoke-test',
   harnesses: [{id: 'codex', model: 'gpt-5.4-mini'}],
   scenarios: [

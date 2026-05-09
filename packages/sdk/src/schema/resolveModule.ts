@@ -1,7 +1,7 @@
 import {z} from 'zod';
 
 import type {DynoboxConfig} from '../types/config.js';
-import {configSchema} from './config-schema.js';
+import {configSchema} from './configSchema.js';
 
 const configModuleSchema = z.object({
   default: configSchema,

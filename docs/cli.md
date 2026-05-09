@@ -8,7 +8,7 @@ The public CLI package is `dynobox`. In this repository, run it from built outpu
 dynobox run <config> [options]
 ```
 
-`<config>` is the path to a TypeScript Dynobox config module. The module must default-export a config created with `defineConfig` or a compatible config object.
+`<config>` is the path to a TypeScript Dynobox config module. The module must default-export a dyno created with `defineDyno` or a compatible config object.
 
 ## Options
 

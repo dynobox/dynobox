@@ -6,7 +6,7 @@ import type {HarnessRunConfig} from './harness.js';
  *
  * Generic over:
  * - `EKeys`: the union of endpoint keys that assertions in this scenario
- *   may reference. `defineConfig` widens this to (global ∪ local) per
+ *   may reference. `defineDyno` widens this to (global ∪ local) per
  *   scenario; `defineScenario` widens it to (declared globals ∪ local).
  * - `E`: the concrete endpoint map. Helpers capture this so `keyof E &
  *   string` produces the local key union.
@@ -27,7 +27,7 @@ export type ScenarioInput<
 
 /**
  * The runtime shape of an authored Dynobox config. Authors typically reach
- * this type indirectly via `defineConfig`, which adds per-scenario key
+ * this type indirectly via `defineDyno`, which adds per-scenario key
  * inference on top.
  */
 export type DynoboxConfig = {

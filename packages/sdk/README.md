@@ -13,7 +13,7 @@ This package provides the Milestone 1 authoring contract, helper functions, conf
 
 Authoring helpers for user config files:
 
-- `defineConfig(config)`
+- `defineDyno(config)`
 - `defineScenario(scenario)`
 - `http.endpoint()`
 - `http.called()`

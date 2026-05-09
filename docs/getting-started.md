@@ -52,12 +52,12 @@ If you omit `--harness`, Dynobox uses the harness list from the config. When a c
 
 ## Create A Skill-Oriented Config
 
-A Dynobox config is a TypeScript module with a default export from `defineConfig`. This example tests a hypothetical skill that should inspect package scripts without modifying files.
+A Dynobox config is a TypeScript module with a default export from `defineDyno`. This example tests a hypothetical skill that should inspect package scripts without modifying files.
 
 ```ts
-import {artifact, defineConfig, finalMessage, tool} from '@dynobox/sdk';
+import {artifact, defineDyno, finalMessage, tool} from '@dynobox/sdk';
 
-export default defineConfig({
+export default defineDyno({
   name: 'package-script-skill',
   harnesses: ['claude-code'],
   scenarios: [

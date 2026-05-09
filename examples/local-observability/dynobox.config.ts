@@ -1,6 +1,6 @@
-import {defineConfig, tool} from '@dynobox/sdk';
+import {defineDyno, tool} from '@dynobox/sdk';
 
-export default defineConfig({
+export default defineDyno({
   name: 'local-observability',
   scenarios: [
     {

@@ -1,4 +1,4 @@
-import type {HttpMethod} from './http-method.js';
+import type {HttpMethod} from './httpMethod.js';
 
 /**
  * The author-facing shape passed to `http.endpoint`.

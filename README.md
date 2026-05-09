@@ -42,9 +42,9 @@ The selected harness executable must already be installed, authenticated, and av
 ## Example Config
 
 ```ts
-import {artifact, defineConfig, finalMessage, tool} from '@dynobox/sdk';
+import {artifact, defineDyno, finalMessage, tool} from '@dynobox/sdk';
 
-export default defineConfig({
+export default defineDyno({
   name: 'package-script-skill',
   harnesses: ['claude-code'],
   scenarios: [
@@ -84,7 +84,7 @@ See [Getting Started](./docs/getting-started.md) for a full walkthrough.
 
 ## Current Capabilities
 
-- Author configs with `@dynobox/sdk` helpers: `defineConfig`, `defineScenario`, `tool`, `artifact`, `transcript`, `finalMessage`, `sequence`, `http`, and `dyno`.
+- Author dynos with `@dynobox/sdk` helpers: `defineDyno`, `defineScenario`, `tool`, `artifact`, `transcript`, `finalMessage`, `sequence`, `http`, and `dyno`.
 - Run `dynobox run <config>` locally against Claude Code, Codex, or both.
 - Override harnesses at runtime with `--harness claude-code`, `--harness codex`, or comma-separated values.
 - Assert tool calls with `tool.called(...)` and `tool.notCalled(...)`.

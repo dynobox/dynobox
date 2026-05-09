@@ -23,14 +23,14 @@ type ConstrainScenarios<
 };
 
 /**
- * Provides a typed passthrough for authoring Dynobox configs. The mapped
+ * Provides a typed passthrough for authoring dynos. The mapped
  * type over `scenarios` constrains each scenario's assertion endpoint keys
  * to keys present in (global ∪ that scenario's local) endpoints.
  *
  * @param config The config object authored by the user.
  * @returns The same config object, narrowed to `DynoboxConfig` for downstream use.
  */
-export function defineConfig<
+export function defineDyno<
   const GE extends EndpointMap | undefined,
   const S extends ReadonlyArray<ScenarioInput<string, EndpointMap>>,
 >(config: {

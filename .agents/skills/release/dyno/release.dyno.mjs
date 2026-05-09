@@ -1,8 +1,8 @@
-import {artifact, defineConfig, dyno, sequence, tool} from '@dynobox/sdk';
+import {artifact, defineDyno, dyno, sequence, tool} from '@dynobox/sdk';
 
 const here = dyno.here(import.meta.url);
 
-export default defineConfig({
+export default defineDyno({
   name: 'release-skill-smoke-test',
   scenarios: [
     {

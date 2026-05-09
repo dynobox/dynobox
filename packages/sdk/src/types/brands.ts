@@ -1,4 +1,4 @@
-import type {EndpointSpec} from './endpoint-spec.js';
+import type {EndpointSpec} from './endpointSpec.js';
 
 /**
  * Brand symbols backing opaque authoring types. Endpoint and assertion objects

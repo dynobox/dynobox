@@ -27,9 +27,9 @@ export function stripAnsi(text: string): string {
   return text.replaceAll('\x1B', '').replace(ANSI_ESCAPE_PATTERN, '');
 }
 
-const VALID_CONFIG = `import {defineConfig, tool} from '@dynobox/sdk';
+const VALID_CONFIG = `import {defineDyno, tool} from '@dynobox/sdk';
 
-export default defineConfig({
+export default defineDyno({
   name: 'cli-local-runner',
   scenarios: [
     {
@@ -49,9 +49,9 @@ const INVALID_CONFIG = `export default {
 };
 `;
 
-const SETUP_FAIL_CONFIG = `import {defineConfig, tool} from '@dynobox/sdk';
+const SETUP_FAIL_CONFIG = `import {defineDyno, tool} from '@dynobox/sdk';
 
-export default defineConfig({
+export default defineDyno({
   scenarios: [
     {
       name: 'setup breaks',
@@ -63,9 +63,9 @@ export default defineConfig({
 });
 `;
 
-const MODALITIES_CONFIG = `import {artifact, defineConfig, finalMessage, sequence, tool, transcript} from '@dynobox/sdk';
+const MODALITIES_CONFIG = `import {artifact, defineDyno, finalMessage, sequence, tool, transcript} from '@dynobox/sdk';
 
-export default defineConfig({
+export default defineDyno({
   scenarios: [
     {
       name: 'modalities',
@@ -87,9 +87,9 @@ export default defineConfig({
 });
 `;
 
-const SEQUENCE_FAIL_CONFIG = `import {defineConfig, sequence, tool} from '@dynobox/sdk';
+const SEQUENCE_FAIL_CONFIG = `import {defineDyno, sequence, tool} from '@dynobox/sdk';
 
-export default defineConfig({
+export default defineDyno({
   scenarios: [
     {
       name: 'sequence fails',
@@ -105,11 +105,11 @@ export default defineConfig({
 });
 `;
 
-const DYNO_MJS_CONFIG = `import {defineConfig, dyno, tool} from '@dynobox/sdk';
+const DYNO_MJS_CONFIG = `import {defineDyno, dyno, tool} from '@dynobox/sdk';
 
 const here = dyno.here(import.meta.url);
 
-export default defineConfig({
+export default defineDyno({
   scenarios: [
     {
       name: 'uses dyno mjs',

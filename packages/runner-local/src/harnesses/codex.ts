@@ -1,7 +1,7 @@
 import {execa} from 'execa';
 import {realpathSync} from 'fs';
 
-import {normalizeToolKind} from './tool-events.js';
+import {normalizeToolKind} from './toolEvents.js';
 import type {
   Harness,
   HarnessInput,

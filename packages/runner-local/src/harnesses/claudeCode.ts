@@ -1,6 +1,6 @@
 import {execa} from 'execa';
 
-import {normalizeToolKind} from './tool-events.js';
+import {normalizeToolKind} from './toolEvents.js';
 import type {
   Harness,
   HarnessInput,

@@ -1,6 +1,6 @@
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 
-import {createFixtureSet, PassingHarness} from '../test-utils.js';
+import {createFixtureSet, PassingHarness} from '../testUtils.js';
 import {executeCli} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
 

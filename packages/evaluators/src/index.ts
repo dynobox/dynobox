@@ -9,7 +9,7 @@ import {
   shellCommandMatches,
   shellCommandMatchPosition,
   validateRegexMatcher,
-} from './shell-matcher.js';
+} from './shellMatcher.js';
 
 /** Canonical tool event shape consumed by assertion evaluators. */
 export type ToolEvent = {

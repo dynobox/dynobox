@@ -6,7 +6,7 @@ import {
   createFixtureSet,
   createPassingHarness,
   stripAnsi,
-} from '../test-utils.js';
+} from '../testUtils.js';
 import {executeCli, placeholderExitCode, runCli} from './execute.js';
 
 const fixtures = createFixtureSet('execute');

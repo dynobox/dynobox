@@ -1,11 +1,11 @@
 # Config Authoring
 
-Dynobox configs are TypeScript files loaded by the CLI. A config should default-export `defineConfig(...)` from `@dynobox/sdk`.
+Dynobox configs are TypeScript files loaded by the CLI. A config should default-export `defineDyno(...)` from `@dynobox/sdk`.
 
 ```ts
-import {defineConfig, tool} from '@dynobox/sdk';
+import {defineDyno, tool} from '@dynobox/sdk';
 
-export default defineConfig({
+export default defineDyno({
   name: 'local-observability',
   scenarios: [
     {
@@ -189,7 +189,7 @@ Available helpers:
 Use `defineScenario` when you want to author or export a scenario independently, then include it in a config.
 
 ```ts
-import {defineConfig, defineScenario, tool} from '@dynobox/sdk';
+import {defineDyno, defineScenario, tool} from '@dynobox/sdk';
 
 const checksPackageJson = defineScenario({
   name: 'checks package json',
@@ -197,7 +197,7 @@ const checksPackageJson = defineScenario({
   assertions: [tool.called('shell', {includes: 'package.json'})],
 });
 
-export default defineConfig({
+export default defineDyno({
   scenarios: [checksPackageJson],
 });
 ```

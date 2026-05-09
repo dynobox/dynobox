@@ -2,5 +2,5 @@
 
 export {DynoboxConfigError} from './errors.js';
 export {compile} from './ir/compile.js';
-export {configSchema} from './schema/config-schema.js';
-export {resolveConfigModule} from './schema/resolve-module.js';
+export {configSchema} from './schema/configSchema.js';
+export {resolveConfigModule} from './schema/resolveModule.js';

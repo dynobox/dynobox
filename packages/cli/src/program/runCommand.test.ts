@@ -11,7 +11,7 @@ import {
   MISMATCHED_SHELL_EVENT,
   MULTILINE_GIT_COMMIT_EVENT,
   StreamingHarness,
-} from '../test-utils.js';
+} from '../testUtils.js';
 import {executeCli} from './execute.js';
 import {configErrorExitCode, runFailureExitCode} from './exitCodes.js';
 

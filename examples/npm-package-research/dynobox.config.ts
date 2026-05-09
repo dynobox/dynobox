@@ -1,6 +1,6 @@
-import {defineConfig, http} from '@dynobox/sdk';
+import {defineDyno, http} from '@dynobox/sdk';
 
-export default defineConfig({
+export default defineDyno({
   name: 'npm-package-research',
   endpoints: {
     getPrettierMetadata: http.endpoint({

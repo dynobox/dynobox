@@ -1,7 +1,7 @@
 import type {z} from 'zod';
 
 import {DynoboxConfigError} from '../errors.js';
-import {assertionSchema, configSchema} from '../schema/config-schema.js';
+import {assertionSchema, configSchema} from '../schema/configSchema.js';
 import type {Endpoint} from '../types/brands.js';
 import type {DynoboxConfig} from '../types/config.js';
 import type {HarnessRunConfig} from '../types/harness.js';

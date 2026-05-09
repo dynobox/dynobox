@@ -7,7 +7,7 @@ import {
   TOOL_KINDS,
 } from '../types/brands.js';
 import {HARNESS_IDS} from '../types/harness.js';
-import {HTTP_METHODS} from '../types/http-method.js';
+import {HTTP_METHODS} from '../types/httpMethod.js';
 
 const endpointKeySchema = z
   .string()

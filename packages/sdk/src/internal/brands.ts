@@ -13,7 +13,7 @@ import type {
   TranscriptContainsAssertion,
 } from '../types/brands.js';
 import {ASSERTION_BRAND, ENDPOINT_BRAND} from '../types/brands.js';
-import type {EndpointSpec} from '../types/endpoint-spec.js';
+import type {EndpointSpec} from '../types/endpointSpec.js';
 
 /**
  * Internal constructors for SDK-authored endpoint/assertion objects.

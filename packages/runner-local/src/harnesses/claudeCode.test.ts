@@ -9,7 +9,7 @@ import {
   ClaudeCodeHarness,
   parseClaudeCodeStreamJson,
   parseClaudeCodeStreamJsonLine,
-} from './claude-code.js';
+} from './claudeCode.js';
 import type {HarnessRunOutput, ToolEvent} from './types.js';
 
 const scratchRoots: string[] = [];

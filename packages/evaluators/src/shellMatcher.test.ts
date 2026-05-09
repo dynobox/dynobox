@@ -5,7 +5,7 @@ import {
   shellCommandMatches,
   shellCommandMatchPosition,
   validateRegexMatcher,
-} from './shell-matcher.js';
+} from './shellMatcher.js';
 
 const command = 'pnpm test -- --runInBand';
 

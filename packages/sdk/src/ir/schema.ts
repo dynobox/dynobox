@@ -6,7 +6,7 @@ import {
   TOOL_KINDS,
 } from '../types/brands.js';
 import {HARNESS_IDS} from '../types/harness.js';
-import {HTTP_METHODS} from '../types/http-method.js';
+import {HTTP_METHODS} from '../types/httpMethod.js';
 
 export const IR_VERSION = '0.1' as const;
 
