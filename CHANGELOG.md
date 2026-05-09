@@ -8,9 +8,9 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
-### `dynobox` (CLI)
+---
 
-- Hardened the CLI package as bin-only and reorganized internal rendering helpers without changing command behavior.
+## @dynobox/sdk@0.0.5 — 2026-05-09
 
 ### `@dynobox/sdk`
 
@@ -18,7 +18,11 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Tightened SDK helper naming, endpoint key validation, and config path shell quoting.
 - Renamed the authoring helper from `defineConfig` to `defineDyno`.
 
----
+## dynobox@0.0.9 — 2026-05-09
+
+### `dynobox` (CLI)
+
+- Hardened the CLI package as bin-only and reorganized internal rendering helpers without changing command behavior.
 
 ## @dynobox/sdk@0.0.4 — 2026-05-08
 
