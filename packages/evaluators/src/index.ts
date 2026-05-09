@@ -1,7 +1,8 @@
 import {existsSync, readFileSync} from 'node:fs';
 import {isAbsolute, relative, resolve} from 'node:path';
 
-import type {IrAssertion, ToolKind} from '@dynobox/sdk';
+import type {ToolKind} from '@dynobox/sdk';
+import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {
   describeShellMatcher,
@@ -10,6 +11,7 @@ import {
   validateRegexMatcher,
 } from './shell-matcher.js';
 
+/** Canonical tool event shape consumed by assertion evaluators. */
 export type ToolEvent = {
   kind: ToolKind;
   rawName: string;
@@ -20,6 +22,7 @@ export type ToolEvent = {
   completedAt?: string;
 };
 
+/** Inputs available when evaluating one scenario's compiled assertions. */
 export type EvaluationInput = {
   assertions: readonly IrAssertion[];
   toolEvents: readonly ToolEvent[];
@@ -28,6 +31,7 @@ export type EvaluationInput = {
   finalMessage?: string | undefined;
 };
 
+/** Result for one compiled assertion. */
 export type AssertionResult = {
   assertionId: string;
   kind: string;
@@ -48,6 +52,7 @@ type SequenceCursor = {
   commandOffset: number;
 };
 
+/** Evaluate a scenario's compiled IR assertions against observed harness output. */
 export function evaluateAssertions(input: EvaluationInput): AssertionResult[] {
   return input.assertions.map((assertion) =>
     evaluateAssertion(assertion, input),

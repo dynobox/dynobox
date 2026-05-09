@@ -1,7 +1,6 @@
 import {describe, expect, it} from 'vitest';
 
 import {stripAnsi} from '../test-utils.js';
-
 import {renderPlaceholderMessage} from './placeholder.js';
 
 const EXPECTED = `

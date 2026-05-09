@@ -1,7 +1,7 @@
 /**
- * Public CLI entry points: `executeCli` (testable; returns captured
- * stdout/stderr + exit code) and `runCli` (process-coupled; writes directly
- * to `process.stdout`/`process.stderr` and returns the exit code).
+ * CLI execution helpers: `executeCli` is testable and returns captured
+ * stdout/stderr + exit code; `runCli` is process-coupled and writes directly
+ * to `process.stdout`/`process.stderr`.
  *
  * Tests use `executeCli`; `bin.ts` uses `runCli`.
  */
@@ -13,11 +13,7 @@ import {renderPlaceholderMessage} from '../render/index.js';
 import type {RunOutputMode} from '../terminal/index.js';
 import {buildProgram} from './builder.js';
 import {shouldUseLiveTerminalOutput} from './environment.js';
-import {
-  configErrorExitCode,
-  placeholderExitCode,
-  runFailureExitCode,
-} from './exitCodes.js';
+import {placeholderExitCode, runFailureExitCode} from './exitCodes.js';
 
 export type OutputWriter = (value: string) => void;
 
@@ -42,7 +38,7 @@ export type ExecuteCliOptions = {
 };
 
 /**
- * Programmatic entry point. Captures all stdout/stderr the CLI would emit
+ * Testable execution path. Captures all stdout/stderr the CLI would emit
  * (including any user-supplied writers) and returns it alongside the exit
  * code. Suitable for testing without spawning a subprocess.
  */
@@ -113,8 +109,7 @@ export async function runCli(
   return result.exitCode;
 }
 
-// Re-export exit codes here so consumers importing from `program/execute`
-// don't have to reach into `exitCodes` separately.
+// Re-export exit codes here for internal tests and command wiring.
 export {
   configErrorExitCode,
   placeholderExitCode,

@@ -9,6 +9,13 @@ import {
 import {HARNESS_IDS} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/http-method.js';
 
+const endpointKeySchema = z
+  .string()
+  .regex(
+    /^[A-Za-z0-9_-]+$/,
+    'Endpoint keys may only contain letters, numbers, underscores, and hyphens.',
+  );
+
 /**
  * Zod schemas for structural validation of authored configs.
  *
@@ -162,7 +169,7 @@ export const scenarioSchema = z.object({
   prompt: z.string().min(1),
   harnesses: z.array(harnessRunConfigSchema).min(1).optional(),
   setup: z.array(z.string().min(1)).optional(),
-  endpoints: z.record(z.string(), endpointSchema).optional(),
+  endpoints: z.record(endpointKeySchema, endpointSchema).optional(),
   assertions: z.array(assertionSchema).optional(),
 });
 
@@ -171,6 +178,6 @@ export const configSchema = z.object({
   version: z.string().optional(),
   harnesses: z.array(harnessRunConfigSchema).min(1).optional(),
   setup: z.array(z.string().min(1)).optional(),
-  endpoints: z.record(z.string(), endpointSchema).optional(),
+  endpoints: z.record(endpointKeySchema, endpointSchema).optional(),
   scenarios: z.array(scenarioSchema).min(1),
 });

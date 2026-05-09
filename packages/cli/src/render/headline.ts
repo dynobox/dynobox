@@ -7,7 +7,6 @@
 
 import type {LocalRunnerJob} from '@dynobox/runner-local';
 
-import {formatJobHarness} from '../jobs.js';
 import {
   colorStatus,
   formatDuration,
@@ -15,6 +14,7 @@ import {
   type RenderContext,
   symbol,
 } from '../terminal/index.js';
+import {formatJobHarness} from './plan.js';
 
 export type HeadlineStatus = 'pass' | 'fail' | 'running';
 

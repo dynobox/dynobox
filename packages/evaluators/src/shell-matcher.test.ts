@@ -104,6 +104,7 @@ describe('shellCommandMatchPosition', () => {
     const result = shellCommandMatchPosition(command, {matches: '('});
 
     expect(result.passed).toBe(false);
+    if (result.passed) throw new Error('Expected invalid regex to fail');
     expect(result.error).toMatch(/^Invalid shell matcher regex "\("/);
   });
 });

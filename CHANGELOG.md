@@ -8,6 +8,15 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Hardened the CLI package as bin-only and reorganized internal rendering helpers without changing command behavior.
+
+### `@dynobox/sdk`
+
+- Split authoring, compiler, and IR exports into explicit package entrypoints.
+- Tightened SDK helper naming, endpoint key validation, and config path shell quoting.
+
 ---
 
 ## @dynobox/sdk@0.0.4 — 2026-05-08

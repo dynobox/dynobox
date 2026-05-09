@@ -1,10 +1,12 @@
 import {
-  brandCalled,
-  brandEndpoint,
-  brandNotCalled,
-  type CalledAssertion,
-  type Endpoint,
-  type NotCalledAssertion,
+  createEndpoint,
+  createHttpCalledAssertion,
+  createHttpNotCalledAssertion,
+} from '../internal/brands.js';
+import type {
+  CalledAssertion,
+  Endpoint,
+  NotCalledAssertion,
 } from '../types/brands.js';
 import type {EndpointSpec} from '../types/endpoint-spec.js';
 
@@ -18,17 +20,17 @@ import type {EndpointSpec} from '../types/endpoint-spec.js';
  */
 export const http = {
   endpoint(spec: EndpointSpec): Endpoint {
-    return brandEndpoint(spec);
+    return createEndpoint(spec);
   },
 
   called<K extends string>(
     endpoint: K,
     opts?: {status?: number},
   ): CalledAssertion<K> {
-    return brandCalled(endpoint, opts);
+    return createHttpCalledAssertion(endpoint, opts);
   },
 
   notCalled<K extends string>(endpoint: K): NotCalledAssertion<K> {
-    return brandNotCalled(endpoint);
+    return createHttpNotCalledAssertion(endpoint);
   },
 };

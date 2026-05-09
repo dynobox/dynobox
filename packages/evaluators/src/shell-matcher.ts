@@ -16,6 +16,7 @@ export type ShellMatcherPositionResult =
       error?: string;
     };
 
+/** Evaluate whether a shell command satisfies a matcher. */
 export function shellCommandMatches(
   command: string,
   matcher: ShellToolMatcher,
@@ -42,6 +43,12 @@ export function shellCommandMatches(
   return {passed: false};
 }
 
+/**
+ * Locate a shell matcher within a command after an offset.
+ *
+ * Sequence assertions use this to allow multiple ordered steps to match one
+ * compound shell command without repeatedly matching the same substring.
+ */
 export function shellCommandMatchPosition(
   command: string,
   matcher: ShellToolMatcher,
@@ -88,6 +95,7 @@ export function shellCommandMatchPosition(
   return {passed: false};
 }
 
+/** Return a validation message for invalid regex matchers, otherwise undefined. */
 export function validateRegexMatcher(
   matcher: ShellToolMatcher,
 ): string | undefined {
@@ -103,6 +111,7 @@ export function validateRegexMatcher(
   }
 }
 
+/** Describe a shell matcher for failure messages and CLI output. */
 export function describeShellMatcher(matcher: ShellToolMatcher): string {
   if ('equals' in matcher && typeof matcher.equals === 'string') {
     return `equals "${matcher.equals}"`;

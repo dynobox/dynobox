@@ -2,7 +2,7 @@ import {existsSync, mkdtempSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, relative} from 'node:path';
 
-import type {IrScenario} from '@dynobox/sdk';
+import type {IrScenario} from '@dynobox/sdk/ir';
 import {afterEach, describe, expect, it} from 'vitest';
 
 import {FakeHarness} from './harnesses/fake.js';

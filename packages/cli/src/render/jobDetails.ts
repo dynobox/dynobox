@@ -7,7 +7,7 @@
  */
 
 import type {LocalRunnerResult} from '@dynobox/runner-local';
-import type {IrAssertion} from '@dynobox/sdk';
+import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import type {RenderContext} from '../terminal/index.js';
 import {renderAssertionDetails} from './assertions.js';

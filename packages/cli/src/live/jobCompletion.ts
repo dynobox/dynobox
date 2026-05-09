@@ -1,5 +1,5 @@
 import type {LocalRunnerResult} from '@dynobox/runner-local';
-import type {IrAssertion} from '@dynobox/sdk';
+import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {renderAssertionDetails} from '../render/assertions.js';
 import {renderDebugDetails} from '../render/debug.js';

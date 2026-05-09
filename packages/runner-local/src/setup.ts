@@ -1,4 +1,4 @@
-import type {IrScenario} from '@dynobox/sdk';
+import type {IrScenario} from '@dynobox/sdk/ir';
 import {execaCommand} from 'execa';
 
 export type SetupCommandLog = {
@@ -53,6 +53,7 @@ export async function runSetup(opts: RunSetupOptions): Promise<SetupResult> {
   return {success: true, logs};
 }
 
+/** Execute the setup commands attached to a compiled scenario. */
 export async function runScenarioSetup(opts: {
   scenario: Pick<IrScenario, 'setup'>;
   workDir: string;

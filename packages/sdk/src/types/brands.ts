@@ -1,14 +1,14 @@
 import type {EndpointSpec} from './endpoint-spec.js';
 
 /**
- * Internal brand symbols. Endpoint and assertion objects can only be
- * produced by the SDK helpers — users cannot hand-author them. This keeps
- * the IR a compile target rather than a hand-written format and lets us
- * change internal shapes without breaking authors.
+ * Brand symbols backing opaque authoring types. Endpoint and assertion objects
+ * are produced by SDK helpers so the IR stays a compile target rather than a
+ * hand-written format.
  */
-const ENDPOINT_BRAND = Symbol.for('@dynobox/sdk/endpoint');
-const ASSERTION_BRAND = Symbol.for('@dynobox/sdk/assertion');
+export const ENDPOINT_BRAND = Symbol.for('@dynobox/sdk/endpoint');
+export const ASSERTION_BRAND = Symbol.for('@dynobox/sdk/assertion');
 
+/** Canonical tool kinds used by authoring helpers, IR, and harness adapters. */
 export const TOOL_KINDS = [
   'shell',
   'read_file',
@@ -39,12 +39,17 @@ type SingleShellToolMatcher<K extends ShellToolMatcherKey> = {
   readonly [P in Exclude<ShellToolMatcherKey, K>]?: never;
 };
 
+/**
+ * Shell command matcher. Exactly one strategy is allowed so assertions are
+ * unambiguous and renderer/evaluator messages can describe intent clearly.
+ */
 export type ShellToolMatcher = {
   [K in ShellToolMatcherKey]: SingleShellToolMatcher<K>;
 }[ShellToolMatcherKey];
 
 const shellToolMatcherKeys = new Set<string>(SHELL_TOOL_MATCHER_KEYS);
 
+/** Runtime guard used by Zod schemas and evaluator code for shell matchers. */
 export function isShellToolMatcher(value: unknown): value is ShellToolMatcher {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
@@ -59,10 +64,12 @@ export function isShellToolMatcher(value: unknown): value is ShellToolMatcher {
   return shellToolMatcherKeys.has(key) && typeof matcherValue === 'string';
 }
 
+/** Endpoint definition produced by `http.endpoint`. */
 export type Endpoint = EndpointSpec & {
   readonly [ENDPOINT_BRAND]: true;
 };
 
+/** Assertion that a named HTTP endpoint should be observed. */
 export type CalledAssertion<K extends string = string> = {
   readonly [ASSERTION_BRAND]: true;
   readonly kind: 'http.called';
@@ -70,12 +77,14 @@ export type CalledAssertion<K extends string = string> = {
   readonly status?: number;
 };
 
+/** Assertion that a named HTTP endpoint should not be observed. */
 export type NotCalledAssertion<K extends string = string> = {
   readonly [ASSERTION_BRAND]: true;
   readonly kind: 'http.notCalled';
   readonly endpoint: K;
 };
 
+/** Assertion that a harness should call a tool, optionally matching shell text. */
 export type ToolCalledAssertion<K extends ToolKind = ToolKind> =
   K extends 'shell'
     ? {
@@ -90,6 +99,7 @@ export type ToolCalledAssertion<K extends ToolKind = ToolKind> =
         readonly toolKind: K;
       };
 
+/** Assertion that a harness should not call a tool. */
 export type ToolNotCalledAssertion<K extends ToolKind = ToolKind> =
   K extends 'shell'
     ? {
@@ -104,12 +114,14 @@ export type ToolNotCalledAssertion<K extends ToolKind = ToolKind> =
         readonly toolKind: K;
       };
 
+/** Assertion that a work-directory artifact exists. */
 export type ArtifactExistsAssertion = {
   readonly [ASSERTION_BRAND]: true;
   readonly kind: 'artifact.exists';
   readonly path: string;
 };
 
+/** Assertion that a work-directory artifact contains text. */
 export type ArtifactContainsAssertion = {
   readonly [ASSERTION_BRAND]: true;
   readonly kind: 'artifact.contains';
@@ -117,24 +129,28 @@ export type ArtifactContainsAssertion = {
   readonly text: string;
 };
 
+/** Assertion that the full harness transcript contains text. */
 export type TranscriptContainsAssertion = {
   readonly [ASSERTION_BRAND]: true;
   readonly kind: 'transcript.contains';
   readonly text: string;
 };
 
+/** Assertion that the extracted final assistant message contains text. */
 export type FinalMessageContainsAssertion = {
   readonly [ASSERTION_BRAND]: true;
   readonly kind: 'finalMessage.contains';
   readonly text: string;
 };
 
+/** Assertion that positive tool calls occur in order. */
 export type SequenceInOrderAssertion = {
   readonly [ASSERTION_BRAND]: true;
   readonly kind: 'sequence.inOrder';
   readonly steps: readonly ToolCalledAssertion[];
 };
 
+/** Union of all author-facing assertion objects accepted by config scenarios. */
 export type Assertion<K extends string = string> =
   | CalledAssertion<K>
   | NotCalledAssertion<K>
@@ -145,130 +161,3 @@ export type Assertion<K extends string = string> =
   | TranscriptContainsAssertion
   | FinalMessageContainsAssertion
   | SequenceInOrderAssertion;
-
-/**
- * Constructs a branded endpoint. Internal — call via `http.endpoint`.
- *
- * @param spec The author-supplied endpoint shape.
- * @returns A branded endpoint object.
- */
-export function brandEndpoint(spec: EndpointSpec): Endpoint {
-  return {...spec, [ENDPOINT_BRAND]: true} as Endpoint;
-}
-
-/**
- * Constructs a branded `http.called` assertion. Internal — call via
- * `http.called`.
- *
- * @param endpoint The endpoint key being asserted on.
- * @param opts Optional assertion modifiers (e.g. `status`).
- * @returns A branded `http.called` assertion.
- */
-export function brandCalled<K extends string>(
-  endpoint: K,
-  opts?: {status?: number},
-): CalledAssertion<K> {
-  const base = {
-    [ASSERTION_BRAND]: true as const,
-    kind: 'http.called' as const,
-    endpoint,
-  };
-  return opts?.status === undefined
-    ? (base as CalledAssertion<K>)
-    : ({...base, status: opts.status} as CalledAssertion<K>);
-}
-
-/**
- * Constructs a branded `http.notCalled` assertion. Internal — call via
- * `http.notCalled`.
- *
- * @param endpoint The endpoint key being asserted on.
- * @returns A branded `http.notCalled` assertion.
- */
-export function brandNotCalled<K extends string>(
-  endpoint: K,
-): NotCalledAssertion<K> {
-  return {
-    [ASSERTION_BRAND]: true as const,
-    kind: 'http.notCalled' as const,
-    endpoint,
-  };
-}
-
-export function brandToolCalled<K extends ToolKind>(
-  toolKind: K,
-  matcher?: ShellToolMatcher,
-): ToolCalledAssertion<K> {
-  const base = {
-    [ASSERTION_BRAND]: true as const,
-    kind: 'tool.called' as const,
-    toolKind,
-  };
-  return (matcher === undefined
-    ? base
-    : {...base, matcher}) as unknown as ToolCalledAssertion<K>;
-}
-
-export function brandToolNotCalled<K extends ToolKind>(
-  toolKind: K,
-  matcher?: ShellToolMatcher,
-): ToolNotCalledAssertion<K> {
-  const base = {
-    [ASSERTION_BRAND]: true as const,
-    kind: 'tool.notCalled' as const,
-    toolKind,
-  };
-  return (matcher === undefined
-    ? base
-    : {...base, matcher}) as unknown as ToolNotCalledAssertion<K>;
-}
-
-export function brandArtifactExists(path: string): ArtifactExistsAssertion {
-  return {
-    [ASSERTION_BRAND]: true as const,
-    kind: 'artifact.exists' as const,
-    path,
-  };
-}
-
-export function brandArtifactContains(
-  path: string,
-  text: string,
-): ArtifactContainsAssertion {
-  return {
-    [ASSERTION_BRAND]: true as const,
-    kind: 'artifact.contains' as const,
-    path,
-    text,
-  };
-}
-
-export function brandTranscriptContains(
-  text: string,
-): TranscriptContainsAssertion {
-  return {
-    [ASSERTION_BRAND]: true as const,
-    kind: 'transcript.contains' as const,
-    text,
-  };
-}
-
-export function brandFinalMessageContains(
-  text: string,
-): FinalMessageContainsAssertion {
-  return {
-    [ASSERTION_BRAND]: true as const,
-    kind: 'finalMessage.contains' as const,
-    text,
-  };
-}
-
-export function brandSequenceInOrder(
-  steps: readonly ToolCalledAssertion[],
-): SequenceInOrderAssertion {
-  return {
-    [ASSERTION_BRAND]: true as const,
-    kind: 'sequence.inOrder' as const,
-    steps,
-  };
-}

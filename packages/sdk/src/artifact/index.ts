@@ -1,16 +1,21 @@
 import {
-  type ArtifactContainsAssertion,
-  type ArtifactExistsAssertion,
-  brandArtifactContains,
-  brandArtifactExists,
+  createArtifactContainsAssertion,
+  createArtifactExistsAssertion,
+} from '../internal/brands.js';
+import type {
+  ArtifactContainsAssertion,
+  ArtifactExistsAssertion,
 } from '../types/brands.js';
 
+/** Authoring helpers for assertions against files in the scenario workdir. */
 export const artifact = {
+  /** Assert that a path exists after the harness runs. */
   exists(path: string): ArtifactExistsAssertion {
-    return brandArtifactExists(path);
+    return createArtifactExistsAssertion(path);
   },
 
+  /** Assert that a file contains expected text after the harness runs. */
   contains(path: string, text: string): ArtifactContainsAssertion {
-    return brandArtifactContains(path, text);
+    return createArtifactContainsAssertion(path, text);
   },
 };

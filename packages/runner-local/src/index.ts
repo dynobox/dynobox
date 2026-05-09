@@ -3,7 +3,8 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
 import {type AssertionResult, evaluateAssertions} from '@dynobox/evaluators';
-import type {HarnessId, IrScenario} from '@dynobox/sdk';
+import type {HarnessId} from '@dynobox/sdk';
+import type {IrScenario} from '@dynobox/sdk/ir';
 
 import type {
   Harness,
@@ -36,6 +37,7 @@ export {
 export type {RunSetupOptions, SetupCommandLog, SetupResult} from './setup.js';
 export {runScenarioSetup, runSetup} from './setup.js';
 
+/** One compiled scenario/harness/iteration unit scheduled by the CLI. */
 export type LocalRunnerJob = {
   id: string;
   scenario: IrScenario;
@@ -44,6 +46,7 @@ export type LocalRunnerJob = {
   iteration: number;
 };
 
+/** Progress events emitted while `runJob` advances through setup/harness/assertions. */
 export type RunJobProgressEvent =
   | {
       type: 'setup.started';
@@ -87,6 +90,7 @@ export type RunJobProgressEvent =
       assertionResults: AssertionResult[];
     };
 
+/** Runtime options for local execution of one job. */
 export type RunJobOptions = {
   harnesses?: readonly Harness[];
   scratchRoot?: string;
@@ -101,11 +105,13 @@ export type LocalRunnerStatus =
   | 'harness_failed'
   | 'assertion_failed';
 
+/** Artifact produced by local execution and surfaced in debug output. */
 export type LocalArtifact = {
   kind: 'work_dir';
   path: string;
 };
 
+/** Timing breakdown for setup, harness execution, and assertions. */
 export type LocalRunnerTiming = {
   setupMs: number;
   harnessMs: number;
@@ -113,6 +119,7 @@ export type LocalRunnerTiming = {
   totalMs: number;
 };
 
+/** Structured result returned by `runJob` for rendering and summaries. */
 export type LocalRunnerResult = {
   jobId: string;
   scenarioId: string;
@@ -131,6 +138,13 @@ export type LocalRunnerResult = {
   timing: LocalRunnerTiming;
 };
 
+/**
+ * Run one compiled scenario/harness job locally.
+ *
+ * The runner creates an isolated work directory, executes setup commands,
+ * invokes the selected harness, extracts tool/transcript/final-message data,
+ * evaluates assertions, and returns a structured result for renderers.
+ */
 export async function runJob(
   job: LocalRunnerJob,
   options: RunJobOptions = {},

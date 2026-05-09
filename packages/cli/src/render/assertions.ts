@@ -4,7 +4,7 @@
  */
 
 import type {LocalRunnerResult, ToolEvent} from '@dynobox/runner-local';
-import type {IrAssertion} from '@dynobox/sdk';
+import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {
   colorStatus,

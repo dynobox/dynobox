@@ -2,6 +2,7 @@ import type {Endpoint} from '../types/brands.js';
 import type {ScenarioInput} from '../types/config.js';
 
 type EndpointMap = Record<string, Endpoint>;
+type EmptyEndpointMap = Record<string, never>;
 
 /**
  * Provides a typed passthrough for authoring a single scenario in
@@ -12,8 +13,8 @@ type EndpointMap = Record<string, Endpoint>;
  * @returns The same scenario object, narrowed to `ScenarioInput`.
  */
 export function defineScenario<
-  const E extends EndpointMap = EndpointMap,
   Globals extends string = never,
+  const E extends EndpointMap = EmptyEndpointMap,
 >(scenario: ScenarioInput<Globals | (keyof E & string), E>): ScenarioInput {
   return scenario;
 }

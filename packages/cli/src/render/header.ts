@@ -4,7 +4,6 @@
 
 import type {LocalRunnerJob} from '@dynobox/runner-local';
 
-import {renderPlan} from '../jobs.js';
 import {
   createRenderContext,
   dim,
@@ -14,6 +13,7 @@ import {
   style,
 } from '../terminal/index.js';
 import {readPackageVersion} from '../util/version.js';
+import {renderPlan} from './plan.js';
 
 export function renderRunHeader(
   configPath: string,

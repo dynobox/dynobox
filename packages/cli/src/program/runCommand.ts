@@ -18,7 +18,8 @@ import {
   runJob,
   type RunJobOptions,
 } from '@dynobox/runner-local';
-import {compile, type Ir, resolveConfigModule} from '@dynobox/sdk';
+import {compile, resolveConfigModule} from '@dynobox/sdk/compiler';
+import type {Ir} from '@dynobox/sdk/ir';
 import {CommanderError} from 'commander';
 
 import {assertionByIdForJobs, buildLocalRunnerJobs} from '../jobs.js';

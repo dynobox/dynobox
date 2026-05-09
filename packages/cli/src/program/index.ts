@@ -1,6 +1,6 @@
 /**
- * Commander program & dispatch — public surface re-exported by the
- * top-level package barrel.
+ * Commander program & dispatch helpers used by the binary and tests.
+ * This module is internal to the CLI package.
  */
 
 export {

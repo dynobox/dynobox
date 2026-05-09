@@ -2,7 +2,7 @@ import {mkdtempSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import type {IrAssertion} from '@dynobox/sdk';
+import type {IrAssertion} from '@dynobox/sdk/ir';
 import {describe, expect, it} from 'vitest';
 
 import {

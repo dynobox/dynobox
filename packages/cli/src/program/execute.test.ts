@@ -2,8 +2,11 @@ import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 
 import {renderRunHeader} from '../render/header.js';
 import {renderPlaceholderMessage} from '../render/placeholder.js';
-import {createFixtureSet, createPassingHarness, stripAnsi} from '../test-utils.js';
-
+import {
+  createFixtureSet,
+  createPassingHarness,
+  stripAnsi,
+} from '../test-utils.js';
 import {executeCli, placeholderExitCode, runCli} from './execute.js';
 
 const fixtures = createFixtureSet('execute');

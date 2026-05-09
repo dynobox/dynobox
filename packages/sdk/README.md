@@ -9,10 +9,12 @@ This package provides the Milestone 1 authoring contract, helper functions, conf
 
 ## Current exports
 
+### `@dynobox/sdk`
+
+Authoring helpers for user config files:
+
 - `defineConfig(config)`
 - `defineScenario(scenario)`
-- `compile(config)`
-- `resolveConfigModule(moduleExport)`
 - `http.endpoint()`
 - `http.called()`
 - `http.notCalled()`
@@ -22,6 +24,20 @@ This package provides the Milestone 1 authoring contract, helper functions, conf
 - `finalMessage.contains()`
 - `sequence.inOrder()`
 - `dyno` helpers
+
+### `@dynobox/sdk/compiler`
+
+Compiler and config-loader utilities used by the CLI and integrations:
+
+- `compile(config)`
+- `resolveConfigModule(moduleExport)`
+- `configSchema`
+- `DynoboxConfigError`
+
+### `@dynobox/sdk/ir`
+
+Canonical IR contract used by runners and evaluators:
+
 - IR schemas and derived IR types
 
 ## Config contract

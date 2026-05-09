@@ -1,8 +1,8 @@
 /**
  * Process exit codes returned by the CLI.
  *
- * Kept as constants (not enums) because they're surfaced as part of the
- * public API and consumers compare against them numerically.
+ * Kept as constants (not enums) so command wiring and tests can compare
+ * against them numerically.
  */
 
 /** No subcommand supplied — printed the placeholder banner. */

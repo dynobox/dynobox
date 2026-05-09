@@ -4,7 +4,8 @@
  */
 
 import type {ShellToolEvent, ToolEvent} from '@dynobox/runner-local';
-import type {IrAssertion, ShellToolMatcher} from '@dynobox/sdk';
+import type {ShellToolMatcher} from '@dynobox/sdk';
+import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {truncate} from '../terminal/index.js';
 

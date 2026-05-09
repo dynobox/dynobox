@@ -1,22 +1,23 @@
 /**
  * Pure data transforms over the compiled IR: turn scenarios into runnable
  * jobs, summarize a run as a matrix, and answer assertion lookups.
- *
- * No rendering or I/O. Anything that returns user-facing strings here
- * (`renderPlan`, `renderPlanFromMatrix`, `formatJobHarness`) is a tiny pure
- * formatter — full rendering lives under `render/`.
  */
 
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
-import type {HarnessId, Ir, IrAssertion, IrHarnessConfig} from '@dynobox/sdk';
+import type {HarnessId} from '@dynobox/sdk';
+import type {Ir, IrAssertion, IrHarnessConfig} from '@dynobox/sdk/ir';
 
-import {formatCount} from './terminal/index.js';
 import {unique} from './util/unique.js';
+
+type RunMatrixHarness = {
+  id: string;
+  model?: string;
+};
 
 type RunMatrixCell = {
   scenarioId: string;
   scenarioName: string;
-  harness: string;
+  harness: RunMatrixHarness;
   iteration: number;
   passed: boolean;
   failedAssertions: string[];
@@ -25,7 +26,7 @@ type RunMatrixCell = {
 
 export type RunMatrix = {
   scenarios: string[];
-  harnesses: string[];
+  harnesses: RunMatrixHarness[];
   iterations: number[];
   cells: RunMatrixCell[];
 };
@@ -63,7 +64,7 @@ export function buildRunMatrix(
   results: readonly LocalRunnerResult[],
 ): RunMatrix {
   const scenarios = unique(jobs.map((job) => job.scenario.name));
-  const harnesses = unique(jobs.map(formatJobHarness));
+  const harnesses = uniqueHarnesses(jobs);
   const iterations = unique(jobs.map((job) => job.iteration + 1));
   const cells = jobs.flatMap((job, index): RunMatrixCell[] => {
     const result = results[index];
@@ -72,7 +73,7 @@ export function buildRunMatrix(
       {
         scenarioId: job.scenario.id,
         scenarioName: job.scenario.name,
-        harness: formatJobHarness(job),
+        harness: matrixHarness(job),
         iteration: job.iteration + 1,
         passed: result.passed,
         failedAssertions: result.assertionResults
@@ -84,32 +85,6 @@ export function buildRunMatrix(
   });
 
   return {scenarios, harnesses, iterations, cells};
-}
-
-/**
- * Render the plan summary line ("N scenarios · M harnesses · K iterations").
- *
- * Tiny pure formatter; lives here because both run-output and quiet-mode
- * renderers consume it.
- */
-export function renderPlan(jobs: readonly LocalRunnerJob[]): string {
-  return renderPlanFromMatrix(buildRunMatrix(jobs, []));
-}
-
-export function renderPlanFromMatrix(
-  matrix: Pick<RunMatrix, 'scenarios' | 'harnesses' | 'iterations'>,
-): string {
-  return `${formatCount(matrix.scenarios.length, 'scenario')} · ${formatCount(matrix.harnesses.length, 'harness')} · ${formatCount(matrix.iterations.length, 'iteration')}`;
-}
-
-/**
- * Format the harness display name for a job, including its optional model:
- * `claude-code` or `codex/gpt-5`.
- */
-export function formatJobHarness(
-  job: Pick<LocalRunnerJob, 'harness' | 'model'>,
-): string {
-  return job.model === undefined ? job.harness : `${job.harness}/${job.model}`;
 }
 
 /**
@@ -139,4 +114,22 @@ function overrideHarnessConfigs(
 function harnessJobSuffix(harness: IrHarnessConfig): string {
   if (harness.model === undefined) return harness.id;
   return `${harness.id}.${harness.model.replace(/[^a-zA-Z0-9._-]+/g, '-')}`;
+}
+
+function uniqueHarnesses(jobs: readonly LocalRunnerJob[]): RunMatrixHarness[] {
+  const byKey = new Map<string, RunMatrixHarness>();
+  for (const job of jobs) {
+    byKey.set(jobHarnessKey(job), matrixHarness(job));
+  }
+  return [...byKey.values()];
+}
+
+function matrixHarness(job: Pick<LocalRunnerJob, 'harness' | 'model'>) {
+  return job.model === undefined
+    ? {id: job.harness}
+    : {id: job.harness, model: job.model};
+}
+
+function jobHarnessKey(job: Pick<LocalRunnerJob, 'harness' | 'model'>): string {
+  return job.model === undefined ? job.harness : `${job.harness}/${job.model}`;
 }

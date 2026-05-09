@@ -5,18 +5,14 @@
 
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 
-import {
-  assertionByIdForJobs,
-  buildRunMatrix,
-  formatJobHarness,
-  renderPlanFromMatrix,
-} from '../jobs.js';
+import {assertionByIdForJobs, buildRunMatrix} from '../jobs.js';
 import {
   colorStatus,
   formatDuration,
   type RenderContext,
 } from '../terminal/index.js';
 import {describeAssertion} from './describe.js';
+import {formatJobHarness, renderPlanFromMatrix} from './plan.js';
 
 export function renderQuietRun(
   jobs: readonly LocalRunnerJob[],

@@ -164,6 +164,8 @@ assertions: [http.called('npmPrettier', {status: 200})];
 
 These helpers are useful for type-checking and future configs, but the local runner does not yet capture HTTP traffic or evaluate HTTP assertions.
 
+Endpoint keys become part of stable IR ids, so they may only contain letters, numbers, underscores, and hyphens.
+
 ## Path Helpers
 
 The `dyno` helper is useful when config files need stable paths relative to the config module.

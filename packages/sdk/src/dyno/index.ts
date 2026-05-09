@@ -1,7 +1,11 @@
+import {fileURLToPath} from 'node:url';
+
+/** Convert a file URL into a platform-correct filesystem path. */
 export function fsPath(url: URL): string {
-  return decodeURIComponent(url.pathname);
+  return fileURLToPath(url);
 }
 
+/** Resolve a path relative to a config module URL. */
 export function fromUrl(baseUrl: string, path: string): string {
   const resolved = fsPath(new URL(path, baseUrl));
   if (path.endsWith('/.') && !resolved.endsWith('/.')) {
@@ -10,10 +14,15 @@ export function fromUrl(baseUrl: string, path: string): string {
   return resolved;
 }
 
+/** Quote a string for safe use as one POSIX shell argument. */
 export function shellQuote(value: string): string {
-  return JSON.stringify(value);
+  if (value.length === 0) return "''";
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+/**
+ * Build path helpers scoped to a config module URL, usually `import.meta.url`.
+ */
 export function here(baseUrl: string): {
   path(path: string): string;
   q(path: string): string;
@@ -28,6 +37,7 @@ export function here(baseUrl: string): {
   };
 }
 
+/** Namespace object exported for config authors as `dyno`. */
 export const dyno = {
   fromUrl,
   fsPath,

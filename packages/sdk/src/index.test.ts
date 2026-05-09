@@ -1,21 +1,17 @@
 import {describe, expect, expectTypeOf, it} from 'vitest';
 
+import {compile, DynoboxConfigError, resolveConfigModule} from './compiler.js';
 import {
   artifact,
   type ArtifactContainsAssertion,
   type ArtifactExistsAssertion,
   type CalledAssertion,
-  compile,
   defineConfig,
   defineScenario,
   dyno,
-  DynoboxConfigError,
   finalMessage,
   type FinalMessageContainsAssertion,
   http,
-  IR_VERSION,
-  irSchema,
-  resolveConfigModule,
   sequence,
   type SequenceInOrderAssertion,
   tool,
@@ -23,12 +19,11 @@ import {
   type ToolNotCalledAssertion,
   transcript,
   type TranscriptContainsAssertion,
-  version,
 } from './index.js';
+import {IR_VERSION, irSchema} from './ir.js';
 
 describe('packages/sdk', () => {
   it('exports the SDK surface', () => {
-    expect(version).toBe('0.0.1');
     expect(typeof defineConfig).toBe('function');
     expect(typeof defineScenario).toBe('function');
     expect(typeof dyno.fromUrl).toBe('function');
@@ -59,11 +54,16 @@ describe('packages/sdk', () => {
     );
     const here = dyno.here('file:///tmp/dyno/test.dyno.mjs');
     expect(here.path('fixtures/repo/')).toBe('/tmp/dyno/fixtures/repo/');
-    expect(here.q('fixtures/repo/.')).toBe('"/tmp/dyno/fixtures/repo/."');
+    expect(here.q('fixtures/repo/.')).toBe("'/tmp/dyno/fixtures/repo/.'");
     expect(dyno.shellQuote('/tmp/path with spaces')).toBe(
-      '"/tmp/path with spaces"',
+      "'/tmp/path with spaces'",
     );
-    expect(dyno.q('/tmp/path with spaces')).toBe('"/tmp/path with spaces"');
+    expect(dyno.q('/tmp/path with spaces')).toBe("'/tmp/path with spaces'");
+    expect(dyno.shellQuote('')).toBe("''");
+    expect(dyno.shellQuote("Bob's repo")).toBe("'Bob'\\''s repo'");
+    expect(dyno.shellQuote('$(rm -rf .) $HOME `pwd`')).toBe(
+      "'$(rm -rf .) $HOME `pwd`'",
+    );
   });
 
   it('preserves the endpoint key as a literal type on assertion helpers', () => {
@@ -704,6 +704,22 @@ describe('packages/sdk', () => {
     expect(() => compile(bad)).toThrow(/unknown endpoint "nope"/);
   });
 
+  it('rejects endpoint keys that are unsafe for stable IR ids', () => {
+    const bad = {
+      scenarios: [
+        {
+          name: 'bad endpoint key',
+          prompt: 'p',
+          endpoints: {
+            'get user': http.endpoint({method: 'GET', url: 'https://a/'}),
+          },
+        },
+      ],
+    } as Parameters<typeof compile>[0];
+
+    expect(() => compile(bad)).toThrow(/Endpoint keys may only contain/);
+  });
+
   it('defineScenario typechecks local endpoint references', () => {
     const scenario = defineScenario({
       name: 'self-contained',
@@ -717,7 +733,7 @@ describe('packages/sdk', () => {
   });
 
   it('defineScenario accepts globals via type parameter', () => {
-    const scenario = defineScenario<Record<string, never>, 'globalA'>({
+    const scenario = defineScenario<'globalA'>({
       name: 'uses global',
       prompt: 'p',
       assertions: [http.called('globalA')],

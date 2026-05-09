@@ -12,7 +12,6 @@ import {
   MULTILINE_GIT_COMMIT_EVENT,
   StreamingHarness,
 } from '../test-utils.js';
-
 import {executeCli} from './execute.js';
 import {configErrorExitCode, runFailureExitCode} from './exitCodes.js';
 
@@ -73,9 +72,12 @@ describe('dynobox run — output modes', () => {
   afterAll(fixtures.teardown);
 
   it('prints quiet output for CI-style runs', async () => {
-    const result = await executeCli(['run', fixtures.validConfigPath, '--quiet'], {
-      harnesses: [createPassingHarness()],
-    });
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--quiet'],
+      {
+        harnesses: [createPassingHarness()],
+      },
+    );
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(
@@ -98,9 +100,12 @@ describe('dynobox run — output modes', () => {
   });
 
   it('expands all phase rows in verbose mode', async () => {
-    const result = await executeCli(['run', fixtures.validConfigPath, '--verbose'], {
-      harnesses: [createPassingHarness()],
-    });
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--verbose'],
+      {
+        harnesses: [createPassingHarness()],
+      },
+    );
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('✓  uses shell');
@@ -111,10 +116,13 @@ describe('dynobox run — output modes', () => {
   });
 
   it('renders plain fallback symbols when ANSI is disabled', async () => {
-    const result = await executeCli(['run', fixtures.validConfigPath, '--verbose'], {
-      harnesses: [createPassingHarness()],
-      usePlainSymbols: true,
-    });
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--verbose'],
+      {
+        harnesses: [createPassingHarness()],
+        usePlainSymbols: true,
+      },
+    );
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('[ ok ]  uses shell');
@@ -123,9 +131,12 @@ describe('dynobox run — output modes', () => {
   });
 
   it('includes work directory details in debug mode', async () => {
-    const result = await executeCli(['run', fixtures.validConfigPath, '--debug'], {
-      harnesses: [createPassingHarness()],
-    });
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--debug'],
+      {
+        harnesses: [createPassingHarness()],
+      },
+    );
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('work dir');
@@ -139,11 +150,14 @@ describe('dynobox run — live output', () => {
 
   it('prints live tool progress when live output is enabled', async () => {
     const writes: string[] = [];
-    const result = await executeCli(['run', fixtures.validConfigPath, '--verbose'], {
-      harnesses: [new StreamingHarness()],
-      live: true,
-      writeStdout: (value) => writes.push(value),
-    });
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--verbose'],
+      {
+        harnesses: [new StreamingHarness()],
+        live: true,
+        writeStdout: (value) => writes.push(value),
+      },
+    );
 
     expect(result.exitCode).toBe(0);
     expect(writes.join('')).toContain('Bash: pnpm test 1 tool');
@@ -153,12 +167,15 @@ describe('dynobox run — live output', () => {
 
   it('keeps multiline live shell progress on one rendered row', async () => {
     const writes: string[] = [];
-    const result = await executeCli(['run', fixtures.validConfigPath, '--verbose'], {
-      harnesses: [new StreamingHarness(MULTILINE_GIT_COMMIT_EVENT)],
-      live: true,
-      color: true,
-      writeStdout: (value) => writes.push(value),
-    });
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--verbose'],
+      {
+        harnesses: [new StreamingHarness(MULTILINE_GIT_COMMIT_EVENT)],
+        live: true,
+        color: true,
+        writeStdout: (value) => writes.push(value),
+      },
+    );
 
     const toolWrites = writes.filter((value) => value.includes('Bash:'));
     expect(result.exitCode).toBe(0);

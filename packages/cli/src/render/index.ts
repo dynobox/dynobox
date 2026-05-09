@@ -1,5 +1,5 @@
 /**
- * Public render API. All exports here are pure string-producing functions —
+ * Internal render barrel. All exports here are pure string-producing functions —
  * no side effects, no I/O. Both the static and live output paths consume
  * helpers from this module.
  */
@@ -18,7 +18,7 @@ export {
   renderSetupFailureDetails,
 } from './failure.js';
 export {renderRunHeader} from './header.js';
-export {type HeadlineStatus,renderHeadline} from './headline.js';
+export {type HeadlineStatus, renderHeadline} from './headline.js';
 export {renderJobDetails} from './jobDetails.js';
 export {
   type PhaseRowInput,
@@ -30,6 +30,7 @@ export {
   setupDurationMs,
 } from './phases.js';
 export {renderPlaceholderMessage} from './placeholder.js';
+export {formatJobHarness, renderPlan, renderPlanFromMatrix} from './plan.js';
 export {renderQuietRun} from './quiet.js';
 export {renderRunOutput, type RenderRunOutputInput} from './runOutput.js';
 export {renderRunSummary} from './summary.js';
