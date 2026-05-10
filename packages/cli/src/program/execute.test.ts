@@ -1,3 +1,6 @@
+import {mkdirSync, rmSync} from 'node:fs';
+import {join} from 'node:path';
+
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 
 import {renderRunHeader} from '../render/header.js';
@@ -53,14 +56,22 @@ describe('executeCli — top-level entry', () => {
     });
   });
 
-  it('requires an explicit config path for run', async () => {
-    const result = await executeCli(['run']);
-
-    expect(result.exitCode).toBe(1);
-    expect(result.stdout).toBe('');
-    expect(result.stderr).toContain(
-      "error: missing required argument 'config'",
+  it('reports no dynos found when run is given an empty directory', async () => {
+    const emptyDir = join(
+      process.cwd(),
+      '.tmp-dynobox-cli-tests-execute-empty',
     );
+    rmSync(emptyDir, {force: true, recursive: true});
+    mkdirSync(emptyDir, {recursive: true});
+
+    try {
+      const result = await executeCli(['run', emptyDir]);
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain('No *.dyno');
+    } finally {
+      rmSync(emptyDir, {force: true, recursive: true});
+    }
   });
 
   it('rejects unknown commands', async () => {

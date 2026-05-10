@@ -1,16 +1,21 @@
 /**
- * Action handler for `dynobox run <config>`.
+ * Action handler for `dynobox run [path]`.
  *
  * Top-level flow:
- *   1. Validate `--harness` overrides, load + compile the config.
- *   2. Build the job matrix.
- *   3. Choose the live (interactive) or static (batched) output path.
- *   4. Execute jobs, write transcript logs in debug mode, render output.
- *   5. Return whether any job failed.
+ *   1. Validate `--harness` overrides, resolve the discovery target.
+ *   2. Discover `*.dyno.{mjs,js,ts,yaml,...}` files (or use a single
+ *      explicit file path verbatim).
+ *   3. Load + compile each file, accumulating per-file errors.
+ *   4. Build the full job list across every compiled IR.
+ *   5. Choose the live (interactive) or static (batched) output path.
+ *   6. Execute jobs, write transcript logs in debug mode, render output.
+ *   7. Return whether any compile error or job failure occurred.
  *
  * Splitting `runLive` and `runStatic` keeps each path linear and easy to
  * read; both share the same job-iteration shape.
  */
+
+import {resolve} from 'node:path';
 
 import {
   type LocalRunnerJob,
@@ -18,8 +23,6 @@ import {
   runJob,
   type RunJobOptions,
 } from '@dynobox/runner-local';
-import {compile, resolveConfigModule} from '@dynobox/sdk/compiler';
-import type {Ir} from '@dynobox/sdk/ir';
 import {CommanderError} from 'commander';
 
 import {assertionByIdForJobs, buildLocalRunnerJobs} from '../jobs.js';
@@ -44,7 +47,12 @@ import {
   hasDebugLogPaths,
   writeDebugLogs,
 } from '../util/transcript.js';
-import {loadConfigModule, normalizeLoadedModule} from './configLoader.js';
+import {compileDynos, type DynoCompileSuccess} from './compileDynos.js';
+import {
+  discoverDynos,
+  DynoTargetNotFoundError,
+  NoDynosFoundError,
+} from './discoverDynos.js';
 import {shouldRenderLive} from './environment.js';
 import type {ExecuteCliOptions, OutputWriter} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
@@ -63,7 +71,8 @@ export type RunCommandFlags = {
 };
 
 export type RunCommandActionInput = {
-  configPath: string;
+  /** Optional file/directory; falls back to the current working directory. */
+  configPath: string | undefined;
   commandFlags: RunCommandFlags;
   options: ExecuteCliOptions;
   writeStdout: OutputWriter;
@@ -73,41 +82,112 @@ export type RunCommandActionInput = {
 /**
  * Run the `run` subcommand end-to-end.
  *
- * @returns `true` if any job failed (caller should set the run-failure
- * exit code), `false` if every job passed.
+ * @returns `true` if any job failed or any file failed to compile
+ * (caller should set the run-failure exit code), `false` otherwise.
  */
 export async function runCommandAction(
   input: RunCommandActionInput,
 ): Promise<boolean> {
   const {configPath, commandFlags, options, writeStdout, writeStderr} = input;
+  const targetLabel = configPath ?? '.';
+  const resolvedTarget = resolve(targetLabel);
 
   const overrideHarnesses = validateOverrides(
     commandFlags.harness,
-    configPath,
+    targetLabel,
     writeStderr,
   );
   const permissionMode = validatePermissionMode(
     commandFlags.permissionMode,
-    configPath,
+    targetLabel,
     writeStderr,
   );
-  const ir = await compileConfig(configPath, writeStderr);
-  const jobs = buildLocalRunnerJobs(
-    ir,
-    buildJobOptions(overrideHarnesses, permissionMode),
+
+  const filePaths = await discoverOrFail(
+    configPath,
+    resolvedTarget,
+    writeStderr,
+  );
+  const {compiled, errors} = await compileDynos(filePaths);
+
+  for (const error of errors) {
+    writeStderr(renderRunConfigErrorMessage(error.filePath, error.message));
+  }
+
+  if (compiled.length === 0) {
+    // Every file failed to load or compile (or the only file passed was
+    // bad). Per-file errors were already written above; signal the
+    // standard config-error exit code.
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.config',
+      'no dynos compiled',
+    );
+  }
+
+  const jobs = compiled.flatMap((entry) =>
+    buildLocalRunnerJobs(
+      entry.ir,
+      buildJobOptions(overrideHarnesses, permissionMode),
+    ),
   );
   const runOptions = buildRunJobOptions(options);
   const ctx = createRenderContext(options, commandFlags);
+  const headerLabel = renderHeaderLabel(targetLabel, compiled);
 
   const results = shouldRenderLive(options, ctx)
-    ? await runLive({configPath, jobs, runOptions, ctx, writeStdout})
-    : await runStatic({configPath, jobs, runOptions, ctx, writeStdout});
+    ? await runLive({headerLabel, jobs, runOptions, ctx, writeStdout})
+    : await runStatic({headerLabel, jobs, runOptions, ctx, writeStdout});
 
-  return results.some((result) => !result.passed);
+  const anyJobFailed = results.some((result) => !result.passed);
+  return anyJobFailed || errors.length > 0;
+}
+
+/**
+ * Build a short label for the run header that captures what the user
+ * asked to run. When discovery found multiple files, append the count
+ * so a reader knows the run spans more than a single config.
+ */
+function renderHeaderLabel(
+  targetLabel: string,
+  compiled: readonly DynoCompileSuccess[],
+): string {
+  if (compiled.length === 1) {
+    const only = compiled[0];
+    if (only === undefined) return targetLabel;
+    return only.filePath;
+  }
+  return `${targetLabel}  (${compiled.length} dyno files)`;
+}
+
+async function discoverOrFail(
+  configPath: string | undefined,
+  resolvedTarget: string,
+  writeStderr: OutputWriter,
+): Promise<readonly string[]> {
+  try {
+    return await discoverDynos(configPath);
+  } catch (error) {
+    const label = configPath ?? resolvedTarget;
+    if (
+      error instanceof DynoTargetNotFoundError ||
+      error instanceof NoDynosFoundError
+    ) {
+      writeStderr(renderRunConfigErrorMessage(label, error.message));
+    } else {
+      const message = error instanceof Error ? error.message : String(error);
+      writeStderr(renderRunConfigErrorMessage(label, message));
+    }
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.config',
+      'discovery failed',
+    );
+  }
 }
 
 type RunPathInput = {
-  configPath: string;
+  headerLabel: string;
   jobs: readonly LocalRunnerJob[];
   runOptions: RunJobOptions;
   ctx: RenderContext;
@@ -127,7 +207,7 @@ async function runStatic(input: RunPathInput): Promise<LocalRunnerResult[]> {
   const debugLogPaths = writeDebugLogsIfDebug(input.ctx, results);
   input.writeStdout(
     renderRunOutput({
-      configPath: input.configPath,
+      configPath: input.headerLabel,
       jobs: input.jobs,
       results,
       ctx: input.ctx,
@@ -143,9 +223,9 @@ async function runStatic(input: RunPathInput): Promise<LocalRunnerResult[]> {
  * default mode collapse to a one-liner; everything else stays expanded.
  */
 async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
-  const {configPath, jobs, runOptions, ctx, writeStdout} = input;
+  const {headerLabel, jobs, runOptions, ctx, writeStdout} = input;
 
-  writeStdout(renderRunHeader(configPath, jobs, ctx));
+  writeStdout(renderRunHeader(headerLabel, jobs, ctx));
   const assertionById = assertionByIdForJobs(jobs);
   const live = createLiveWriter(writeStdout, ctx.color, SPINNER_FRAMES[0]);
   const spinnerEnabled = ctx.color && !ctx.usePlainSymbols;
@@ -216,28 +296,28 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
  */
 function validateOverrides(
   rawHarnesses: readonly string[] | undefined,
-  configPath: string,
+  targetLabel: string,
   writeStderr: OutputWriter,
 ) {
   try {
     return validateHarnessOverrides(rawHarnesses);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    writeStderr(renderRunConfigErrorMessage(configPath, message));
+    writeStderr(renderRunConfigErrorMessage(targetLabel, message));
     throw error;
   }
 }
 
 function validatePermissionMode(
   rawPermissionMode: string | undefined,
-  configPath: string,
+  targetLabel: string,
   writeStderr: OutputWriter,
 ) {
   try {
     return validatePermissionModeOverride(rawPermissionMode);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    writeStderr(renderRunConfigErrorMessage(configPath, message));
+    writeStderr(renderRunConfigErrorMessage(targetLabel, message));
     throw error;
   }
 }
@@ -250,26 +330,6 @@ function buildJobOptions(
     ...(harnesses === undefined ? {} : {harnesses}),
     ...(permissionMode === undefined ? {} : {permissionMode}),
   };
-}
-
-/**
- * Load and compile the config. On failure, write the standard config-error
- * message and throw `CommanderError(configErrorExitCode)` so the top-level
- * executor returns the documented exit code.
- */
-async function compileConfig(
-  configPath: string,
-  writeStderr: OutputWriter,
-): Promise<Ir> {
-  try {
-    const moduleExport = await loadConfigModule(configPath);
-    const config = resolveConfigModule(normalizeLoadedModule(moduleExport));
-    return compile(config);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    writeStderr(renderRunConfigErrorMessage(configPath, message));
-    throw new CommanderError(configErrorExitCode, 'dynobox.config', message);
-  }
 }
 
 /**
