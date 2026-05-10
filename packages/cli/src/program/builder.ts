@@ -9,6 +9,7 @@
 import {Command} from 'commander';
 
 import type {ExecuteCliOptions, OutputWriter} from './execute.js';
+import {initCommandAction, type InitCommandFlags} from './initCommand.js';
 import {collectOption} from './options.js';
 import {runCommandAction, type RunCommandFlags} from './runCommand.js';
 
@@ -71,6 +72,22 @@ export function buildProgram(input: BuildProgramInput): Command {
         if (failed) onRunFailure();
       },
     );
+
+  program
+    .command('init')
+    .description(
+      'scaffold a starter *.dyno.mjs (or .dyno.yaml) under ./dynobox/',
+    )
+    .option('--yaml', 'generate a YAML dyno instead of an MJS dyno')
+    .option('--harness <id>', 'starter harness id', 'claude-code')
+    .option('--force', 'overwrite an existing starter file')
+    .action(async (commandFlags: InitCommandFlags) => {
+      await initCommandAction({
+        commandFlags,
+        writeStdout,
+        writeStderr,
+      });
+    });
 
   return program;
 }
