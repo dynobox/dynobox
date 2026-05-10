@@ -1,6 +1,6 @@
 import {join} from 'node:path';
 
-import {FakeHarness} from '@dynobox/runner-local';
+import {FakeHarness, type ToolEvent} from '@dynobox/runner-local';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 
 import {
@@ -17,6 +17,20 @@ import {executeCli} from './execute.js';
 import {configErrorExitCode, runFailureExitCode} from './exitCodes.js';
 
 const fixtures = createFixtureSet('runCommand');
+const COMMIT_SKILL_PATH = '/tmp/work/.agents/skills/commit/SKILL.md';
+const RELEASE_SKILL_PATH = '/tmp/work/.agents/skills/release/SKILL.md';
+
+const NESTED_COMMIT_SKILL_READ_EVENT: ToolEvent = {
+  kind: 'read_file',
+  rawName: 'Read',
+  input: {request: {file_path: COMMIT_SKILL_PATH}},
+};
+
+const RELEASE_SKILL_READ_EVENT: ToolEvent = {
+  kind: 'read_file',
+  rawName: 'Read',
+  input: {file_path: RELEASE_SKILL_PATH},
+};
 
 describe('dynobox run — config loading', () => {
   beforeAll(fixtures.setup);
@@ -241,6 +255,78 @@ describe('dynobox run — failures and diagnostics', () => {
     expect(result.stdout).toContain('✓ finalMessage.contains');
     expect(result.stdout).toContain('✓ sequence.inOrder(2 steps)');
     expect(result.stdout).toContain('✓ skill.invoked(commit)');
+  });
+
+  it('shows observed skill files in verbose output without duplicates', async () => {
+    const result = await executeCli(
+      ['run', fixtures.modalitiesConfigPath, '--verbose'],
+      {
+        harnesses: [
+          new FakeHarness(
+            {stdout: 'transcript EOTP\nworking tree is dirty'},
+            {
+              toolEvents: [
+                GIT_STATUS_EVENT,
+                GIT_COMMIT_EVENT,
+                NESTED_COMMIT_SKILL_READ_EVENT,
+                NESTED_COMMIT_SKILL_READ_EVENT,
+              ],
+            },
+          ),
+        ],
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('observed skill files during this run:');
+    expect(result.stdout).toContain(`1. ${COMMIT_SKILL_PATH}`);
+    expect(result.stdout).not.toContain(`2. ${COMMIT_SKILL_PATH}`);
+  });
+
+  it('shows observed skill files when skill invocation assertions fail', async () => {
+    const result = await executeCli(['run', fixtures.modalitiesConfigPath], {
+      harnesses: [
+        new FakeHarness(
+          {stdout: 'transcript EOTP\nworking tree is dirty'},
+          {
+            toolEvents: [
+              GIT_STATUS_EVENT,
+              GIT_COMMIT_EVENT,
+              RELEASE_SKILL_READ_EVENT,
+            ],
+          },
+        ),
+      ],
+    });
+
+    expect(result.exitCode).toBe(runFailureExitCode);
+    expect(result.stdout).toContain('✗ skill.invoked(commit)');
+    expect(result.stdout).toContain(
+      'expected  skill "commit" instruction file access',
+    );
+    expect(result.stdout).toContain(
+      'observed  Expected skill "commit" to be invoked, but no access to its SKILL.md was observed.',
+    );
+    expect(result.stdout).toContain('observed skill files during this run:');
+    expect(result.stdout).toContain(`1. ${RELEASE_SKILL_PATH}`);
+  });
+
+  it('shows no observed skill files when skill invocation evidence is absent', async () => {
+    const result = await executeCli(['run', fixtures.modalitiesConfigPath], {
+      harnesses: [
+        new FakeHarness(
+          {stdout: 'transcript EOTP\nworking tree is dirty'},
+          {toolEvents: [GIT_STATUS_EVENT, GIT_COMMIT_EVENT]},
+        ),
+      ],
+    });
+
+    expect(result.exitCode).toBe(runFailureExitCode);
+    expect(result.stdout).toContain('observed skill files during this run:');
+    expect(result.stdout).toContain('(none)');
+    expect(result.stdout).not.toContain(
+      'observed shell commands during this run:',
+    );
   });
 
   it('renders failed sequence expectations and observed shell commands', async () => {
