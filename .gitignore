@@ -27,5 +27,6 @@ pnpm-debug.log*
 .idea/
 *.swp
 
-# Local planning docs
+# Local ai + planning docs
 plans/
+.claude/
