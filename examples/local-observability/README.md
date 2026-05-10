@@ -1,8 +1,13 @@
 # Local Observability Example
 
-This is the fastest local runner smoke test for Dynobox. It runs one Claude Code scenario in a scratch work directory and verifies observed harness tool usage with `tool.called` assertions.
+This example demonstrates Dynobox's local runner with two `*.dyno.mjs`
+files. Running it shows two things at once:
 
-The scenario setup creates a tiny `package.json` in the scratch directory. The prompt asks Claude Code to inspect that file with a shell command.
+1. `dynobox run <directory>` discovers and runs every `*.dyno.mjs` file
+   in the directory tree.
+2. `tool.called`, `artifact.contains`, and `finalMessage.contains`
+   assertions evaluate observed harness behavior in a scratch work
+   directory.
 
 ## Run
 
@@ -10,39 +15,46 @@ From the repository root:
 
 ```bash
 pnpm --filter dynobox... build
-node packages/cli/dist/bin.js run examples/local-observability/dynobox.config.ts
+node packages/cli/dist/bin.js run examples/local-observability
+```
+
+Or, after installing the published CLI globally:
+
+```bash
+dynobox run examples/local-observability
 ```
 
 Prerequisites:
 
 - `claude` is installed and available on `PATH`.
-- Claude Code supports `-p`, `--output-format stream-json`, and `--include-hook-events`.
+- Claude Code supports `-p`, `--output-format stream-json`, and
+  `--include-hook-events`.
 
-Expected output shape:
+## Files
 
-```text
-  dynobox  0.0.3
+- `inspect-package.dyno.mjs` — asks Claude Code to inspect `package.json`
+  with a shell command, then asserts that a `shell` tool was called and
+  that the command mentioned `package.json`.
+- `add-script.dyno.mjs` — asks Claude Code to add a `lint` script to
+  `package.json`, then asserts the artifact contains the new entry and
+  the final response mentions `lint`.
 
-  config   examples/local-observability/dynobox.config.ts
-  plan     1 scenario · 1 harness · 1 iteration                   1 job
-
-  ✓  inspect package scripts                       claude-code  iter 1
-     ✓ setup      1 command                                          0.1s
-     ✓ harness    ran prompt 2 tools                                 8.2s
-     ✓ assertions 2 of 2 passed                                      0.0s
-        ✓ tool.called(shell)
-        ✓ tool.called(shell, includes: package.json)
-
-  ──────────────────────────────────────────────────────────────────────
-  1 passed   0 failed                                             8.3s
-```
-
-In an interactive terminal, the harness phase updates while Claude Code runs and prints the latest observed tool call, for example `Bash: cat package.json`.
+Each file is a self-contained dyno: it declares its own `setup`, prompt,
+and assertions. Discovery treats files independently.
 
 ## Assertion Semantics
 
-`tool.called('shell')` observes shell tool calls reported by the harness. It does not trace arbitrary operating system processes.
+`tool.called('shell')` observes shell tool calls reported by the
+harness — it does not trace arbitrary OS processes.
 
-`tool.called('shell', {includes: 'package.json'})` passes when a captured shell command string contains `package.json`.
+`tool.called('shell', {includes: 'package.json'})` passes when a
+captured shell command string contains `package.json`.
 
-Setup commands are run by Dynobox before the harness starts. They prepare the scratch directory but are not counted as harness shell tool calls.
+`artifact.contains(path, text)` reads the file from the scratch work
+directory after the harness finishes and looks for `text`.
+
+`finalMessage.contains(text)` checks the last assistant message for
+`text`.
+
+Setup commands run before the harness starts and do not count as
+harness shell tool calls.

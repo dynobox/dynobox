@@ -1,0 +1,28 @@
+name: yaml-quickstart
+harnesses:
+  - claude-code
+scenarios:
+  - name: inspect package scripts (yaml)
+    prompt: >-
+      Use a shell command that reads package.json and tell me whether a test
+      script exists.
+    setup:
+      - |
+        cat > package.json <<'JSON'
+        {
+          "name": "dynobox-yaml-smoke",
+          "scripts": {
+            "test": "vitest run"
+          }
+        }
+        JSON
+    assertions:
+      - kind: tool.called
+        toolKind: shell
+      - kind: tool.called
+        toolKind: shell
+        matcher:
+          includes: package.json
+      - kind: artifact.contains
+        path: package.json
+        text: vitest run
