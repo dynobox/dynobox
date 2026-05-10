@@ -13,6 +13,7 @@ export {dyno} from './dyno/index.js';
 export {finalMessage} from './final-message/index.js';
 export {http} from './http/index.js';
 export {sequence} from './sequence/index.js';
+export {skill} from './skill/index.js';
 export {tool} from './tool/index.js';
 export {transcript} from './transcript/index.js';
 export type {
@@ -25,6 +26,7 @@ export type {
   NotCalledAssertion,
   SequenceInOrderAssertion,
   ShellToolMatcher,
+  SkillInvokedAssertion,
   ToolCalledAssertion,
   ToolKind,
   ToolNotCalledAssertion,

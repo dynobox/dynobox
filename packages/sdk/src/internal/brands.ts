@@ -7,6 +7,7 @@ import type {
   NotCalledAssertion,
   SequenceInOrderAssertion,
   ShellToolMatcher,
+  SkillInvokedAssertion,
   ToolCalledAssertion,
   ToolKind,
   ToolNotCalledAssertion,
@@ -139,5 +140,16 @@ export function createSequenceInOrderAssertion(
     [ASSERTION_BRAND]: true as const,
     kind: 'sequence.inOrder' as const,
     steps,
+  };
+}
+
+/** Create an assertion that a named skill instruction file was loaded. */
+export function createSkillInvokedAssertion(
+  skill: string,
+): SkillInvokedAssertion {
+  return {
+    [ASSERTION_BRAND]: true as const,
+    kind: 'skill.invoked' as const,
+    skill,
   };
 }

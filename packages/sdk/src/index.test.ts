@@ -14,6 +14,8 @@ import {
   http,
   sequence,
   type SequenceInOrderAssertion,
+  skill,
+  type SkillInvokedAssertion,
   tool,
   type ToolCalledAssertion,
   type ToolNotCalledAssertion,
@@ -43,6 +45,7 @@ describe('packages/sdk', () => {
     expect(typeof transcript.contains).toBe('function');
     expect(typeof finalMessage.contains).toBe('function');
     expect(typeof sequence.inOrder).toBe('function');
+    expect(typeof skill.invoked).toBe('function');
   });
 
   it('provides dyno config path and shell quoting helpers', () => {
@@ -100,6 +103,9 @@ describe('packages/sdk', () => {
     expectTypeOf(
       sequence.inOrder([tool.called('shell')]),
     ).toEqualTypeOf<SequenceInOrderAssertion>();
+    expectTypeOf(
+      skill.invoked('commit'),
+    ).toEqualTypeOf<SkillInvokedAssertion>();
   });
 
   it('compile returns a deterministic IR for a minimal config', () => {
@@ -244,6 +250,7 @@ describe('packages/sdk', () => {
               tool.called('shell', {includes: 'git status'}),
               tool.called('shell', {includes: 'git commit'}),
             ]),
+            skill.invoked('commit'),
           ],
         },
       ],
@@ -294,6 +301,11 @@ describe('packages/sdk', () => {
             matcher: {includes: 'git commit'},
           },
         ],
+      },
+      {
+        id: 'assertion.skill-flow.6',
+        kind: 'skill.invoked',
+        skill: 'commit',
       },
     ]);
     expect(irSchema.parse(ir)).toEqual(ir);

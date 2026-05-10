@@ -99,6 +99,11 @@ export const irAssertionSchema = z
       kind: z.literal('sequence.inOrder'),
       steps: z.array(irSequenceToolCalledStepSchema).min(1),
     }),
+    z.object({
+      id: z.string().min(1),
+      kind: z.literal('skill.invoked'),
+      skill: z.string().min(1),
+    }),
   ])
   .superRefine((assertion, ctx) => {
     if (

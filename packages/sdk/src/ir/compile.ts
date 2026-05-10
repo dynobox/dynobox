@@ -161,6 +161,10 @@ function buildIrAssertion(
     };
   }
 
+  if (assertion.kind === 'skill.invoked') {
+    return {id, kind: 'skill.invoked', skill: assertion.skill};
+  }
+
   const endpointId = endpointIdByKey.get(assertion.endpoint);
   if (endpointId === undefined) {
     throw new DynoboxConfigError(

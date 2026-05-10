@@ -150,6 +150,13 @@ export type SequenceInOrderAssertion = {
   readonly steps: readonly ToolCalledAssertion[];
 };
 
+/** Assertion that an agent loaded a named skill's instruction file. */
+export type SkillInvokedAssertion = {
+  readonly [ASSERTION_BRAND]: true;
+  readonly kind: 'skill.invoked';
+  readonly skill: string;
+};
+
 /** Union of all author-facing assertion objects accepted by config scenarios. */
 export type Assertion<K extends string = string> =
   | CalledAssertion<K>
@@ -160,4 +167,5 @@ export type Assertion<K extends string = string> =
   | ArtifactContainsAssertion
   | TranscriptContainsAssertion
   | FinalMessageContainsAssertion
-  | SequenceInOrderAssertion;
+  | SequenceInOrderAssertion
+  | SkillInvokedAssertion;

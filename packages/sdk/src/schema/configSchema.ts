@@ -123,6 +123,13 @@ const sequenceInOrderAssertionSchema = z
   })
   .loose();
 
+const skillInvokedAssertionSchema = z
+  .object({
+    kind: z.literal('skill.invoked'),
+    skill: z.string().min(1),
+  })
+  .loose();
+
 export const assertionSchema = z
   .discriminatedUnion('kind', [
     calledAssertionSchema,
@@ -134,6 +141,7 @@ export const assertionSchema = z
     transcriptContainsAssertionSchema,
     finalMessageContainsAssertionSchema,
     sequenceInOrderAssertionSchema,
+    skillInvokedAssertionSchema,
   ])
   .superRefine((assertion, ctx) => {
     if (
