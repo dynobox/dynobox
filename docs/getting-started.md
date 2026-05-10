@@ -1,58 +1,81 @@
 # Getting Started
 
-This guide assumes you are checking out the repository and want to see whether Dynobox can test your own skill or agent workflow.
+Dynobox is a test framework for agent and skill workflows. You describe what an
+agent should do in a `*.dyno.{mjs,yaml}` file, then `dynobox run` executes the
+prompt against a local harness (Claude Code or Codex) and evaluates assertions
+against the observed behavior.
 
 ## Prerequisites
 
-- Node.js compatible with the repo toolchain.
-- `pnpm` via the package manager declared in `package.json`.
+- Node.js 22+.
 - At least one local harness installed and authenticated:
   - `claude` for the Claude Code harness.
   - `codex` for the Codex harness.
 
-Dynobox runs scenarios in temporary work directories. Scenario `setup` commands create the files the agent should operate on before the harness prompt runs.
+Dynobox runs each scenario in a temporary work directory. Scenario `setup`
+commands prepare the files the agent should operate on before the prompt runs.
 
-## Install And Build
-
-From the repository root:
-
-```bash
-pnpm install
-pnpm build
-```
-
-Run the test suite if you want to verify the checkout:
+## Install
 
 ```bash
-pnpm test
+npm install -g dynobox
 ```
 
-## Run The Local Smoke Test
-
-The fastest example is `examples/local-observability/dynobox.config.ts`.
+Verify the install:
 
 ```bash
-pnpm --filter dynobox build
-node packages/cli/dist/bin.js run examples/local-observability/dynobox.config.ts --harness claude-code
+dynobox --help
 ```
 
-Use Codex instead if that is the harness you have installed:
+## Scaffold A Starter Dyno
+
+The fastest path from zero to a passing run:
 
 ```bash
-node packages/cli/dist/bin.js run examples/local-observability/dynobox.config.ts --harness codex
+dynobox init        # writes dynobox/example.dyno.mjs
+dynobox run         # discovers and runs every *.dyno.* file under the cwd
 ```
 
-Run both harnesses with a comma-separated override:
+`dynobox init` accepts:
+
+- `--yaml` — generate `dynobox/example.dyno.yaml` instead of MJS.
+- `--harness <id>` — pin the starter harness (default `claude-code`).
+- `--force` — overwrite an existing starter file.
+
+## Discovery
+
+`dynobox run [path]` accepts:
+
+- _no argument_ — discover recursively under the current directory.
+- a directory path — discover recursively under that directory.
+- a file path — run that single file (works for any `.mjs`/`.js`/`.ts`/`.yaml`/`.yml`,
+  not just `*.dyno.*`).
+
+Discovery globs `**/*.dyno.{mjs,cjs,js,ts,mts,cts,yaml,yml}` and skips
+`node_modules`, `dist`, `build`, `coverage`, `.git`, `.dynobox`, `.next`, and
+`.cache` by default.
+
+## Pick A Harness
+
+Each authored dyno declares its own harness list. To override at runtime:
 
 ```bash
-node packages/cli/dist/bin.js run examples/local-observability/dynobox.config.ts --harness claude-code,codex
+dynobox run                       # uses harnesses from each file
+dynobox run --harness claude-code
+dynobox run --harness codex
+dynobox run --harness claude-code,codex
 ```
 
-If you omit `--harness`, Dynobox uses the harness list from the config. When a config does not specify harnesses, it defaults to `claude-code`.
+If you omit `--harness` and a file does not list harnesses, Dynobox defaults to
+`claude-code`.
 
-## Create A Skill-Oriented Config
+## Author A Dyno
 
-A Dynobox config is a TypeScript module with a default export from `defineDyno`. This example tests a hypothetical skill that should inspect package scripts without modifying files.
+A dyno file exports a `defineDyno(...)` (TypeScript / JavaScript) or is a YAML
+document with the same shape. The example below tests a skill that should
+inspect `package.json` without modifying files.
+
+**TypeScript form** (`my-skill.dyno.mjs`):
 
 ```ts
 import {artifact, defineDyno, finalMessage, tool} from '@dynobox/sdk';
@@ -67,9 +90,7 @@ export default defineDyno({
         `cat > package.json <<'JSON'
 {
   "name": "fixture",
-  "scripts": {
-    "test": "vitest run"
-  }
+  "scripts": {"test": "vitest run"}
 }
 JSON`,
       ],
@@ -86,25 +107,67 @@ JSON`,
 });
 ```
 
-Save the file anywhere in the repo, for example `tmp/package-script.dynobox.config.ts`, then run it:
+**YAML form** (`my-skill.dyno.yaml`):
 
-```bash
-node packages/cli/dist/bin.js run tmp/package-script.dynobox.config.ts --harness claude-code --debug
+```yaml
+name: package-script-skill
+harnesses:
+  - id: claude-code
+    permissionMode: default
+scenarios:
+  - name: detects test script
+    prompt: >-
+      Inspect package.json and tell me whether this project has a test script.
+    setup:
+      - |
+        cat > package.json <<'JSON'
+        {
+          "name": "fixture",
+          "scripts": {"test": "vitest run"}
+        }
+        JSON
+    assertions:
+      - kind: tool.called
+        toolKind: shell
+        matcher:
+          includes: package.json
+      - kind: tool.notCalled
+        toolKind: edit_file
+      - kind: artifact.contains
+        path: package.json
+        text: vitest run
+      - kind: finalMessage.contains
+        text: test
 ```
 
-Use `--debug` when developing a scenario. It prints the temporary work directory and writes debug logs such as `dynobox-transcript.log`, `dynobox-chat-history.jsonl`, and `dynobox-tool-events.json` inside each job work directory.
+See [`docs/config-authoring.md`](./config-authoring.md) for the full assertion
+reference and the helper-to-`kind` mapping used in YAML.
 
-Dynobox uses secure harness defaults. If a trusted local eval needs full access or non-interactive approval bypasses, opt in explicitly:
+## Run And Debug
 
 ```bash
-node packages/cli/dist/bin.js run tmp/package-script.dynobox.config.ts --permission-mode dangerous
+dynobox run                # run every discovered file
+dynobox run examples/      # run a specific directory
+dynobox run my-skill.dyno.mjs   # run one file
+dynobox run --verbose      # expand passing scenarios
+dynobox run --debug        # include work-dir paths and debug logs
 ```
 
-You can also set `permissionMode: 'dangerous'` on a specific harness entry in a config.
+`--debug` writes per-job logs (`dynobox-transcript.log`,
+`dynobox-chat-history.jsonl`, `dynobox-tool-events.json`) into each scenario's
+work directory.
+
+Dynobox uses secure harness defaults. To opt into a full-access run, either set
+`permissionMode: 'dangerous'` on the harness in your dyno file, or pass:
+
+```bash
+dynobox run --permission-mode dangerous
+```
 
 ## Interpreting Results
 
-Each scenario expands into one job per selected harness. A passing job means setup completed, the harness exited successfully, and all assertions passed.
+Each scenario expands into one job per selected harness. A passing job means
+setup completed, the harness exited successfully, and every assertion passed.
 
 Common failure causes:
 
@@ -112,4 +175,17 @@ Common failure causes:
 - A setup command failed before the prompt ran.
 - The agent did not call the expected tool.
 - A shell matcher was too strict for the harness's actual command.
-- An artifact assertion used an absolute path or tried to leave the work directory.
+- An artifact assertion used an absolute path or tried to leave the work
+  directory.
+
+## Developing Dynobox Itself
+
+If you're hacking on the CLI/SDK from a checkout rather than the published
+package:
+
+```bash
+pnpm install
+pnpm build
+pnpm test
+node packages/cli/dist/bin.js run examples/local-observability
+```

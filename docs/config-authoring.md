@@ -1,6 +1,12 @@
 # Config Authoring
 
-Dynobox configs are TypeScript files loaded by the CLI. A config should default-export `defineDyno(...)` from `@dynobox/sdk`.
+Dynobox tests live in `*.dyno.{mjs,cjs,js,ts,mts,cts,yaml,yml}` files. TypeScript
+and JavaScript files default-export `defineDyno(...)` from `@dynobox/sdk`. YAML
+files use the same shape as a plain document — assertions are declared with a
+`kind` discriminator (see [YAML Configs](#yaml-configs) below).
+
+`dynobox run` discovers every dyno file under the target directory; each file
+is compiled and executed independently.
 
 ```ts
 import {defineDyno, tool} from '@dynobox/sdk';
@@ -228,3 +234,64 @@ export default defineDyno({
   scenarios: [checksPackageJson],
 });
 ```
+
+## YAML Configs
+
+YAML dyno files use the same top-level shape as the TypeScript form. The only
+difference is that helper calls like `tool.called('shell', {includes: 'x'})`
+are written as plain objects discriminated by a `kind` field.
+
+```yaml
+name: package-script-skill
+harnesses:
+  - id: claude-code
+    permissionMode: default
+scenarios:
+  - name: detects test script
+    prompt: >-
+      Inspect package.json and tell me whether this project has a test script.
+    setup:
+      - |
+        cat > package.json <<'JSON'
+        {"scripts":{"test":"vitest run"}}
+        JSON
+    assertions:
+      - kind: tool.called
+        toolKind: shell
+        matcher:
+          includes: package.json
+      - kind: tool.notCalled
+        toolKind: edit_file
+      - kind: artifact.contains
+        path: package.json
+        text: vitest run
+      - kind: finalMessage.contains
+        text: test
+```
+
+YAML configs flow through the same Zod schema and IR compiler as TypeScript
+configs, so runtime behavior is identical.
+
+### Assertion `kind` reference
+
+The following table maps each TypeScript helper to its YAML form.
+
+| TypeScript helper                                       | YAML object                                                              |
+| ------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `tool.called('shell')`                                  | `{kind: tool.called, toolKind: shell}`                                   |
+| `tool.called('shell', {includes: 'x'})`                 | `{kind: tool.called, toolKind: shell, matcher: {includes: x}}`           |
+| `tool.notCalled('edit_file')`                           | `{kind: tool.notCalled, toolKind: edit_file}`                            |
+| `artifact.exists('README.md')`                          | `{kind: artifact.exists, path: README.md}`                               |
+| `artifact.contains('pkg.json', 'foo')`                  | `{kind: artifact.contains, path: pkg.json, text: foo}`                   |
+| `transcript.contains('done')`                           | `{kind: transcript.contains, text: done}`                                |
+| `finalMessage.contains('ok')`                           | `{kind: finalMessage.contains, text: ok}`                                |
+| `skill.invoked('commit')`                               | `{kind: skill.invoked, skill: commit}`                                   |
+| `sequence.inOrder([tool.called('shell', {...}), ...])`  | `{kind: sequence.inOrder, steps: [{kind: tool.called, ...}, ...]}`       |
+| `http.called('npmPrettier', {status: 200})` _(pending)_ | `{kind: http.called, endpoint: npmPrettier, status: 200}` _(pending)_    |
+| `http.notCalled('leftPad')` _(pending)_                 | `{kind: http.notCalled, endpoint: leftPad}` _(pending)_                  |
+
+Matcher shapes accept exactly one of `equals`, `includes`, `startsWith`,
+`matches` and are only valid on `shell` tool assertions.
+
+When YAML parsing fails, the CLI emits a `line:column` pointer into the file so
+syntax errors are easy to locate.

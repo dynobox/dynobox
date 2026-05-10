@@ -18,30 +18,38 @@ Use Dynobox when you want to answer questions like:
 
 ## Quick Start
 
-Install and build from the repository root:
+Install the CLI and a starter dyno file, then run it:
 
 ```bash
-pnpm install
-pnpm build
+npm install -g dynobox
+dynobox init        # writes dynobox/example.dyno.mjs
+dynobox run         # discovers and runs every *.dyno.* file under the cwd
 ```
 
-Run the local smoke-test config with a specific harness:
+`dynobox run` with no argument discovers `*.dyno.{mjs,cjs,js,ts,mts,cts,yaml,yml}` files
+recursively under the current directory. Pass a directory or a single file to scope it:
 
 ```bash
-node packages/cli/dist/bin.js run examples/local-observability/dynobox.config.ts --harness claude-code
+dynobox run examples/local-observability
+dynobox run my-skill.dyno.yaml
 ```
 
-Or run it with Codex:
+Pick a harness at runtime when needed (each authored file declares its own
+default list):
 
 ```bash
-node packages/cli/dist/bin.js run examples/local-observability/dynobox.config.ts --harness codex
+dynobox run --harness claude-code
+dynobox run --harness codex
+dynobox run --harness claude-code,codex
 ```
 
-The selected harness executable must already be installed, authenticated, and available on `PATH`.
+The selected harness executable must already be installed, authenticated, and
+available on `PATH`.
 
-## Example Config
+## Example: A Dyno File
 
 ```ts
+// my-skill.dyno.mjs
 import {artifact, defineDyno, finalMessage, tool} from '@dynobox/sdk';
 
 export default defineDyno({
@@ -54,9 +62,7 @@ export default defineDyno({
         `cat > package.json <<'JSON'
 {
   "name": "fixture",
-  "scripts": {
-    "test": "vitest run"
-  }
+  "scripts": {"test": "vitest run"}
 }
 JSON`,
       ],
@@ -73,7 +79,39 @@ JSON`,
 });
 ```
 
-See [Getting Started](./docs/getting-started.md) for a full walkthrough.
+The same dyno authored in YAML:
+
+```yaml
+# my-skill.dyno.yaml
+name: package-script-skill
+harnesses:
+  - id: claude-code
+    permissionMode: default
+scenarios:
+  - name: detects test script
+    prompt: >-
+      Inspect package.json and tell me whether this project has a test script.
+    setup:
+      - |
+        cat > package.json <<'JSON'
+        {"scripts":{"test":"vitest run"}}
+        JSON
+    assertions:
+      - kind: tool.called
+        toolKind: shell
+        matcher: {includes: package.json}
+      - kind: tool.notCalled
+        toolKind: edit_file
+      - kind: artifact.contains
+        path: package.json
+        text: vitest run
+      - kind: finalMessage.contains
+        text: test
+```
+
+See [Getting Started](./docs/getting-started.md) for the full walkthrough and
+[Config Authoring](./docs/config-authoring.md) for the YAML / TS assertion
+reference.
 
 ## Documentation
 
@@ -84,20 +122,34 @@ See [Getting Started](./docs/getting-started.md) for a full walkthrough.
 
 ## Current Capabilities
 
-- Author dynos with `@dynobox/sdk` helpers: `defineDyno`, `defineScenario`, `tool`, `skill`, `artifact`, `transcript`, `finalMessage`, `sequence`, `http`, and `dyno`.
-- Run `dynobox run <config>` locally against Claude Code, Codex, or both.
-- Override harnesses at runtime with `--harness claude-code`, `--harness codex`, or comma-separated values.
-- Configure harness permission behavior with `permissionMode` or `--permission-mode`; dangerous full-access modes are opt-in.
+- Discover and run `*.dyno.{mjs,cjs,js,ts,mts,cts,yaml,yml}` files with
+  `dynobox run [path]` — no arg = cwd, directory = recursive, file = single
+  run. Legacy explicit-file paths (e.g. `dynobox.config.ts`) keep working.
+- Scaffold a starter file with `dynobox init` (`--yaml` for YAML, `--harness`
+  to pin the starter harness).
+- Author dynos in TypeScript / JavaScript with `@dynobox/sdk` helpers
+  (`defineDyno`, `defineScenario`, `tool`, `skill`, `artifact`, `transcript`,
+  `finalMessage`, `sequence`, `http`, `dyno`) or in YAML using the same shape
+  with `kind`-discriminated assertion objects.
+- Run locally against Claude Code, Codex, or both.
+- Override harnesses at runtime with `--harness claude-code`, `--harness codex`,
+  or comma-separated values.
+- Configure harness permission behavior with `permissionMode` or
+  `--permission-mode`; dangerous full-access modes are opt-in.
 - Assert tool calls with `tool.called(...)` and `tool.notCalled(...)`.
 - Assert skill instruction loading with `skill.invoked(...)`.
 - Match shell commands with `equals`, `includes`, `startsWith`, or `matches`.
 - Assert ordered tool-call sequences with `sequence.inOrder(...)`.
-- Assert work-directory artifacts with `artifact.exists(...)` and `artifact.contains(...)`.
-- Assert harness transcript and final response text with `transcript.contains(...)` and `finalMessage.contains(...)`.
+- Assert work-directory artifacts with `artifact.exists(...)` and
+  `artifact.contains(...)`.
+- Assert harness transcript and final response text with
+  `transcript.contains(...)` and `finalMessage.contains(...)`.
 - Stream live progress and tool events in interactive terminals.
-- Use default, `--quiet`, `--verbose`, and `--debug` output modes, including debug log paths for transcripts, raw chat JSONL, and normalized tool events.
+- Use default, `--quiet`, `--verbose`, and `--debug` output modes, including
+  debug log paths for transcripts, raw chat JSONL, and normalized tool events.
 
-HTTP endpoint declarations and HTTP assertions exist in the SDK, but local HTTP capture/evaluation is not wired in yet.
+HTTP endpoint declarations and HTTP assertions exist in the SDK, but local HTTP
+capture/evaluation is not wired in yet.
 
 ## Packages
 
