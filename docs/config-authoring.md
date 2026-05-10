@@ -126,6 +126,16 @@ sequence.inOrder([
 
 For shell commands, ordered sequence matching can match multiple steps against one compound shell command when the commands appear in order.
 
+## Skill Assertions
+
+Use `skill.invoked` to assert that the harness accessed a named skill's `SKILL.md` instruction file.
+
+```ts
+skill.invoked('commit');
+```
+
+This passes when observed tool events reference `.agents/skills/<name>/SKILL.md` or `.claude/skills/<name>/SKILL.md`, including reads, searches, or shell commands that access the file.
+
 ## Artifact Assertions
 
 Artifact assertions read files inside the scenario work directory.

@@ -1,4 +1,4 @@
-import {artifact, defineDyno, dyno, sequence, tool} from '@dynobox/sdk';
+import {artifact, defineDyno, dyno, sequence, skill, tool} from '@dynobox/sdk';
 
 const here = dyno.here(import.meta.url);
 
@@ -29,6 +29,7 @@ export default defineDyno({
           tool.called('shell', {includes: 'git log'}),
           tool.called('shell', {includes: 'git commit'}),
         ]),
+        skill.invoked('commit'),
         tool.called('shell', {includes: 'git add'}),
         artifact.exists('.agents/skills/commit/SKILL.md'),
         tool.notCalled('shell', {includes: 'git push'}),

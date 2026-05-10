@@ -84,10 +84,11 @@ See [Getting Started](./docs/getting-started.md) for a full walkthrough.
 
 ## Current Capabilities
 
-- Author dynos with `@dynobox/sdk` helpers: `defineDyno`, `defineScenario`, `tool`, `artifact`, `transcript`, `finalMessage`, `sequence`, `http`, and `dyno`.
+- Author dynos with `@dynobox/sdk` helpers: `defineDyno`, `defineScenario`, `tool`, `skill`, `artifact`, `transcript`, `finalMessage`, `sequence`, `http`, and `dyno`.
 - Run `dynobox run <config>` locally against Claude Code, Codex, or both.
 - Override harnesses at runtime with `--harness claude-code`, `--harness codex`, or comma-separated values.
 - Assert tool calls with `tool.called(...)` and `tool.notCalled(...)`.
+- Assert skill instruction loading with `skill.invoked(...)`.
 - Match shell commands with `equals`, `includes`, `startsWith`, or `matches`.
 - Assert ordered tool-call sequences with `sequence.inOrder(...)`.
 - Assert work-directory artifacts with `artifact.exists(...)` and `artifact.contains(...)`.

@@ -8,6 +8,14 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Added evaluation and output rendering for `skill.invoked(...)` assertions.
+
+### `@dynobox/sdk`
+
+- Added `skill.invoked(...)` for asserting observable skill instruction loading.
+
 ---
 
 ## @dynobox/sdk@0.0.5 — 2026-05-09
