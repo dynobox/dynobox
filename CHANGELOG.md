@@ -8,18 +8,22 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.0.10 — 2026-05-10
+
 ### `dynobox` (CLI)
 
 - Added evaluation and output rendering for `skill.invoked(...)` assertions.
 - Added `--permission-mode` for explicit harness permission overrides, with dangerous full-access behavior now opt-in.
 - Added debug log paths for raw chat JSONL, normalized tool events, transcripts, and harness stderr when available.
 
+## @dynobox/sdk@0.0.6 — 2026-05-10
+
 ### `@dynobox/sdk`
 
 - Added `skill.invoked(...)` for asserting observable skill instruction loading.
 - Added `permissionMode` to harness config entries.
-
----
 
 ## @dynobox/sdk@0.0.5 — 2026-05-09
 
