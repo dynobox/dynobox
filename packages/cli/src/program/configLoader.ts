@@ -1,26 +1,52 @@
 /**
- * Load a user-supplied dynobox config module via `tsx`'s ESM API so both
- * `.ts` and `.js`/`.mjs` configs work without a separate build step.
+ * Load a single dyno file (TS, JS, MJS, or YAML) and return a
+ * module-shaped object that `resolveConfigModule` from the SDK can
+ * unwrap.
  *
- * The returned value is the module's namespace; `resolveConfigModule` from
- * the SDK handles unwrapping `default` / nested `default.default` shapes.
+ * Code paths:
+ *   - `*.yaml` / `*.yml` → parse with `yaml`, return `{default: parsed}`.
+ *   - everything else    → import via `tsx`'s ESM API so both `.ts` and
+ *                          `.js` / `.mjs` configs work without a separate
+ *                          build step.
+ *
+ * Some bundlers (and certain tsx outputs) wrap the config in
+ * `{default: {default: …}}`. `normalizeLoadedModule` unwraps one level so
+ * the SDK resolver always sees a plain `{default: …}` module shape.
  */
 
-import {resolve} from 'node:path';
+import {extname, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 import {tsImport} from 'tsx/esm/api';
 
+import {loadYamlDyno} from './yamlLoader.js';
+
+const YAML_EXTENSIONS = new Set(['.yaml', '.yml']);
+
+/**
+ * Resolve a dyno file path to a module-namespace-like object.
+ *
+ * Callers typically follow with
+ * `resolveConfigModule(normalizeLoadedModule(...))` from the SDK.
+ */
+export async function loadDyno(filePath: string): Promise<unknown> {
+  const absolute = resolve(filePath);
+  if (YAML_EXTENSIONS.has(extname(absolute).toLowerCase())) {
+    return loadYamlDyno(absolute);
+  }
+  return loadConfigModule(absolute);
+}
+
+/**
+ * Backwards-compatible alias. Prefer `loadDyno`. Retained because the
+ * existing `runCommand` import points here; will be removed once the
+ * call site has migrated.
+ */
 export async function loadConfigModule(configPath: string): Promise<unknown> {
   const configUrl = pathToFileURL(resolve(configPath)).href;
   return tsImport(configUrl, import.meta.url);
 }
 
-/**
- * Some bundlers (and certain tsx outputs) wrap the config in
- * `{default: {default: …}}`. Unwrap one level when we detect that shape so
- * the SDK resolver sees a plain `{default: …}` module.
- */
 export function normalizeLoadedModule(moduleExport: unknown): unknown {
   if (
     isRecord(moduleExport) &&
