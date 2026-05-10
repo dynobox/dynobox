@@ -39,8 +39,13 @@ export function buildProgram(input: BuildProgramInput): Command {
 
   program
     .command('run')
-    .argument('<config>', 'path to dynobox config')
-    .description('run a dynobox config')
+    .argument(
+      '[path]',
+      'file or directory to run; defaults to the current directory',
+    )
+    .description(
+      'run discovered *.dyno.{mjs,js,ts,yaml} files (or an explicit file path)',
+    )
     .option(
       '--harness <id>',
       'override config harnesses for this run; repeat for multiple harnesses',
@@ -54,16 +59,18 @@ export function buildProgram(input: BuildProgramInput): Command {
       '--permission-mode <mode>',
       'override harness permission mode: default or dangerous',
     )
-    .action(async (configPath: string, commandFlags: RunCommandFlags) => {
-      const failed = await runCommandAction({
-        configPath,
-        commandFlags,
-        options,
-        writeStdout,
-        writeStderr,
-      });
-      if (failed) onRunFailure();
-    });
+    .action(
+      async (configPath: string | undefined, commandFlags: RunCommandFlags) => {
+        const failed = await runCommandAction({
+          configPath,
+          commandFlags,
+          options,
+          writeStdout,
+          writeStderr,
+        });
+        if (failed) onRunFailure();
+      },
+    );
 
   return program;
 }
