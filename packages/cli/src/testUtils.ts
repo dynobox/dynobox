@@ -63,7 +63,7 @@ export default defineDyno({
 });
 `;
 
-const MODALITIES_CONFIG = `import {artifact, defineDyno, finalMessage, sequence, tool, transcript} from '@dynobox/sdk';
+const MODALITIES_CONFIG = `import {artifact, defineDyno, finalMessage, sequence, skill, tool, transcript} from '@dynobox/sdk';
 
 export default defineDyno({
   scenarios: [
@@ -81,6 +81,7 @@ export default defineDyno({
           tool.called('shell', {includes: 'git status'}),
           tool.called('shell', {includes: 'git commit'}),
         ]),
+        skill.invoked('commit'),
       ],
     },
   ],
@@ -211,6 +212,13 @@ export const MULTILINE_GIT_COMMIT_EVENT: ShellToolEvent = {
     command: `pnpm test && git commit -m "$(cat <<'EOF'\nmessage\nEOF\n)"`,
   },
   command: `pnpm test && git commit -m "$(cat <<'EOF'\nmessage\nEOF\n)"`,
+};
+
+export const SKILL_READ_EVENT: ShellToolEvent = {
+  kind: 'shell',
+  rawName: 'Bash',
+  input: {command: 'sed -n "1,220p" .agents/skills/commit/SKILL.md'},
+  command: 'sed -n "1,220p" .agents/skills/commit/SKILL.md',
 };
 
 /** A `FakeHarness` preconfigured to emit a single `pnpm test` shell event. */

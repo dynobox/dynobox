@@ -10,6 +10,7 @@ import {
   GIT_STATUS_EVENT,
   MISMATCHED_SHELL_EVENT,
   MULTILINE_GIT_COMMIT_EVENT,
+  SKILL_READ_EVENT,
   StreamingHarness,
 } from '../testUtils.js';
 import {executeCli} from './execute.js';
@@ -218,7 +219,13 @@ describe('dynobox run — failures and diagnostics', () => {
         harnesses: [
           new FakeHarness(
             {stdout: 'transcript EOTP\nworking tree is dirty'},
-            {toolEvents: [GIT_STATUS_EVENT, GIT_COMMIT_EVENT]},
+            {
+              toolEvents: [
+                GIT_STATUS_EVENT,
+                GIT_COMMIT_EVENT,
+                SKILL_READ_EVENT,
+              ],
+            },
           ),
         ],
       },
@@ -233,6 +240,7 @@ describe('dynobox run — failures and diagnostics', () => {
     expect(result.stdout).toContain('✓ transcript.contains');
     expect(result.stdout).toContain('✓ finalMessage.contains');
     expect(result.stdout).toContain('✓ sequence.inOrder(2 steps)');
+    expect(result.stdout).toContain('✓ skill.invoked(commit)');
   });
 
   it('renders failed sequence expectations and observed shell commands', async () => {

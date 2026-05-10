@@ -75,6 +75,10 @@ function evaluateAssertion(
     return evaluateSequenceInOrder(assertion, input.toolEvents);
   }
 
+  if (assertion.kind === 'skill.invoked') {
+    return evaluateSkillInvoked(assertion, input.toolEvents);
+  }
+
   if (assertion.kind === 'artifact.exists') {
     return evaluateArtifactExists(assertion, input.workDir);
   }
@@ -321,6 +325,74 @@ function toolNotCalledFailMessage(assertion: ToolNotCalledStep): string {
 function describeToolStep(step: ToolCalledStep): string {
   if (step.matcher === undefined) return `tool.called(${step.toolKind})`;
   return `tool.called(${step.toolKind}, ${describeShellMatcher(step.matcher)})`;
+}
+
+function evaluateSkillInvoked(
+  assertion: Extract<IrAssertion, {kind: 'skill.invoked'}>,
+  toolEvents: readonly ToolEvent[],
+): AssertionResult {
+  const event = toolEvents.find((toolEvent) =>
+    toolEventMentionsSkillFile(toolEvent, assertion.skill),
+  );
+
+  if (event !== undefined) {
+    return {
+      assertionId: assertion.id,
+      kind: assertion.kind,
+      passed: true,
+      message: `Observed skill "${assertion.skill}" instruction file access.`,
+      evidence: event,
+    };
+  }
+
+  return failed(
+    assertion,
+    `Expected skill "${assertion.skill}" to be invoked, but no access to its SKILL.md was observed.`,
+  );
+}
+
+function toolEventMentionsSkillFile(
+  event: ToolEvent,
+  skillName: string,
+): boolean {
+  return stringsFromUnknown(event).some((value) =>
+    stringMentionsSkillFile(value, skillName),
+  );
+}
+
+function stringMentionsSkillFile(value: string, skillName: string): boolean {
+  const normalized = value.replaceAll('\\', '/').toLowerCase();
+  const normalizedSkill = skillName.toLowerCase();
+  return [
+    `.agents/skills/${normalizedSkill}/skill.md`,
+    `.claude/skills/${normalizedSkill}/skill.md`,
+  ].some((path) => normalized.includes(path));
+}
+
+function stringsFromUnknown(value: unknown): string[] {
+  const strings: string[] = [];
+  const seen = new WeakSet<object>();
+
+  function visit(current: unknown): void {
+    if (typeof current === 'string') {
+      strings.push(current);
+      return;
+    }
+
+    if (typeof current !== 'object' || current === null) return;
+    if (seen.has(current)) return;
+    seen.add(current);
+
+    if (Array.isArray(current)) {
+      for (const item of current) visit(item);
+      return;
+    }
+
+    for (const entry of Object.values(current)) visit(entry);
+  }
+
+  visit(value);
+  return strings;
 }
 
 function evaluateArtifactExists(
