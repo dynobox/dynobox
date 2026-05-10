@@ -6,7 +6,7 @@ import {
   type ShellToolMatcher,
   TOOL_KINDS,
 } from '../types/brands.js';
-import {HARNESS_IDS} from '../types/harness.js';
+import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/httpMethod.js';
 
 const endpointKeySchema = z
@@ -48,6 +48,7 @@ const harnessRunConfigSchema = z.union([
   z.object({
     id: z.enum(HARNESS_IDS),
     model: z.string().min(1).optional(),
+    permissionMode: z.enum(PERMISSION_MODES).optional(),
   }),
 ]);
 

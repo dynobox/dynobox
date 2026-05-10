@@ -1,3 +1,4 @@
+import type {PermissionMode} from '@dynobox/sdk';
 import {execa} from 'execa';
 
 import {normalizeToolKind} from './toolEvents.js';
@@ -49,7 +50,12 @@ export class ClaudeCodeHarness implements Harness {
 
     const subprocess = execa(
       this.executable,
-      buildClaudeCodeArgs(input.prompt, this.extraArgs, input.model),
+      buildClaudeCodeArgs(
+        input.prompt,
+        this.extraArgs,
+        input.model,
+        input.permissionMode,
+      ),
       options,
     );
     const stdoutChunks: string[] = [];
@@ -96,6 +102,7 @@ export function buildClaudeCodeArgs(
   prompt: string,
   extraArgs: readonly string[] = [],
   model?: string,
+  permissionMode?: PermissionMode,
 ): string[] {
   return [
     '-p',
@@ -104,9 +111,17 @@ export function buildClaudeCodeArgs(
     'stream-json',
     '--include-hook-events',
     ...(model === undefined ? [] : ['--model', model]),
+    ...claudeCodePermissionArgs(permissionMode),
     ...extraArgs,
     prompt,
   ];
+}
+
+function claudeCodePermissionArgs(
+  permissionMode: PermissionMode | undefined,
+): string[] {
+  if (permissionMode !== 'dangerous') return [];
+  return ['--permission-mode', 'bypassPermissions'];
 }
 
 export function parseClaudeCodeStreamJson(

@@ -9,11 +9,12 @@
 import type {LocalRunnerResult} from '@dynobox/runner-local';
 
 import {dim, type RenderContext} from '../terminal/index.js';
+import type {DebugLogPaths} from '../util/transcript.js';
 
 export function renderDebugDetails(
   result: LocalRunnerResult,
   ctx: RenderContext,
-  options: {transcriptLogPath?: string} = {},
+  options: {debugLogPaths?: DebugLogPaths} = {},
 ): string {
   const lines = [`        ${dim(ctx, `work dir  ${result.workDir}`)}\n`];
   for (const artifact of result.artifacts) {
@@ -21,10 +22,20 @@ export function renderDebugDetails(
       `        ${dim(ctx, `artifact  ${artifact.kind} ${artifact.path}`)}\n`,
     );
   }
-  if (options.transcriptLogPath !== undefined) {
-    lines.push(
-      `        ${dim(ctx, `log       ${options.transcriptLogPath}`)}\n`,
-    );
+  for (const [label, path] of debugLogEntries(options.debugLogPaths)) {
+    lines.push(`        ${dim(ctx, `log       ${label} ${path}`)}\n`);
   }
   return lines.join('');
+}
+
+function debugLogEntries(
+  paths: DebugLogPaths | undefined,
+): Array<[string, string]> {
+  if (paths === undefined) return [];
+  return [
+    ['transcript', paths.transcript],
+    ['chat_jsonl', paths.chatHistory],
+    ['stderr', paths.stderr],
+    ['tool_events', paths.toolEvents],
+  ].filter((entry): entry is [string, string] => entry[1] !== undefined);
 }

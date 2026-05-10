@@ -3,7 +3,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
 import {type AssertionResult, evaluateAssertions} from '@dynobox/evaluators';
-import type {HarnessId} from '@dynobox/sdk';
+import type {HarnessId, PermissionMode} from '@dynobox/sdk';
 import type {IrScenario} from '@dynobox/sdk/ir';
 
 import type {
@@ -43,6 +43,7 @@ export type LocalRunnerJob = {
   scenario: IrScenario;
   harness: HarnessId;
   model?: string;
+  permissionMode?: PermissionMode;
   iteration: number;
 };
 
@@ -125,6 +126,7 @@ export type LocalRunnerResult = {
   scenarioId: string;
   harness: HarnessId;
   model?: string;
+  permissionMode?: PermissionMode;
   iteration: number;
   status: LocalRunnerStatus;
   passed: boolean;
@@ -214,6 +216,9 @@ export async function runJob(
       workDir,
       env: options.env ?? {},
       ...(job.model === undefined ? {} : {model: job.model}),
+      ...(job.permissionMode === undefined
+        ? {}
+        : {permissionMode: job.permissionMode}),
       onToolEvent: (toolEvent: ToolEvent) => {
         liveToolCount += 1;
         emitProgress(options, {
@@ -389,6 +394,9 @@ function buildResult(
     scenarioId: job.scenario.id,
     harness: job.harness,
     ...(job.model === undefined ? {} : {model: job.model}),
+    ...(job.permissionMode === undefined
+      ? {}
+      : {permissionMode: job.permissionMode}),
     iteration: job.iteration,
     status: result.status,
     passed: result.status === 'passed',

@@ -20,6 +20,7 @@ Dynobox currently supports local execution through:
 It can assert:
 
 - Whether harness tools were called or not called.
+- Whether skill instruction files were loaded with `skill.invoked(...)`.
 - Shell command content with `equals`, `includes`, `startsWith`, or `matches`.
 - Ordered tool-call sequences.
 - Files created or updated inside the scenario work directory.
@@ -36,6 +37,7 @@ Dynobox is useful now for checking whether a skill or agent workflow:
 - Avoids prohibited tools or shell commands.
 - Produces a final answer containing required text.
 - Works similarly across Claude Code and Codex.
+- Uses secure harness defaults unless a trusted eval explicitly opts into dangerous permission mode.
 - Survives refactors or prompt changes by running repeatable scenarios.
 
 ## Not Yet Covered

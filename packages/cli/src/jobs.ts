@@ -4,7 +4,7 @@
  */
 
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
-import type {HarnessId} from '@dynobox/sdk';
+import type {HarnessId, PermissionMode} from '@dynobox/sdk';
 import type {Ir, IrAssertion, IrHarnessConfig} from '@dynobox/sdk/ir';
 
 import {unique} from './util/unique.js';
@@ -12,6 +12,7 @@ import {unique} from './util/unique.js';
 type RunMatrixHarness = {
   id: string;
   model?: string;
+  permissionMode?: PermissionMode;
 };
 
 type RunMatrixCell = {
@@ -41,17 +42,37 @@ export type RunMatrix = {
  */
 export function buildLocalRunnerJobs(
   ir: Ir,
-  options: {harnesses?: readonly HarnessId[]} = {},
+  options: {
+    harnesses?: readonly HarnessId[];
+    permissionMode?: PermissionMode;
+  } = {},
 ): LocalRunnerJob[] {
-  const overrides = overrideHarnessConfigs(options.harnesses);
+  const overrides = overrideHarnessConfigs(
+    options.harnesses,
+    options.permissionMode,
+  );
   return ir.scenarios.flatMap((scenario) =>
-    (overrides ?? scenario.harnesses).map((harness) => ({
-      id: `${scenario.id}.${harnessJobSuffix(harness)}.iteration.0`,
-      scenario,
-      harness: harness.id,
-      ...(harness.model === undefined ? {} : {model: harness.model}),
-      iteration: 0,
-    })),
+    (overrides ?? scenario.harnesses).map((harness) => {
+      const permissionMode = permissionModeForHarness(
+        harness,
+        options.permissionMode,
+      );
+      const jobHarness =
+        permissionMode === harness.permissionMode
+          ? harness
+          : {
+              ...harness,
+              ...(permissionMode === undefined ? {} : {permissionMode}),
+            };
+      return {
+        id: `${scenario.id}.${harnessJobSuffix(jobHarness)}.iteration.0`,
+        scenario,
+        harness: harness.id,
+        ...(harness.model === undefined ? {} : {model: harness.model}),
+        ...(permissionMode === undefined ? {} : {permissionMode}),
+        iteration: 0,
+      };
+    }),
   );
 }
 
@@ -107,13 +128,22 @@ export function assertionByIdForJobs(
 
 function overrideHarnessConfigs(
   harnesses: readonly HarnessId[] | undefined,
+  permissionMode: PermissionMode | undefined,
 ): IrHarnessConfig[] | undefined {
-  return harnesses?.map((id) => ({id}));
+  return harnesses?.map((id) =>
+    permissionMode === undefined ? {id} : {id, permissionMode},
+  );
 }
 
 function harnessJobSuffix(harness: IrHarnessConfig): string {
-  if (harness.model === undefined) return harness.id;
-  return `${harness.id}.${harness.model.replace(/[^a-zA-Z0-9._-]+/g, '-')}`;
+  const parts: string[] = [harness.id];
+  if (harness.model !== undefined) {
+    parts.push(harness.model.replace(/[^a-zA-Z0-9._-]+/g, '-'));
+  }
+  if (harness.permissionMode !== undefined) {
+    parts.push(harness.permissionMode);
+  }
+  return parts.join('.');
 }
 
 function uniqueHarnesses(jobs: readonly LocalRunnerJob[]): RunMatrixHarness[] {
@@ -124,12 +154,30 @@ function uniqueHarnesses(jobs: readonly LocalRunnerJob[]): RunMatrixHarness[] {
   return [...byKey.values()];
 }
 
-function matrixHarness(job: Pick<LocalRunnerJob, 'harness' | 'model'>) {
-  return job.model === undefined
-    ? {id: job.harness}
-    : {id: job.harness, model: job.model};
+function matrixHarness(
+  job: Pick<LocalRunnerJob, 'harness' | 'model' | 'permissionMode'>,
+): RunMatrixHarness {
+  return {
+    id: job.harness,
+    ...(job.model === undefined ? {} : {model: job.model}),
+    ...(job.permissionMode === undefined
+      ? {}
+      : {permissionMode: job.permissionMode}),
+  };
 }
 
-function jobHarnessKey(job: Pick<LocalRunnerJob, 'harness' | 'model'>): string {
-  return job.model === undefined ? job.harness : `${job.harness}/${job.model}`;
+function jobHarnessKey(
+  job: Pick<LocalRunnerJob, 'harness' | 'model' | 'permissionMode'>,
+): string {
+  const parts: string[] = [job.harness];
+  if (job.model !== undefined) parts.push(job.model);
+  if (job.permissionMode !== undefined) parts.push(job.permissionMode);
+  return parts.join('/');
+}
+
+function permissionModeForHarness(
+  harness: IrHarnessConfig,
+  override: PermissionMode | undefined,
+): PermissionMode | undefined {
+  return override ?? harness.permissionMode;
 }

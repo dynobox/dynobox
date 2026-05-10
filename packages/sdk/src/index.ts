@@ -38,5 +38,7 @@ export {
   HARNESS_IDS,
   type HarnessId,
   type HarnessRunConfig,
+  PERMISSION_MODES,
+  type PermissionMode,
 } from './types/harness.js';
 export {HTTP_METHODS, type HttpMethod} from './types/httpMethod.js';

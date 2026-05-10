@@ -14,6 +14,8 @@ dynobox run <config> [options]
 
 ```text
 --harness <id>   Override config harnesses for this run; repeat or comma-separate for multiple harnesses.
+--permission-mode <mode>
+                 Override harness permission mode: default or dangerous.
 --quiet          Print compact CI-friendly output.
 --verbose        Expand scenario details even when passing.
 --debug          Include debug paths and artifacts.
@@ -28,6 +30,7 @@ dynobox run dynobox.config.ts --harness claude-code
 dynobox run dynobox.config.ts --harness codex
 dynobox run dynobox.config.ts --harness claude-code,codex
 dynobox run dynobox.config.ts --harness claude-code --harness codex
+dynobox run dynobox.config.ts --harness codex --permission-mode dangerous
 ```
 
 ## Output Modes
@@ -38,7 +41,12 @@ Default mode shows a run header, job status, assertion results for failures or e
 
 `--verbose` expands scenario details even when jobs pass.
 
-`--debug` includes temporary work-directory paths and writes harness transcripts to `dynobox-transcript.log` inside each job work directory when transcript text is available.
+`--debug` includes temporary work-directory paths and writes harness debug logs inside each job work directory when data is available:
+
+- `dynobox-transcript.log`: the extracted harness transcript.
+- `dynobox-chat-history.jsonl`: the raw harness stdout or JSONL chat stream.
+- `dynobox-tool-events.json`: normalized tool events used by assertions.
+- `dynobox-stderr.log`: raw harness stderr, when non-empty.
 
 When stdout is an interactive terminal and live output is enabled, Dynobox streams phase progress and harness tool events as they happen. In non-interactive output, quiet mode, or incompatible terminals, it runs jobs to completion and renders static output.
 
@@ -57,9 +65,16 @@ A successful run exits with `0`.
 The CLI registers both real harnesses by default:
 
 - `claude-code` invokes `claude -p --verbose --output-format stream-json --include-hook-events ...`.
-- `codex` invokes `codex exec --json --color never --skip-git-repo-check --sandbox danger-full-access -c approval_policy="never" ...`.
+- `codex` invokes `codex exec --json --color never --skip-git-repo-check ...`.
 
 Make sure the harness executable you select is installed, authenticated, and available on `PATH`.
+
+Dynobox defaults to each harness's normal permission behavior. Use `--permission-mode dangerous` only for trusted local evals that need full access or non-interactive approval bypasses.
+
+Dangerous mode maps to harness-specific flags:
+
+- `claude-code`: adds `--permission-mode bypassPermissions`.
+- `codex`: adds `--sandbox danger-full-access -c approval_policy="never"`.
 
 ## Local Development Commands
 

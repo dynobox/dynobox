@@ -7,6 +7,7 @@ import {defineDyno, tool} from '@dynobox/sdk';
 
 export default defineDyno({
   name: 'local-observability',
+  harnesses: [{id: 'claude-code', permissionMode: 'default'}],
   scenarios: [
     {
       name: 'inspect package scripts',
@@ -78,7 +79,23 @@ harnesses: [
 ];
 ```
 
-The CLI also supports runtime harness overrides with `--harness`.
+Harness objects can also set `permissionMode`:
+
+```ts
+harnesses: [
+  {id: 'claude-code', permissionMode: 'default'},
+  {id: 'codex', model: 'gpt-5.1', permissionMode: 'dangerous'},
+];
+```
+
+Permission modes are:
+
+- `default`: use the harness's normal permission and sandbox behavior. This is the secure default.
+- `dangerous`: opt into harness-specific full-access or permission-bypass flags for trusted local evals.
+
+For `claude-code`, `dangerous` adds `--permission-mode bypassPermissions`. For `codex`, `dangerous` adds `--sandbox danger-full-access -c approval_policy="never"`.
+
+The CLI also supports runtime harness overrides with `--harness` and runtime permission overrides with `--permission-mode`.
 
 ## Tool Assertions
 

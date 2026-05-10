@@ -156,6 +156,12 @@ describe('dynobox run — output modes', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('work dir');
     expect(result.stdout).toContain('artifact  work_dir');
+    expect(result.stdout).toContain('log       transcript');
+    expect(result.stdout).toContain('dynobox-transcript.log');
+    expect(result.stdout).toContain('log       chat_jsonl');
+    expect(result.stdout).toContain('dynobox-chat-history.jsonl');
+    expect(result.stdout).toContain('log       tool_events');
+    expect(result.stdout).toContain('dynobox-tool-events.json');
   });
 });
 

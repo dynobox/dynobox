@@ -10,6 +10,7 @@ import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 
 import {assertionByIdForJobs} from '../jobs.js';
 import {createRenderContext, type RenderContext} from '../terminal/index.js';
+import type {DebugLogPaths} from '../util/transcript.js';
 import {renderRunHeader} from './header.js';
 import {renderHeadline} from './headline.js';
 import {renderJobDetails} from './jobDetails.js';
@@ -22,11 +23,11 @@ export type RenderRunOutputInput = {
   results: readonly LocalRunnerResult[];
   ctx?: RenderContext;
   /**
-   * Optional map of jobId → transcript log path, populated by the runner
+   * Optional map of jobId → debug log paths, populated by the runner
    * when running in `debug` mode. Used to print the log path in debug
    * details without coupling renderers to the filesystem.
    */
-  transcriptLogPaths?: Map<string, string>;
+  debugLogPaths?: Map<string, DebugLogPaths>;
 };
 
 export function renderRunOutput(input: RenderRunOutputInput): string {
@@ -53,13 +54,13 @@ export function renderRunOutput(input: RenderRunOutputInput): string {
     );
     lines.push(`${headline}\n`);
     if (expand) {
-      const transcriptLogPath = input.transcriptLogPaths?.get(job.id);
+      const debugLogPaths = input.debugLogPaths?.get(job.id);
       lines.push(
         renderJobDetails(
           result,
           assertionById,
           ctx,
-          transcriptLogPath === undefined ? {} : {transcriptLogPath},
+          debugLogPaths === undefined ? {} : {debugLogPaths},
         ),
       );
     }

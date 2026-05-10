@@ -5,7 +5,7 @@ import {
   type ShellToolMatcher,
   TOOL_KINDS,
 } from '../types/brands.js';
-import {HARNESS_IDS} from '../types/harness.js';
+import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/httpMethod.js';
 
 export const IR_VERSION = '0.1' as const;
@@ -31,6 +31,7 @@ export const irEndpointSchema = z.object({
 export const irHarnessConfigSchema = z.object({
   id: z.enum(HARNESS_IDS),
   model: z.string().min(1).optional(),
+  permissionMode: z.enum(PERMISSION_MODES).optional(),
 });
 
 const shellToolMatcherSchema = z.custom<ShellToolMatcher>(isShellToolMatcher, {

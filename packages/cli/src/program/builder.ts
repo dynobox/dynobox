@@ -50,6 +50,10 @@ export function buildProgram(input: BuildProgramInput): Command {
     .option('--quiet', 'print compact CI-friendly output')
     .option('--verbose', 'expand scenario details even when passing')
     .option('--debug', 'include debug paths and artifacts')
+    .option(
+      '--permission-mode <mode>',
+      'override harness permission mode: default or dangerous',
+    )
     .action(async (configPath: string, commandFlags: RunCommandFlags) => {
       const failed = await runCommandAction({
         configPath,

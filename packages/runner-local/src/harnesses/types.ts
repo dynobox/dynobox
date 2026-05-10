@@ -1,4 +1,4 @@
-import type {HarnessId} from '@dynobox/sdk';
+import type {HarnessId, PermissionMode} from '@dynobox/sdk';
 
 /** Configuration and environment passed to a harness invocation. */
 export type HarnessInput = {
@@ -12,6 +12,8 @@ export type HarnessInput = {
   timeoutMs?: number;
   /** Optional harness-specific model name or alias. */
   model?: string;
+  /** Optional permission/sandbox mode for the harness invocation. */
+  permissionMode?: PermissionMode;
   /** Optional live callback for tool events observed while the harness runs. */
   onToolEvent?: (event: ToolEvent) => void;
 };

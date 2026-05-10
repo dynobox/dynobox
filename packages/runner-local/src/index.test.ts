@@ -211,6 +211,20 @@ describe('runJob', () => {
     expect(harness.inputs[0]).toMatchObject({model: 'sonnet'});
   });
 
+  it('passes the job permission mode to the harness', async () => {
+    const scratchRoot = createScratchRoot();
+    const harness = new RecordingHarness();
+
+    const result = await runJob(
+      {...createJob(), permissionMode: 'dangerous'},
+      {scratchRoot, harnesses: [harness]},
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.permissionMode).toBe('dangerous');
+    expect(harness.inputs[0]).toMatchObject({permissionMode: 'dangerous'});
+  });
+
   it('works with FakeHarness and passing tool assertions', async () => {
     const scratchRoot = createScratchRoot();
     const shellEvent: ShellToolEvent = {

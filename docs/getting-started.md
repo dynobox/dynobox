@@ -59,7 +59,7 @@ import {artifact, defineDyno, finalMessage, tool} from '@dynobox/sdk';
 
 export default defineDyno({
   name: 'package-script-skill',
-  harnesses: ['claude-code'],
+  harnesses: [{id: 'claude-code', permissionMode: 'default'}],
   scenarios: [
     {
       name: 'detects test script',
@@ -92,7 +92,15 @@ Save the file anywhere in the repo, for example `tmp/package-script.dynobox.conf
 node packages/cli/dist/bin.js run tmp/package-script.dynobox.config.ts --harness claude-code --debug
 ```
 
-Use `--debug` when developing a scenario. It prints the temporary work directory and writes harness transcript logs for failed or expanded runs.
+Use `--debug` when developing a scenario. It prints the temporary work directory and writes debug logs such as `dynobox-transcript.log`, `dynobox-chat-history.jsonl`, and `dynobox-tool-events.json` inside each job work directory.
+
+Dynobox uses secure harness defaults. If a trusted local eval needs full access or non-interactive approval bypasses, opt in explicitly:
+
+```bash
+node packages/cli/dist/bin.js run tmp/package-script.dynobox.config.ts --permission-mode dangerous
+```
+
+You can also set `permissionMode: 'dangerous'` on a specific harness entry in a config.
 
 ## Interpreting Results
 

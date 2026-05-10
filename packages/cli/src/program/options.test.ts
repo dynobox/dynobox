@@ -33,4 +33,32 @@ describe('--harness override validation', () => {
     expect(result.exitCode).toBe(configErrorExitCode);
     expect(result.stderr).toContain('Invalid harness "nope"');
   });
+
+  it('accepts a permission mode override', async () => {
+    const result = await executeCli(
+      [
+        'run',
+        fixtures.validConfigPath,
+        '--permission-mode',
+        'dangerous',
+        '--quiet',
+      ],
+      {harnesses: [new PassingHarness('claude-code')]},
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('1 scenario · 1 harness · 1 iteration');
+  });
+
+  it('rejects an unknown permission mode with the config-error exit code', async () => {
+    const result = await executeCli([
+      'run',
+      fixtures.validConfigPath,
+      '--permission-mode',
+      'unsafe',
+    ]);
+
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(result.stderr).toContain('Invalid permission mode "unsafe"');
+  });
 });

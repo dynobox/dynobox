@@ -39,18 +39,27 @@ import {
   renderRunSummary,
 } from '../render/index.js';
 import {createRenderContext, type RenderContext} from '../terminal/index.js';
-import {writeTranscriptLog} from '../util/transcript.js';
+import {
+  type DebugLogPaths,
+  hasDebugLogPaths,
+  writeDebugLogs,
+} from '../util/transcript.js';
 import {loadConfigModule, normalizeLoadedModule} from './configLoader.js';
 import {shouldRenderLive} from './environment.js';
 import type {ExecuteCliOptions, OutputWriter} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
-import {buildRunJobOptions, validateHarnessOverrides} from './options.js';
+import {
+  buildRunJobOptions,
+  validateHarnessOverrides,
+  validatePermissionModeOverride,
+} from './options.js';
 
 export type RunCommandFlags = {
   harness?: string[];
   quiet?: boolean;
   verbose?: boolean;
   debug?: boolean;
+  permissionMode?: string;
 };
 
 export type RunCommandActionInput = {
@@ -77,10 +86,15 @@ export async function runCommandAction(
     configPath,
     writeStderr,
   );
+  const permissionMode = validatePermissionMode(
+    commandFlags.permissionMode,
+    configPath,
+    writeStderr,
+  );
   const ir = await compileConfig(configPath, writeStderr);
   const jobs = buildLocalRunnerJobs(
     ir,
-    overrideHarnesses === undefined ? {} : {harnesses: overrideHarnesses},
+    buildJobOptions(overrideHarnesses, permissionMode),
   );
   const runOptions = buildRunJobOptions(options);
   const ctx = createRenderContext(options, commandFlags);
@@ -110,14 +124,14 @@ async function runStatic(input: RunPathInput): Promise<LocalRunnerResult[]> {
   for (const job of input.jobs) {
     results.push(await runJob(job, input.runOptions));
   }
-  const transcriptLogPaths = writeTranscriptLogsIfDebug(input.ctx, results);
+  const debugLogPaths = writeDebugLogsIfDebug(input.ctx, results);
   input.writeStdout(
     renderRunOutput({
       configPath: input.configPath,
       jobs: input.jobs,
       results,
       ctx: input.ctx,
-      ...(transcriptLogPaths === undefined ? {} : {transcriptLogPaths}),
+      ...(debugLogPaths === undefined ? {} : {debugLogPaths}),
     }),
   );
   return results;
@@ -176,13 +190,13 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
         live.collapseToHeadline(finalHeadline);
       } else {
         live.rewriteHeadline(finalHeadline);
-        const transcriptLogPath = maybeWriteTranscriptLog(ctx, result);
+        const debugLogPaths = maybeWriteDebugLogs(ctx, result);
         writeStdout(
           renderLiveJobCompletion(
             result,
             assertionById,
             ctx,
-            transcriptLogPath === undefined ? {} : {transcriptLogPath},
+            debugLogPaths === undefined ? {} : {debugLogPaths},
           ),
         );
       }
@@ -214,6 +228,30 @@ function validateOverrides(
   }
 }
 
+function validatePermissionMode(
+  rawPermissionMode: string | undefined,
+  configPath: string,
+  writeStderr: OutputWriter,
+) {
+  try {
+    return validatePermissionModeOverride(rawPermissionMode);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    writeStderr(renderRunConfigErrorMessage(configPath, message));
+    throw error;
+  }
+}
+
+function buildJobOptions(
+  harnesses: ReturnType<typeof validateHarnessOverrides>,
+  permissionMode: ReturnType<typeof validatePermissionModeOverride>,
+): Parameters<typeof buildLocalRunnerJobs>[1] {
+  return {
+    ...(harnesses === undefined ? {} : {harnesses}),
+    ...(permissionMode === undefined ? {} : {permissionMode}),
+  };
+}
+
 /**
  * Load and compile the config. On failure, write the standard config-error
  * message and throw `CommanderError(configErrorExitCode)` so the top-level
@@ -235,28 +273,27 @@ async function compileConfig(
 }
 
 /**
- * If we're in debug mode, write each result's harness transcript to its
- * work directory and return a `Map<jobId, path>` for the renderer.
+ * If we're in debug mode, write each result's harness debug logs to its
+ * work directory and return a `Map<jobId, paths>` for the renderer.
  */
-function writeTranscriptLogsIfDebug(
+function writeDebugLogsIfDebug(
   ctx: RenderContext,
   results: readonly LocalRunnerResult[],
-): Map<string, string> | undefined {
+): Map<string, DebugLogPaths> | undefined {
   if (ctx.mode !== 'debug') return undefined;
-  const map = new Map<string, string>();
+  const map = new Map<string, DebugLogPaths>();
   for (const result of results) {
-    const path = maybeWriteTranscriptLog(ctx, result);
-    if (path !== undefined) map.set(result.jobId, path);
+    const paths = maybeWriteDebugLogs(ctx, result);
+    if (paths !== undefined) map.set(result.jobId, paths);
   }
   return map.size === 0 ? undefined : map;
 }
 
-function maybeWriteTranscriptLog(
+function maybeWriteDebugLogs(
   ctx: RenderContext,
   result: LocalRunnerResult,
-): string | undefined {
+): DebugLogPaths | undefined {
   if (ctx.mode !== 'debug') return undefined;
-  const transcript = result.harnessResult?.transcript;
-  if (transcript === undefined || transcript.length === 0) return undefined;
-  return writeTranscriptLog(result.workDir, transcript);
+  const paths = writeDebugLogs(result);
+  return hasDebugLogPaths(paths) ? paths : undefined;
 }

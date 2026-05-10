@@ -9,7 +9,12 @@ import {
   CodexHarness,
   type RunJobOptions,
 } from '@dynobox/runner-local';
-import {HARNESS_IDS, type HarnessId} from '@dynobox/sdk';
+import {
+  HARNESS_IDS,
+  type HarnessId,
+  PERMISSION_MODES,
+  type PermissionMode,
+} from '@dynobox/sdk';
 import {CommanderError} from 'commander';
 
 import {unique} from '../util/unique.js';
@@ -50,6 +55,21 @@ export function validateHarnessOverrides(
   }
 
   return unique(harnesses) as HarnessId[];
+}
+
+export function validatePermissionModeOverride(
+  value: string | undefined,
+): PermissionMode | undefined {
+  if (value === undefined) return undefined;
+  const validModes = new Set<string>(PERMISSION_MODES);
+  if (!validModes.has(value)) {
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.permissionMode',
+      `Invalid permission mode "${value}". Expected one of: ${PERMISSION_MODES.join(', ')}`,
+    );
+  }
+  return value as PermissionMode;
 }
 
 /**

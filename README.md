@@ -46,7 +46,7 @@ import {artifact, defineDyno, finalMessage, tool} from '@dynobox/sdk';
 
 export default defineDyno({
   name: 'package-script-skill',
-  harnesses: ['claude-code'],
+  harnesses: [{id: 'claude-code', permissionMode: 'default'}],
   scenarios: [
     {
       name: 'detects test script',
@@ -87,6 +87,7 @@ See [Getting Started](./docs/getting-started.md) for a full walkthrough.
 - Author dynos with `@dynobox/sdk` helpers: `defineDyno`, `defineScenario`, `tool`, `skill`, `artifact`, `transcript`, `finalMessage`, `sequence`, `http`, and `dyno`.
 - Run `dynobox run <config>` locally against Claude Code, Codex, or both.
 - Override harnesses at runtime with `--harness claude-code`, `--harness codex`, or comma-separated values.
+- Configure harness permission behavior with `permissionMode` or `--permission-mode`; dangerous full-access modes are opt-in.
 - Assert tool calls with `tool.called(...)` and `tool.notCalled(...)`.
 - Assert skill instruction loading with `skill.invoked(...)`.
 - Match shell commands with `equals`, `includes`, `startsWith`, or `matches`.
@@ -94,7 +95,7 @@ See [Getting Started](./docs/getting-started.md) for a full walkthrough.
 - Assert work-directory artifacts with `artifact.exists(...)` and `artifact.contains(...)`.
 - Assert harness transcript and final response text with `transcript.contains(...)` and `finalMessage.contains(...)`.
 - Stream live progress and tool events in interactive terminals.
-- Use default, `--quiet`, `--verbose`, and `--debug` output modes.
+- Use default, `--quiet`, `--verbose`, and `--debug` output modes, including debug log paths for transcripts, raw chat JSONL, and normalized tool events.
 
 HTTP endpoint declarations and HTTP assertions exist in the SDK, but local HTTP capture/evaluation is not wired in yet.
 

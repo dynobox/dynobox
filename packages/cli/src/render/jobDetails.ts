@@ -10,6 +10,7 @@ import type {LocalRunnerResult} from '@dynobox/runner-local';
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import type {RenderContext} from '../terminal/index.js';
+import type {DebugLogPaths} from '../util/transcript.js';
 import {renderAssertionDetails} from './assertions.js';
 import {renderDebugDetails} from './debug.js';
 import {
@@ -23,7 +24,7 @@ import {
 } from './phases.js';
 
 export type JobDetailsOptions = {
-  transcriptLogPath?: string;
+  debugLogPaths?: DebugLogPaths;
 };
 
 export function renderJobDetails(
@@ -57,9 +58,9 @@ export function renderJobDetails(
       renderDebugDetails(
         result,
         ctx,
-        options.transcriptLogPath === undefined
+        options.debugLogPaths === undefined
           ? {}
-          : {transcriptLogPath: options.transcriptLogPath},
+          : {debugLogPaths: options.debugLogPaths},
       ),
     );
   }

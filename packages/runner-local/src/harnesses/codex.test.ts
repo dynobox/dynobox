@@ -42,12 +42,23 @@ describe('CodexHarness', () => {
       '--color',
       'never',
       '--skip-git-repo-check',
+      '--model',
+      'gpt-5.1-codex',
+      'Say hello.',
+    ]);
+  });
+
+  it('adds full-access Codex args only in dangerous permission mode', () => {
+    expect(buildCodexArgs('Say hello.', [], undefined, 'dangerous')).toEqual([
+      'exec',
+      '--json',
+      '--color',
+      'never',
+      '--skip-git-repo-check',
       '--sandbox',
       'danger-full-access',
       '-c',
       'approval_policy="never"',
-      '--model',
-      'gpt-5.1-codex',
       'Say hello.',
     ]);
   });

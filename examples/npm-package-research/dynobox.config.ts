@@ -2,6 +2,7 @@ import {defineDyno, http} from '@dynobox/sdk';
 
 export default defineDyno({
   name: 'npm-package-research',
+  harnesses: [{id: 'claude-code', permissionMode: 'default'}],
   endpoints: {
     getPrettierMetadata: http.endpoint({
       method: 'GET',

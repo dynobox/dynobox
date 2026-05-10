@@ -1,3 +1,4 @@
+import type {PermissionMode} from '@dynobox/sdk';
 import {execa} from 'execa';
 import {realpathSync} from 'fs';
 
@@ -50,7 +51,12 @@ export class CodexHarness implements Harness {
 
     const subprocess = execa(
       this.executable,
-      buildCodexArgs(input.prompt, this.extraArgs, input.model),
+      buildCodexArgs(
+        input.prompt,
+        this.extraArgs,
+        input.model,
+        input.permissionMode,
+      ),
       options,
     );
     const stdoutChunks: string[] = [];
@@ -97,6 +103,7 @@ export function buildCodexArgs(
   prompt: string,
   extraArgs: readonly string[] = [],
   model?: string,
+  permissionMode?: PermissionMode,
 ): string[] {
   return [
     'exec',
@@ -104,14 +111,18 @@ export function buildCodexArgs(
     '--color',
     'never',
     '--skip-git-repo-check',
-    '--sandbox',
-    'danger-full-access',
-    '-c',
-    'approval_policy="never"',
+    ...codexPermissionArgs(permissionMode),
     ...(model === undefined ? [] : ['--model', model]),
     ...extraArgs,
     prompt,
   ];
+}
+
+function codexPermissionArgs(
+  permissionMode: PermissionMode | undefined,
+): string[] {
+  if (permissionMode !== 'dangerous') return [];
+  return ['--sandbox', 'danger-full-access', '-c', 'approval_policy="never"'];
 }
 
 export function parseCodexJson(stdout: string): CodexParsedOutput {

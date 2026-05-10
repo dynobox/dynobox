@@ -15,9 +15,12 @@ export function renderPlanFromMatrix(
   return `${formatCount(matrix.scenarios.length, 'scenario')} · ${formatCount(matrix.harnesses.length, 'harness')} · ${formatCount(matrix.iterations.length, 'iteration')}`;
 }
 
-/** Format a job's harness label, including model when configured. */
+/** Format a job's harness label, including model and permission mode when configured. */
 export function formatJobHarness(
-  job: Pick<LocalRunnerJob, 'harness' | 'model'>,
+  job: Pick<LocalRunnerJob, 'harness' | 'model' | 'permissionMode'>,
 ): string {
-  return job.model === undefined ? job.harness : `${job.harness}/${job.model}`;
+  const parts: string[] = [job.harness];
+  if (job.model !== undefined) parts.push(job.model);
+  if (job.permissionMode !== undefined) parts.push(job.permissionMode);
+  return parts.join('/');
 }

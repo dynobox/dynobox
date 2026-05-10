@@ -56,6 +56,21 @@ describe('ClaudeCodeHarness', () => {
     ]);
   });
 
+  it('adds bypass permissions only in dangerous permission mode', () => {
+    expect(
+      buildClaudeCodeArgs('Say hello.', [], undefined, 'dangerous'),
+    ).toEqual([
+      '-p',
+      '--verbose',
+      '--output-format',
+      'stream-json',
+      '--include-hook-events',
+      '--permission-mode',
+      'bypassPermissions',
+      'Say hello.',
+    ]);
+  });
+
   it('extractResult returns transcript, final message, and tool events', () => {
     const harness = new ClaudeCodeHarness();
     const stdout = jsonl(

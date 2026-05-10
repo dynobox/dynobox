@@ -2,6 +2,7 @@ import {defineDyno, tool} from '@dynobox/sdk';
 
 export default defineDyno({
   name: 'local-observability',
+  harnesses: [{id: 'claude-code', permissionMode: 'default'}],
   scenarios: [
     {
       name: 'inspect package scripts',

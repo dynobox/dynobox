@@ -8,9 +8,10 @@ import {
   renderSetupFailureDetails,
 } from '../render/failure.js';
 import type {RenderContext} from '../terminal/index.js';
+import type {DebugLogPaths} from '../util/transcript.js';
 
 export type JobCompletionOptions = {
-  transcriptLogPath?: string;
+  debugLogPaths?: DebugLogPaths;
 };
 
 /**
@@ -40,9 +41,9 @@ export function renderLiveJobCompletion(
       renderDebugDetails(
         result,
         ctx,
-        options.transcriptLogPath === undefined
+        options.debugLogPaths === undefined
           ? {}
-          : {transcriptLogPath: options.transcriptLogPath},
+          : {debugLogPaths: options.debugLogPaths},
       ),
     );
   }

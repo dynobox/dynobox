@@ -12,6 +12,7 @@ import {
   finalMessage,
   type FinalMessageContainsAssertion,
   http,
+  type PermissionMode,
   sequence,
   type SequenceInOrderAssertion,
   skill,
@@ -193,6 +194,24 @@ describe('packages/sdk', () => {
 
     expect(compile(config).scenarios[0]!.harnesses).toEqual([
       {id: 'codex', model: 'gpt-5'},
+    ]);
+  });
+
+  it('accepts harness permission mode config entries', () => {
+    const mode: PermissionMode = 'dangerous';
+    const config = defineDyno({
+      harnesses: [{id: 'claude-code', permissionMode: 'default'}],
+      scenarios: [
+        {
+          name: 'dangerous path',
+          prompt: 'Run pnpm test.',
+          harnesses: [{id: 'codex', model: 'gpt-5', permissionMode: mode}],
+        },
+      ],
+    });
+
+    expect(compile(config).scenarios[0]!.harnesses).toEqual([
+      {id: 'codex', model: 'gpt-5', permissionMode: 'dangerous'},
     ]);
   });
 
