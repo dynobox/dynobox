@@ -7,11 +7,35 @@ import {
 } from 'node:fs';
 import {join} from 'node:path';
 
+import {FakeHarness, type ShellToolEvent} from '@dynobox/runner-local';
 import {compile, resolveConfigModule} from '@dynobox/sdk/compiler';
 import {afterAll, afterEach, beforeAll, describe, expect, it} from 'vitest';
 
 import {loadDyno, normalizeLoadedModule} from './configLoader.js';
 import {executeCli} from './execute.js';
+
+/**
+ * A harness that satisfies the assertions in the `dynobox init` starter
+ * templates (both MJS and YAML). The starter expects: at least one
+ * `shell` tool call referencing `package.json`, no `edit_file` calls,
+ * a `package.json` artifact containing `echo ok` (provided by setup),
+ * and a final message containing `test`.
+ */
+function createInitStarterHarness(): FakeHarness {
+  const event: ShellToolEvent = {
+    kind: 'shell',
+    rawName: 'Bash',
+    input: {command: 'cat package.json'},
+    command: 'cat package.json',
+  };
+  // `FakeHarness.extractResult` derives both `transcript` and
+  // `finalMessage` from `stdout`, so embedding the required `test`
+  // substring there satisfies `finalMessage.contains('test')`.
+  return new FakeHarness(
+    {stdout: 'yes, this project has a test script'},
+    {toolEvents: [event]},
+  );
+}
 
 const ROOT = join(process.cwd(), '.tmp-dynobox-cli-tests-init');
 
@@ -110,5 +134,35 @@ describe('dynobox init', () => {
     const body = readFileSync(join(dir, 'dynobox/example.dyno.mjs'), 'utf8');
     expect(body).not.toBe('old contents');
     expect(body).toContain('defineDyno');
+  });
+
+  it('scaffolds an MJS starter that passes `dynobox run` end-to-end', async () => {
+    const dir = join(ROOT, 'e2e-mjs');
+    chTo(dir);
+
+    const initResult = await executeCli(['init']);
+    expect(initResult.exitCode).toBe(0);
+
+    const runResult = await executeCli(['run'], {
+      harnesses: [createInitStarterHarness()],
+    });
+    expect(runResult.exitCode).toBe(0);
+    expect(runResult.stdout).toContain('inspects package.json');
+    expect(runResult.stdout).toContain('1 passed');
+  });
+
+  it('scaffolds a YAML starter that passes `dynobox run` end-to-end', async () => {
+    const dir = join(ROOT, 'e2e-yaml');
+    chTo(dir);
+
+    const initResult = await executeCli(['init', '--yaml']);
+    expect(initResult.exitCode).toBe(0);
+
+    const runResult = await executeCli(['run'], {
+      harnesses: [createInitStarterHarness()],
+    });
+    expect(runResult.exitCode).toBe(0);
+    expect(runResult.stdout).toContain('inspects package.json');
+    expect(runResult.stdout).toContain('1 passed');
   });
 });

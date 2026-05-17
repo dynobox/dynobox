@@ -7,7 +7,7 @@
  *   - a directory path  → discover under that directory (recursive)
  *   - a file path       → run that single file
  *
- * Discovery globs `**\/*.dyno.{mjs,js,ts,mts,cts,yaml,yml}` and skips a
+ * Discovery globs `**\/*.dyno.{mjs,js,ts,mts,yaml,yml}` and skips a
  * default set of directories that should never contain authored tests.
  * Existing config files passed by absolute or relative path (the legacy
  * `dynobox run examples/.../dynobox.config.ts` form) keep working — file
@@ -20,14 +20,20 @@ import {isAbsolute, resolve} from 'node:path';
 
 import {glob} from 'tinyglobby';
 
-/** Filename patterns that count as authored dyno files. */
+/**
+ * Filename patterns that count as authored dyno files.
+ *
+ * `.cjs` and `.cts` are intentionally excluded: `@dynobox/sdk` is
+ * ESM-only (its `exports` map has no `"require"` condition), so a
+ * CommonJS config that calls `require('@dynobox/sdk')` fails at load
+ * time. Authors who want a CJS-flavored project still get TypeScript
+ * (`.ts`/`.mts`) or vanilla ESM (`.mjs`/`.js`).
+ */
 export const DYNO_FILE_GLOBS = [
   '**/*.dyno.mjs',
-  '**/*.dyno.cjs',
   '**/*.dyno.js',
   '**/*.dyno.ts',
   '**/*.dyno.mts',
-  '**/*.dyno.cts',
   '**/*.dyno.yaml',
   '**/*.dyno.yml',
 ] as const;
@@ -52,10 +58,19 @@ export class DynoTargetNotFoundError extends Error {
   }
 }
 
+/**
+ * Comma-joined list of extensions derived from `DYNO_FILE_GLOBS`, e.g.
+ * `mjs,js,ts,mts,yaml,yml`. Used in user-facing error messages so the
+ * advertised set can't drift away from the glob.
+ */
+export const DYNO_FILE_SUFFIXES = DYNO_FILE_GLOBS.map((g) =>
+  g.replace('**/*.dyno.', ''),
+).join(',');
+
 /** Thrown when a directory contains no `*.dyno.*` files. */
 export class NoDynosFoundError extends Error {
   constructor(public readonly directory: string) {
-    super(`No *.dyno.{mjs,js,ts,yaml,...} files found under ${directory}`);
+    super(`No *.dyno.{${DYNO_FILE_SUFFIXES}} files found under ${directory}`);
     this.name = 'NoDynosFoundError';
   }
 }

@@ -6,9 +6,9 @@ Use these docs when evaluating whether Dynobox can cover a coworker's skill or a
 
 ## Start Here
 
-- [Getting Started](./getting-started.md): install dependencies, run the examples, and create a first config.
-- [Config Authoring](./config-authoring.md): the current `@dynobox/sdk` API and supported assertions.
-- [CLI Reference](./cli.md): `dynobox run`, harness overrides, output modes, and exit behavior.
+- [Getting Started](./getting-started.md): install the CLI, scaffold a starter dyno with `dynobox init`, and run it.
+- [Config Authoring](./config-authoring.md): the `@dynobox/sdk` API and supported assertions; covers both TypeScript/JavaScript and YAML authoring.
+- [CLI Reference](./cli.md): `dynobox run`, `dynobox init`, harness overrides, output modes, and exit behavior.
 
 ## Current Scope
 
@@ -16,6 +16,14 @@ Dynobox currently supports local execution through:
 
 - Claude Code via the `claude` executable.
 - OpenAI Codex via the `codex` executable.
+
+Authoring formats:
+
+- TypeScript / JavaScript: `*.dyno.{mjs,js,ts,mts}` using `defineDyno(...)` from `@dynobox/sdk`.
+- YAML: `*.dyno.{yaml,yml}` with `kind`-discriminated assertion objects.
+- `.cjs` / `.cts` are not supported (the SDK ships ESM-only).
+
+Discovery: `dynobox run [path]` accepts no argument (current directory), a directory path (recursive glob), or a single file path.
 
 It can assert:
 

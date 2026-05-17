@@ -51,9 +51,9 @@ dynobox run         # discovers and runs every *.dyno.* file under the cwd
 - a file path — run that single file (works for any `.mjs`/`.js`/`.ts`/`.yaml`/`.yml`,
   not just `*.dyno.*`).
 
-Discovery globs `**/*.dyno.{mjs,cjs,js,ts,mts,cts,yaml,yml}` and skips
-`node_modules`, `dist`, `build`, `coverage`, `.git`, `.dynobox`, `.next`, and
-`.cache` by default.
+Discovery globs `**/*.dyno.{mjs,js,ts,mts,yaml,yml}` and skips `node_modules`,
+`dist`, `build`, `coverage`, `.git`, `.dynobox`, `.next`, and `.cache` by
+default. `.cjs`/`.cts` configs aren't supported (the SDK ships ESM-only).
 
 ## Pick A Harness
 

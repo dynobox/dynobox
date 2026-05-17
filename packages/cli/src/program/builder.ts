@@ -8,6 +8,7 @@
 
 import {Command} from 'commander';
 
+import {DYNO_FILE_SUFFIXES} from './discoverDynos.js';
 import type {ExecuteCliOptions, OutputWriter} from './execute.js';
 import {initCommandAction, type InitCommandFlags} from './initCommand.js';
 import {collectOption} from './options.js';
@@ -45,7 +46,7 @@ export function buildProgram(input: BuildProgramInput): Command {
       'file or directory to run; defaults to the current directory',
     )
     .description(
-      'run discovered *.dyno.{mjs,js,ts,yaml} files (or an explicit file path)',
+      `run discovered *.dyno.{${DYNO_FILE_SUFFIXES}} files (or an explicit file path)`,
     )
     .option(
       '--harness <id>',

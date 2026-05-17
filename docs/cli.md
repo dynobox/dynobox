@@ -20,9 +20,10 @@ Discover and run dyno files.
 - _file_ — run that one file. Any extension is accepted for an explicit file
   path, so existing `dynobox.config.ts` files keep working during migration.
 
-Discovery globs `**/*.dyno.{mjs,cjs,js,ts,mts,cts,yaml,yml}` and skips
-`node_modules`, `dist`, `build`, `coverage`, `.git`, `.dynobox`, `.next`, and
-`.cache` by default.
+Discovery globs `**/*.dyno.{mjs,js,ts,mts,yaml,yml}` and skips `node_modules`,
+`dist`, `build`, `coverage`, `.git`, `.dynobox`, `.next`, and `.cache` by
+default. `.cjs`/`.cts` configs aren't supported because `@dynobox/sdk` ships
+as ESM-only.
 
 ```bash
 dynobox run                          # discover under .

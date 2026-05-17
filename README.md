@@ -26,7 +26,7 @@ dynobox init        # writes dynobox/example.dyno.mjs
 dynobox run         # discovers and runs every *.dyno.* file under the cwd
 ```
 
-`dynobox run` with no argument discovers `*.dyno.{mjs,cjs,js,ts,mts,cts,yaml,yml}` files
+`dynobox run` with no argument discovers `*.dyno.{mjs,js,ts,mts,yaml,yml}` files
 recursively under the current directory. Pass a directory or a single file to scope it:
 
 ```bash
@@ -122,7 +122,7 @@ reference.
 
 ## Current Capabilities
 
-- Discover and run `*.dyno.{mjs,cjs,js,ts,mts,cts,yaml,yml}` files with
+- Discover and run `*.dyno.{mjs,js,ts,mts,yaml,yml}` files with
   `dynobox run [path]` — no arg = cwd, directory = recursive, file = single
   run. Legacy explicit-file paths (e.g. `dynobox.config.ts`) keep working.
 - Scaffold a starter file with `dynobox init` (`--yaml` for YAML, `--harness`

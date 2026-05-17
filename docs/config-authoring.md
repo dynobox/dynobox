@@ -1,12 +1,17 @@
 # Config Authoring
 
-Dynobox tests live in `*.dyno.{mjs,cjs,js,ts,mts,cts,yaml,yml}` files. TypeScript
-and JavaScript files default-export `defineDyno(...)` from `@dynobox/sdk`. YAML
+Dynobox tests live in `*.dyno.{mjs,js,ts,mts,yaml,yml}` files. TypeScript and
+JavaScript files default-export `defineDyno(...)` from `@dynobox/sdk`. YAML
 files use the same shape as a plain document — assertions are declared with a
 `kind` discriminator (see [YAML Configs](#yaml-configs) below).
 
 `dynobox run` discovers every dyno file under the target directory; each file
 is compiled and executed independently.
+
+> `.cjs` and `.cts` extensions are not supported: `@dynobox/sdk` is ESM-only
+> (its `exports` map has no `"require"` condition), so a CommonJS config
+> calling `require('@dynobox/sdk')` fails at load time. Use `.mjs`/`.mts` or
+> `.ts`/`.js` with `"type": "module"` instead.
 
 ```ts
 import {defineDyno, tool} from '@dynobox/sdk';
