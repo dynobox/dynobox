@@ -200,9 +200,15 @@ endpoints: {
 assertions: [http.called('npmPrettier', {status: 200})];
 ```
 
-These helpers are useful for type-checking and future configs, but the local runner does not yet capture HTTP traffic or evaluate HTTP assertions.
+The local runner captures HTTP traffic from harness child processes through a local proxy and evaluates matching `http.called` / `http.notCalled` assertions.
 
 Endpoint keys become part of stable IR ids, so they may only contain letters, numbers, underscores, and hyphens.
+
+### How HTTP capture works
+
+When a scenario includes HTTP assertions, Dynobox starts a per-job local proxy and sets `HTTP_PROXY` / `HTTPS_PROXY` on the harness child process. It also sets `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, and `CURL_CA_BUNDLE` to a Dynobox-generated CA at `~/.dynobox/ca.pem` so common Node, Python, and curl-based tools can make HTTPS requests through the proxy without changing the system keychain.
+
+HTTP capture covers local child-process traffic that honors those proxy and CA environment variables. Tools with their own trust stores, such as some Go and Java binaries, may bypass HTTPS capture. Harness-native web tools such as built-in web search or web fetch can also bypass the local proxy if their network request happens outside the harness child process.
 
 ## Path Helpers
 
@@ -281,19 +287,19 @@ configs, so runtime behavior is identical.
 
 The following table maps each TypeScript helper to its YAML form.
 
-| TypeScript helper                                       | YAML object                                                              |
-| ------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `tool.called('shell')`                                  | `{kind: tool.called, toolKind: shell}`                                   |
-| `tool.called('shell', {includes: 'x'})`                 | `{kind: tool.called, toolKind: shell, matcher: {includes: x}}`           |
-| `tool.notCalled('edit_file')`                           | `{kind: tool.notCalled, toolKind: edit_file}`                            |
-| `artifact.exists('README.md')`                          | `{kind: artifact.exists, path: README.md}`                               |
-| `artifact.contains('pkg.json', 'foo')`                  | `{kind: artifact.contains, path: pkg.json, text: foo}`                   |
-| `transcript.contains('done')`                           | `{kind: transcript.contains, text: done}`                                |
-| `finalMessage.contains('ok')`                           | `{kind: finalMessage.contains, text: ok}`                                |
-| `skill.invoked('commit')`                               | `{kind: skill.invoked, skill: commit}`                                   |
-| `sequence.inOrder([tool.called('shell', {...}), ...])`  | `{kind: sequence.inOrder, steps: [{kind: tool.called, ...}, ...]}`       |
-| `http.called('npmPrettier', {status: 200})` _(pending)_ | `{kind: http.called, endpoint: npmPrettier, status: 200}` _(pending)_    |
-| `http.notCalled('leftPad')` _(pending)_                 | `{kind: http.notCalled, endpoint: leftPad}` _(pending)_                  |
+| TypeScript helper                                      | YAML object                                                        |
+| ------------------------------------------------------ | ------------------------------------------------------------------ |
+| `tool.called('shell')`                                 | `{kind: tool.called, toolKind: shell}`                             |
+| `tool.called('shell', {includes: 'x'})`                | `{kind: tool.called, toolKind: shell, matcher: {includes: x}}`     |
+| `tool.notCalled('edit_file')`                          | `{kind: tool.notCalled, toolKind: edit_file}`                      |
+| `artifact.exists('README.md')`                         | `{kind: artifact.exists, path: README.md}`                         |
+| `artifact.contains('pkg.json', 'foo')`                 | `{kind: artifact.contains, path: pkg.json, text: foo}`             |
+| `transcript.contains('done')`                          | `{kind: transcript.contains, text: done}`                          |
+| `finalMessage.contains('ok')`                          | `{kind: finalMessage.contains, text: ok}`                          |
+| `skill.invoked('commit')`                              | `{kind: skill.invoked, skill: commit}`                             |
+| `sequence.inOrder([tool.called('shell', {...}), ...])` | `{kind: sequence.inOrder, steps: [{kind: tool.called, ...}, ...]}` |
+| `http.called('npmPrettier', {status: 200})`            | `{kind: http.called, endpoint: npmPrettier, status: 200}`          |
+| `http.notCalled('leftPad')`                            | `{kind: http.notCalled, endpoint: leftPad}`                        |
 
 Matcher shapes accept exactly one of `equals`, `includes`, `startsWith`,
 `matches` and are only valid on `shell` tool assertions.

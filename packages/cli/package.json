@@ -40,6 +40,7 @@
     "@dynobox/sdk": "workspace:*",
     "commander": "^14.0.3",
     "execa": "^9.6.1",
+    "mockttp": "^4.4.1",
     "tinyglobby": "^0.2.16",
     "tsx": "^4.21.0",
     "yaml": "^2.8.4"

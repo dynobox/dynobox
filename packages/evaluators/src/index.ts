@@ -11,6 +11,16 @@ import {
   validateRegexMatcher,
 } from './shellMatcher.js';
 
+/** Canonical HTTP event shape consumed by HTTP assertion evaluators. */
+export type HttpEvent = {
+  endpointId: string | null;
+  method: string;
+  url: string;
+  host: string;
+  timestamp: string;
+  status?: number;
+};
+
 /** Canonical tool event shape consumed by assertion evaluators. */
 export type ToolEvent = {
   kind: ToolKind;
@@ -26,6 +36,7 @@ export type ToolEvent = {
 export type EvaluationInput = {
   assertions: readonly IrAssertion[];
   toolEvents: readonly ToolEvent[];
+  httpEvents?: readonly HttpEvent[] | undefined;
   workDir?: string | undefined;
   transcript?: string | undefined;
   finalMessage?: string | undefined;
@@ -77,6 +88,14 @@ function evaluateAssertion(
 
   if (assertion.kind === 'skill.invoked') {
     return evaluateSkillInvoked(assertion, input.toolEvents);
+  }
+
+  if (assertion.kind === 'http.called') {
+    return evaluateHttpCalled(assertion, input.httpEvents ?? []);
+  }
+
+  if (assertion.kind === 'http.notCalled') {
+    return evaluateHttpNotCalled(assertion, input.httpEvents ?? []);
   }
 
   if (assertion.kind === 'artifact.exists') {
@@ -393,6 +412,79 @@ function stringsFromUnknown(value: unknown): string[] {
 
   visit(value);
   return strings;
+}
+
+function evaluateHttpCalled(
+  assertion: Extract<IrAssertion, {kind: 'http.called'}>,
+  httpEvents: readonly HttpEvent[],
+): AssertionResult {
+  const matches = httpEvents.filter(
+    (event) => event.endpointId === assertion.endpointId,
+  );
+
+  if (matches.length === 0) {
+    return failed(
+      assertion,
+      `Expected HTTP endpoint "${assertion.endpointId}" to be called, but observed none.`,
+    );
+  }
+
+  if (assertion.status === undefined) {
+    return {
+      assertionId: assertion.id,
+      kind: assertion.kind,
+      passed: true,
+      message: `Observed HTTP endpoint "${assertion.endpointId}".`,
+      evidence: matches[0],
+    };
+  }
+
+  const statusMatch = matches.find(
+    (event) => event.status === assertion.status,
+  );
+  if (statusMatch !== undefined) {
+    return {
+      assertionId: assertion.id,
+      kind: assertion.kind,
+      passed: true,
+      message: `Observed HTTP endpoint "${assertion.endpointId}" with status ${assertion.status}.`,
+      evidence: statusMatch,
+    };
+  }
+
+  const observedStatuses = [
+    ...new Set(matches.map((event) => event.status ?? 'unknown')),
+  ].join(', ');
+  return failed(
+    assertion,
+    `Expected HTTP endpoint "${assertion.endpointId}" to return status ${assertion.status}, but observed ${observedStatuses}.`,
+  );
+}
+
+function evaluateHttpNotCalled(
+  assertion: Extract<IrAssertion, {kind: 'http.notCalled'}>,
+  httpEvents: readonly HttpEvent[],
+): AssertionResult {
+  const match = httpEvents.find(
+    (event) => event.endpointId === assertion.endpointId,
+  );
+
+  if (match !== undefined) {
+    return {
+      assertionId: assertion.id,
+      kind: assertion.kind,
+      passed: false,
+      message: `Expected HTTP endpoint "${assertion.endpointId}" not to be called, but observed a matching request.`,
+      evidence: match,
+    };
+  }
+
+  return {
+    assertionId: assertion.id,
+    kind: assertion.kind,
+    passed: true,
+    message: `Observed no calls to HTTP endpoint "${assertion.endpointId}".`,
+  };
 }
 
 function evaluateArtifactExists(

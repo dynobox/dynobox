@@ -33,8 +33,7 @@ It can assert:
 - Ordered tool-call sequences.
 - Files created or updated inside the scenario work directory.
 - Harness transcript and final-message text.
-
-HTTP endpoint declarations and HTTP assertions are available in the SDK, but HTTP traffic capture/evaluation is not wired into the local runner yet.
+- HTTP requests made by local child-process tools that honor proxy environment variables.
 
 ## Good Fits Today
 
@@ -52,7 +51,7 @@ Dynobox is useful now for checking whether a skill or agent workflow:
 
 The current local runner is not yet a full production eval platform. These areas are still in progress:
 
-- HTTP request capture and HTTP assertion evaluation.
+- HTTP capture for harness-native web tools and binaries that ignore proxy/CA environment variables.
 - Hosted or remote runner execution.
 - Rich multi-iteration controls from authored configs.
 - First-class docs site publishing from this repo.

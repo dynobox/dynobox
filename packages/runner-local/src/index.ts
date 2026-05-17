@@ -2,7 +2,11 @@ import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import {type AssertionResult, evaluateAssertions} from '@dynobox/evaluators';
+import {
+  type AssertionResult,
+  evaluateAssertions,
+  type HttpEvent,
+} from '@dynobox/evaluators';
 import type {HarnessId, PermissionMode} from '@dynobox/sdk';
 import type {IrScenario} from '@dynobox/sdk/ir';
 
@@ -12,6 +16,8 @@ import type {
   HarnessRunOutput,
   ToolEvent,
 } from './harnesses/index.js';
+import type {HttpCapture} from './http/proxy.js';
+import {startHttpCapture} from './http/proxy.js';
 import type {SetupResult} from './setup.js';
 import {runScenarioSetup} from './setup.js';
 
@@ -34,6 +40,9 @@ export {
   FakeHarness,
   normalizeToolKind,
 } from './harnesses/index.js';
+export type {HttpEvent};
+export {ensureDynoboxCA} from './http/ca.js';
+export {buildHttpRoutes, matchHttpEndpointId} from './http/events.js';
 export type {RunSetupOptions, SetupCommandLog, SetupResult} from './setup.js';
 export {runScenarioSetup, runSetup} from './setup.js';
 
@@ -134,6 +143,7 @@ export type LocalRunnerResult = {
   setupResult: SetupResult;
   harnessOutput?: HarnessRunOutput;
   harnessResult?: HarnessResult;
+  httpEvents: readonly HttpEvent[];
   artifacts: LocalArtifact[];
   assertionResults: AssertionResult[];
   diagnostics: string[];
@@ -207,14 +217,36 @@ export async function runJob(
     });
   }
 
+  let httpCapture: HttpCapture | undefined;
+  try {
+    httpCapture = await startHttpCapture(job.scenario);
+  } catch (error) {
+    emitProgress(options, {
+      type: 'harness.completed',
+      job,
+      harnessId: harness.id,
+      success: false,
+      toolCount: 0,
+    });
+    return buildResult(job, {
+      status: 'harness_failed',
+      workDir,
+      setupResult,
+      artifacts,
+      diagnostics: [`HTTP capture failed to start: ${errorMessage(error)}`],
+      timing: buildTiming({setupMs}),
+    });
+  }
+
   let harnessOutput: HarnessRunOutput;
   const harnessStartedAt = Date.now();
   let liveToolCount = 0;
   try {
+    const harnessEnv = {...(options.env ?? {}), ...(httpCapture?.env ?? {})};
     const harnessInput = {
       prompt: job.scenario.prompt,
       workDir,
-      env: options.env ?? {},
+      env: harnessEnv,
       ...(job.model === undefined ? {} : {model: job.model}),
       ...(job.permissionMode === undefined
         ? {}
@@ -236,6 +268,7 @@ export async function runJob(
         : {...harnessInput, timeoutMs: options.timeoutMs},
     );
   } catch (error) {
+    await stopHttpCapture(httpCapture);
     emitProgress(options, {
       type: 'harness.completed',
       job,
@@ -251,12 +284,15 @@ export async function runJob(
       diagnostics: [
         `Harness "${harness.id}" failed to run: ${errorMessage(error)}`,
       ],
+      httpEvents: httpCapture?.events ?? [],
       timing: buildTiming({
         setupMs,
         harnessMs: Date.now() - harnessStartedAt,
       }),
     });
   }
+  await stopHttpCapture(httpCapture);
+  const httpEvents = httpCapture?.events ?? [];
 
   let harnessResult: HarnessResult;
   try {
@@ -277,6 +313,7 @@ export async function runJob(
       setupResult,
       artifacts,
       harnessOutput,
+      httpEvents,
       diagnostics: [
         `Harness "${harness.id}" failed to extract result: ${errorMessage(error)}`,
       ],
@@ -304,6 +341,7 @@ export async function runJob(
       artifacts,
       harnessOutput,
       harnessResult,
+      httpEvents,
       diagnostics: [harnessExitDiagnostic(harnessResult, harnessOutput)],
       timing: buildTiming({
         setupMs,
@@ -330,6 +368,7 @@ export async function runJob(
   const assertionResults = evaluateAssertions({
     assertions: job.scenario.assertions,
     toolEvents: harnessResult.toolEvents,
+    httpEvents,
     workDir,
     transcript: harnessResult.transcript,
     finalMessage: harnessResult.finalMessage,
@@ -349,6 +388,7 @@ export async function runJob(
     artifacts,
     harnessOutput,
     harnessResult,
+    httpEvents,
     assertionResults,
     timing: buildTiming({
       setupMs,
@@ -369,6 +409,13 @@ function emitProgress(
   options.onProgress?.(event);
 }
 
+async function stopHttpCapture(
+  httpCapture: HttpCapture | undefined,
+): Promise<void> {
+  if (httpCapture === undefined) return;
+  await httpCapture.stop();
+}
+
 function buildResult(
   job: LocalRunnerJob,
   result: Omit<
@@ -378,12 +425,14 @@ function buildResult(
     | 'harness'
     | 'iteration'
     | 'passed'
+    | 'httpEvents'
     | 'assertionResults'
     | 'diagnostics'
     | 'timing'
   > & {
     assertionResults?: AssertionResult[];
     diagnostics?: string[];
+    httpEvents?: readonly HttpEvent[];
     timing: LocalRunnerTiming;
   },
 ): LocalRunnerResult {
@@ -408,6 +457,7 @@ function buildResult(
     ...(result.harnessResult === undefined
       ? {}
       : {harnessResult: result.harnessResult}),
+    httpEvents: result.httpEvents ?? [],
     artifacts: result.artifacts,
     assertionResults,
     diagnostics,

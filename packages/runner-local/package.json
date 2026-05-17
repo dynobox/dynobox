@@ -21,7 +21,8 @@
   "dependencies": {
     "@dynobox/evaluators": "workspace:*",
     "@dynobox/sdk": "workspace:*",
-    "execa": "^9.6.1"
+    "execa": "^9.6.1",
+    "mockttp": "^4.4.1"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",

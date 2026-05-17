@@ -597,22 +597,140 @@ describe('evaluateAssertions', () => {
     });
   });
 
-  it('returns a clear unsupported result for HTTP assertions', () => {
-    const result = evaluateOne(
+  it('evaluates HTTP called and notCalled assertions', () => {
+    const called = evaluateOne(
       {
         id: 'assertion.test.0',
         kind: 'http.called',
         endpointId: 'endpoint.test.getUser',
       },
       [],
+      {
+        httpEvents: [
+          {
+            endpointId: 'endpoint.test.getUser',
+            method: 'GET',
+            url: 'https://api.example.test/user',
+            host: 'api.example.test',
+            status: 200,
+            timestamp: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+    );
+    const notCalled = evaluateOne(
+      {
+        id: 'assertion.test.1',
+        kind: 'http.notCalled',
+        endpointId: 'endpoint.test.deleteUser',
+      },
+      [],
+      {httpEvents: []},
     );
 
-    expect(result).toEqual({
+    expect(called).toEqual({
       assertionId: 'assertion.test.0',
       kind: 'http.called',
+      passed: true,
+      message: 'Observed HTTP endpoint "endpoint.test.getUser".',
+      evidence: {
+        endpointId: 'endpoint.test.getUser',
+        method: 'GET',
+        url: 'https://api.example.test/user',
+        host: 'api.example.test',
+        status: 200,
+        timestamp: '2026-01-01T00:00:00.000Z',
+      },
+    });
+    expect(notCalled).toMatchObject({
+      assertionId: 'assertion.test.1',
+      kind: 'http.notCalled',
+      passed: true,
+      message: 'Observed no calls to HTTP endpoint "endpoint.test.deleteUser".',
+    });
+  });
+
+  it('evaluates HTTP status matchers', () => {
+    const pass = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'http.called',
+        endpointId: 'endpoint.test.getUser',
+        status: 201,
+      },
+      [],
+      {
+        httpEvents: [
+          {
+            endpointId: 'endpoint.test.getUser',
+            method: 'POST',
+            url: 'https://api.example.test/user',
+            host: 'api.example.test',
+            status: 201,
+            timestamp: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+    );
+    const fail = evaluateOne(
+      {
+        id: 'assertion.test.1',
+        kind: 'http.called',
+        endpointId: 'endpoint.test.getUser',
+        status: 200,
+      },
+      [],
+      {
+        httpEvents: [
+          {
+            endpointId: 'endpoint.test.getUser',
+            method: 'POST',
+            url: 'https://api.example.test/user',
+            host: 'api.example.test',
+            status: 201,
+            timestamp: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+    );
+
+    expect(pass).toMatchObject({
+      passed: true,
+      message:
+        'Observed HTTP endpoint "endpoint.test.getUser" with status 201.',
+    });
+    expect(fail).toMatchObject({
       passed: false,
       message:
-        'Assertion kind "http.called" is not supported by this evaluator.',
+        'Expected HTTP endpoint "endpoint.test.getUser" to return status 200, but observed 201.',
+    });
+  });
+
+  it('fails http.notCalled when a matching HTTP event exists', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'http.notCalled',
+        endpointId: 'endpoint.test.getUser',
+      },
+      [],
+      {
+        httpEvents: [
+          {
+            endpointId: 'endpoint.test.getUser',
+            method: 'GET',
+            url: 'https://api.example.test/user',
+            host: 'api.example.test',
+            timestamp: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+    );
+
+    expect(result).toMatchObject({
+      passed: false,
+      message:
+        'Expected HTTP endpoint "endpoint.test.getUser" not to be called, but observed a matching request.',
     });
   });
 

@@ -1,4 +1,5 @@
 import {existsSync, mkdtempSync, rmSync} from 'node:fs';
+import {createServer, request as httpRequest, type Server} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join, relative} from 'node:path';
 
@@ -130,6 +131,37 @@ class ToolStreamingHarness implements Harness {
           command: 'pnpm test',
         } as ShellToolEvent,
       ],
+    };
+  }
+}
+
+class ProxyRequestHarness implements Harness {
+  readonly id = 'claude-code' as const;
+
+  constructor(private readonly targetUrl: string) {}
+
+  async run(input: HarnessInput): Promise<HarnessRunOutput> {
+    const proxyUrl = input.env.HTTP_PROXY;
+    if (proxyUrl === undefined) {
+      throw new Error('HTTP_PROXY was not provided');
+    }
+
+    await requestThroughProxy(proxyUrl, this.targetUrl);
+    return {
+      exitCode: 0,
+      stdout: 'fetched endpoint',
+      stderr: '',
+      durationMs: 100,
+    };
+  }
+
+  extractResult(raw: HarnessRunOutput): HarnessResult {
+    return {
+      exitCode: raw.exitCode,
+      durationMs: raw.durationMs,
+      transcript: raw.stdout,
+      finalMessage: raw.stdout,
+      toolEvents: [],
     };
   }
 }
@@ -478,7 +510,7 @@ describe('runJob', () => {
     });
   });
 
-  it('represents unsupported HTTP assertions as assertion results', async () => {
+  it('represents unmet HTTP assertions as assertion results', async () => {
     const scratchRoot = createScratchRoot();
 
     const result = await runJob(
@@ -508,8 +540,66 @@ describe('runJob', () => {
       kind: 'http.called',
       passed: false,
       message:
-        'Assertion kind "http.called" is not supported by this evaluator.',
+        'Expected HTTP endpoint "endpoint.uses-shell.getUser" to be called, but observed none.',
     });
+  });
+
+  it('captures HTTP requests and evaluates HTTP assertions', async () => {
+    const scratchRoot = createScratchRoot();
+    const upstream = await startHttpServer(204);
+    const targetUrl = `http://127.0.0.1:${upstream.port}/user`;
+
+    try {
+      const result = await runJob(
+        createJob({
+          endpoints: [
+            {
+              id: 'endpoint.uses-http.getUser',
+              key: 'getUser',
+              method: 'GET',
+              url: targetUrl,
+            },
+            {
+              id: 'endpoint.uses-http.deleteUser',
+              key: 'deleteUser',
+              method: 'DELETE',
+              url: targetUrl,
+            },
+          ],
+          assertions: [
+            {
+              id: 'assertion.uses-http.0',
+              kind: 'http.called',
+              endpointId: 'endpoint.uses-http.getUser',
+              status: 204,
+            },
+            {
+              id: 'assertion.uses-http.1',
+              kind: 'http.notCalled',
+              endpointId: 'endpoint.uses-http.deleteUser',
+            },
+          ],
+        }),
+        {
+          scratchRoot,
+          harnesses: [new ProxyRequestHarness(targetUrl)],
+        },
+      );
+
+      expect(result.status).toBe('passed');
+      expect(result.httpEvents).toHaveLength(1);
+      expect(result.httpEvents[0]).toMatchObject({
+        endpointId: 'endpoint.uses-http.getUser',
+        method: 'GET',
+        url: targetUrl,
+        status: 204,
+      });
+      expect(
+        result.assertionResults.map((assertion) => assertion.passed),
+      ).toEqual([true, true]);
+    } finally {
+      await upstream.close();
+    }
   });
 
   it('short-circuits setup failures before invoking the harness', async () => {
@@ -614,3 +704,63 @@ describe('runJob', () => {
     ]);
   });
 });
+
+async function startHttpServer(
+  statusCode: number,
+): Promise<{port: number; close(): Promise<void>}> {
+  const server = createServer((_req, res) => {
+    res.statusCode = statusCode;
+    res.end();
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  if (address === null || typeof address === 'string') {
+    throw new Error('Expected HTTP server to listen on a TCP port');
+  }
+
+  return {
+    port: address.port,
+    close: () => closeServer(server),
+  };
+}
+
+function requestThroughProxy(
+  proxyUrl: string,
+  targetUrl: string,
+): Promise<void> {
+  const proxy = new URL(proxyUrl);
+
+  return new Promise((resolve, reject) => {
+    const req = httpRequest(
+      {
+        host: proxy.hostname,
+        port: Number(proxy.port),
+        method: 'GET',
+        path: targetUrl,
+      },
+      (res) => {
+        res.resume();
+        res.on('end', resolve);
+      },
+    );
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+function closeServer(server: Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error !== undefined) reject(error);
+      else resolve();
+    });
+  });
+}
