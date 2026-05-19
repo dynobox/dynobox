@@ -63,6 +63,41 @@ describe('discoverDynos', () => {
     expect(result).toEqual([kept]);
   });
 
+  it('searches an explicitly provided hidden directory root', async () => {
+    const dir = join(ROOT, '.agents/skills');
+    mkdirSync(dir, {recursive: true});
+    const file = touch('.agents/skills/demo/demo.dyno.mjs');
+
+    const result = await discoverDynos(dir);
+    expect(result).toEqual([file]);
+  });
+
+  it('does not enter hidden directories discovered below the search root', async () => {
+    const dir = join(ROOT, 'hidden-descendants');
+    mkdirSync(dir, {recursive: true});
+    const kept = touch('hidden-descendants/skill/skill.dyno.mjs');
+    touch('hidden-descendants/.agents/skills/agent.dyno.mjs');
+    touch('hidden-descendants/skill/.cache/cache.dyno.mjs');
+    touch('hidden-descendants/skill/nested/.hidden/hidden.dyno.mjs');
+    touch('hidden-descendants/skill/nested/.secret.dyno.mjs');
+
+    const result = await discoverDynos(dir);
+    expect(result).toEqual([kept]);
+  });
+
+  it('skips hidden entries below an explicitly provided hidden root', async () => {
+    const dir = join(ROOT, '.agents/hidden-descendants');
+    mkdirSync(dir, {recursive: true});
+    const kept = touch('.agents/hidden-descendants/skill/skill.dyno.mjs');
+    touch('.agents/hidden-descendants/.cache/cache.dyno.mjs');
+    touch('.agents/hidden-descendants/.secret.dyno.mjs');
+    touch('.agents/hidden-descendants/skill/.hidden/hidden.dyno.mjs');
+    touch('.agents/hidden-descendants/skill/.secret.dyno.mjs');
+
+    const result = await discoverDynos(dir);
+    expect(result).toEqual([kept]);
+  });
+
   it('throws NoDynosFoundError for an empty directory', async () => {
     const dir = join(ROOT, 'empty');
     mkdirSync(dir, {recursive: true});

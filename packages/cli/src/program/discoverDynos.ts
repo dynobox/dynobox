@@ -7,8 +7,10 @@
  *   - a directory path  → discover under that directory (recursive)
  *   - a file path       → run that single file
  *
- * Discovery globs `**\/*.dyno.{mjs,js,ts,mts,yaml,yml}` and skips a
- * default set of directories that should never contain authored tests.
+ * Discovery globs `**\/*.dyno.{mjs,js,ts,mts,yaml,yml}` and skips hidden
+ * entries below the search root plus a default set of directories that should
+ * never contain authored tests. Passing a hidden directory as the root still
+ * searches inside that explicit root.
  * Existing config files passed by absolute or relative path (the legacy
  * `dynobox run examples/.../dynobox.config.ts` form) keep working — file
  * inputs are returned verbatim regardless of the `.dyno.*` suffix so that
@@ -38,8 +40,10 @@ export const DYNO_FILE_GLOBS = [
   '**/*.dyno.yml',
 ] as const;
 
-/** Directories never traversed during discovery. */
+/** Hidden entries and directories never traversed during discovery. */
 export const DYNO_DEFAULT_IGNORE = [
+  '**/.*',
+  '**/.*/**',
   '**/node_modules/**',
   '**/dist/**',
   '**/build/**',
@@ -112,6 +116,7 @@ export async function discoverDynos(
   const matches = await glob(DYNO_FILE_GLOBS as unknown as string[], {
     cwd: absoluteTarget,
     absolute: true,
+    dot: true,
     ignore: DYNO_DEFAULT_IGNORE as unknown as string[],
     onlyFiles: true,
     followSymbolicLinks: false,

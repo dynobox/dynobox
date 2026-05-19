@@ -51,9 +51,11 @@ dynobox run         # discovers and runs every *.dyno.* file under the cwd
 - a file path — run that single file (works for any `.mjs`/`.js`/`.ts`/`.yaml`/`.yml`,
   not just `*.dyno.*`).
 
-Discovery globs `**/*.dyno.{mjs,js,ts,mts,yaml,yml}` and skips `node_modules`,
-`dist`, `build`, `coverage`, `.git`, `.dynobox`, `.next`, and `.cache` by
-default. `.cjs`/`.cts` configs aren't supported (the SDK ships ESM-only).
+Discovery globs `**/*.dyno.{mjs,js,ts,mts,yaml,yml}` and skips hidden entries,
+`node_modules`, `dist`, `build`, `coverage`, `.git`, `.dynobox`, `.next`, and
+`.cache` by default. Passing a hidden directory explicitly, such as
+`.agents/skills`, searches inside that root but still skips hidden entries below
+it. `.cjs`/`.cts` configs aren't supported (the SDK ships ESM-only).
 
 ## Pick A Harness
 
