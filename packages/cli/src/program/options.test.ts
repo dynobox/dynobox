@@ -61,4 +61,16 @@ describe('--harness override validation', () => {
     expect(result.exitCode).toBe(configErrorExitCode);
     expect(result.stderr).toContain('Invalid permission mode "unsafe"');
   });
+
+  it('rejects an unknown reporter with the config-error exit code', async () => {
+    const result = await executeCli([
+      'run',
+      fixtures.validConfigPath,
+      '--reporter',
+      'xml',
+    ]);
+
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(result.stderr).toContain('Invalid reporter "xml"');
+  });
 });

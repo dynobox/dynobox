@@ -20,6 +20,7 @@ export {
 export {renderRunHeader} from './header.js';
 export {type HeadlineStatus, renderHeadline} from './headline.js';
 export {renderJobDetails} from './jobDetails.js';
+export {renderJsonRunOutput} from './jsonReporter.js';
 export {
   type PhaseRowInput,
   type PhaseStatus,

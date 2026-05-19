@@ -163,6 +163,76 @@ describe('dynobox run — output modes', () => {
     expect(result.stdout).toContain('log       tool_events');
     expect(result.stdout).toContain('dynobox-tool-events.json');
   });
+
+  it('prints newline-delimited JSON with one job record and a summary', async () => {
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--reporter', 'json'],
+      {
+        harnesses: [createPassingHarness()],
+      },
+    );
+    const records = result.stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(records).toHaveLength(2);
+    expect(records[0]).toMatchObject({
+      schema: 'dynobox.report.v1',
+      type: 'job',
+      scenario: {name: 'uses shell'},
+      harness: {id: 'claude-code'},
+      iteration: 1,
+      status: 'passed',
+      passed: true,
+      observations: {toolEventCount: 1, httpEventCount: 0},
+    });
+    expect(records[0]).toHaveProperty('assertions');
+    expect(records[1]).toMatchObject({
+      schema: 'dynobox.report.v1',
+      type: 'summary',
+      status: 'passed',
+      totals: {jobs: 1, passed: 1, failed: 0, configErrors: 0},
+      plan: {scenarios: 1, harnesses: 1, iterations: 1},
+      failedJobs: [],
+    });
+    expect(result.stdout).not.toContain('dynobox  1 scenario');
+    expect(result.stdout).not.toContain('✓');
+  });
+
+  it('reports failed jobs as JSON while preserving run failure exit semantics', async () => {
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--reporter', 'json'],
+      {
+        harnesses: [
+          new FakeHarness(undefined, {toolEvents: [MISMATCHED_SHELL_EVENT]}),
+        ],
+      },
+    );
+    const records = result.stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(result.exitCode).toBe(runFailureExitCode);
+    expect(records[0]).toMatchObject({
+      type: 'job',
+      status: 'assertion_failed',
+      passed: false,
+    });
+    expect(records[1]).toMatchObject({
+      type: 'summary',
+      status: 'failed',
+      totals: {jobs: 1, passed: 0, failed: 1, configErrors: 0},
+    });
+    const failedJobs = records[1]?.failedJobs;
+    expect(Array.isArray(failedJobs)).toBe(true);
+    expect(String(failedJobs?.[0])).toContain(
+      'scenario.uses-shell.claude-code.iteration.0',
+    );
+  });
 });
 
 describe('dynobox run — live output', () => {

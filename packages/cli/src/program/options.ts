@@ -21,6 +21,8 @@ import {unique} from '../util/unique.js';
 import type {ExecuteCliOptions} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
 
+export type ReporterFormat = 'text' | 'json';
+
 /** Collect repeated/comma-separated `--harness` values into a flat list. */
 export function collectOption(value: string, previous: string[]): string[] {
   return [...previous, value];
@@ -70,6 +72,18 @@ export function validatePermissionModeOverride(
     );
   }
   return value as PermissionMode;
+}
+
+export function validateReporterFormat(
+  value: string | undefined,
+): ReporterFormat {
+  if (value === undefined) return 'text';
+  if (value === 'text' || value === 'json') return value;
+  throw new CommanderError(
+    configErrorExitCode,
+    'dynobox.reporter',
+    `Invalid reporter "${value}". Expected one of: text, json`,
+  );
 }
 
 /**

@@ -61,6 +61,7 @@ dynobox init --force     # overwrite an existing starter
 --quiet                    Print compact CI-friendly output.
 --verbose                  Expand scenario details even when passing.
 --debug                    Include debug paths and artifacts.
+--reporter <fmt>           Output reporter format: text or json.
 ```
 
 Harness IDs are `claude-code` and `codex`.
@@ -72,6 +73,7 @@ dynobox run --harness claude-code
 dynobox run --harness codex
 dynobox run --harness claude-code,codex
 dynobox run --harness codex --permission-mode dangerous
+dynobox run --reporter json
 ```
 
 ## Output Modes
@@ -86,11 +88,49 @@ dynobox run --harness codex --permission-mode dangerous
   - `dynobox-chat-history.jsonl` — raw harness stdout / JSONL chat stream.
   - `dynobox-tool-events.json` — normalized tool events used by assertions.
   - `dynobox-stderr.log` — raw harness stderr, when non-empty.
+- `--reporter json` — emit newline-delimited JSON on stdout instead of the
+  text renderer. Dynobox writes one job object per completed job, then one
+  summary object. The JSON reporter always uses the static run path, even in
+  interactive terminals, so stdout remains machine-readable.
 
 When stdout is an interactive terminal and live output is enabled, Dynobox
 streams phase progress and harness tool events as they happen. In
 non-interactive output, quiet mode, or incompatible terminals, it runs jobs to
 completion and renders static output.
+
+### JSON Reporter
+
+Every JSON reporter object includes `"schema": "dynobox.report.v1"` and a
+`type` field.
+
+Job records include:
+
+- `jobId`
+- `scenario.id` and `scenario.name`
+- `harness.id`, with `model` and `permissionMode` when configured
+- `iteration`, using a 1-based number
+- `status` and `passed`
+- `timing`
+- `diagnostics`
+- `artifacts`, plus `debugLogPaths` when `--debug` produced logs
+- `setup.commands`
+- `harnessOutput.exitCode` and `harnessOutput.durationMs` when the harness ran
+- `observations.toolEventCount` and `observations.httpEventCount`
+- `assertions`, with `assertionId`, `kind`, `passed`, and `message`
+
+The final summary record includes:
+
+- `status`
+- `totals.jobs`, `totals.passed`, `totals.failed`, `totals.configErrors`, and
+  `totals.durationMs`
+- `plan.scenarios`, `plan.harnesses`, and `plan.iterations`
+- `failedJobs`
+
+Example:
+
+```bash
+dynobox run --reporter json examples/local-observability
+```
 
 ## Exit Behavior
 

@@ -36,6 +36,7 @@ import {
 } from '../live/index.js';
 import {
   renderHeadline,
+  renderJsonRunOutput,
   renderRunConfigErrorMessage,
   renderRunHeader,
   renderRunOutput,
@@ -60,6 +61,7 @@ import {
   buildRunJobOptions,
   validateHarnessOverrides,
   validatePermissionModeOverride,
+  validateReporterFormat,
 } from './options.js';
 
 export type RunCommandFlags = {
@@ -67,6 +69,7 @@ export type RunCommandFlags = {
   quiet?: boolean;
   verbose?: boolean;
   debug?: boolean;
+  reporter?: string;
   permissionMode?: string;
 };
 
@@ -99,6 +102,11 @@ export async function runCommandAction(
   );
   const permissionMode = validatePermissionMode(
     commandFlags.permissionMode,
+    targetLabel,
+    writeStderr,
+  );
+  const reporter = validateReporter(
+    commandFlags.reporter,
     targetLabel,
     writeStderr,
   );
@@ -135,9 +143,28 @@ export async function runCommandAction(
   const ctx = createRenderContext(options, commandFlags);
   const headerLabel = renderHeaderLabel(targetLabel, compiled);
 
-  const results = shouldRenderLive(options, ctx)
-    ? await runLive({headerLabel, jobs, runOptions, ctx, writeStdout})
-    : await runStatic({headerLabel, jobs, runOptions, ctx, writeStdout});
+  const results =
+    reporter === 'json'
+      ? await runStatic({
+          headerLabel,
+          jobs,
+          runOptions,
+          ctx,
+          writeStdout,
+          reporter,
+          configErrorCount: errors.length,
+        })
+      : shouldRenderLive(options, ctx)
+        ? await runLive({headerLabel, jobs, runOptions, ctx, writeStdout})
+        : await runStatic({
+            headerLabel,
+            jobs,
+            runOptions,
+            ctx,
+            writeStdout,
+            reporter,
+            configErrorCount: errors.length,
+          });
 
   const anyJobFailed = results.some((result) => !result.passed);
   return anyJobFailed || errors.length > 0;
@@ -192,6 +219,8 @@ type RunPathInput = {
   runOptions: RunJobOptions;
   ctx: RenderContext;
   writeStdout: OutputWriter;
+  reporter?: ReturnType<typeof validateReporterFormat>;
+  configErrorCount?: number;
 };
 
 /**
@@ -205,6 +234,17 @@ async function runStatic(input: RunPathInput): Promise<LocalRunnerResult[]> {
     results.push(await runJob(job, input.runOptions));
   }
   const debugLogPaths = writeDebugLogsIfDebug(input.ctx, results);
+  if (input.reporter === 'json') {
+    input.writeStdout(
+      renderJsonRunOutput({
+        jobs: input.jobs,
+        results,
+        configErrorCount: input.configErrorCount ?? 0,
+        ...(debugLogPaths === undefined ? {} : {debugLogPaths}),
+      }),
+    );
+    return results;
+  }
   input.writeStdout(
     renderRunOutput({
       configPath: input.headerLabel,
@@ -315,6 +355,20 @@ function validatePermissionMode(
 ) {
   try {
     return validatePermissionModeOverride(rawPermissionMode);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    writeStderr(renderRunConfigErrorMessage(targetLabel, message));
+    throw error;
+  }
+}
+
+function validateReporter(
+  rawReporter: string | undefined,
+  targetLabel: string,
+  writeStderr: OutputWriter,
+) {
+  try {
+    return validateReporterFormat(rawReporter);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     writeStderr(renderRunConfigErrorMessage(targetLabel, message));

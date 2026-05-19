@@ -57,6 +57,7 @@ export function buildProgram(input: BuildProgramInput): Command {
     .option('--quiet', 'print compact CI-friendly output')
     .option('--verbose', 'expand scenario details even when passing')
     .option('--debug', 'include debug paths and artifacts')
+    .option('--reporter <fmt>', 'output reporter format: text or json', 'text')
     .option(
       '--permission-mode <mode>',
       'override harness permission mode: default or dangerous',
