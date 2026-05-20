@@ -28,6 +28,7 @@ export type ToolEvent = {
   input: unknown;
   command?: string;
   status?: 'success' | 'failure';
+  message?: string;
   startedAt?: string;
   completedAt?: string;
 };

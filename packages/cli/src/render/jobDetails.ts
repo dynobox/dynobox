@@ -22,6 +22,7 @@ import {
   renderHarnessPhase,
   renderSetupPhase,
 } from './phases.js';
+import {renderWarningDetails} from './warnings.js';
 
 export type JobDetailsOptions = {
   debugLogPaths?: DebugLogPaths;
@@ -45,6 +46,7 @@ export function renderJobDetails(
   } else if (result.status === 'harness_failed') {
     lines.push(renderHarnessFailureDetails(result, ctx));
   }
+  lines.push(renderWarningDetails(result, ctx));
 
   if (
     result.assertionResults.length > 0 &&

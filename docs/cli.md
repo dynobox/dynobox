@@ -101,6 +101,12 @@ the run exits with the config-error exit code.
   summary object. The JSON reporter always uses the static run path, even in
   interactive terminals, so stdout remains machine-readable.
 
+If a harness reports that a tool action was blocked by permissions or sandbox
+policy, Dynobox prints a permission warning and includes it in JSON output. This
+is advisory context only: warnings do not change job status, assertion results,
+or exit codes. Use `--permission-mode dangerous` only for trusted evals that
+intentionally need that access.
+
 When stdout is an interactive terminal and live output is enabled, Dynobox
 streams phase progress and harness tool events as they happen. In
 non-interactive output, quiet mode, or incompatible terminals, it runs jobs to
@@ -120,6 +126,7 @@ Job records include:
 - `status` and `passed`
 - `timing`
 - `diagnostics`
+- `warnings`, with `kind`, `message`, and optional blocked tool metadata
 - `artifacts`, plus `debugLogPaths` when `--debug` produced logs
 - `setup.commands`
 - `harnessOutput.exitCode` and `harnessOutput.durationMs` when the harness ran
@@ -130,9 +137,10 @@ The final summary record includes:
 
 - `status`
 - `totals.jobs`, `totals.passed`, `totals.failed`, `totals.configErrors`, and
-  `totals.durationMs`
+  `totals.warnings`, and `totals.durationMs`
 - `plan.scenarios`, `plan.harnesses`, and `plan.iterations`
 - `failedJobs`
+- `warningJobs`
 
 Example:
 

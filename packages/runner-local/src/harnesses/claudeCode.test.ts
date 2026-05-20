@@ -322,6 +322,7 @@ describe('parseClaudeCodeStreamJson', () => {
           hook_event_name: 'PostToolUseFailure',
           tool_name: 'Bash',
           tool_input: {command: 'pnpm build'},
+          message: 'Permission denied',
         },
       ),
     );
@@ -339,6 +340,7 @@ describe('parseClaudeCodeStreamJson', () => {
         rawName: 'Bash',
         input: {command: 'pnpm build'},
         status: 'failure',
+        message: 'Permission denied',
         command: 'pnpm build',
       },
     ]);

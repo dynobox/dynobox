@@ -54,6 +54,7 @@ function jobRecord(
     passed: result.passed,
     timing: result.timing,
     diagnostics: result.diagnostics,
+    warnings: result.warnings,
     artifacts: result.artifacts,
     ...(debugLogPaths === undefined ? {} : {debugLogPaths}),
     setup: {
@@ -103,6 +104,10 @@ function summaryRecord(input: RenderJsonRunOutputInput) {
       passed: passedCount,
       failed: failedCount,
       configErrors: configErrorCount,
+      warnings: input.results.reduce(
+        (sum, result) => sum + result.warnings.length,
+        0,
+      ),
       durationMs: totalMs,
     },
     plan: {
@@ -112,6 +117,9 @@ function summaryRecord(input: RenderJsonRunOutputInput) {
     },
     failedJobs: input.results
       .filter((result) => !result.passed)
+      .map((result) => result.jobId),
+    warningJobs: input.results
+      .filter((result) => result.warnings.length > 0)
       .map((result) => result.jobId),
   };
 }

@@ -314,7 +314,8 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
       live.flush();
 
       const finalStatus: 'pass' | 'fail' = result.passed ? 'pass' : 'fail';
-      const collapse = result.passed && !expanded;
+      const collapse =
+        result.passed && result.warnings.length === 0 && !expanded;
       const finalHeadline = renderHeadline(
         job,
         ctx,

@@ -15,6 +15,7 @@ import {
   separator,
 } from '../terminal/index.js';
 import {describeAssertion} from './describe.js';
+import {describeWarning} from './warnings.js';
 
 export function renderRunSummary(
   jobs: readonly LocalRunnerJob[],
@@ -54,6 +55,17 @@ export function renderRunSummary(
           : describeAssertion(assertion);
       lines.push(
         `    ${job?.scenario.name ?? result.scenarioId}   ${detail}\n`,
+      );
+    }
+  }
+
+  const warningResults = results.filter((result) => result.warnings.length > 0);
+  if (warningResults.length > 0) {
+    lines.push('\n  permission warnings:\n');
+    for (const result of warningResults) {
+      const job = jobs.find((candidate) => candidate.id === result.jobId);
+      lines.push(
+        `    ${job?.scenario.name ?? result.scenarioId}   ${describeWarning(result.warnings[0]!)}\n`,
       );
     }
   }

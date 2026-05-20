@@ -44,7 +44,7 @@ export function renderRunOutput(input: RenderRunOutputInput): string {
     const result = input.results[index];
     if (result === undefined) continue;
 
-    const expand = expandAll || !result.passed;
+    const expand = expandAll || !result.passed || result.warnings.length > 0;
     const status: 'pass' | 'fail' = result.passed ? 'pass' : 'fail';
     const headline = renderHeadline(
       job,

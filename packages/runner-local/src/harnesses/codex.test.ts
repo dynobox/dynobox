@@ -247,6 +247,7 @@ describe('parseCodexJson', () => {
             type: 'command_execution',
             command: 'pnpm build',
             exit_code: 1,
+            error: {message: 'blocked by sandbox'},
           },
         },
       ),
@@ -265,6 +266,7 @@ describe('parseCodexJson', () => {
         rawName: 'command_execution',
         input: {command: 'pnpm build'},
         status: 'failure',
+        message: 'blocked by sandbox',
         command: 'pnpm build',
       },
     ]);

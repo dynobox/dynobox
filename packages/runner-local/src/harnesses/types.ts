@@ -43,6 +43,7 @@ export type ToolEvent = {
   rawName: string;
   input: unknown;
   status?: 'success' | 'failure';
+  message?: string;
   startedAt?: string;
   completedAt?: string;
 };

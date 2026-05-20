@@ -10,6 +10,7 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Added permission-denied warnings for harness tool failures in text and JSON run output.
 - Added `dynobox run --scenario` for filtering runs by scenario name or id.
 - Added `dynobox run --reporter json` for newline-delimited machine-readable job and summary output.
 - Added local HTTP capture and evaluation for `http.called(...)` and `http.notCalled(...)` assertions, including status checks for proxy-observed child-process traffic.

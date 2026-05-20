@@ -265,6 +265,7 @@ function parseToolEvent(event: JsonObject): ToolEvent | undefined {
     rawName,
     event.tool_input,
     hookStatus(event.hook_event_name),
+    failureMessage(event),
   );
 }
 
@@ -292,12 +293,16 @@ function createToolEvent(
   rawName: string,
   input: unknown,
   status: ToolEvent['status'] | undefined = undefined,
+  message: string | undefined = undefined,
 ): ToolEvent {
   const kind = normalizeToolKind(rawName);
-  const base: ToolEvent =
-    status === undefined
-      ? {kind, rawName, input}
-      : {kind, rawName, input, status};
+  const base: ToolEvent = {
+    kind,
+    rawName,
+    input,
+    ...(status === undefined ? {} : {status}),
+    ...(message === undefined ? {} : {message}),
+  };
 
   const command = shellCommand(input);
   if (kind === 'shell' && command !== undefined) {
@@ -311,6 +316,16 @@ function createToolEvent(
 function hookStatus(hookEventName: string): ToolEvent['status'] | undefined {
   if (hookEventName === 'PostToolUse') return 'success';
   if (hookEventName === 'PostToolUseFailure') return 'failure';
+  return undefined;
+}
+
+function failureMessage(event: JsonObject): string | undefined {
+  for (const key of ['message', 'error', 'reason', 'detail']) {
+    const value = event[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
   return undefined;
 }
 

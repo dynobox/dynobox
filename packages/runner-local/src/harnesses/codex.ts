@@ -276,6 +276,7 @@ function parseToolEvent(
       parseRawToolName(candidate) ?? 'shell',
       {command},
       parseStatus(candidate, event),
+      parseFailureMessage(candidate, event),
     );
   }
 
@@ -286,6 +287,7 @@ function parseToolEvent(
     rawName,
     parseToolInput(candidate),
     parseStatus(candidate, event),
+    parseFailureMessage(candidate, event),
   );
 }
 
@@ -388,12 +390,16 @@ function createToolEvent(
   rawName: string,
   input: unknown,
   status: ToolEvent['status'] | undefined = undefined,
+  message: string | undefined = undefined,
 ): ToolEvent {
   const kind = normalizeToolKind(rawName);
-  const base: ToolEvent =
-    status === undefined
-      ? {kind, rawName, input}
-      : {kind, rawName, input, status};
+  const base: ToolEvent = {
+    kind,
+    rawName,
+    input,
+    ...(status === undefined ? {} : {status}),
+    ...(message === undefined ? {} : {message}),
+  };
 
   const command = shellCommand(input);
   if (kind === 'shell' && command !== undefined) {
@@ -408,6 +414,27 @@ function shellCommand(input: unknown): string | undefined {
   if (!isRecord(input)) return undefined;
   if (typeof input.command === 'string') return input.command;
   return typeof input.cmd === 'string' ? input.cmd : undefined;
+}
+
+function parseFailureMessage(
+  candidate: JsonObject,
+  event: JsonObject,
+): string | undefined {
+  return stringFromKeys(candidate) ?? stringFromKeys(event);
+}
+
+function stringFromKeys(value: JsonObject): string | undefined {
+  for (const key of ['message', 'error', 'reason', 'detail', 'stderr']) {
+    const candidate = value[key];
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+    if (isRecord(candidate)) {
+      const nested = stringFromKeys(candidate);
+      if (nested !== undefined) return nested;
+    }
+  }
+  return undefined;
 }
 
 function parseFinalMessage(event: JsonObject): string | undefined {

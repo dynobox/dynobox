@@ -510,6 +510,60 @@ describe('runJob', () => {
     });
   });
 
+  it('adds permission warnings without changing pass/fail status', async () => {
+    const scratchRoot = createScratchRoot();
+    const deniedGitCommit: ShellToolEvent = {
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {command: 'git commit -m test'},
+      command: 'git commit -m test',
+      status: 'failure',
+      message: 'Permission denied',
+    };
+
+    const result = await runJob(createJob(), {
+      scratchRoot,
+      harnesses: [new FakeHarness(undefined, {toolEvents: [deniedGitCommit]})],
+    });
+
+    expect(result.status).toBe('passed');
+    expect(result.passed).toBe(true);
+    expect(result.warnings).toEqual([
+      {
+        kind: 'permission_denied',
+        message:
+          'Harness blocked a tool action. Use --permission-mode dangerous only for trusted evals that intentionally need this access.',
+        tool: {
+          kind: 'shell',
+          rawName: 'Bash',
+          command: 'git commit -m test',
+        },
+      },
+    ]);
+  });
+
+  it('does not warn for ordinary failed tool events', async () => {
+    const scratchRoot = createScratchRoot();
+    const failedTestCommand: ShellToolEvent = {
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {command: 'pnpm test'},
+      command: 'pnpm test',
+      status: 'failure',
+      message: 'Tests failed',
+    };
+
+    const result = await runJob(createJob(), {
+      scratchRoot,
+      harnesses: [
+        new FakeHarness(undefined, {toolEvents: [failedTestCommand]}),
+      ],
+    });
+
+    expect(result.status).toBe('passed');
+    expect(result.warnings).toEqual([]);
+  });
+
   it('represents unmet HTTP assertions as assertion results', async () => {
     const scratchRoot = createScratchRoot();
 

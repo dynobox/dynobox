@@ -35,3 +35,4 @@ export {formatJobHarness, renderPlan, renderPlanFromMatrix} from './plan.js';
 export {renderQuietRun} from './quiet.js';
 export {renderRunOutput, type RenderRunOutputInput} from './runOutput.js';
 export {renderRunSummary} from './summary.js';
+export {describeWarning, renderWarningDetails} from './warnings.js';

@@ -1,6 +1,10 @@
 import {join} from 'node:path';
 
-import {FakeHarness, type ToolEvent} from '@dynobox/runner-local';
+import {
+  FakeHarness,
+  type ShellToolEvent,
+  type ToolEvent,
+} from '@dynobox/runner-local';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 
 import {
@@ -10,6 +14,7 @@ import {
   GIT_STATUS_EVENT,
   MISMATCHED_SHELL_EVENT,
   MULTILINE_GIT_COMMIT_EVENT,
+  SHELL_EVENT,
   SKILL_READ_EVENT,
   StreamingHarness,
 } from '../testUtils.js';
@@ -30,6 +35,15 @@ const RELEASE_SKILL_READ_EVENT: ToolEvent = {
   kind: 'read_file',
   rawName: 'Read',
   input: {file_path: RELEASE_SKILL_PATH},
+};
+
+const PERMISSION_DENIED_GIT_EVENT: ShellToolEvent = {
+  kind: 'shell',
+  rawName: 'Bash',
+  input: {command: 'git commit -m test'},
+  command: 'git commit -m test',
+  status: 'failure',
+  message: 'Permission denied',
 };
 
 describe('dynobox run — config loading', () => {
@@ -100,6 +114,46 @@ describe('dynobox run — output modes', () => {
     );
     expect(result.stdout).toContain('\n  .\n');
     expect(result.stdout).toContain('1 passed, 0 failed in 0.1s');
+  });
+
+  it('prints permission warnings for passing jobs', async () => {
+    const result = await executeCli(['run', fixtures.validConfigPath], {
+      harnesses: [
+        new FakeHarness(undefined, {
+          toolEvents: [SHELL_EVENT, PERMISSION_DENIED_GIT_EVENT],
+        }),
+      ],
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('✓  uses shell');
+    expect(result.stdout).toContain(
+      'warning permission denied for shell command: git commit -m test',
+    );
+    expect(result.stdout).toContain(
+      'Use --permission-mode dangerous only for trusted evals',
+    );
+    expect(result.stdout).toContain('permission warnings:');
+  });
+
+  it('prints permission warnings in quiet output without changing marks', async () => {
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--quiet'],
+      {
+        harnesses: [
+          new FakeHarness(undefined, {
+            toolEvents: [SHELL_EVENT, PERMISSION_DENIED_GIT_EVENT],
+          }),
+        ],
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('\n  .\n');
+    expect(result.stdout).toContain('WARN  uses shell [claude-code]');
+    expect(result.stdout).toContain(
+      'permission denied for shell command: git commit -m test',
+    );
   });
 
   it('collapses passing scenarios to a one-liner in default mode', async () => {
@@ -187,6 +241,7 @@ describe('dynobox run — output modes', () => {
       iteration: 1,
       status: 'passed',
       passed: true,
+      warnings: [],
       observations: {toolEventCount: 1, httpEventCount: 0},
     });
     expect(records[0]).toHaveProperty('assertions');
@@ -194,9 +249,10 @@ describe('dynobox run — output modes', () => {
       schema: 'dynobox.report.v1',
       type: 'summary',
       status: 'passed',
-      totals: {jobs: 1, passed: 1, failed: 0, configErrors: 0},
+      totals: {jobs: 1, passed: 1, failed: 0, configErrors: 0, warnings: 0},
       plan: {scenarios: 1, harnesses: 1, iterations: 1},
       failedJobs: [],
+      warningJobs: [],
     });
     expect(result.stdout).not.toContain('dynobox  1 scenario');
     expect(result.stdout).not.toContain('✓');
@@ -262,6 +318,50 @@ describe('dynobox run — output modes', () => {
       'scenario.uses-shell.claude-code.iteration.0',
     );
   });
+
+  it('reports permission warnings as JSON without changing pass status', async () => {
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--reporter', 'json'],
+      {
+        harnesses: [
+          new FakeHarness(undefined, {
+            toolEvents: [SHELL_EVENT, PERMISSION_DENIED_GIT_EVENT],
+          }),
+        ],
+      },
+    );
+    const records = result.stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(result.exitCode).toBe(0);
+    expect(records[0]).toMatchObject({
+      type: 'job',
+      status: 'passed',
+      passed: true,
+      warnings: [
+        {
+          kind: 'permission_denied',
+          tool: {
+            kind: 'shell',
+            rawName: 'Bash',
+            command: 'git commit -m test',
+          },
+        },
+      ],
+    });
+    expect(records[1]).toMatchObject({
+      type: 'summary',
+      status: 'passed',
+      totals: {warnings: 1},
+    });
+    const warningJobs = records[1]?.warningJobs;
+    expect(Array.isArray(warningJobs)).toBe(true);
+    expect(String(warningJobs?.[0])).toContain(
+      'scenario.uses-shell.claude-code.iteration.0',
+    );
+  });
 });
 
 describe('dynobox run — live output', () => {
@@ -302,6 +402,24 @@ describe('dynobox run — live output', () => {
     expect(toolWrites).toHaveLength(1);
     expect(toolWrites[0]).toContain(`Bash: pnpm test && git commit -m`);
     expect(toolWrites[0]).not.toContain('\n');
+  });
+
+  it('prints permission warnings when live output completes', async () => {
+    const writes: string[] = [];
+    const result = await executeCli(['run', fixtures.validConfigPath], {
+      harnesses: [
+        new FakeHarness(undefined, {
+          toolEvents: [SHELL_EVENT, PERMISSION_DENIED_GIT_EVENT],
+        }),
+      ],
+      live: true,
+      writeStdout: (value) => writes.push(value),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(writes.join('')).toContain(
+      'warning permission denied for shell command: git commit -m test',
+    );
   });
 });
 

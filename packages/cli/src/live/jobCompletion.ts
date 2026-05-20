@@ -7,6 +7,7 @@ import {
   renderHarnessFailureDetails,
   renderSetupFailureDetails,
 } from '../render/failure.js';
+import {renderWarningDetails} from '../render/warnings.js';
 import type {RenderContext} from '../terminal/index.js';
 import type {DebugLogPaths} from '../util/transcript.js';
 
@@ -30,6 +31,7 @@ export function renderLiveJobCompletion(
   } else if (result.status === 'harness_failed') {
     lines.push(renderHarnessFailureDetails(result, ctx));
   }
+  lines.push(renderWarningDetails(result, ctx));
   if (
     result.assertionResults.length > 0 &&
     (result.status !== 'harness_failed' || result.harnessResult !== undefined)

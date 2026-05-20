@@ -13,6 +13,7 @@ import {
 } from '../terminal/index.js';
 import {describeAssertion} from './describe.js';
 import {formatJobHarness, renderPlanFromMatrix} from './plan.js';
+import {describeWarning} from './warnings.js';
 
 export function renderQuietRun(
   jobs: readonly LocalRunnerJob[],
@@ -44,6 +45,22 @@ export function renderQuietRun(
         lines.push(
           `        ${assertion === undefined ? assertionResult.kind : describeAssertion(assertion)}\n`,
         );
+      }
+    }
+  }
+
+  const warned = results
+    .map((result, index) => ({result, job: jobs[index]}))
+    .filter(
+      (entry): entry is {result: LocalRunnerResult; job: LocalRunnerJob} =>
+        Boolean(entry.job && entry.result.warnings.length > 0),
+    );
+  if (warned.length > 0) {
+    lines.push('\n');
+    for (const {result, job} of warned) {
+      lines.push(`  WARN  ${job.scenario.name} [${formatJobHarness(job)}]\n`);
+      for (const warning of result.warnings) {
+        lines.push(`        ${describeWarning(warning)}\n`);
       }
     }
   }
