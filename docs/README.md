@@ -9,6 +9,7 @@ Use these docs when evaluating whether Dynobox can cover a coworker's skill or a
 - [Getting Started](./getting-started.md): install the CLI, scaffold a starter dyno with `dynobox init`, and run it.
 - [Config Authoring](./config-authoring.md): the `@dynobox/sdk` API and supported assertions; covers both TypeScript/JavaScript and YAML authoring.
 - [CLI Reference](./cli.md): `dynobox run`, `dynobox init`, harness overrides, output modes, and exit behavior.
+- [CI Integration](./ci.md): run Dynobox in CI, capture JSON reports, and use the GitHub Actions reference workflow.
 
 ## Current Scope
 

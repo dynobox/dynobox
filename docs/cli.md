@@ -101,6 +101,9 @@ the run exits with the config-error exit code.
   summary object. The JSON reporter always uses the static run path, even in
   interactive terminals, so stdout remains machine-readable.
 
+See [CI Integration](./ci.md) for a GitHub Actions recipe that runs a harness
+matrix, uploads JSON reports, and summarizes the final summary record.
+
 If a harness reports that a tool action was blocked by permissions or sandbox
 policy, Dynobox prints a permission warning and includes it in JSON output. This
 is advisory context only: warnings do not change job status, assertion results,
@@ -146,6 +149,12 @@ Example:
 
 ```bash
 dynobox run --reporter json examples/local-observability
+```
+
+In CI, redirect stdout to an artifact file:
+
+```bash
+dynobox run --reporter json dynobox > dynobox-report.ndjson
 ```
 
 ## Exit Behavior

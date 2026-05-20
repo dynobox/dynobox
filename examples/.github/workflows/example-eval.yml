@@ -1,0 +1,98 @@
+name: Dynobox evals
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  dynobox:
+    name: dynobox (${{ matrix.harness }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        harness:
+          - claude-code
+          - codex
+
+    env:
+      DYNOBOX_TARGET: dynobox
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Dynobox
+        run: npm install -g dynobox
+
+      - name: Install Claude Code
+        if: matrix.harness == 'claude-code'
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Install Codex
+        if: matrix.harness == 'codex'
+        run: npm install -g @openai/codex
+
+      - name: Run Dynobox
+        run: |
+          set +e
+          dynobox run "$DYNOBOX_TARGET" \
+            --harness "${{ matrix.harness }}" \
+            --reporter json \
+            > "dynobox-${{ matrix.harness }}.ndjson"
+          status=$?
+          set -e
+
+          node --input-type=module <<'NODE'
+          import {readFileSync, appendFileSync} from 'node:fs';
+
+          const harness = process.env.MATRIX_HARNESS;
+          const reportPath = `dynobox-${harness}.ndjson`;
+          const records = readFileSync(reportPath, 'utf8')
+            .trim()
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => JSON.parse(line));
+          const summary = records.find((record) => record.type === 'summary');
+
+          if (summary === undefined) {
+            appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+              `## Dynobox (${harness})`,
+              '',
+              'No summary record was produced. Check the step logs for config or discovery errors.',
+              '',
+            ].join('\n'));
+          } else {
+            appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+              `## Dynobox (${harness})`,
+              '',
+              `Status: ${summary.status}`,
+              `Jobs: ${summary.totals.passed}/${summary.totals.jobs} passed`,
+              `Warnings: ${summary.totals.warnings}`,
+              `Failed jobs: ${summary.failedJobs.length === 0 ? 'none' : summary.failedJobs.join(', ')}`,
+              '',
+            ].join('\n'));
+          }
+          NODE
+
+          exit "$status"
+        env:
+          MATRIX_HARNESS: ${{ matrix.harness }}
+
+      - name: Upload Dynobox report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dynobox-${{ matrix.harness }}-report
+          path: dynobox-${{ matrix.harness }}.ndjson
+          if-no-files-found: warn
