@@ -8,6 +8,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.1.0 — 2026-05-20
+
 ### `dynobox` (CLI)
 
 - Added permission-denied warnings for harness tool failures in text and JSON run output.
@@ -15,8 +19,6 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Added `dynobox run --reporter json` for newline-delimited machine-readable job and summary output.
 - Added local HTTP capture and evaluation for `http.called(...)` and `http.notCalled(...)` assertions, including status checks for proxy-observed child-process traffic.
 - Fixed directory discovery so explicitly provided hidden roots such as `.agents/skills` are searched while hidden entries below the root remain skipped.
-
----
 
 ## dynobox@0.0.10 — 2026-05-10
 
