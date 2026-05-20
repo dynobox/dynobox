@@ -54,4 +54,55 @@ describe('buildLocalRunnerJobs', () => {
       permissionMode: 'default',
     });
   });
+
+  it('filters scenarios by exact name, id, and glob pattern', () => {
+    const ir = {
+      version: '0.1' as const,
+      scenarios: [
+        {
+          id: 'scenario.lint-package',
+          name: 'lint package',
+          prompt: 'Run lint.',
+          harnesses: [{id: 'claude-code' as const}],
+          setup: [],
+          endpoints: [],
+          assertions: [],
+        },
+        {
+          id: 'scenario.deploy-package',
+          name: 'deploy package',
+          prompt: 'Run deploy.',
+          harnesses: [{id: 'claude-code' as const}],
+          setup: [],
+          endpoints: [],
+          assertions: [],
+        },
+        {
+          id: 'scenario.release-notes',
+          name: 'release notes',
+          prompt: 'Write release notes.',
+          harnesses: [{id: 'claude-code' as const}],
+          setup: [],
+          endpoints: [],
+          assertions: [],
+        },
+      ],
+    };
+
+    expect(
+      buildLocalRunnerJobs(ir, {scenarioPatterns: ['deploy package']}).map(
+        (job) => job.scenario.name,
+      ),
+    ).toEqual(['deploy package']);
+    expect(
+      buildLocalRunnerJobs(ir, {
+        scenarioPatterns: ['scenario.release-notes'],
+      }).map((job) => job.scenario.name),
+    ).toEqual(['release notes']);
+    expect(
+      buildLocalRunnerJobs(ir, {scenarioPatterns: ['*package']}).map(
+        (job) => job.scenario.name,
+      ),
+    ).toEqual(['lint package', 'deploy package']);
+  });
 });

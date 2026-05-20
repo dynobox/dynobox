@@ -1,7 +1,7 @@
 /**
- * Option parsing helpers for the `run` subcommand: collecting repeated
- * `--harness` flags, validating ids against the SDK's allowlist, and
- * translating `ExecuteCliOptions` into the local runner's `RunJobOptions`.
+ * Option parsing helpers for the `run` subcommand: collecting repeated flags,
+ * validating ids against the SDK's allowlist, and translating
+ * `ExecuteCliOptions` into the local runner's `RunJobOptions`.
  */
 
 import {
@@ -23,7 +23,7 @@ import {configErrorExitCode} from './exitCodes.js';
 
 export type ReporterFormat = 'text' | 'json';
 
-/** Collect repeated/comma-separated `--harness` values into a flat list. */
+/** Collect repeated/comma-separated option values into a flat list. */
 export function collectOption(value: string, previous: string[]): string[] {
   return [...previous, value];
 }
@@ -84,6 +84,19 @@ export function validateReporterFormat(
     'dynobox.reporter',
     `Invalid reporter "${value}". Expected one of: text, json`,
   );
+}
+
+export function validateScenarioFilters(
+  values: readonly string[] | undefined,
+): string[] | undefined {
+  const patterns = values?.flatMap((value) =>
+    value
+      .split(',')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0),
+  );
+  if (patterns === undefined || patterns.length === 0) return undefined;
+  return unique(patterns);
 }
 
 /**

@@ -62,6 +62,7 @@ import {
   validateHarnessOverrides,
   validatePermissionModeOverride,
   validateReporterFormat,
+  validateScenarioFilters,
 } from './options.js';
 
 export type RunCommandFlags = {
@@ -70,6 +71,7 @@ export type RunCommandFlags = {
   verbose?: boolean;
   debug?: boolean;
   reporter?: string;
+  scenario?: string[];
   permissionMode?: string;
 };
 
@@ -110,6 +112,7 @@ export async function runCommandAction(
     targetLabel,
     writeStderr,
   );
+  const scenarioPatterns = validateScenarioFilters(commandFlags.scenario);
 
   const filePaths = await discoverOrFail(
     configPath,
@@ -136,9 +139,22 @@ export async function runCommandAction(
   const jobs = compiled.flatMap((entry) =>
     buildLocalRunnerJobs(
       entry.ir,
-      buildJobOptions(overrideHarnesses, permissionMode),
+      buildJobOptions(overrideHarnesses, permissionMode, scenarioPatterns),
     ),
   );
+  if (jobs.length === 0 && scenarioPatterns !== undefined) {
+    writeStderr(
+      renderRunConfigErrorMessage(
+        targetLabel,
+        `No scenarios matched --scenario ${scenarioPatterns.map((pattern) => JSON.stringify(pattern)).join(', ')}.`,
+      ),
+    );
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.scenario',
+      'no scenarios matched',
+    );
+  }
   const runOptions = buildRunJobOptions(options);
   const ctx = createRenderContext(options, commandFlags);
   const headerLabel = renderHeaderLabel(targetLabel, compiled);
@@ -379,10 +395,12 @@ function validateReporter(
 function buildJobOptions(
   harnesses: ReturnType<typeof validateHarnessOverrides>,
   permissionMode: ReturnType<typeof validatePermissionModeOverride>,
+  scenarioPatterns: ReturnType<typeof validateScenarioFilters>,
 ): Parameters<typeof buildLocalRunnerJobs>[1] {
   return {
     ...(harnesses === undefined ? {} : {harnesses}),
     ...(permissionMode === undefined ? {} : {permissionMode}),
+    ...(scenarioPatterns === undefined ? {} : {scenarioPatterns}),
   };
 }
 

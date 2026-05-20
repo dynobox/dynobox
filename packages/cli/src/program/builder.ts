@@ -54,6 +54,12 @@ export function buildProgram(input: BuildProgramInput): Command {
       collectOption,
       [] as string[],
     )
+    .option(
+      '--scenario <pattern>',
+      'run only scenarios whose name or id matches; repeat for multiple patterns',
+      collectOption,
+      [] as string[],
+    )
     .option('--quiet', 'print compact CI-friendly output')
     .option('--verbose', 'expand scenario details even when passing')
     .option('--debug', 'include debug paths and artifacts')

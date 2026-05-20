@@ -58,6 +58,8 @@ dynobox init --force     # overwrite an existing starter
                            for multiple harnesses.
 --permission-mode <mode>   Override harness permission mode: default or
                            dangerous.
+--scenario <pattern>       Run only scenarios whose name or id matches;
+                           repeat or comma-separate for multiple patterns.
 --quiet                    Print compact CI-friendly output.
 --verbose                  Expand scenario details even when passing.
 --debug                    Include debug paths and artifacts.
@@ -73,8 +75,14 @@ dynobox run --harness claude-code
 dynobox run --harness codex
 dynobox run --harness claude-code,codex
 dynobox run --harness codex --permission-mode dangerous
+dynobox run --scenario "release*"
+dynobox run --scenario "lint*,deploy package"
 dynobox run --reporter json
 ```
+
+Scenario filters match the compiled scenario name or id. Patterns support `*`
+for any number of characters and `?` for one character. If no scenarios match,
+the run exits with the config-error exit code.
 
 ## Output Modes
 
@@ -146,9 +154,9 @@ A successful run exits with `0`.
 
 The CLI registers both real harnesses by default:
 
-- `claude-code` invokes `claude -p --verbose --output-format stream-json
-  --include-hook-events ...`.
-- `codex` invokes `codex exec --json --color never --skip-git-repo-check ...`.
+- `claude-code` invokes Claude Code with stream JSON output and hook events.
+- `codex` invokes Codex with JSON output, no color, and the git-repo check
+  skipped.
 
 Make sure the harness executable you select is installed, authenticated, and
 available on `PATH`.

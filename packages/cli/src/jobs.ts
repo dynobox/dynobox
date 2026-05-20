@@ -5,7 +5,12 @@
 
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 import type {HarnessId, PermissionMode} from '@dynobox/sdk';
-import type {Ir, IrAssertion, IrHarnessConfig} from '@dynobox/sdk/ir';
+import type {
+  Ir,
+  IrAssertion,
+  IrHarnessConfig,
+  IrScenario,
+} from '@dynobox/sdk/ir';
 
 import {unique} from './util/unique.js';
 
@@ -45,13 +50,15 @@ export function buildLocalRunnerJobs(
   options: {
     harnesses?: readonly HarnessId[];
     permissionMode?: PermissionMode;
+    scenarioPatterns?: readonly string[];
   } = {},
 ): LocalRunnerJob[] {
   const overrides = overrideHarnessConfigs(
     options.harnesses,
     options.permissionMode,
   );
-  return ir.scenarios.flatMap((scenario) =>
+  const scenarios = filterScenarios(ir.scenarios, options.scenarioPatterns);
+  return scenarios.flatMap((scenario) =>
     (overrides ?? scenario.harnesses).map((harness) => {
       const permissionMode = permissionModeForHarness(
         harness,
@@ -74,6 +81,43 @@ export function buildLocalRunnerJobs(
       };
     }),
   );
+}
+
+function filterScenarios(
+  scenarios: readonly IrScenario[],
+  patterns: readonly string[] | undefined,
+): readonly IrScenario[] {
+  if (patterns === undefined || patterns.length === 0) return scenarios;
+  return scenarios.filter((scenario) =>
+    patterns.some((pattern) => scenarioMatchesPattern(scenario, pattern)),
+  );
+}
+
+function scenarioMatchesPattern(
+  scenario: IrScenario,
+  pattern: string,
+): boolean {
+  const matcher = globPatternToRegExp(pattern);
+  return matcher.test(scenario.name) || matcher.test(scenario.id);
+}
+
+function globPatternToRegExp(pattern: string): RegExp {
+  let source = '^';
+  for (const char of pattern) {
+    if (char === '*') {
+      source += '.*';
+    } else if (char === '?') {
+      source += '.';
+    } else {
+      source += escapeRegExp(char);
+    }
+  }
+  source += '$';
+  return new RegExp(source);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[\\^$+?.()|[\]{}]/g, '\\$&');
 }
 
 /**

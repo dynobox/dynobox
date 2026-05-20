@@ -63,6 +63,25 @@ export default defineDyno({
 });
 `;
 
+const MULTI_SCENARIO_CONFIG = `import {defineDyno, tool} from '@dynobox/sdk';
+
+export default defineDyno({
+  name: 'cli-filter-runner',
+  scenarios: [
+    {
+      name: 'lint package',
+      prompt: 'Run pnpm lint.',
+      assertions: [tool.called('shell')],
+    },
+    {
+      name: 'deploy package',
+      prompt: 'Run pnpm deploy.',
+      assertions: [tool.called('shell')],
+    },
+  ],
+});
+`;
+
 const MODALITIES_CONFIG = `import {artifact, defineDyno, finalMessage, sequence, skill, tool, transcript} from '@dynobox/sdk';
 
 export default defineDyno({
@@ -129,6 +148,7 @@ export type FixtureSet = {
   validConfigPath: string;
   invalidConfigPath: string;
   setupFailConfigPath: string;
+  multiScenarioConfigPath: string;
   modalitiesConfigPath: string;
   sequenceFailConfigPath: string;
   dynoMjsConfigPath: string;
@@ -147,6 +167,7 @@ export function createFixtureSet(tag: string): FixtureSet {
   const validConfigPath = join(dir, 'valid.config.ts');
   const invalidConfigPath = join(dir, 'invalid.config.ts');
   const setupFailConfigPath = join(dir, 'setup-fail.config.ts');
+  const multiScenarioConfigPath = join(dir, 'multi-scenario.config.ts');
   const modalitiesConfigPath = join(dir, 'modalities.config.ts');
   const sequenceFailConfigPath = join(dir, 'sequence-fail.config.ts');
   const dynoMjsConfigPath = join(dir, 'typed.dyno.mjs');
@@ -156,6 +177,7 @@ export function createFixtureSet(tag: string): FixtureSet {
     validConfigPath,
     invalidConfigPath,
     setupFailConfigPath,
+    multiScenarioConfigPath,
     modalitiesConfigPath,
     sequenceFailConfigPath,
     dynoMjsConfigPath,
@@ -165,6 +187,7 @@ export function createFixtureSet(tag: string): FixtureSet {
       writeFileSync(validConfigPath, VALID_CONFIG);
       writeFileSync(invalidConfigPath, INVALID_CONFIG);
       writeFileSync(setupFailConfigPath, SETUP_FAIL_CONFIG);
+      writeFileSync(multiScenarioConfigPath, MULTI_SCENARIO_CONFIG);
       writeFileSync(modalitiesConfigPath, MODALITIES_CONFIG);
       writeFileSync(sequenceFailConfigPath, SEQUENCE_FAIL_CONFIG);
       mkdirSync(join(dir, 'fixtures/repo'), {recursive: true});

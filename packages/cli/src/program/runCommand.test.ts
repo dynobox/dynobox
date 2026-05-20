@@ -202,6 +202,35 @@ describe('dynobox run — output modes', () => {
     expect(result.stdout).not.toContain('✓');
   });
 
+  it('runs only scenarios matching --scenario filters', async () => {
+    const result = await executeCli(
+      ['run', fixtures.multiScenarioConfigPath, '--scenario', 'deploy*'],
+      {
+        harnesses: [createPassingHarness()],
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('✓  deploy package');
+    expect(result.stdout).not.toContain('lint package');
+    expect(result.stdout).toContain('1 scenario · 1 harness · 1 iteration');
+  });
+
+  it('exits with a config error when no scenarios match --scenario', async () => {
+    const result = await executeCli([
+      'run',
+      fixtures.multiScenarioConfigPath,
+      '--scenario',
+      'missing*',
+    ]);
+
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain(
+      'No scenarios matched --scenario "missing*"',
+    );
+  });
+
   it('reports failed jobs as JSON while preserving run failure exit semantics', async () => {
     const result = await executeCli(
       ['run', fixtures.validConfigPath, '--reporter', 'json'],

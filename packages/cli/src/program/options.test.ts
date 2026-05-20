@@ -3,6 +3,7 @@ import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {createFixtureSet, PassingHarness} from '../testUtils.js';
 import {executeCli} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
+import {validateScenarioFilters} from './options.js';
 
 const fixtures = createFixtureSet('options');
 
@@ -72,5 +73,11 @@ describe('--harness override validation', () => {
 
     expect(result.exitCode).toBe(configErrorExitCode);
     expect(result.stderr).toContain('Invalid reporter "xml"');
+  });
+
+  it('parses repeated and comma-separated scenario filters', () => {
+    expect(
+      validateScenarioFilters(['lint*,deploy package', 'scenario.smoke']),
+    ).toEqual(['lint*', 'deploy package', 'scenario.smoke']);
   });
 });
