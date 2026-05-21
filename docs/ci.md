@@ -1,16 +1,15 @@
 # CI Integration
 
-Dynobox is designed to run in CI as a normal command-line test step. A run
-passes with exit code `0`; config, flag, discovery, load, or job failures exit
-with `1`.
+Dynobox runs in CI like any other command-line test step. A successful run exits
+with `0`; config, flag, discovery, load, or job failures exit with `1`.
 
-Use the text reporter when humans will read the log:
+Use text output when humans will read the log:
 
 ```bash
 dynobox run dynobox --quiet --harness claude-code
 ```
 
-Use the JSON reporter when another CI step should consume the result:
+Use JSON output when a later CI step should consume the results:
 
 ```bash
 dynobox run dynobox --reporter json --harness claude-code > dynobox-report.ndjson
@@ -20,13 +19,14 @@ dynobox run dynobox --reporter json --harness claude-code > dynobox-report.ndjso
 produces one `"type": "job"` record, followed by one `"type": "summary"` record.
 Every record includes `"schema": "dynobox.report.v1"`.
 
-## Recommended CI Pattern
+## Recommended Pattern
 
-1. Install Node.js 22+.
-2. Install `dynobox` and the harness executable you plan to run.
-3. Run `dynobox run` once per harness, usually through a CI matrix.
-4. Upload the JSON report as a build artifact.
-5. Summarize the final JSON `summary` record in the job output.
+1. Install Node.js 22 or newer.
+2. Install `dynobox`.
+3. Install the harness executable for the job.
+4. Run `dynobox run` once per harness, usually through a CI matrix.
+5. Upload the JSON report as a build artifact.
+6. Summarize the final JSON `summary` record in the job output.
 
 For targeted CI jobs, combine the JSON reporter with scenario filters:
 
@@ -41,19 +41,19 @@ comma-separated values to select multiple patterns:
 dynobox run dynobox --scenario "release*,publish package"
 ```
 
-## GitHub Actions Example
+## GitHub Actions
 
-A complete reference workflow lives at
+A reference workflow lives at
 [`examples/.github/workflows/example-eval.yml`](../examples/.github/workflows/example-eval.yml).
-It runs a matrix over `claude-code` and `codex`, writes an NDJSON report for
-each harness, uploads the report, and appends a compact summary to the GitHub
+It runs a matrix over `claude-code` and `codex`, writes one NDJSON report per
+harness, uploads each report, and appends a compact summary to the GitHub
 Actions step summary.
 
-Copy the workflow into your own repository's `.github/workflows/` directory and
+Copy the workflow into your repository's `.github/workflows/` directory and
 adjust:
 
-- `DYNOBOX_TARGET` to the directory or file containing your dynos.
-- Harness install commands if your organization pins different packages.
+- `DYNOBOX_TARGET` for the directory or file containing your dynos.
+- Harness install commands for your pinned versions.
 - Secrets for the selected harnesses.
 
 The example assumes:
@@ -61,7 +61,7 @@ The example assumes:
 - `ANTHROPIC_API_KEY` is available for `claude-code`.
 - `OPENAI_API_KEY` is available for `codex`.
 
-## Consuming JSON Output
+## Read JSON Reports
 
 The JSON reporter is line-oriented. Read the file one line at a time and parse
 each line as a separate JSON object.
@@ -79,11 +79,11 @@ const summary = records.find((record) => record.type === 'summary');
 console.log(summary.totals);
 ```
 
-Useful fields:
+Useful job fields include `jobId`, `scenario`, `harness`, `status`, `passed`,
+`warnings`, `observations`, and `assertions`.
 
-- Job records: `jobId`, `scenario`, `harness`, `status`, `passed`, `warnings`,
-  `observations`, and `assertions`.
-- Summary records: `status`, `totals`, `plan`, `failedJobs`, and `warningJobs`.
+Useful summary fields include `status`, `totals`, `plan`, `failedJobs`, and
+`warningJobs`.
 
 Permission warnings are advisory. They explain when a harness blocked a tool
 action, but they do not change job status or exit codes. Use

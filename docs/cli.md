@@ -1,57 +1,62 @@
 # CLI Reference
 
-The public CLI package is `dynobox`. Install with:
+The public CLI package is `dynobox`:
 
 ```bash
 npm install -g dynobox
 ```
 
-When working from a repository checkout, run the built binary with
+From a repository checkout, build first and run
 `node packages/cli/dist/bin.js`.
 
 ## Commands
+
+### `dynobox init`
+
+Create a starter dyno under `./dynobox/`.
+
+```bash
+dynobox init
+dynobox init --yaml
+dynobox init --harness codex
+dynobox init --force
+```
+
+`dynobox init` writes `dynobox/example.dyno.mjs` by default. With `--yaml`, it
+writes `dynobox/example.dyno.yaml`. Existing starter files are not overwritten
+unless `--force` is passed.
 
 ### `dynobox run [path]`
 
 Discover and run dyno files.
 
-- _no path_ — discover under the current working directory.
-- _directory_ — discover recursively under the given directory.
-- _file_ — run that one file. Any extension is accepted for an explicit file
-  path, so existing `dynobox.config.ts` files keep working during migration.
-
-Discovery globs `**/*.dyno.{mjs,js,ts,mts,yaml,yml}` and skips hidden entries,
-`node_modules`, `dist`, `build`, `coverage`, `.git`, `.dynobox`, `.next`, and
-`.cache` by default. Passing a hidden directory explicitly, such as
-`.agents/skills`, searches inside that root but still skips hidden entries below
-it. `.cjs`/`.cts` configs aren't supported because `@dynobox/sdk` ships as
-ESM-only.
-
 ```bash
-dynobox run                          # discover under .
-dynobox run examples                 # discover under examples/
-dynobox run my-skill.dyno.yaml       # run a single YAML file
-dynobox run path/to/legacy/config.ts # explicit file still works
+dynobox run
+dynobox run examples
+dynobox run my-skill.dyno.yaml
+dynobox run dynobox.config.ts
 ```
 
-A failure in one discovered file does not abort the rest of the run — each bad
-file produces its own `config:` error block on stderr; valid files still
-execute. The process exits non-zero if any file failed to load or any job
-failed.
+Path behavior:
 
-### `dynobox init`
+- No path: discover under the current working directory.
+- Directory path: discover recursively under that directory.
+- File path: run that one loadable Dynobox config file.
 
-Scaffold a starter dyno under `./dynobox/` so a fresh project can go from `npm
-install -g dynobox` to a passing run in two commands.
+Directory discovery matches `**/*.dyno.{mjs,js,ts,mts,yaml,yml}`. It skips
+hidden entries, `node_modules`, `dist`, `build`, `coverage`, `.git`,
+`.dynobox`, `.next`, and `.cache`.
 
-```bash
-dynobox init             # writes dynobox/example.dyno.mjs
-dynobox init --yaml      # writes dynobox/example.dyno.yaml instead
-dynobox init --harness codex
-dynobox init --force     # overwrite an existing starter
-```
+Explicit file paths do not need to match the `*.dyno.*` naming pattern. YAML
+files are parsed as YAML, and JavaScript or TypeScript files such as `.mjs`,
+`.js`, `.ts`, and `.mts` are imported through the CLI loader. `.cjs` and `.cts`
+configs are not supported because `@dynobox/sdk` is ESM-only.
 
-## Options For `run`
+A load error in one discovered file does not stop other files from running.
+Each bad file prints a `config:` error block on stderr, and the process exits
+non-zero if any file failed to load or any job failed.
+
+## Run Options
 
 ```text
 --harness <id>             Override config harnesses; repeat or comma-separate
@@ -82,40 +87,35 @@ dynobox run --reporter json
 
 Scenario filters match the compiled scenario name or id. Patterns support `*`
 for any number of characters and `?` for one character. If no scenarios match,
-the run exits with the config-error exit code.
+the run exits with code `1`.
 
 ## Output Modes
 
-- _default_ — run header, job status, assertion results for failures or
-  expanded jobs, and a summary. Passing jobs collapse to one line.
-- `--quiet` — CI-friendly compact progress and failure information.
-- `--verbose` — expand scenario details even when jobs pass.
-- `--debug` — include temporary work-directory paths and write harness debug
-  logs inside each job's work directory when data is available:
-  - `dynobox-transcript.log` — extracted harness transcript.
-  - `dynobox-chat-history.jsonl` — raw harness stdout / JSONL chat stream.
-  - `dynobox-tool-events.json` — normalized tool events used by assertions.
-  - `dynobox-stderr.log` — raw harness stderr, when non-empty.
-- `--reporter json` — emit newline-delimited JSON on stdout instead of the
-  text renderer. Dynobox writes one job object per completed job, then one
-  summary object. The JSON reporter always uses the static run path, even in
-  interactive terminals, so stdout remains machine-readable.
+Default output prints the run header, job status, assertion details for failed
+or expanded jobs, and a final summary. Passing jobs collapse to one line.
 
-See [CI Integration](./ci.md) for a GitHub Actions recipe that runs a harness
-matrix, uploads JSON reports, and summarizes the final summary record.
+`--quiet` prints compact CI-friendly progress and failure information.
 
-If a harness reports that a tool action was blocked by permissions or sandbox
-policy, Dynobox prints a permission warning and includes it in JSON output. This
-is advisory context only: warnings do not change job status, assertion results,
-or exit codes. Use `--permission-mode dangerous` only for trusted evals that
-intentionally need that access.
+`--verbose` expands scenario details even when jobs pass.
+
+`--debug` includes temporary work-directory paths and writes debug logs inside
+each job's work directory when data is available. Debug logs can include:
+
+- `dynobox-transcript.log`
+- `dynobox-chat-history.jsonl`
+- `dynobox-tool-events.json`
+- `dynobox-stderr.log`
+
+`--reporter json` emits newline-delimited JSON on stdout instead of text.
+Dynobox writes one job object per completed job, then one summary object. The
+JSON reporter always uses static output so stdout remains machine-readable.
 
 When stdout is an interactive terminal and live output is enabled, Dynobox
 streams phase progress and harness tool events as they happen. In
-non-interactive output, quiet mode, or incompatible terminals, it runs jobs to
-completion and renders static output.
+non-interactive output, quiet mode, or incompatible terminals, it renders static
+output after jobs complete.
 
-### JSON Reporter
+## JSON Reporter
 
 Every JSON reporter object includes `"schema": "dynobox.report.v1"` and a
 `type` field.
@@ -129,17 +129,18 @@ Job records include:
 - `status` and `passed`
 - `timing`
 - `diagnostics`
-- `warnings`, with `kind`, `message`, and optional blocked tool metadata
-- `artifacts`, plus `debugLogPaths` when `--debug` produced logs
+- `warnings`
+- `artifacts`
+- `debugLogPaths` when `--debug` produced logs
 - `setup.commands`
 - `harnessOutput.exitCode` and `harnessOutput.durationMs` when the harness ran
 - `observations.toolEventCount` and `observations.httpEventCount`
 - `assertions`, with `assertionId`, `kind`, `passed`, and `message`
 
-The final summary record includes:
+The summary record includes:
 
 - `status`
-- `totals.jobs`, `totals.passed`, `totals.failed`, `totals.configErrors`, and
+- `totals.jobs`, `totals.passed`, `totals.failed`, `totals.configErrors`,
   `totals.warnings`, and `totals.durationMs`
 - `plan.scenarios`, `plan.harnesses`, and `plan.iterations`
 - `failedJobs`
@@ -157,15 +158,16 @@ In CI, redirect stdout to an artifact file:
 dynobox run --reporter json dynobox > dynobox-report.ndjson
 ```
 
-## Exit Behavior
+## Exit Codes
 
-The CLI uses exit code `1` for:
+Dynobox exits with `0` when all loaded jobs pass.
+
+Dynobox exits with `1` for:
 
 - No subcommand supplied.
-- Config load, parse, validation, or flag errors (including "no dynos found").
+- Config load, parse, validation, or flag errors.
+- No dynos found for a directory target.
 - At least one completed job failed.
-
-A successful run exits with `0`.
 
 ## Harness Requirements
 
@@ -175,19 +177,22 @@ The CLI registers both real harnesses by default:
 - `codex` invokes Codex with JSON output, no color, and the git-repo check
   skipped.
 
-Make sure the harness executable you select is installed, authenticated, and
+Make sure the selected harness executable is installed, authenticated, and
 available on `PATH`.
 
-Dynobox defaults to each harness's normal permission behavior. Use
-`--permission-mode dangerous` only for trusted local evals that need full
-access or non-interactive approval bypasses.
+Dynobox uses each harness's normal permission behavior by default. Use
+`--permission-mode dangerous` only for trusted local evals that intentionally
+need full access or non-interactive approval bypasses.
 
 Dangerous mode maps to harness-specific flags:
 
-- `claude-code` — adds `--permission-mode bypassPermissions`.
-- `codex` — adds `--sandbox danger-full-access -c approval_policy="never"`.
+- `claude-code`: adds `--permission-mode bypassPermissions`.
+- `codex`: adds `--sandbox danger-full-access -c approval_policy="never"`.
 
-## Local Development Commands
+Permission warnings are advisory. They explain when a harness blocked a tool
+action, but they do not change job status, assertion results, or exit codes.
+
+## Development Checkout
 
 From the repository root:
 

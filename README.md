@@ -148,8 +148,9 @@ reference.
 - Use default, `--quiet`, `--verbose`, and `--debug` output modes, including
   debug log paths for transcripts, raw chat JSONL, and normalized tool events.
 
-HTTP endpoint declarations and HTTP assertions exist in the SDK, but local HTTP
-capture/evaluation is not wired in yet.
+HTTP endpoint declarations and HTTP assertions can evaluate local child-process
+traffic that honors proxy and CA environment variables. Harness-native web
+tools and binaries with their own trust stores may bypass local HTTPS capture.
 
 ## Packages
 

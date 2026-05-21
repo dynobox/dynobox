@@ -1,34 +1,33 @@
 # Config Authoring
 
-Dynobox tests live in `*.dyno.{mjs,js,ts,mts,yaml,yml}` files. TypeScript and
-JavaScript files default-export `defineDyno(...)` from `@dynobox/sdk`. YAML
-files use the same shape as a plain document — assertions are declared with a
-`kind` discriminator (see [YAML Configs](#yaml-configs) below).
+Dynobox configs describe what to run and what to assert. A config can be
+authored as JavaScript, TypeScript, or YAML.
 
-`dynobox run` discovers every dyno file under the target directory; each file
-is compiled and executed independently.
+Directory discovery loads files named `*.dyno.{mjs,js,ts,mts,yaml,yml}`.
+Explicit file paths can use other names, such as `dynobox.config.ts`, as long
+as the file is a loadable Dynobox config.
 
-> `.cjs` and `.cts` extensions are not supported: `@dynobox/sdk` is ESM-only
-> (its `exports` map has no `"require"` condition), so a CommonJS config
-> calling `require('@dynobox/sdk')` fails at load time. Use `.mjs`/`.mts` or
-> `.ts`/`.js` with `"type": "module"` instead.
+CommonJS config files (`.cjs` and `.cts`) are not supported because
+`@dynobox/sdk` is ESM-only.
+
+## Minimal Config
 
 ```ts
 import {defineDyno, tool} from '@dynobox/sdk';
 
 export default defineDyno({
   name: 'local-observability',
-  harnesses: [{id: 'claude-code', permissionMode: 'default'}],
+  harnesses: ['claude-code'],
   scenarios: [
     {
       name: 'inspect package scripts',
-      prompt:
-        'Use a shell command that reads package.json and tell me whether a test script exists.',
       setup: [
         `cat > package.json <<'JSON'
 {"scripts":{"test":"vitest run"}}
 JSON`,
       ],
+      prompt:
+        'Use a shell command that reads package.json and tell me whether a test script exists.',
       assertions: [
         tool.called('shell'),
         tool.called('shell', {includes: 'package.json'}),
@@ -51,9 +50,9 @@ type DynoboxConfig = {
 };
 ```
 
-Top-level `setup` commands and `endpoints` are merged into each scenario. Top-level `harnesses` apply when a scenario does not define its own `harnesses`; scenario harnesses replace the top-level harness list.
-
-## Scenario Shape
+Top-level `setup` commands and `endpoints` are merged into each scenario.
+Top-level `harnesses` apply when a scenario does not define its own harnesses.
+Scenario harnesses replace the top-level harness list.
 
 ```ts
 type ScenarioInput = {
@@ -66,51 +65,54 @@ type ScenarioInput = {
 };
 ```
 
-Scenario `setup` commands run in a fresh temporary work directory before the harness prompt. The prompt runs with that work directory as the harness current directory.
+Each scenario runs in a fresh temporary work directory. Setup commands run in
+that directory before the harness prompt, and artifact assertions read files
+from that directory after the harness exits.
 
 ## Harnesses
 
-Supported harness IDs are:
+Supported harness IDs:
 
 - `claude-code`
 - `codex`
 
-Use a string when the default model is fine:
+Use strings when the default model and permission behavior are fine:
 
 ```ts
 harnesses: ['claude-code', 'codex'];
 ```
 
-Use an object when you want a model-specific run:
+Use objects to set a model or permission mode:
 
 ```ts
 harnesses: [
   {id: 'claude-code', model: 'sonnet'},
-  {id: 'codex', model: 'gpt-5.1'},
-];
-```
-
-Harness objects can also set `permissionMode`:
-
-```ts
-harnesses: [
-  {id: 'claude-code', permissionMode: 'default'},
   {id: 'codex', model: 'gpt-5.1', permissionMode: 'dangerous'},
 ];
 ```
 
-Permission modes are:
+Permission modes:
 
-- `default`: use the harness's normal permission and sandbox behavior. This is the secure default.
-- `dangerous`: opt into harness-specific full-access or permission-bypass flags for trusted local evals.
+- `default`: use the harness's normal permission and sandbox behavior.
+- `dangerous`: opt into harness-specific full-access or permission-bypass flags
+  for trusted local evals.
 
-For `claude-code`, `dangerous` adds `--permission-mode bypassPermissions`. For `codex`, `dangerous` adds `--sandbox danger-full-access -c approval_policy="never"`.
+Dangerous mode maps to:
 
-The CLI also supports runtime harness overrides with `--harness` and runtime permission overrides with `--permission-mode`.
+- `claude-code`: `--permission-mode bypassPermissions`
+- `codex`: `--sandbox danger-full-access -c approval_policy="never"`
 
-## Tool Assertions
+The CLI can override authored harnesses with `--harness` and authored
+permission modes with `--permission-mode`.
 
-Use `tool.called` and `tool.notCalled` to assert observed harness tool usage.
+## Assertions
+
+Assertions are evaluated against observed harness behavior after each scenario
+runs.
+
+### Tool Calls
+
+Use `tool.called` and `tool.notCalled` to assert tool usage.
 
 ```ts
 tool.called('shell');
@@ -119,7 +121,7 @@ tool.called('shell', {includes: 'package.json'});
 tool.notCalled('shell', {matches: 'rm\\s+-rf'});
 ```
 
-Supported tool kinds are:
+Supported tool kinds:
 
 - `shell`
 - `read_file`
@@ -139,9 +141,10 @@ Shell tool assertions can include exactly one matcher:
 - `{startsWith: 'pnpm'}`
 - `{matches: 'pnpm\\s+test'}`
 
-`matches` is a JavaScript regular expression string.
+`matches` is a JavaScript regular expression string. Matchers are only valid on
+`shell` tool assertions.
 
-## Sequence Assertions
+### Ordered Sequences
 
 Use `sequence.inOrder` when order matters.
 
@@ -152,19 +155,23 @@ sequence.inOrder([
 ]);
 ```
 
-For shell commands, ordered sequence matching can match multiple steps against one compound shell command when the commands appear in order.
+For shell commands, ordered matching can match multiple steps against one
+compound command when the command text appears in order.
 
-## Skill Assertions
+### Skills
 
-Use `skill.invoked` to assert that the harness accessed a named skill's `SKILL.md` instruction file.
+Use `skill.invoked` to assert that the harness accessed a named skill's
+`SKILL.md` instruction file.
 
 ```ts
 skill.invoked('commit');
 ```
 
-This passes when observed tool events reference `.agents/skills/<name>/SKILL.md` or `.claude/skills/<name>/SKILL.md`, including reads, searches, or shell commands that access the file.
+This passes when observed tool events reference
+`.agents/skills/<name>/SKILL.md` or `.claude/skills/<name>/SKILL.md`, including
+reads, searches, or shell commands that access the file.
 
-## Artifact Assertions
+### Artifacts
 
 Artifact assertions read files inside the scenario work directory.
 
@@ -175,20 +182,24 @@ artifact.contains('package.json', 'vitest run');
 
 Artifact paths must be relative and must stay inside the work directory.
 
-## Transcript And Final Message Assertions
+### Transcript And Final Message
 
-Use transcript assertions to inspect the raw harness transcript and final-message assertions to inspect the final response extracted from the harness output.
+Use transcript assertions to inspect the full harness transcript. Use
+final-message assertions to inspect the final assistant response extracted from
+the harness output.
 
 ```ts
 transcript.contains('package.json');
 finalMessage.contains('test script');
 ```
 
-Final-message extraction depends on the harness output format. If a harness does not provide a final message, the assertion fails with a clear message.
+Final-message extraction depends on the harness output format. If a harness
+does not provide a final message, the assertion fails with a clear message.
 
-## HTTP Helpers
+## HTTP Assertions
 
-The SDK can declare HTTP endpoints and assertions:
+Declare endpoints with `http.endpoint(...)` and assert whether matching
+requests were observed.
 
 ```ts
 endpoints: {
@@ -200,21 +211,42 @@ endpoints: {
 assertions: [http.called('npmPrettier', {status: 200})];
 ```
 
-The local runner captures HTTP traffic from harness child processes through a local proxy and evaluates matching `http.called` / `http.notCalled` assertions.
+Endpoint keys become part of stable IR ids, so they may only contain letters,
+numbers, underscores, and hyphens.
 
-Endpoint keys become part of stable IR ids, so they may only contain letters, numbers, underscores, and hyphens.
+Endpoint specs also accept `headers`, `body`, and `response` fields. The
+current local runner preserves those fields in the compiled IR, but HTTP
+assertions match observed requests by endpoint URL/method and optional response
+status. It does not use those fields to mock or shape requests yet.
 
-### How HTTP capture works
+When a scenario includes HTTP assertions, Dynobox starts a per-job local proxy
+and sets proxy environment variables on the harness child process:
 
-When a scenario includes HTTP assertions, Dynobox starts a per-job local proxy and sets `HTTP_PROXY` / `HTTPS_PROXY` on the harness child process. It also sets `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, and `CURL_CA_BUNDLE` to a Dynobox-generated CA at `~/.dynobox/ca.pem` so common Node, Python, and curl-based tools can make HTTPS requests through the proxy without changing the system keychain.
+- `HTTP_PROXY`
+- `HTTPS_PROXY`
+- `http_proxy`
+- `https_proxy`
 
-HTTP capture covers local child-process traffic that honors those proxy and CA environment variables. Tools with their own trust stores, such as some Go and Java binaries, may bypass HTTPS capture. Harness-native web tools such as built-in web search or web fetch can also bypass the local proxy if their network request happens outside the harness child process.
+Dynobox also sets common CA variables to a generated CA at
+`~/.dynobox/ca.pem`:
+
+- `NODE_EXTRA_CA_CERTS`
+- `SSL_CERT_FILE`
+- `REQUESTS_CA_BUNDLE`
+- `CURL_CA_BUNDLE`
+
+HTTP capture covers local child-process traffic that honors those proxy and CA
+environment variables. Harness-native web tools and binaries with their own
+trust stores may bypass capture.
 
 ## Path Helpers
 
-The `dyno` helper is useful when config files need stable paths relative to the config module.
+The `dyno` helper is useful when config files need stable paths relative to the
+config module.
 
 ```ts
+import {dyno} from '@dynobox/sdk';
+
 const here = dyno.here(import.meta.url);
 
 setup: [`cp ${here.q('./fixtures/input.txt')} input.txt`];
@@ -224,13 +256,14 @@ Available helpers:
 
 - `dyno.fsPath(url)`
 - `dyno.fromUrl(baseUrl, path)`
-- `dyno.shellQuote(value)` / `dyno.q(value)`
+- `dyno.shellQuote(value)` or `dyno.q(value)`
 - `dyno.here(import.meta.url).path(path)`
 - `dyno.here(import.meta.url).q(path)`
 
-## Single Scenario Authoring
+## Reusable Scenarios
 
-Use `defineScenario` when you want to author or export a scenario independently, then include it in a config.
+Use `defineScenario` when you want to author or export a scenario
+independently, then include it in a dyno.
 
 ```ts
 import {defineDyno, defineScenario, tool} from '@dynobox/sdk';
@@ -248,15 +281,14 @@ export default defineDyno({
 
 ## YAML Configs
 
-YAML dyno files use the same top-level shape as the TypeScript form. The only
-difference is that helper calls like `tool.called('shell', {includes: 'x'})`
-are written as plain objects discriminated by a `kind` field.
+YAML dynos use the same top-level shape as JavaScript and TypeScript configs.
+The difference is that helper calls are written as plain objects with a `kind`
+field.
 
 ```yaml
-name: package-script-skill
+name: package-script-check
 harnesses:
-  - id: claude-code
-    permissionMode: default
+  - claude-code
 scenarios:
   - name: detects test script
     prompt: >-
@@ -280,12 +312,10 @@ scenarios:
         text: test
 ```
 
-YAML configs flow through the same Zod schema and IR compiler as TypeScript
-configs, so runtime behavior is identical.
+YAML configs flow through the same schema and IR compiler as JavaScript and
+TypeScript configs.
 
-### Assertion `kind` reference
-
-The following table maps each TypeScript helper to its YAML form.
+## YAML Assertion Reference
 
 | TypeScript helper                                      | YAML object                                                        |
 | ------------------------------------------------------ | ------------------------------------------------------------------ |
@@ -301,8 +331,8 @@ The following table maps each TypeScript helper to its YAML form.
 | `http.called('npmPrettier', {status: 200})`            | `{kind: http.called, endpoint: npmPrettier, status: 200}`          |
 | `http.notCalled('leftPad')`                            | `{kind: http.notCalled, endpoint: leftPad}`                        |
 
-Matcher shapes accept exactly one of `equals`, `includes`, `startsWith`,
-`matches` and are only valid on `shell` tool assertions.
+Matcher shapes accept exactly one of `equals`, `includes`, `startsWith`, or
+`matches`, and are only valid on `shell` tool assertions.
 
 When YAML parsing fails, the CLI emits a `line:column` pointer into the file so
 syntax errors are easy to locate.

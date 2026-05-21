@@ -1,58 +1,70 @@
 # Dynobox Docs
 
-Dynobox is an early local test runner for agent and skill workflows. It lets you describe a task, run it through one or more agent harnesses, and assert on observable behavior such as tool usage, shell commands, files written in the sandbox, transcripts, and final messages.
+Dynobox is a local test runner for agent and skill workflows. You describe a
+task, choose one or more local agent harnesses, and assert on observable
+behavior such as tool calls, shell commands, files in the sandbox, transcripts,
+HTTP requests, and final messages.
 
-Use these docs when evaluating whether Dynobox can cover a coworker's skill or agent workflow today.
+Dynobox is useful when you want repeatable checks for agent behavior before
+shipping a prompt, skill, or workflow change.
 
 ## Start Here
 
-- [Getting Started](./getting-started.md): install the CLI, scaffold a starter dyno with `dynobox init`, and run it.
-- [Config Authoring](./config-authoring.md): the `@dynobox/sdk` API and supported assertions; covers both TypeScript/JavaScript and YAML authoring.
-- [CLI Reference](./cli.md): `dynobox run`, `dynobox init`, harness overrides, output modes, and exit behavior.
-- [CI Integration](./ci.md): run Dynobox in CI, capture JSON reports, and use the GitHub Actions reference workflow.
+- [Getting Started](./getting-started.md): install the CLI, scaffold a dyno,
+  and run your first scenario.
+- [Config Authoring](./config-authoring.md): write JavaScript, TypeScript, or
+  YAML dynos with the `@dynobox/sdk` helpers.
+- [CLI Reference](./cli.md): commands, flags, output modes, JSON reports, and
+  exit behavior.
+- [CI Integration](./ci.md): run Dynobox in GitHub Actions and publish JSON
+  reports as build artifacts.
 
-## Current Scope
+## What Dynobox Tests
 
-Dynobox currently supports local execution through:
+Dynobox runs each scenario in an isolated temporary work directory. Setup
+commands create the fixture, the selected harness performs the task, and
+assertions evaluate what happened.
+
+You can assert:
+
+- Tool calls, including expected and prohibited shell commands.
+- Skill instruction loading with `skill.invoked(...)`.
+- Ordered tool-call sequences.
+- Files present inside the scenario work directory.
+- Harness transcript and final-message text.
+- HTTP requests made by local child-process tools that honor proxy environment
+  variables.
+
+## Supported Harnesses
+
+Dynobox currently runs local scenarios through:
 
 - Claude Code via the `claude` executable.
 - OpenAI Codex via the `codex` executable.
 
-Authoring formats:
+Each harness must already be installed, authenticated, and available on
+`PATH`.
 
-- TypeScript / JavaScript: `*.dyno.{mjs,js,ts,mts}` using `defineDyno(...)` from `@dynobox/sdk`.
-- YAML: `*.dyno.{yaml,yml}` with `kind`-discriminated assertion objects.
-- `.cjs` / `.cts` are not supported (the SDK ships ESM-only).
+## Supported Config Formats
 
-Discovery: `dynobox run [path]` accepts no argument (current directory), a directory path (recursive glob), or a single file path.
+Dynobox discovers `*.dyno.{mjs,js,ts,mts,yaml,yml}` files recursively when you
+run a directory. Explicit file paths can use non-`*.dyno.*` names, such as
+`dynobox.config.ts`, as long as they are loadable Dynobox configs.
 
-It can assert:
+Supported authoring formats:
 
-- Whether harness tools were called or not called.
-- Whether skill instruction files were loaded with `skill.invoked(...)`.
-- Shell command content with `equals`, `includes`, `startsWith`, or `matches`.
-- Ordered tool-call sequences.
-- Files created or updated inside the scenario work directory.
-- Harness transcript and final-message text.
-- HTTP requests made by local child-process tools that honor proxy environment variables.
+- TypeScript or JavaScript with `defineDyno(...)` from `@dynobox/sdk`.
+- YAML with `kind`-discriminated assertion objects.
 
-## Good Fits Today
+CommonJS config files (`.cjs` and `.cts`) are not supported because the SDK is
+ESM-only.
 
-Dynobox is useful now for checking whether a skill or agent workflow:
+## Current Limits
 
-- Runs expected shell commands.
-- Reads, writes, or edits expected files.
-- Avoids prohibited tools or shell commands.
-- Produces a final answer containing required text.
-- Works similarly across Claude Code and Codex.
-- Uses secure harness defaults unless a trusted eval explicitly opts into dangerous permission mode.
-- Survives refactors or prompt changes by running repeatable scenarios.
+Dynobox is under active development and is currently focused on local
+execution. These areas are not complete yet:
 
-## Not Yet Covered
-
-The current local runner is not yet a full production eval platform. These areas are still in progress:
-
-- HTTP capture for harness-native web tools and binaries that ignore proxy/CA environment variables.
+- HTTP capture for harness-native web tools and binaries that ignore proxy/CA
+  environment variables.
 - Hosted or remote runner execution.
 - Rich multi-iteration controls from authored configs.
-- First-class docs site publishing from this repo.

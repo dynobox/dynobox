@@ -1,0 +1,10 @@
+---
+import DocsLayout from '../layouts/DocsLayout.astro';
+import { getDoc, getDocNav } from '../lib/docs';
+
+const [page, navItems] = await Promise.all([getDoc('README.md'), getDocNav()]);
+---
+
+<DocsLayout page={page} navItems={navItems}>
+  <Fragment set:html={page.html} />
+</DocsLayout>

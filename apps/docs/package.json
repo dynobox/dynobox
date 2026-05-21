@@ -1,0 +1,20 @@
+{
+  "name": "@dynobox/docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "astro build",
+    "deploy": "pnpm run build && pnpm dlx wrangler deploy",
+    "dev": "astro dev",
+    "typecheck": "astro check"
+  },
+  "dependencies": {
+    "@markdoc/markdoc": "^0.5.7",
+    "astro": "^6.3.6"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.9",
+    "typescript": "^6.0.3"
+  }
+}

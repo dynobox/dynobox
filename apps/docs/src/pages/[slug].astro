@@ -1,0 +1,26 @@
+---
+import DocsLayout from '../layouts/DocsLayout.astro';
+import {
+  getAllDocs,
+  getDoc,
+  getDocFileBySlug,
+  getDocNav,
+} from '../lib/docs';
+
+export async function getStaticPaths() {
+  const docs = await getAllDocs();
+
+  return docs
+    .filter((doc) => doc.slug)
+    .map((doc) => ({
+      params: { slug: doc.slug },
+    }));
+}
+
+const file = getDocFileBySlug(Astro.params.slug);
+const [page, navItems] = await Promise.all([getDoc(file), getDocNav()]);
+---
+
+<DocsLayout page={page} navItems={navItems}>
+  <Fragment set:html={page.html} />
+</DocsLayout>

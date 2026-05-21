@@ -1,0 +1,11 @@
+{
+  "compatibility_date": "2026-05-20",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "name": "dynobox-docs",
+  "assets": {
+    "directory": "./dist",
+  },
+  "observability": {
+    "enabled": true,
+  },
+}
