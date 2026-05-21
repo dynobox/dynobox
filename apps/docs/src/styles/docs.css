@@ -10,9 +10,9 @@
   --muted: #8f96a3;
   --line: #252a33;
   --line-soft: #1a1e26;
-  --accent: #ff4b3e;
-  --accent-soft: rgba(255, 75, 62, 0.1);
-  --accent-line: rgba(255, 75, 62, 0.5);
+  --accent: #e03125;
+  --accent-soft: rgba(224, 56, 45, 0.12);
+  --accent-line: rgba(224, 56, 45, 0.58);
   --code: #0f1117;
   --font-display: 'Familjen Grotesk', ui-sans-serif, system-ui, sans-serif;
   --font-mono:
@@ -38,9 +38,9 @@
   --muted: #6f737c;
   --line: #d6d0c8;
   --line-soft: #e6e1da;
-  --accent: #d83b30;
-  --accent-soft: rgba(216, 59, 48, 0.1);
-  --accent-line: rgba(216, 59, 48, 0.45);
+  --accent: #e03125;
+  --accent-soft: rgba(183, 37, 27, 0.11);
+  --accent-line: rgba(183, 37, 27, 0.48);
   --code: #f3f1ec;
 }
 
@@ -233,7 +233,6 @@ a {
 }
 
 :root[data-theme='light'] .theme-toggle-thumb {
-  background: var(--accent);
   transform: translate(var(--toggle-shift), -50%);
 }
 
@@ -457,7 +456,7 @@ a {
 .content a {
   color: var(--text);
   font-weight: 500;
-  text-decoration-color: rgba(255, 75, 62, 0.75);
+  text-decoration-color: var(--accent-line);
   text-decoration-thickness: 1px;
   text-underline-offset: 4px;
 }
