@@ -8,6 +8,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## @dynobox/sdk@0.1.0 — 2026-05-22
+
 ### `@dynobox/sdk`
 
 - Changed the authoring assertion object shape to use `type`, `tool`, and
@@ -16,13 +20,13 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Added optional scenario and assertion IDs plus assertion labels for stable
   references and clearer output.
 
+## dynobox@0.2.0 — 2026-05-22
+
 ### `dynobox` (CLI)
 
 - Updated YAML dyno authoring, starter templates, examples, and docs for the
   shared `type` / `tool` / `command` assertion contract.
 - Added assertion labels to text output and JSON reporter assertion records.
-
----
 
 ## dynobox@0.1.0 — 2026-05-20
 
