@@ -1,0 +1,56 @@
+---
+import SiteLayout from '../layouts/SiteLayout.astro';
+import Terminal from '../components/Terminal.astro';
+
+const sampleRun = `<span class="mut">$</span> <span class="cmd">dynobox run</span>
+  dynobox 0.2.0
+
+  <span class="ok">✓</span> commit-skill   claude-code   <span class="mut">14.2s</span>
+    <span class="ok">✓ skill.invoked(commit)</span>
+    <span class="ok">✓ tool.called(shell, "git commit")</span>
+    <span class="ok">✓ tool.notCalled(shell, "git push")</span>
+
+  <span class="fail">✗</span> commit-skill   codex         <span class="mut">11.8s</span>
+    <span class="fail">✗ skill.invoked(commit)</span>
+      <span class="mut">SKILL.md was never read</span>
+    <span class="ok">✓ tool.called(shell, "git commit")</span>
+    <span class="ok">✓ tool.notCalled(shell, "git push")</span>
+
+  <span class="mut">────────────────────────────────────────────</span>
+  <span class="ok">1 passed</span>   <span class="fail">1 failed</span>           <span class="mut">26.0s</span>`;
+---
+
+<SiteLayout>
+  <main class="shell">
+    <section class="hero">
+      <div class="hero-copy">
+        <h1>Agents deserve <span class="accent">test coverage</span> too.</h1>
+        <p>
+          Write scenarios in TypeScript or YAML, run them against Claude Code
+          and Codex. Assert on real behavior — not just the final answer.
+        </p>
+
+        <div class="install">
+          <code><span class="prompt">$</span> npm install -g dynobox</code>
+          <code><span class="prompt">$</span> dynobox init &amp;&amp; dynobox run</code>
+        </div>
+
+        <div class="cta-row">
+          <a class="cta cta-primary" href="https://docs.dynobox.xyz/getting-started">Get started</a>
+          <a class="cta" href="https://github.com/dynobox/dynobox" target="_blank">View on GitHub</a>
+        </div>
+      </div>
+
+      <div class="hero-terminal">
+        <Terminal title="commit-skill.dyno.yaml">
+          <Fragment set:html={sampleRun} />
+        </Terminal>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <a href="https://x.com/dynobox_xyz" target="_blank">@dynobox_xyz</a>
+      <a href="mailto:dynobox@bhk.dev">dynobox@bhk.dev</a>
+    </footer>
+  </main>
+</SiteLayout>

@@ -1,0 +1,47 @@
+---
+import '../styles/site.css';
+
+type Props = {
+  title?: string;
+  description?: string;
+};
+
+const {
+  title = 'dynobox.xyz',
+  description = 'Write scenarios in TypeScript or YAML, run them against Claude Code and Codex. Assert on real behavior — not just the final answer.',
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <meta name="description" content={description} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://dynobox.xyz" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Dynobox home">
+        <span class="brand-mark">dynobox</span>
+      </a>
+      <nav class="topnav" aria-label="Primary">
+        <a href="https://docs.dynobox.xyz">Docs</a>
+        <a href="https://github.com/dynobox/dynobox" target="_blank">GitHub</a>
+        <a href="https://www.npmjs.com/package/dynobox" target="_blank">npm</a>
+      </nav>
+    </header>
+    <slot />
+  </body>
+</html>

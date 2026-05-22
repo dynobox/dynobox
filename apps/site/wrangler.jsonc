@@ -1,0 +1,15 @@
+{
+  "compatibility_date": "2026-05-20",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "name": "dynobox-site",
+  "assets": {
+    "directory": "./dist",
+  },
+  "routes": [
+    {"pattern": "dynobox.xyz", "custom_domain": true},
+    {"pattern": "www.dynobox.xyz", "custom_domain": true},
+  ],
+  "observability": {
+    "enabled": true,
+  },
+}
