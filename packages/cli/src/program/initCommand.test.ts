@@ -13,6 +13,7 @@ import {afterAll, afterEach, beforeAll, describe, expect, it} from 'vitest';
 
 import {loadDyno, normalizeLoadedModule} from './configLoader.js';
 import {executeCli} from './execute.js';
+import {configErrorExitCode} from './exitCodes.js';
 
 /**
  * A harness that satisfies the assertions in the `dynobox init` starter
@@ -105,6 +106,17 @@ describe('dynobox init', () => {
 
     const body = readFileSync(join(dir, 'dynobox/example.dyno.mjs'), 'utf8');
     expect(body).toContain("['codex']");
+  });
+
+  it('rejects an unknown --harness id before writing a starter', async () => {
+    const dir = join(ROOT, 'invalid-harness');
+    chTo(dir);
+
+    const result = await executeCli(['init', '--harness', 'nope']);
+
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(result.stderr).toContain('Invalid harness "nope"');
+    expect(existsSync(join(dir, 'dynobox/example.dyno.mjs'))).toBe(false);
   });
 
   it('refuses to overwrite an existing starter without --force', async () => {

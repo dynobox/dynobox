@@ -43,9 +43,12 @@ Canonical IR contract used by runners and evaluators:
 
 ## Config contract
 
-- user config file name: `dynobox.config.ts`
-- config module shape: default export
+- discovered user config names: `*.dyno.{mjs,js,ts,mts,yaml,yml}`
+- config module shape: default export for JavaScript/TypeScript, same object
+  shape in YAML
 - authoring import path: `@dynobox/sdk`
+- assertion objects use `type` plus assertion-specific fields, matching YAML
+  declarations and SDK helper return values
 
 ## Local development
 

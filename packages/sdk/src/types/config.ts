@@ -17,6 +17,7 @@ export type ScenarioInput<
   EKeys extends string = string,
   E extends Record<string, Endpoint> = Record<string, Endpoint>,
 > = {
+  id?: string;
   name: string;
   prompt: string;
   harnesses?: HarnessRunConfig[];

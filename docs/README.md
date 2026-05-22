@@ -54,7 +54,8 @@ run a directory. Explicit file paths can use non-`*.dyno.*` names, such as
 Supported authoring formats:
 
 - TypeScript or JavaScript with `defineDyno(...)` from `@dynobox/sdk`.
-- YAML with `kind`-discriminated assertion objects.
+- YAML with the same `type`-discriminated assertion objects that SDK helpers
+  return.
 
 CommonJS config files (`.cjs` and `.cts`) are not supported because the SDK is
 ESM-only.

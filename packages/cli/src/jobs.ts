@@ -98,7 +98,15 @@ function scenarioMatchesPattern(
   pattern: string,
 ): boolean {
   const matcher = globPatternToRegExp(pattern);
-  return matcher.test(scenario.name) || matcher.test(scenario.id);
+  return (
+    matcher.test(scenario.name) ||
+    matcher.test(scenario.id) ||
+    matcher.test(unprefixedScenarioId(scenario.id))
+  );
+}
+
+function unprefixedScenarioId(id: string): string {
+  return id.startsWith('scenario.') ? id.slice('scenario.'.length) : id;
 }
 
 function globPatternToRegExp(pattern: string): RegExp {

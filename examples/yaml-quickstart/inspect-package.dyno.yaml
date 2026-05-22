@@ -17,12 +17,14 @@ scenarios:
         }
         JSON
     assertions:
-      - kind: tool.called
-        toolKind: shell
-      - kind: tool.called
-        toolKind: shell
-        matcher:
+      - label: uses shell
+        type: tool.called
+        tool: shell
+      - label: reads package.json
+        type: tool.called
+        tool: shell
+        command:
           includes: package.json
-      - kind: artifact.contains
+      - type: artifact.contains
         path: package.json
         text: vitest run

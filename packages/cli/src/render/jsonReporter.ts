@@ -76,13 +76,26 @@ function jobRecord(
       toolEventCount: result.harnessResult?.toolEvents.length ?? 0,
       httpEventCount: result.httpEvents.length,
     },
-    assertions: result.assertionResults.map((assertion) => ({
-      assertionId: assertion.assertionId,
-      kind: assertion.kind,
-      passed: assertion.passed,
-      message: assertion.message,
-    })),
+    assertions: result.assertionResults.map((assertion) => {
+      const label = jobAssertionLabel(job, assertion.assertionId);
+      return {
+        assertionId: assertion.assertionId,
+        ...(label === undefined ? {} : {label}),
+        kind: assertion.kind,
+        passed: assertion.passed,
+        message: assertion.message,
+      };
+    }),
   };
+}
+
+function jobAssertionLabel(
+  job: LocalRunnerJob | undefined,
+  assertionId: string,
+): string | undefined {
+  return job?.scenario.assertions.find(
+    (assertion) => assertion.id === assertionId,
+  )?.label;
 }
 
 function summaryRecord(input: RenderJsonRunOutputInput) {

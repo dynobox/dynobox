@@ -46,6 +46,11 @@ const PERMISSION_DENIED_GIT_EVENT: ShellToolEvent = {
   message: 'Permission denied',
 };
 
+function expectStringArray(value: unknown): string[] {
+  expect(Array.isArray(value)).toBe(true);
+  return value as string[];
+}
+
 describe('dynobox run — config loading', () => {
   beforeAll(fixtures.setup);
   afterAll(fixtures.teardown);
@@ -312,9 +317,8 @@ describe('dynobox run — output modes', () => {
       status: 'failed',
       totals: {jobs: 1, passed: 0, failed: 1, configErrors: 0},
     });
-    const failedJobs = records[1]?.failedJobs;
-    expect(Array.isArray(failedJobs)).toBe(true);
-    expect(String(failedJobs?.[0])).toContain(
+    const failedJobs = expectStringArray(records[1]?.failedJobs);
+    expect(failedJobs[0]).toContain(
       'scenario.uses-shell.claude-code.iteration.0',
     );
   });
@@ -356,9 +360,8 @@ describe('dynobox run — output modes', () => {
       status: 'passed',
       totals: {warnings: 1},
     });
-    const warningJobs = records[1]?.warningJobs;
-    expect(Array.isArray(warningJobs)).toBe(true);
-    expect(String(warningJobs?.[0])).toContain(
+    const warningJobs = expectStringArray(records[1]?.warningJobs);
+    expect(warningJobs[0]).toContain(
       'scenario.uses-shell.claude-code.iteration.0',
     );
   });

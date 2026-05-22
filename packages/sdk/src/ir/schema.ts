@@ -41,6 +41,7 @@ const shellToolMatcherSchema = z.custom<ShellToolMatcher>(isShellToolMatcher, {
 
 const irToolCalledAssertionSchema = z.object({
   id: z.string().min(1),
+  label: z.string().min(1).optional(),
   kind: z.literal('tool.called'),
   toolKind: z.enum(TOOL_KINDS),
   matcher: shellToolMatcherSchema.optional(),
@@ -48,6 +49,7 @@ const irToolCalledAssertionSchema = z.object({
 
 const irToolNotCalledAssertionSchema = z.object({
   id: z.string().min(1),
+  label: z.string().min(1).optional(),
   kind: z.literal('tool.notCalled'),
   toolKind: z.enum(TOOL_KINDS),
   matcher: shellToolMatcherSchema.optional(),
@@ -63,12 +65,14 @@ export const irAssertionSchema = z
   .discriminatedUnion('kind', [
     z.object({
       id: z.string().min(1),
+      label: z.string().min(1).optional(),
       kind: z.literal('http.called'),
       endpointId: z.string().min(1),
       status: z.number().int().optional(),
     }),
     z.object({
       id: z.string().min(1),
+      label: z.string().min(1).optional(),
       kind: z.literal('http.notCalled'),
       endpointId: z.string().min(1),
     }),
@@ -76,32 +80,38 @@ export const irAssertionSchema = z
     irToolNotCalledAssertionSchema,
     z.object({
       id: z.string().min(1),
+      label: z.string().min(1).optional(),
       kind: z.literal('artifact.exists'),
       path: z.string().min(1),
     }),
     z.object({
       id: z.string().min(1),
+      label: z.string().min(1).optional(),
       kind: z.literal('artifact.contains'),
       path: z.string().min(1),
       text: z.string(),
     }),
     z.object({
       id: z.string().min(1),
+      label: z.string().min(1).optional(),
       kind: z.literal('transcript.contains'),
       text: z.string(),
     }),
     z.object({
       id: z.string().min(1),
+      label: z.string().min(1).optional(),
       kind: z.literal('finalMessage.contains'),
       text: z.string(),
     }),
     z.object({
       id: z.string().min(1),
+      label: z.string().min(1).optional(),
       kind: z.literal('sequence.inOrder'),
       steps: z.array(irSequenceToolCalledStepSchema).min(1),
     }),
     z.object({
       id: z.string().min(1),
+      label: z.string().min(1).optional(),
       kind: z.literal('skill.invoked'),
       skill: z.string().min(1),
     }),

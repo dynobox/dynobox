@@ -79,13 +79,13 @@ describe('packages/sdk', () => {
   it('preserves the tool kind as a literal type on assertion helpers', () => {
     const a = tool.called('shell', {includes: 'pnpm test'});
     expectTypeOf(a).toEqualTypeOf<ToolCalledAssertion<'shell'>>();
-    expectTypeOf(a.toolKind).toEqualTypeOf<'shell'>();
+    expectTypeOf(a.tool).toEqualTypeOf<'shell'>();
   });
 
   it('preserves the tool kind as a literal type on negative tool helpers', () => {
     const a = tool.notCalled('shell', {includes: 'npm publish'});
     expectTypeOf(a).toEqualTypeOf<ToolNotCalledAssertion<'shell'>>();
-    expectTypeOf(a.toolKind).toEqualTypeOf<'shell'>();
+    expectTypeOf(a.tool).toEqualTypeOf<'shell'>();
   });
 
   it('types non-tool assertion helpers', () => {
@@ -330,13 +330,106 @@ describe('packages/sdk', () => {
     expect(irSchema.parse(ir)).toEqual(ir);
   });
 
+  it('compiles plain authoring objects with the same shape as YAML', () => {
+    const config = {
+      scenarios: [
+        {
+          id: 'yaml-shaped',
+          name: 'yaml shaped',
+          prompt: 'Read package.json.',
+          assertions: [
+            {
+              id: 'reads-package',
+              label: 'reads package.json',
+              type: 'tool.called',
+              tool: 'shell',
+              command: {includes: 'package.json'},
+            },
+            {
+              type: 'artifact.contains',
+              path: 'package.json',
+              text: 'vitest',
+            },
+          ],
+        },
+      ],
+    } as unknown as Parameters<typeof compile>[0];
+
+    expect(compile(config).scenarios[0]).toMatchObject({
+      id: 'scenario.yaml-shaped',
+      assertions: [
+        {
+          id: 'assertion.yaml-shaped.reads-package',
+          label: 'reads package.json',
+          kind: 'tool.called',
+          toolKind: 'shell',
+          matcher: {includes: 'package.json'},
+        },
+        {
+          id: 'assertion.yaml-shaped.1',
+          kind: 'artifact.contains',
+        },
+      ],
+    });
+  });
+
+  it('rejects legacy authoring assertion fields', () => {
+    const bad = {
+      scenarios: [
+        {
+          name: 'legacy fields',
+          prompt: 'p',
+          assertions: [
+            {
+              kind: 'tool.called',
+              toolKind: 'shell',
+              matcher: {includes: 'package.json'},
+            },
+          ],
+        },
+      ],
+    } as unknown as Parameters<typeof compile>[0];
+
+    expect(() => compile(bad)).toThrow(/type/);
+  });
+
+  it('rejects duplicate authored ids', () => {
+    const duplicateScenarios = {
+      scenarios: [
+        {id: 'same', name: 'first', prompt: 'p'},
+        {id: 'same', name: 'second', prompt: 'p'},
+      ],
+    } as unknown as Parameters<typeof compile>[0];
+
+    expect(() => compile(duplicateScenarios)).toThrow(
+      /Duplicate scenario id "same"/,
+    );
+
+    const duplicateAssertions = {
+      scenarios: [
+        {
+          name: 'assertion ids',
+          prompt: 'p',
+          assertions: [
+            {id: 'same', type: 'tool.called', tool: 'shell'},
+            {id: 'same', type: 'tool.notCalled', tool: 'edit_file'},
+          ],
+        },
+      ],
+    } as unknown as Parameters<typeof compile>[0];
+
+    expect(() => compile(duplicateAssertions)).toThrow(
+      /Duplicate assertion id "same"/,
+    );
+  });
+
   it('rejects invalid tool kinds in runtime config validation', () => {
     const bad = {
       scenarios: [
         {
           name: 'bad tool kind',
           prompt: 'p',
-          assertions: [{kind: 'tool.called', toolKind: 'not_real'}],
+          assertions: [{type: 'tool.called', tool: 'not_real'}],
         },
       ],
     } as unknown as Parameters<typeof compile>[0];
@@ -344,7 +437,7 @@ describe('packages/sdk', () => {
     expect(() => compile(bad)).toThrow(/Invalid option/);
   });
 
-  it('rejects invalid shell matcher shapes in runtime config validation', () => {
+  it('rejects invalid shell command matcher shapes in runtime config validation', () => {
     const bad = {
       scenarios: [
         {
@@ -352,19 +445,19 @@ describe('packages/sdk', () => {
           prompt: 'p',
           assertions: [
             {
-              kind: 'tool.called',
-              toolKind: 'shell',
-              matcher: {contains: 'pnpm'},
+              type: 'tool.called',
+              tool: 'shell',
+              command: {contains: 'pnpm'},
             },
           ],
         },
       ],
     } as unknown as Parameters<typeof compile>[0];
 
-    expect(() => compile(bad)).toThrow(/Shell tool matcher/);
+    expect(() => compile(bad)).toThrow(/Shell command matcher/);
   });
 
-  it('rejects matchers on non-shell tool assertions', () => {
+  it('rejects command matchers on non-shell tool assertions', () => {
     const bad = {
       scenarios: [
         {
@@ -372,9 +465,9 @@ describe('packages/sdk', () => {
           prompt: 'p',
           assertions: [
             {
-              kind: 'tool.called',
-              toolKind: 'edit_file',
-              matcher: {includes: 'src/index.ts'},
+              type: 'tool.called',
+              tool: 'edit_file',
+              command: {includes: 'src/index.ts'},
             },
           ],
         },
@@ -384,7 +477,7 @@ describe('packages/sdk', () => {
     expect(() => compile(bad)).toThrow(/only supported/);
   });
 
-  it('rejects matchers on non-shell negative tool assertions', () => {
+  it('rejects command matchers on non-shell negative tool assertions', () => {
     const bad = {
       scenarios: [
         {
@@ -392,9 +485,9 @@ describe('packages/sdk', () => {
           prompt: 'p',
           assertions: [
             {
-              kind: 'tool.notCalled',
-              toolKind: 'edit_file',
-              matcher: {includes: 'src/index.ts'},
+              type: 'tool.notCalled',
+              tool: 'edit_file',
+              command: {includes: 'src/index.ts'},
             },
           ],
         },
@@ -412,8 +505,8 @@ describe('packages/sdk', () => {
           prompt: 'p',
           assertions: [
             {
-              kind: 'sequence.inOrder',
-              steps: [{kind: 'artifact.exists', path: 'CHANGELOG.md'}],
+              type: 'sequence.inOrder',
+              steps: [{type: 'artifact.exists', path: 'CHANGELOG.md'}],
             },
           ],
         },

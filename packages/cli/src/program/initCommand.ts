@@ -10,10 +10,12 @@
 import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
 import {relative, resolve} from 'node:path';
 
+import {type HarnessId} from '@dynobox/sdk';
 import {CommanderError} from 'commander';
 
 import type {OutputWriter} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
+import {validateHarnessOverrides} from './options.js';
 
 export type InitCommandFlags = {
   yaml?: boolean;
@@ -38,7 +40,10 @@ export async function initCommandAction(
 ): Promise<void> {
   const {commandFlags, writeStdout, writeStderr} = input;
   const cwd = input.cwd ?? process.cwd();
-  const harness = commandFlags.harness ?? 'claude-code';
+  const harness = validateStarterHarness(
+    commandFlags.harness ?? 'claude-code',
+    writeStderr,
+  );
 
   const dir = resolve(cwd, STARTER_DIR);
   const basename = commandFlags.yaml === true ? YAML_BASENAME : MJS_BASENAME;
@@ -65,7 +70,30 @@ Next:
 `);
 }
 
-function mjsTemplate(harness: string): string {
+function validateStarterHarness(
+  rawHarness: string,
+  writeStderr: OutputWriter,
+): HarnessId {
+  try {
+    const harnesses = validateHarnessOverrides([rawHarness]);
+    const harness = harnesses?.[0];
+    if (harness !== undefined) return harness;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    writeStderr(`error: ${message}\n`);
+    throw error;
+  }
+
+  const error = new CommanderError(
+    configErrorExitCode,
+    'dynobox.harness',
+    'Harness id cannot be empty.',
+  );
+  writeStderr(`error: ${error.message}\n`);
+  throw error;
+}
+
+function mjsTemplate(harness: HarnessId): string {
   return `import {artifact, defineDyno, finalMessage, tool} from '@dynobox/sdk';
 
 export default defineDyno({
@@ -97,7 +125,7 @@ JSON\`,
 `;
 }
 
-function yamlTemplate(harness: string): string {
+function yamlTemplate(harness: HarnessId): string {
   return `name: example
 harnesses:
   - ${harness}
@@ -115,18 +143,20 @@ scenarios:
         }
         JSON
     assertions:
-      - kind: tool.called
-        toolKind: shell
-      - kind: tool.called
-        toolKind: shell
-        matcher:
+      - label: uses shell
+        type: tool.called
+        tool: shell
+      - label: reads package.json
+        type: tool.called
+        tool: shell
+        command:
           includes: package.json
-      - kind: tool.notCalled
-        toolKind: edit_file
-      - kind: artifact.contains
+      - type: tool.notCalled
+        tool: edit_file
+      - type: artifact.contains
         path: package.json
         text: echo ok
-      - kind: finalMessage.contains
+      - type: finalMessage.contains
         text: test
 `;
 }

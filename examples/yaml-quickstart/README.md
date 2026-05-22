@@ -18,20 +18,20 @@ dynobox run examples/yaml-quickstart
 
 ## YAML Schema
 
-Each assertion is a plain object discriminated by `kind`. The full
+Each assertion is a plain object discriminated by `type`. The full
 mapping from the TypeScript helper API to YAML keys is in
 [`docs/config-authoring.md`](../../docs/config-authoring.md).
 
 Examples used in this file:
 
 ```yaml
-- kind: tool.called
-  toolKind: shell
-- kind: tool.called
-  toolKind: shell
-  matcher:
+- type: tool.called
+  tool: shell
+- type: tool.called
+  tool: shell
+  command:
     includes: package.json
-- kind: artifact.contains
+- type: artifact.contains
   path: package.json
   text: vitest run
 ```

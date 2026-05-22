@@ -37,7 +37,7 @@ export function renderAssertionDetails(
     const label =
       assertion === undefined
         ? assertionResult.kind
-        : describeAssertion(assertion);
+        : describeAssertionLabel(assertion);
     lines.push(
       `        ${colorStatus(ctx, symbol(ctx, status), status)} ${label}\n`,
     );
@@ -77,6 +77,13 @@ export function renderAssertionDetails(
   }
 
   return lines.join('');
+}
+
+function describeAssertionLabel(assertion: IrAssertion): string {
+  const description = describeAssertion(assertion);
+  return assertion.label === undefined
+    ? description
+    : `${assertion.label}  ${description}`;
 }
 
 function shouldShowObservedShellCommands(

@@ -13,18 +13,21 @@ const VALID_YAML = `name: yaml-quickstart
 harnesses:
   - claude-code
 scenarios:
-  - name: inspect package scripts
+  - id: inspect-package
+    name: inspect package scripts
     prompt: Read package.json and report scripts.
     setup:
       - "echo '{}' > package.json"
     assertions:
-      - kind: tool.called
-        toolKind: shell
-      - kind: tool.called
-        toolKind: shell
-        matcher:
+      - id: reads-package
+        label: reads package.json
+        type: tool.called
+        tool: shell
+      - type: tool.called
+        tool: shell
+        command:
           includes: package.json
-      - kind: artifact.exists
+      - type: artifact.exists
         path: package.json
 `;
 
@@ -34,14 +37,14 @@ scenarios:
     prompt: "missing close
 `;
 
-const BAD_KIND_YAML = `name: bad-kind
+const BAD_TYPE_YAML = `name: bad-type
 harnesses: ['claude-code']
 scenarios:
   - name: bogus
     prompt: hi
     assertions:
-      - kind: tool.cAlLeD
-        toolKind: shell
+      - type: tool.cAlLeD
+        tool: shell
 `;
 
 function writeFile(name: string, body: string): string {
@@ -72,6 +75,11 @@ describe('loadYamlDyno', () => {
     const scenario = ir.scenarios[0];
     if (scenario === undefined) throw new Error('expected scenario');
     expect(scenario.name).toBe('inspect package scripts');
+    expect(scenario.id).toBe('scenario.inspect-package');
+    expect(scenario.assertions[0]).toMatchObject({
+      id: 'assertion.inspect-package.reads-package',
+      label: 'reads package.json',
+    });
     expect(scenario.assertions.length).toBeGreaterThanOrEqual(3);
   });
 
@@ -84,10 +92,10 @@ describe('loadYamlDyno', () => {
     });
   });
 
-  it('lets the SDK schema reject an invalid assertion kind', async () => {
-    const file = writeFile('bad-kind.dyno.yaml', BAD_KIND_YAML);
+  it('lets the SDK schema reject an invalid assertion type', async () => {
+    const file = writeFile('bad-type.dyno.yaml', BAD_TYPE_YAML);
     const loaded = await loadYamlDyno(file);
-    // resolveConfigModule runs the full schema, so it rejects bad kinds
+    // resolveConfigModule runs the full schema, so it rejects bad types
     // before compile() ever gets called.
     expect(() => resolveConfigModule(loaded)).toThrow();
   });

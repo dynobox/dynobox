@@ -2,8 +2,8 @@ import {z} from 'zod';
 
 import {
   type Endpoint,
-  isShellToolMatcher,
-  type ShellToolMatcher,
+  isShellCommandMatcher,
+  type ShellCommandMatcher,
   TOOL_KINDS,
 } from '../types/brands.js';
 import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
@@ -16,6 +16,19 @@ const endpointKeySchema = z
     'Endpoint keys may only contain letters, numbers, underscores, and hyphens.',
   );
 
+const authoredIdSchema = z
+  .string()
+  .min(1)
+  .regex(
+    /^[A-Za-z0-9._-]+$/,
+    'IDs may only contain letters, numbers, dots, underscores, and hyphens.',
+  );
+
+const assertionBaseSchema = z.object({
+  id: authoredIdSchema.optional(),
+  label: z.string().min(1).optional(),
+});
+
 /**
  * Zod schemas for structural validation of authored configs.
  *
@@ -23,8 +36,8 @@ const endpointKeySchema = z
  * which has access to the merged endpoint set. These schemas only enforce
  * shape.
  *
- * Object schemas use `.loose()` so brand symbols on author-supplied objects
- * survive validation untouched.
+ * Assertion object schemas are strict so legacy authoring fields fail fast
+ * instead of being silently ignored.
  */
 
 export const endpointSchema: z.ZodType<Endpoint> = z
@@ -54,85 +67,101 @@ const harnessRunConfigSchema = z.union([
 
 const calledAssertionSchema = z
   .object({
-    kind: z.literal('http.called'),
+    type: z.literal('http.called'),
     endpoint: z.string(),
     status: z.number().int().optional(),
   })
-  .loose();
+  .merge(assertionBaseSchema)
+  .strict();
 
 const notCalledAssertionSchema = z
   .object({
-    kind: z.literal('http.notCalled'),
+    type: z.literal('http.notCalled'),
     endpoint: z.string(),
   })
-  .loose();
+  .merge(assertionBaseSchema)
+  .strict();
 
-const shellToolMatcherSchema = z.custom<ShellToolMatcher>(isShellToolMatcher, {
-  message:
-    'Shell tool matcher must specify exactly one string field: equals, includes, startsWith, or matches.',
-});
+const shellCommandMatcherSchema = z.custom<ShellCommandMatcher>(
+  isShellCommandMatcher,
+  {
+    message:
+      'Shell command matcher must specify exactly one string field: equals, includes, startsWith, or matches.',
+  },
+);
 
-const toolCalledAssertionSchema = z
+const toolCalledStepSchema = z
   .object({
-    kind: z.literal('tool.called'),
-    toolKind: z.enum(TOOL_KINDS),
-    matcher: shellToolMatcherSchema.optional(),
+    type: z.literal('tool.called'),
+    tool: z.enum(TOOL_KINDS),
+    command: shellCommandMatcherSchema.optional(),
   })
-  .loose();
+  .strict();
+
+const toolCalledAssertionSchema = toolCalledStepSchema
+  .merge(assertionBaseSchema)
+  .strict();
 
 const toolNotCalledAssertionSchema = z
   .object({
-    kind: z.literal('tool.notCalled'),
-    toolKind: z.enum(TOOL_KINDS),
-    matcher: shellToolMatcherSchema.optional(),
+    type: z.literal('tool.notCalled'),
+    tool: z.enum(TOOL_KINDS),
+    command: shellCommandMatcherSchema.optional(),
   })
-  .loose();
+  .merge(assertionBaseSchema)
+  .strict();
 
 const artifactExistsAssertionSchema = z
   .object({
-    kind: z.literal('artifact.exists'),
+    type: z.literal('artifact.exists'),
     path: z.string().min(1),
   })
-  .loose();
+  .merge(assertionBaseSchema)
+  .strict();
 
 const artifactContainsAssertionSchema = z
   .object({
-    kind: z.literal('artifact.contains'),
+    type: z.literal('artifact.contains'),
     path: z.string().min(1),
     text: z.string(),
   })
-  .loose();
+  .merge(assertionBaseSchema)
+  .strict();
 
 const transcriptContainsAssertionSchema = z
   .object({
-    kind: z.literal('transcript.contains'),
+    type: z.literal('transcript.contains'),
     text: z.string(),
   })
-  .loose();
+  .merge(assertionBaseSchema)
+  .strict();
 
 const finalMessageContainsAssertionSchema = z
   .object({
-    kind: z.literal('finalMessage.contains'),
+    type: z.literal('finalMessage.contains'),
     text: z.string(),
   })
-  .loose();
+  .merge(assertionBaseSchema)
+  .strict();
 
 const sequenceInOrderAssertionSchema = z
   .object({
-    kind: z.literal('sequence.inOrder'),
-    steps: z.array(toolCalledAssertionSchema).min(1),
+    type: z.literal('sequence.inOrder'),
+    steps: z.array(toolCalledStepSchema).min(1),
   })
-  .loose();
+  .merge(assertionBaseSchema)
+  .strict();
 
 const skillInvokedAssertionSchema = z
   .object({
-    kind: z.literal('skill.invoked'),
+    type: z.literal('skill.invoked'),
     skill: z.string().min(1),
   })
-  .loose();
+  .merge(assertionBaseSchema)
+  .strict();
 
 export const assertionSchema = z
-  .discriminatedUnion('kind', [
+  .discriminatedUnion('type', [
     calledAssertionSchema,
     notCalledAssertionSchema,
     toolCalledAssertionSchema,
@@ -146,27 +175,27 @@ export const assertionSchema = z
   ])
   .superRefine((assertion, ctx) => {
     if (
-      (assertion.kind === 'tool.called' ||
-        assertion.kind === 'tool.notCalled') &&
-      assertion.matcher !== undefined &&
-      assertion.toolKind !== 'shell'
+      (assertion.type === 'tool.called' ||
+        assertion.type === 'tool.notCalled') &&
+      assertion.command !== undefined &&
+      assertion.tool !== 'shell'
     ) {
       ctx.addIssue({
         code: 'custom',
-        path: ['matcher'],
+        path: ['command'],
         message:
-          'Tool assertion matchers are only supported for shell tool assertions.',
+          'Command matchers are only supported for shell tool assertions.',
       });
     }
 
-    if (assertion.kind === 'sequence.inOrder') {
+    if (assertion.type === 'sequence.inOrder') {
       assertion.steps.forEach((step, index) => {
-        if (step.matcher !== undefined && step.toolKind !== 'shell') {
+        if (step.command !== undefined && step.tool !== 'shell') {
           ctx.addIssue({
             code: 'custom',
-            path: ['steps', index, 'matcher'],
+            path: ['steps', index, 'command'],
             message:
-              'Tool assertion matchers are only supported for shell tool assertions.',
+              'Command matchers are only supported for shell tool assertions.',
           });
         }
       });
@@ -174,6 +203,7 @@ export const assertionSchema = z
   });
 
 export const scenarioSchema = z.object({
+  id: authoredIdSchema.optional(),
   name: z.string().min(1),
   prompt: z.string().min(1),
   harnesses: z.array(harnessRunConfigSchema).min(1).optional(),

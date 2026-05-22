@@ -29,8 +29,11 @@ export function compile(config: DynoboxConfig): Ir {
 
   const scenarioSlugs = new Set<string>();
   const irScenarios: IrScenario[] = parsed.scenarios.map((scenario) => {
-    const scenarioId = `${SCENARIO_PREFIX}${uniquify(slugify(scenario.name), scenarioSlugs)}`;
-    const scenarioSlug = scenarioId.slice(SCENARIO_PREFIX.length);
+    const scenarioSlug =
+      scenario.id === undefined
+        ? uniquify(slugify(scenario.name), scenarioSlugs)
+        : reserveAuthoredId(scenario.id, scenarioSlugs, 'scenario');
+    const scenarioId = `${SCENARIO_PREFIX}${scenarioSlug}`;
 
     const mergedEndpoints: Record<string, Endpoint> = {
       ...(parsed.endpoints ?? {}),
@@ -48,15 +51,22 @@ export function compile(config: DynoboxConfig): Ir {
       ]),
     );
 
+    const assertionIds = new Set<string>();
     const irAssertions: IrAssertion[] = (scenario.assertions ?? []).map(
-      (assertion, index) =>
-        buildIrAssertion(
+      (assertion, index) => {
+        const assertionIdSuffix =
+          assertion.id === undefined
+            ? reserveGeneratedId(String(index), assertionIds)
+            : reserveAuthoredId(assertion.id, assertionIds, 'assertion');
+        return buildIrAssertion(
           scenario.name,
           scenarioSlug,
+          assertionIdSuffix,
           index,
           endpointIdByKey,
           assertion,
-        ),
+        );
+      },
     );
 
     const harnesses = (
@@ -112,57 +122,68 @@ function buildIrEndpoint(
 function buildIrAssertion(
   scenarioName: string,
   scenarioSlug: string,
+  assertionIdSuffix: string,
   index: number,
   endpointIdByKey: Map<string, string>,
   assertion: z.infer<typeof assertionSchema>,
 ): IrAssertion {
-  const id = `assertion.${scenarioSlug}.${index}`;
-  if (assertion.kind === 'tool.called') {
-    return {id, ...buildIrToolCalledStep(assertion)};
+  const id = `assertion.${scenarioSlug}.${assertionIdSuffix}`;
+  const metadata =
+    assertion.label === undefined ? {} : {label: assertion.label};
+  if (assertion.type === 'tool.called') {
+    return {id, ...metadata, ...buildIrToolCalledStep(assertion)};
   }
 
-  if (assertion.kind === 'tool.notCalled') {
+  if (assertion.type === 'tool.notCalled') {
     const base: IrAssertion = {
       id,
+      ...metadata,
       kind: 'tool.notCalled',
-      toolKind: assertion.toolKind,
+      toolKind: assertion.tool,
     };
-    return assertion.matcher === undefined
+    return assertion.command === undefined
       ? base
-      : {...base, matcher: assertion.matcher};
+      : {...base, matcher: assertion.command};
   }
 
-  if (assertion.kind === 'artifact.exists') {
-    return {id, kind: 'artifact.exists', path: assertion.path};
+  if (assertion.type === 'artifact.exists') {
+    return {id, ...metadata, kind: 'artifact.exists', path: assertion.path};
   }
 
-  if (assertion.kind === 'artifact.contains') {
+  if (assertion.type === 'artifact.contains') {
     return {
       id,
+      ...metadata,
       kind: 'artifact.contains',
       path: assertion.path,
       text: assertion.text,
     };
   }
 
-  if (assertion.kind === 'transcript.contains') {
-    return {id, kind: 'transcript.contains', text: assertion.text};
+  if (assertion.type === 'transcript.contains') {
+    return {id, ...metadata, kind: 'transcript.contains', text: assertion.text};
   }
 
-  if (assertion.kind === 'finalMessage.contains') {
-    return {id, kind: 'finalMessage.contains', text: assertion.text};
-  }
-
-  if (assertion.kind === 'sequence.inOrder') {
+  if (assertion.type === 'finalMessage.contains') {
     return {
       id,
+      ...metadata,
+      kind: 'finalMessage.contains',
+      text: assertion.text,
+    };
+  }
+
+  if (assertion.type === 'sequence.inOrder') {
+    return {
+      id,
+      ...metadata,
       kind: 'sequence.inOrder',
       steps: assertion.steps.map(buildIrToolCalledStep),
     };
   }
 
-  if (assertion.kind === 'skill.invoked') {
-    return {id, kind: 'skill.invoked', skill: assertion.skill};
+  if (assertion.type === 'skill.invoked') {
+    return {id, ...metadata, kind: 'skill.invoked', skill: assertion.skill};
   }
 
   const endpointId = endpointIdByKey.get(assertion.endpoint);
@@ -173,26 +194,47 @@ function buildIrAssertion(
     );
   }
 
-  if (assertion.kind === 'http.called') {
-    const base: IrAssertion = {id, kind: 'http.called', endpointId};
+  if (assertion.type === 'http.called') {
+    const base: IrAssertion = {
+      id,
+      ...metadata,
+      kind: 'http.called',
+      endpointId,
+    };
     if (assertion.status !== undefined) {
       return {...base, status: assertion.status};
     }
     return base;
   }
-  return {id, kind: 'http.notCalled', endpointId};
+  return {id, ...metadata, kind: 'http.notCalled', endpointId};
 }
 
 function buildIrToolCalledStep(
-  assertion: Extract<z.infer<typeof assertionSchema>, {kind: 'tool.called'}>,
+  assertion: Extract<z.infer<typeof assertionSchema>, {type: 'tool.called'}>,
 ): Omit<Extract<IrAssertion, {kind: 'tool.called'}>, 'id'> {
   const base = {
     kind: 'tool.called' as const,
-    toolKind: assertion.toolKind,
+    toolKind: assertion.tool,
   };
   return (
-    assertion.matcher === undefined
+    assertion.command === undefined
       ? base
-      : {...base, matcher: assertion.matcher}
+      : {...base, matcher: assertion.command}
   ) as Omit<Extract<IrAssertion, {kind: 'tool.called'}>, 'id'>;
+}
+
+function reserveAuthoredId(
+  id: string,
+  taken: Set<string>,
+  label: 'scenario' | 'assertion',
+): string {
+  if (taken.has(id)) {
+    throw new DynoboxConfigError(`Duplicate ${label} id "${id}".`);
+  }
+  taken.add(id);
+  return id;
+}
+
+function reserveGeneratedId(id: string, taken: Set<string>): string {
+  return uniquify(id, taken);
 }

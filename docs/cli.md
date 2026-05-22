@@ -24,7 +24,8 @@ dynobox init --force
 
 `dynobox init` writes `dynobox/example.dyno.mjs` by default. With `--yaml`, it
 writes `dynobox/example.dyno.yaml`. Existing starter files are not overwritten
-unless `--force` is passed.
+unless `--force` is passed. `--harness` accepts the same harness IDs as
+`dynobox run`; invalid harness IDs fail before writing a starter file.
 
 ### `dynobox run [path]`
 
@@ -135,7 +136,8 @@ Job records include:
 - `setup.commands`
 - `harnessOutput.exitCode` and `harnessOutput.durationMs` when the harness ran
 - `observations.toolEventCount` and `observations.httpEventCount`
-- `assertions`, with `assertionId`, `kind`, `passed`, and `message`
+- `assertions`, with `assertionId`, optional `label`, `kind`, `passed`, and
+  `message`
 
 The summary record includes:
 

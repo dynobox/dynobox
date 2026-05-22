@@ -56,6 +56,7 @@ Scenario harnesses replace the top-level harness list.
 
 ```ts
 type ScenarioInput = {
+  id?: string;
   name: string;
   prompt: string;
   harnesses?: HarnessRunConfig[];
@@ -68,6 +69,10 @@ type ScenarioInput = {
 Each scenario runs in a fresh temporary work directory. Setup commands run in
 that directory before the harness prompt, and artifact assertions read files
 from that directory after the harness exits.
+
+Scenario `id` is optional. When provided, it is used for stable compiled
+scenario IDs, job IDs, and `dynobox run --scenario` filters. Without an `id`,
+Dynobox derives one from the scenario name.
 
 ## Harnesses
 
@@ -134,15 +139,15 @@ Supported tool kinds:
 - `task`
 - `unknown`
 
-Shell tool assertions can include exactly one matcher:
+Shell tool assertions can include exactly one command matcher:
 
 - `{equals: 'pnpm test'}`
 - `{includes: 'package.json'}`
 - `{startsWith: 'pnpm'}`
 - `{matches: 'pnpm\\s+test'}`
 
-`matches` is a JavaScript regular expression string. Matchers are only valid on
-`shell` tool assertions.
+`matches` is a JavaScript regular expression string. Command matchers are only
+valid on `shell` tool assertions.
 
 ### Ordered Sequences
 
@@ -282,8 +287,8 @@ export default defineDyno({
 ## YAML Configs
 
 YAML dynos use the same top-level shape as JavaScript and TypeScript configs.
-The difference is that helper calls are written as plain objects with a `kind`
-field.
+The difference is that helper calls are written as plain objects using the same
+authoring assertion shape that SDK helpers return.
 
 ```yaml
 name: package-script-check
@@ -299,40 +304,48 @@ scenarios:
         {"scripts":{"test":"vitest run"}}
         JSON
     assertions:
-      - kind: tool.called
-        toolKind: shell
-        matcher:
+      - label: reads package.json
+        type: tool.called
+        tool: shell
+        command:
           includes: package.json
-      - kind: tool.notCalled
-        toolKind: edit_file
-      - kind: artifact.contains
+      - type: tool.notCalled
+        tool: edit_file
+      - type: artifact.contains
         path: package.json
         text: vitest run
-      - kind: finalMessage.contains
+      - type: finalMessage.contains
         text: test
 ```
 
 YAML configs flow through the same schema and IR compiler as JavaScript and
 TypeScript configs.
 
-## YAML Assertion Reference
+## Authoring Assertion Contract
 
-| TypeScript helper                                      | YAML object                                                        |
+All assertion objects accept optional `id` and `label` fields. `id` stabilizes
+compiled assertion IDs and JSON report references. `label` appears in CLI and
+JSON output.
+
+| TypeScript helper                                      | Authoring object                                                   |
 | ------------------------------------------------------ | ------------------------------------------------------------------ |
-| `tool.called('shell')`                                 | `{kind: tool.called, toolKind: shell}`                             |
-| `tool.called('shell', {includes: 'x'})`                | `{kind: tool.called, toolKind: shell, matcher: {includes: x}}`     |
-| `tool.notCalled('edit_file')`                          | `{kind: tool.notCalled, toolKind: edit_file}`                      |
-| `artifact.exists('README.md')`                         | `{kind: artifact.exists, path: README.md}`                         |
-| `artifact.contains('pkg.json', 'foo')`                 | `{kind: artifact.contains, path: pkg.json, text: foo}`             |
-| `transcript.contains('done')`                          | `{kind: transcript.contains, text: done}`                          |
-| `finalMessage.contains('ok')`                          | `{kind: finalMessage.contains, text: ok}`                          |
-| `skill.invoked('commit')`                              | `{kind: skill.invoked, skill: commit}`                             |
-| `sequence.inOrder([tool.called('shell', {...}), ...])` | `{kind: sequence.inOrder, steps: [{kind: tool.called, ...}, ...]}` |
-| `http.called('npmPrettier', {status: 200})`            | `{kind: http.called, endpoint: npmPrettier, status: 200}`          |
-| `http.notCalled('leftPad')`                            | `{kind: http.notCalled, endpoint: leftPad}`                        |
+| `tool.called('shell')`                                 | `{type: tool.called, tool: shell}`                                 |
+| `tool.called('shell', {includes: 'x'})`                | `{type: tool.called, tool: shell, command: {includes: x}}`         |
+| `tool.notCalled('edit_file')`                          | `{type: tool.notCalled, tool: edit_file}`                          |
+| `artifact.exists('README.md')`                         | `{type: artifact.exists, path: README.md}`                         |
+| `artifact.contains('pkg.json', 'foo')`                 | `{type: artifact.contains, path: pkg.json, text: foo}`             |
+| `transcript.contains('done')`                          | `{type: transcript.contains, text: done}`                          |
+| `finalMessage.contains('ok')`                          | `{type: finalMessage.contains, text: ok}`                          |
+| `skill.invoked('commit')`                              | `{type: skill.invoked, skill: commit}`                             |
+| `sequence.inOrder([tool.called('shell', {...}), ...])` | `{type: sequence.inOrder, steps: [{type: tool.called, ...}, ...]}` |
+| `http.called('npmPrettier', {status: 200})`            | `{type: http.called, endpoint: npmPrettier, status: 200}`          |
+| `http.notCalled('leftPad')`                            | `{type: http.notCalled, endpoint: leftPad}`                        |
 
-Matcher shapes accept exactly one of `equals`, `includes`, `startsWith`, or
-`matches`, and are only valid on `shell` tool assertions.
+Command matcher shapes accept exactly one of `equals`, `includes`,
+`startsWith`, or `matches`, and are only valid on `shell` tool assertions.
+
+Older YAML objects that used `kind`, `toolKind`, or `matcher` are not accepted.
+Use `type`, `tool`, and `command` instead.
 
 When YAML parsing fails, the CLI emits a `line:column` pointer into the file so
 syntax errors are easy to locate.

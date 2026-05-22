@@ -97,15 +97,16 @@ scenarios:
         {"scripts":{"test":"vitest run"}}
         JSON
     assertions:
-      - kind: tool.called
-        toolKind: shell
-        matcher: {includes: package.json}
-      - kind: tool.notCalled
-        toolKind: edit_file
-      - kind: artifact.contains
+      - label: reads package.json
+        type: tool.called
+        tool: shell
+        command: {includes: package.json}
+      - type: tool.notCalled
+        tool: edit_file
+      - type: artifact.contains
         path: package.json
         text: vitest run
-      - kind: finalMessage.contains
+      - type: finalMessage.contains
         text: test
 ```
 
@@ -130,7 +131,7 @@ reference.
 - Author dynos in TypeScript / JavaScript with `@dynobox/sdk` helpers
   (`defineDyno`, `defineScenario`, `tool`, `skill`, `artifact`, `transcript`,
   `finalMessage`, `sequence`, `http`, `dyno`) or in YAML using the same shape
-  with `kind`-discriminated assertion objects.
+  with `type`-discriminated assertion objects.
 - Run locally against Claude Code, Codex, or both.
 - Override harnesses at runtime with `--harness claude-code`, `--harness codex`,
   or comma-separated values.

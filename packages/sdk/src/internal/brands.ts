@@ -6,7 +6,7 @@ import type {
   FinalMessageContainsAssertion,
   NotCalledAssertion,
   SequenceInOrderAssertion,
-  ShellToolMatcher,
+  ShellCommandMatcher,
   SkillInvokedAssertion,
   ToolCalledAssertion,
   ToolKind,
@@ -37,7 +37,7 @@ export function createHttpCalledAssertion<K extends string>(
 ): CalledAssertion<K> {
   const base = {
     [ASSERTION_BRAND]: true as const,
-    kind: 'http.called' as const,
+    type: 'http.called' as const,
     endpoint,
   };
   return opts?.status === undefined
@@ -51,39 +51,39 @@ export function createHttpNotCalledAssertion<K extends string>(
 ): NotCalledAssertion<K> {
   return {
     [ASSERTION_BRAND]: true as const,
-    kind: 'http.notCalled' as const,
+    type: 'http.notCalled' as const,
     endpoint,
   };
 }
 
 /** Create a positive tool-use assertion, optionally scoped by shell matcher. */
 export function createToolCalledAssertion<K extends ToolKind>(
-  toolKind: K,
-  matcher?: ShellToolMatcher,
+  tool: K,
+  command?: ShellCommandMatcher,
 ): ToolCalledAssertion<K> {
   const base = {
     [ASSERTION_BRAND]: true as const,
-    kind: 'tool.called' as const,
-    toolKind,
+    type: 'tool.called' as const,
+    tool,
   };
-  return (matcher === undefined
+  return (command === undefined
     ? base
-    : {...base, matcher}) as unknown as ToolCalledAssertion<K>;
+    : {...base, command}) as unknown as ToolCalledAssertion<K>;
 }
 
 /** Create a negative tool-use assertion, optionally scoped by shell matcher. */
 export function createToolNotCalledAssertion<K extends ToolKind>(
-  toolKind: K,
-  matcher?: ShellToolMatcher,
+  tool: K,
+  command?: ShellCommandMatcher,
 ): ToolNotCalledAssertion<K> {
   const base = {
     [ASSERTION_BRAND]: true as const,
-    kind: 'tool.notCalled' as const,
-    toolKind,
+    type: 'tool.notCalled' as const,
+    tool,
   };
-  return (matcher === undefined
+  return (command === undefined
     ? base
-    : {...base, matcher}) as unknown as ToolNotCalledAssertion<K>;
+    : {...base, command}) as unknown as ToolNotCalledAssertion<K>;
 }
 
 /** Create an assertion that a path exists in the scenario work directory. */
@@ -92,7 +92,7 @@ export function createArtifactExistsAssertion(
 ): ArtifactExistsAssertion {
   return {
     [ASSERTION_BRAND]: true as const,
-    kind: 'artifact.exists' as const,
+    type: 'artifact.exists' as const,
     path,
   };
 }
@@ -104,7 +104,7 @@ export function createArtifactContainsAssertion(
 ): ArtifactContainsAssertion {
   return {
     [ASSERTION_BRAND]: true as const,
-    kind: 'artifact.contains' as const,
+    type: 'artifact.contains' as const,
     path,
     text,
   };
@@ -116,7 +116,7 @@ export function createTranscriptContainsAssertion(
 ): TranscriptContainsAssertion {
   return {
     [ASSERTION_BRAND]: true as const,
-    kind: 'transcript.contains' as const,
+    type: 'transcript.contains' as const,
     text,
   };
 }
@@ -127,7 +127,7 @@ export function createFinalMessageContainsAssertion(
 ): FinalMessageContainsAssertion {
   return {
     [ASSERTION_BRAND]: true as const,
-    kind: 'finalMessage.contains' as const,
+    type: 'finalMessage.contains' as const,
     text,
   };
 }
@@ -138,7 +138,7 @@ export function createSequenceInOrderAssertion(
 ): SequenceInOrderAssertion {
   return {
     [ASSERTION_BRAND]: true as const,
-    kind: 'sequence.inOrder' as const,
+    type: 'sequence.inOrder' as const,
     steps,
   };
 }
@@ -149,7 +149,7 @@ export function createSkillInvokedAssertion(
 ): SkillInvokedAssertion {
   return {
     [ASSERTION_BRAND]: true as const,
-    kind: 'skill.invoked' as const,
+    type: 'skill.invoked' as const,
     skill,
   };
 }

@@ -25,6 +25,7 @@ export type {
   FinalMessageContainsAssertion,
   NotCalledAssertion,
   SequenceInOrderAssertion,
+  ShellCommandMatcher,
   ShellToolMatcher,
   SkillInvokedAssertion,
   ToolCalledAssertion,

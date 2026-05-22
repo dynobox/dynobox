@@ -1,8 +1,8 @@
 /**
  * Load a `*.dyno.yaml` file as the same plain JS object shape that an
  * authored TypeScript config produces after the SDK's brand-helper calls
- * have run. The Zod schema in `@dynobox/sdk/compiler` accepts plain
- * objects with the discriminated `kind` field, so YAML configs flow
+ * have run. The Zod schema in `@dynobox/sdk/compiler` accepts the same
+ * authoring object shape that SDK helpers return, so YAML configs flow
  * through the existing `compile()` pipeline unchanged.
  *
  * Parse errors are rewritten to include the file path plus a `line:column`

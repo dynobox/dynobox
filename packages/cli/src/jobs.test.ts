@@ -100,6 +100,11 @@ describe('buildLocalRunnerJobs', () => {
       }).map((job) => job.scenario.name),
     ).toEqual(['release notes']);
     expect(
+      buildLocalRunnerJobs(ir, {
+        scenarioPatterns: ['release-notes'],
+      }).map((job) => job.scenario.name),
+    ).toEqual(['release notes']);
+    expect(
       buildLocalRunnerJobs(ir, {scenarioPatterns: ['*package']}).map(
         (job) => job.scenario.name,
       ),

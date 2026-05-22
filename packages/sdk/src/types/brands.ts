@@ -24,33 +24,38 @@ export const TOOL_KINDS = [
 
 export type ToolKind = (typeof TOOL_KINDS)[number];
 
-const SHELL_TOOL_MATCHER_KEYS = [
+const SHELL_COMMAND_MATCHER_KEYS = [
   'equals',
   'includes',
   'startsWith',
   'matches',
 ] as const;
 
-type ShellToolMatcherKey = (typeof SHELL_TOOL_MATCHER_KEYS)[number];
+type ShellCommandMatcherKey = (typeof SHELL_COMMAND_MATCHER_KEYS)[number];
 
-type SingleShellToolMatcher<K extends ShellToolMatcherKey> = {
+type SingleShellCommandMatcher<K extends ShellCommandMatcherKey> = {
   readonly [P in K]: string;
 } & {
-  readonly [P in Exclude<ShellToolMatcherKey, K>]?: never;
+  readonly [P in Exclude<ShellCommandMatcherKey, K>]?: never;
 };
 
 /**
  * Shell command matcher. Exactly one strategy is allowed so assertions are
  * unambiguous and renderer/evaluator messages can describe intent clearly.
  */
-export type ShellToolMatcher = {
-  [K in ShellToolMatcherKey]: SingleShellToolMatcher<K>;
-}[ShellToolMatcherKey];
+export type ShellCommandMatcher = {
+  [K in ShellCommandMatcherKey]: SingleShellCommandMatcher<K>;
+}[ShellCommandMatcherKey];
 
-const shellToolMatcherKeys = new Set<string>(SHELL_TOOL_MATCHER_KEYS);
+/** @deprecated Use `ShellCommandMatcher`. */
+export type ShellToolMatcher = ShellCommandMatcher;
+
+const shellCommandMatcherKeys = new Set<string>(SHELL_COMMAND_MATCHER_KEYS);
 
 /** Runtime guard used by Zod schemas and evaluator code for shell matchers. */
-export function isShellToolMatcher(value: unknown): value is ShellToolMatcher {
+export function isShellCommandMatcher(
+  value: unknown,
+): value is ShellCommandMatcher {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
   }
@@ -61,8 +66,11 @@ export function isShellToolMatcher(value: unknown): value is ShellToolMatcher {
   }
 
   const [key, matcherValue] = entries[0]!;
-  return shellToolMatcherKeys.has(key) && typeof matcherValue === 'string';
+  return shellCommandMatcherKeys.has(key) && typeof matcherValue === 'string';
 }
+
+/** @deprecated Use `isShellCommandMatcher`. */
+export const isShellToolMatcher = isShellCommandMatcher;
 
 /** Endpoint definition produced by `http.endpoint`. */
 export type Endpoint = EndpointSpec & {
@@ -72,7 +80,9 @@ export type Endpoint = EndpointSpec & {
 /** Assertion that a named HTTP endpoint should be observed. */
 export type CalledAssertion<K extends string = string> = {
   readonly [ASSERTION_BRAND]: true;
-  readonly kind: 'http.called';
+  readonly id?: string;
+  readonly label?: string;
+  readonly type: 'http.called';
   readonly endpoint: K;
   readonly status?: number;
 };
@@ -80,7 +90,9 @@ export type CalledAssertion<K extends string = string> = {
 /** Assertion that a named HTTP endpoint should not be observed. */
 export type NotCalledAssertion<K extends string = string> = {
   readonly [ASSERTION_BRAND]: true;
-  readonly kind: 'http.notCalled';
+  readonly id?: string;
+  readonly label?: string;
+  readonly type: 'http.notCalled';
   readonly endpoint: K;
 };
 
@@ -89,14 +101,18 @@ export type ToolCalledAssertion<K extends ToolKind = ToolKind> =
   K extends 'shell'
     ? {
         readonly [ASSERTION_BRAND]: true;
-        readonly kind: 'tool.called';
-        readonly toolKind: 'shell';
-        readonly matcher?: ShellToolMatcher;
+        readonly id?: string;
+        readonly label?: string;
+        readonly type: 'tool.called';
+        readonly tool: 'shell';
+        readonly command?: ShellCommandMatcher;
       }
     : {
         readonly [ASSERTION_BRAND]: true;
-        readonly kind: 'tool.called';
-        readonly toolKind: K;
+        readonly id?: string;
+        readonly label?: string;
+        readonly type: 'tool.called';
+        readonly tool: K;
       };
 
 /** Assertion that a harness should not call a tool. */
@@ -104,27 +120,35 @@ export type ToolNotCalledAssertion<K extends ToolKind = ToolKind> =
   K extends 'shell'
     ? {
         readonly [ASSERTION_BRAND]: true;
-        readonly kind: 'tool.notCalled';
-        readonly toolKind: 'shell';
-        readonly matcher?: ShellToolMatcher;
+        readonly id?: string;
+        readonly label?: string;
+        readonly type: 'tool.notCalled';
+        readonly tool: 'shell';
+        readonly command?: ShellCommandMatcher;
       }
     : {
         readonly [ASSERTION_BRAND]: true;
-        readonly kind: 'tool.notCalled';
-        readonly toolKind: K;
+        readonly id?: string;
+        readonly label?: string;
+        readonly type: 'tool.notCalled';
+        readonly tool: K;
       };
 
 /** Assertion that a work-directory artifact exists. */
 export type ArtifactExistsAssertion = {
   readonly [ASSERTION_BRAND]: true;
-  readonly kind: 'artifact.exists';
+  readonly id?: string;
+  readonly label?: string;
+  readonly type: 'artifact.exists';
   readonly path: string;
 };
 
 /** Assertion that a work-directory artifact contains text. */
 export type ArtifactContainsAssertion = {
   readonly [ASSERTION_BRAND]: true;
-  readonly kind: 'artifact.contains';
+  readonly id?: string;
+  readonly label?: string;
+  readonly type: 'artifact.contains';
   readonly path: string;
   readonly text: string;
 };
@@ -132,28 +156,36 @@ export type ArtifactContainsAssertion = {
 /** Assertion that the full harness transcript contains text. */
 export type TranscriptContainsAssertion = {
   readonly [ASSERTION_BRAND]: true;
-  readonly kind: 'transcript.contains';
+  readonly id?: string;
+  readonly label?: string;
+  readonly type: 'transcript.contains';
   readonly text: string;
 };
 
 /** Assertion that the extracted final assistant message contains text. */
 export type FinalMessageContainsAssertion = {
   readonly [ASSERTION_BRAND]: true;
-  readonly kind: 'finalMessage.contains';
+  readonly id?: string;
+  readonly label?: string;
+  readonly type: 'finalMessage.contains';
   readonly text: string;
 };
 
 /** Assertion that positive tool calls occur in order. */
 export type SequenceInOrderAssertion = {
   readonly [ASSERTION_BRAND]: true;
-  readonly kind: 'sequence.inOrder';
+  readonly id?: string;
+  readonly label?: string;
+  readonly type: 'sequence.inOrder';
   readonly steps: readonly ToolCalledAssertion[];
 };
 
 /** Assertion that an agent loaded a named skill's instruction file. */
 export type SkillInvokedAssertion = {
   readonly [ASSERTION_BRAND]: true;
-  readonly kind: 'skill.invoked';
+  readonly id?: string;
+  readonly label?: string;
+  readonly type: 'skill.invoked';
   readonly skill: string;
 };
 
