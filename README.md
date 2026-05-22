@@ -166,28 +166,14 @@ This repository is a pnpm monorepo. Published packages live under `packages/`.
 
 `@dynobox/runner-local` and `@dynobox/evaluators` are private workspace packages. They are bundled into the published `dynobox` CLI instead of exposed as public npm dependencies.
 
-## Development
-
-Common root commands:
-
-```bash
-pnpm build
-pnpm test
-pnpm typecheck
-pnpm check
-```
-
-Package-scoped examples:
-
-```bash
-pnpm --filter dynobox test
-pnpm --filter @dynobox/sdk test
-pnpm --filter dynobox... build
-```
-
 ## Project Site
 
-[dynobox.dev](https://dynobox.dev)
+[dynobox.xyz](https://dynobox.xyz)
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for local development commands and
+checkout workflows.
 
 ## License
 

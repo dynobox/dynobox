@@ -1,82 +1,75 @@
 # dynobox
 
-CLI for authoring and running Dynobox scenario configs.
+Cross-harness testing for multi-step agent and skill workflows.
 
-Dynobox is under active development and not ready for external use.
+Dynobox runs agent scenarios through local harnesses such as Claude Code and
+Codex, captures observable behavior, and evaluates assertions against what
+actually happened.
 
-- Site: [dynobox.dev](https://dynobox.dev)
+- Site: [dynobox.xyz](https://dynobox.xyz)
+- Docs: [docs.dynobox.xyz](https://docs.dynobox.xyz)
 - GitHub: [github.com/dynobox/dynobox](https://github.com/dynobox/dynobox)
 
-## Current status
-
-The CLI currently loads an explicit config path, resolves the config module's default export, compiles it with `@dynobox/sdk`, and runs local jobs with `@dynobox/runner-local`.
-
-Local execution supports harness tool assertions (`tool.called`, `tool.notCalled`), shell command matchers, ordered sequences, skill invocation assertions, artifact assertions, transcript and final message assertions, and HTTP assertions for local child-process traffic that honors proxy environment variables.
-
-When stdout is an interactive terminal, `dynobox run` streams phase progress while jobs run and shows live harness tool events as they are observed.
-
-Example:
+## Install
 
 ```bash
-node packages/cli/dist/bin.js run examples/local-observability/dynobox.config.ts
+npm install -g dynobox
 ```
 
-Expected output shape:
+The selected harness executable must already be installed, authenticated, and
+available on `PATH`.
 
-```text
-  dynobox  0.0.3
+## Quick Start
 
-  config   examples/local-observability/dynobox.config.ts
-  plan     1 scenario · 1 harness · 1 iteration                   1 job
+Create a starter dyno file, then run it:
 
-  ✓  inspect package scripts                       claude-code  iter 1
-     ✓ setup      1 command                                          0.1s
-     ✓ harness    ran prompt 2 tools                                 8.2s
-     ✓ assertions 2 of 2 passed                                      0.0s
-        ✓ tool.called(shell)
-        ✓ tool.called(shell, includes: package.json)
-
-  ──────────────────────────────────────────────────────────────────────
-  1 passed   0 failed                                             8.3s
+```bash
+dynobox init
+dynobox run
 ```
 
-Run output modes:
+`dynobox init` writes `dynobox/example.dyno.mjs` by default. `dynobox run` with
+no argument discovers `*.dyno.{mjs,js,ts,mts,yaml,yml}` files recursively under
+the current directory.
+
+Scope a run to a directory or file:
+
+```bash
+dynobox run dynobox
+dynobox run my-skill.dyno.yaml
+```
+
+Pick a harness at runtime when needed:
+
+```bash
+dynobox run --harness claude-code
+dynobox run --harness codex
+dynobox run --harness claude-code,codex
+```
+
+## What You Can Assert
+
+Dynobox supports assertions for:
+
+- Tool calls with `tool.called(...)` and `tool.notCalled(...)`.
+- Shell command matchers with `equals`, `includes`, `startsWith`, or `matches`.
+- Ordered tool-call sequences.
+- Skill instruction loading.
+- Work-directory artifacts.
+- Harness transcript and final response text.
+- HTTP requests from local child-process tools that honor proxy environment
+  variables.
+
+## Output Modes
 
 - `--quiet`: compact dots-and-failures output for CI.
 - `--verbose`: expand scenario details even when they pass.
 - `--debug`: include work directory, artifact paths, and debug log paths.
-- `--permission-mode default|dangerous`: override harness permission behavior. Dangerous mode is opt-in.
+- `--reporter json`: emit newline-delimited JSON reports.
+- `--permission-mode default|dangerous`: override harness permission behavior.
 
-## Local development
+## Documentation
 
-Run from the repository root:
-
-```bash
-pnpm --filter dynobox test
-pnpm --filter dynobox typecheck
-pnpm --filter dynobox... build
-node packages/cli/dist/bin.js
-```
-
-Run from `packages/cli`:
-
-```bash
-pnpm test
-pnpm typecheck
-pnpm build
-node dist/bin.js
-```
-
-## Run without building
-
-From the repository root:
-
-```bash
-pnpm tsx packages/cli/src/bin.ts
-```
-
-From `packages/cli`:
-
-```bash
-pnpm tsx src/bin.ts
-```
+- [Getting Started](https://docs.dynobox.xyz/getting-started)
+- [Config Authoring](https://docs.dynobox.xyz/config-authoring)
+- [CLI Reference](https://docs.dynobox.xyz/cli)

@@ -10,6 +10,22 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ---
 
+## @dynobox/sdk@0.1.1 — 2026-05-22
+
+### `@dynobox/sdk`
+
+- Updated package metadata and npm README links to use `dynobox.xyz`.
+- Removed checkout-only development commands from the npm README.
+
+## dynobox@0.2.1 — 2026-05-22
+
+### `dynobox` (CLI)
+
+- Updated package metadata, CLI follow-along output, and npm README links to
+  use `dynobox.xyz`.
+- Reworked the npm README around install and usage, moving local checkout
+  development commands into `CONTRIBUTING.md`.
+
 ## @dynobox/sdk@0.1.0 — 2026-05-22
 
 ### `@dynobox/sdk`

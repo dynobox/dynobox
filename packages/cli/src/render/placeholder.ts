@@ -14,7 +14,7 @@ export function renderPlaceholderMessage(): string {
 
   ${dim(dimCtx, 'This package is a placeholder. Dynobox is under active development.')}${RESET}
 
-  Follow along:  ${PURPLE}https://dynobox.dev${RESET}
+  Follow along:  ${PURPLE}https://dynobox.xyz${RESET}
   GitHub:        ${PURPLE}https://github.com/dynobox/dynobox${RESET}
 `;
 }

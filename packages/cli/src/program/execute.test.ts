@@ -21,7 +21,7 @@ const EXPECTED_PLACEHOLDER = `
 
   This package is a placeholder. Dynobox is under active development.
 
-  Follow along:  https://dynobox.dev
+  Follow along:  https://dynobox.xyz
   GitHub:        https://github.com/dynobox/dynobox
 `;
 

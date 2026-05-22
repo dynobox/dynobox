@@ -4,7 +4,7 @@ TypeScript SDK for authoring Dynobox scenario configs.
 
 This package provides the Milestone 1 authoring contract, helper functions, config module resolver, and canonical IR compiler used by the CLI and local runner scaffold.
 
-- Site: [dynobox.dev](https://dynobox.dev)
+- Site: [dynobox.xyz](https://dynobox.xyz)
 - GitHub: [github.com/dynobox/dynobox](https://github.com/dynobox/dynobox)
 
 ## Current exports
@@ -49,21 +49,3 @@ Canonical IR contract used by runners and evaluators:
 - authoring import path: `@dynobox/sdk`
 - assertion objects use `type` plus assertion-specific fields, matching YAML
   declarations and SDK helper return values
-
-## Local development
-
-Run from the repository root:
-
-```bash
-pnpm --filter @dynobox/sdk test
-pnpm --filter @dynobox/sdk typecheck
-pnpm --filter @dynobox/sdk... build
-```
-
-Run from `packages/sdk`:
-
-```bash
-pnpm test
-pnpm typecheck
-pnpm build
-```

@@ -1,7 +1,7 @@
 {
   "name": "dynobox",
-  "version": "0.2.0",
-  "description": "Placeholder - Dynobox is under active development. Docs to come at https://dynobox.dev",
+  "version": "0.2.1",
+  "description": "Cross-harness testing for multi-step agent and skill workflows",
   "keywords": [
     "agent",
     "testing",
@@ -10,7 +10,7 @@
     "codex",
     "evals"
   ],
-  "homepage": "https://dynobox.dev",
+  "homepage": "https://dynobox.xyz",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dynobox/dynobox.git",
@@ -27,7 +27,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm run build && vitest run"
   },
-  "author": "dynobox (https://dynobox.dev)",
+  "author": "dynobox (https://dynobox.xyz)",
   "bin": {
     "dynobox": "dist/bin.js"
   },

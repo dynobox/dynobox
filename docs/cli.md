@@ -6,9 +6,6 @@ The public CLI package is `dynobox`:
 npm install -g dynobox
 ```
 
-From a repository checkout, build first and run
-`node packages/cli/dist/bin.js`.
-
 ## Commands
 
 ### `dynobox init`
@@ -196,22 +193,4 @@ action, but they do not change job status, assertion results, or exit codes.
 
 ## Development Checkout
 
-From the repository root:
-
-```bash
-pnpm --filter dynobox test
-pnpm --filter dynobox typecheck
-pnpm --filter dynobox... build
-```
-
-Run from built output:
-
-```bash
-node packages/cli/dist/bin.js run examples/local-observability
-```
-
-Run from source:
-
-```bash
-pnpm tsx packages/cli/src/bin.ts run examples/local-observability
-```
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for local checkout workflows.
