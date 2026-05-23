@@ -21,6 +21,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Improved failed assertion output so `observed` lines show the actual
+  observed evidence instead of repeating the expectation.
 - Render path-aware tool assertions in CLI output.
 - Covered JS dynos that rely on adjacent fixture auto-copying.
 

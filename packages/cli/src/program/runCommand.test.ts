@@ -531,7 +531,7 @@ describe('dynobox run — failures and diagnostics', () => {
       'expected  skill "commit" instruction file access',
     );
     expect(result.stdout).toContain(
-      'observed  Expected skill "commit" to be invoked, but no access to its SKILL.md was observed.',
+      'observed  no matching SKILL.md access observed',
     );
     expect(result.stdout).toContain('observed skill files during this run:');
     expect(result.stdout).toContain(`1. ${RELEASE_SKILL_PATH}`);

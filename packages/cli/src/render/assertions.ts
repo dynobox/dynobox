@@ -3,7 +3,14 @@
  * when relevant assertions fail (or in verbose/debug mode).
  */
 
-import type {LocalRunnerResult, ToolEvent} from '@dynobox/runner-local';
+import {existsSync, readFileSync} from 'node:fs';
+import {isAbsolute, relative, resolve} from 'node:path';
+
+import type {
+  HttpEvent,
+  LocalRunnerResult,
+  ToolEvent,
+} from '@dynobox/runner-local';
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {
@@ -44,7 +51,13 @@ export function renderAssertionDetails(
 
     if (!assertionResult.passed && assertion !== undefined) {
       lines.push(`           expected  ${describeExpectation(assertion)}\n`);
-      lines.push(`           observed  ${assertionResult.message}\n`);
+      lines.push(
+        `           observed  ${describeObservedFailure(
+          assertion,
+          result,
+          assertionResult.message,
+        )}\n`,
+      );
     }
   }
 
@@ -84,6 +97,238 @@ function describeAssertionLabel(assertion: IrAssertion): string {
   return assertion.label === undefined
     ? description
     : `${assertion.label}  ${description}`;
+}
+
+function describeObservedFailure(
+  assertion: IrAssertion,
+  result: LocalRunnerResult,
+  fallback: string,
+): string {
+  if (assertion.kind === 'tool.called') {
+    const events = result.harnessResult?.toolEvents ?? [];
+    const sameKind = events.filter(
+      (event) => event.kind === assertion.toolKind,
+    );
+    if (sameKind.length === 0)
+      return `no ${assertion.toolKind} tool calls observed`;
+    if (assertion.matcher !== undefined) {
+      return `${formatCount(sameKind.length, `${assertion.toolKind} tool call`)} observed, none matching`;
+    }
+    if (assertion.pathMatcher !== undefined) {
+      return `${formatCount(sameKind.length, `${assertion.toolKind} tool call`)} observed, none for path "${assertion.pathMatcher.path}"`;
+    }
+    return fallback;
+  }
+
+  if (assertion.kind === 'tool.notCalled') {
+    const evidence = toolEventEvidence(result, assertion.id);
+    return evidence === undefined
+      ? fallback
+      : `matching ${formatToolEvent(evidence)}`;
+  }
+
+  if (assertion.kind === 'sequence.inOrder') {
+    const matched = toolEventArrayEvidence(result, assertion.id);
+    if (matched === undefined) return fallback;
+    const last = matched.at(-1);
+    const suffix =
+      last === undefined ? '' : `; last matched ${formatToolEvent(last)}`;
+    return `matched ${matched.length} of ${assertion.steps.length} ordered steps${suffix}`;
+  }
+
+  if (assertion.kind === 'skill.invoked') {
+    return `no matching SKILL.md access observed`;
+  }
+
+  if (assertion.kind === 'http.called') {
+    const matches = result.httpEvents.filter(
+      (event) => event.endpointId === assertion.endpointId,
+    );
+    if (matches.length === 0) return 'no matching HTTP requests observed';
+    if (assertion.status === undefined) return fallback;
+    return `matching endpoint statuses: ${[
+      ...new Set(matches.map((event) => event.status ?? 'unknown')),
+    ].join(', ')}`;
+  }
+
+  if (assertion.kind === 'http.notCalled') {
+    const evidence = httpEventEvidence(result, assertion.id);
+    return evidence === undefined
+      ? fallback
+      : `matching request: ${formatHttpEvent(evidence)}`;
+  }
+
+  if (assertion.kind === 'artifact.exists') {
+    const artifact = inspectArtifact(assertion.path, result.workDir);
+    if (artifact.kind === 'exists')
+      return `artifact exists at ${artifact.path}`;
+    if (artifact.kind === 'missing')
+      return `artifact missing at ${artifact.path}`;
+    return artifact.message;
+  }
+
+  if (assertion.kind === 'artifact.contains') {
+    const artifact = inspectArtifact(assertion.path, result.workDir);
+    if (artifact.kind === 'exists') {
+      return artifact.contents === undefined
+        ? `artifact exists at ${artifact.path}, but could not be read as UTF-8`
+        : `artifact: ${formatTextExcerpt(artifact.contents)}`;
+    }
+    if (artifact.kind === 'missing')
+      return `artifact missing at ${artifact.path}`;
+    return artifact.message;
+  }
+
+  if (assertion.kind === 'finalMessage.contains') {
+    const finalMessage = result.harnessResult?.finalMessage;
+    return finalMessage === undefined
+      ? fallback
+      : `final message: ${formatTextExcerpt(finalMessage)}`;
+  }
+
+  if (assertion.kind === 'transcript.contains') {
+    const transcript = result.harnessResult?.transcript;
+    return transcript === undefined
+      ? fallback
+      : `transcript: ${formatTextExcerpt(transcript)}`;
+  }
+
+  return fallback;
+}
+
+function formatCount(count: number, singular: string): string {
+  return `${count} ${count === 1 ? singular : `${singular}s`}`;
+}
+
+function formatTextExcerpt(text: string, maxLength = 160): string {
+  const compact = text.replace(/\s+/g, ' ').trim();
+  if (compact.length === 0) return '(empty)';
+  const excerpt =
+    compact.length > maxLength
+      ? `${compact.slice(0, Math.max(0, maxLength - 3))}...`
+      : compact;
+  return `"${excerpt.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+}
+
+function toolEventEvidence(
+  result: LocalRunnerResult,
+  assertionId: string,
+): ToolEvent | undefined {
+  const evidence = result.assertionResults.find(
+    (candidate) => candidate.assertionId === assertionId,
+  )?.evidence;
+  return isToolEvent(evidence) ? evidence : undefined;
+}
+
+function toolEventArrayEvidence(
+  result: LocalRunnerResult,
+  assertionId: string,
+): ToolEvent[] | undefined {
+  const evidence = result.assertionResults.find(
+    (candidate) => candidate.assertionId === assertionId,
+  )?.evidence;
+  return Array.isArray(evidence) && evidence.every(isToolEvent)
+    ? evidence
+    : undefined;
+}
+
+function httpEventEvidence(
+  result: LocalRunnerResult,
+  assertionId: string,
+): HttpEvent | undefined {
+  const evidence = result.assertionResults.find(
+    (candidate) => candidate.assertionId === assertionId,
+  )?.evidence;
+  return isHttpEvent(evidence) ? evidence : undefined;
+}
+
+function isToolEvent(value: unknown): value is ToolEvent {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'kind' in value &&
+    typeof value.kind === 'string' &&
+    'rawName' in value &&
+    typeof value.rawName === 'string'
+  );
+}
+
+function isHttpEvent(value: unknown): value is HttpEvent {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'method' in value &&
+    typeof value.method === 'string' &&
+    'url' in value &&
+    typeof value.url === 'string'
+  );
+}
+
+function formatToolEvent(event: ToolEvent): string {
+  if (isShellToolEvent(event))
+    return `shell command ${formatTextExcerpt(event.command)}`;
+  const input = inputPreview(event.input);
+  return input === undefined
+    ? `${event.rawName} tool call`
+    : `${event.rawName} tool call ${input}`;
+}
+
+function inputPreview(input: unknown): string | undefined {
+  if (input === undefined) return undefined;
+  try {
+    return formatTextExcerpt(JSON.stringify(input), 100);
+  } catch {
+    return undefined;
+  }
+}
+
+function formatHttpEvent(event: HttpEvent): string {
+  const status = event.status === undefined ? '' : ` -> ${event.status}`;
+  return `${event.method} ${event.url}${status}`;
+}
+
+type ArtifactInspection =
+  | {kind: 'exists'; path: string; contents?: string}
+  | {kind: 'missing'; path: string}
+  | {kind: 'invalid'; message: string};
+
+function inspectArtifact(
+  artifactPath: string,
+  workDir: string | undefined,
+): ArtifactInspection {
+  if (workDir === undefined) {
+    return {kind: 'invalid', message: 'work directory unavailable'};
+  }
+  if (isAbsolute(artifactPath)) {
+    return {
+      kind: 'invalid',
+      message: `artifact path "${artifactPath}" is absolute`,
+    };
+  }
+
+  const workDirPath = resolve(workDir);
+  const resolvedPath = resolve(workDirPath, artifactPath);
+  const relativePath = relative(workDirPath, resolvedPath);
+  if (relativePath.startsWith('..') || isAbsolute(relativePath)) {
+    return {
+      kind: 'invalid',
+      message: `artifact path "${artifactPath}" is outside the work directory`,
+    };
+  }
+
+  if (!existsSync(resolvedPath)) {
+    return {kind: 'missing', path: resolvedPath};
+  }
+
+  try {
+    return {
+      kind: 'exists',
+      path: resolvedPath,
+      contents: readFileSync(resolvedPath, 'utf8'),
+    };
+  } catch {
+    return {kind: 'exists', path: resolvedPath};
+  }
 }
 
 function shouldShowObservedShellCommands(
