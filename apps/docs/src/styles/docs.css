@@ -508,6 +508,7 @@ button.page-action:disabled {
   font-family: var(--font-display);
   font-weight: 650;
   line-height: 1.2;
+  scroll-margin-top: calc(var(--header-height) + var(--page-gutter));
 }
 
 .content h1 {
@@ -531,6 +532,38 @@ button.page-action:disabled {
 .content h4 {
   margin: 28px 0 8px;
   font-size: 17px;
+}
+
+.heading-anchor {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 10px;
+  opacity: 0;
+  color: var(--muted);
+  text-decoration: none;
+  transform: translateY(1px);
+  transition:
+    color 160ms ease,
+    opacity 160ms ease;
+}
+
+.heading-anchor:hover,
+.heading-anchor:focus-visible,
+.content h1:hover .heading-anchor,
+.content h2:hover .heading-anchor,
+.content h3:hover .heading-anchor,
+.content h4:hover .heading-anchor {
+  opacity: 1;
+}
+
+.heading-anchor:hover,
+.heading-anchor:focus-visible,
+.heading-anchor.copied {
+  color: var(--accent);
+}
+
+.heading-anchor-icon {
+  display: block;
 }
 
 .content p,

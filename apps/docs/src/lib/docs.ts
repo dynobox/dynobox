@@ -213,11 +213,53 @@ function renderMarkdown(source: string, file: DocFile): string {
           const baseId = slugify(text);
           const count = headingCounts.get(baseId) ?? 0;
           headingCounts.set(baseId, count + 1);
+          const id = count === 0 ? baseId : `${baseId}-${count}`;
 
           return new Markdoc.Tag(
             `h${level}`,
-            {id: count === 0 ? baseId : `${baseId}-${count}`},
-            children,
+            {id},
+            [
+              ...children,
+              new Markdoc.Tag(
+                'a',
+                {
+                  'aria-label': `Copy link to ${text}`,
+                  class: 'heading-anchor',
+                  href: `#${id}`,
+                  title: 'Copy link to this section',
+                },
+                [
+                  new Markdoc.Tag(
+                    'svg',
+                    {
+                      'aria-hidden': 'true',
+                      class: 'heading-anchor-icon',
+                      fill: 'none',
+                      height: '16',
+                      viewBox: '0 0 24 24',
+                      width: '16',
+                      xmlns: 'http://www.w3.org/2000/svg',
+                    },
+                    [
+                      new Markdoc.Tag('path', {
+                        d: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.08l-1.72 1.71',
+                        stroke: 'currentColor',
+                        'stroke-linecap': 'round',
+                        'stroke-linejoin': 'round',
+                        'stroke-width': '2',
+                      }),
+                      new Markdoc.Tag('path', {
+                        d: 'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.08l1.71-1.71',
+                        stroke: 'currentColor',
+                        'stroke-linecap': 'round',
+                        'stroke-linejoin': 'round',
+                        'stroke-width': '2',
+                      }),
+                    ],
+                  ),
+                ],
+              ),
+            ],
           );
         },
       },

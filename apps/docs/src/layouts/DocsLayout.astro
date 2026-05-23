@@ -328,5 +328,25 @@ const llmCopyJson = JSON.stringify(llmCopyText).replaceAll('<', '\\u003c');
         });
       })();
     </script>
+    <script is:inline>
+      (() => {
+        if (!navigator.clipboard?.writeText) return;
+
+        const copySectionLink = async (anchor) => {
+          await navigator.clipboard.writeText(anchor.href);
+          anchor.classList.add('copied');
+          window.setTimeout(() => {
+            anchor.classList.remove('copied');
+          }, 1200);
+        };
+
+        for (const anchor of document.querySelectorAll('.heading-anchor')) {
+          if (!(anchor instanceof HTMLAnchorElement)) continue;
+          anchor.addEventListener('click', () => {
+            void copySectionLink(anchor);
+          });
+        }
+      })();
+    </script>
   </body>
 </html>
