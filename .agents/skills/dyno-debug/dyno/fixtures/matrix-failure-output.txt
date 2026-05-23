@@ -1,0 +1,19 @@
+Command: dynobox run matrix.dyno.yaml --debug
+
+Scenario: edits readme
+claude-code / sonnet / iteration 1: passed
+codex / gpt-5.4-mini / iteration 1: failed
+
+Failed assertions:
+- artifact.contains README.md "done"
+
+Observed tools:
+- shell: sed -n "1,80p" README.md
+- final message: "README.md looks fine."
+
+Workdir: runs/codex-fail
+
+Debug artifacts:
+- runs/codex-fail/dynobox-transcript.log
+- runs/codex-fail/dynobox-stderr.log
+- runs/codex-fail/dynobox-tool-events.json
