@@ -1,6 +1,4 @@
-import {artifact, defineDyno, dyno, sequence, skill, tool} from '@dynobox/sdk';
-
-const here = dyno.here(import.meta.url);
+import {artifact, defineDyno, sequence, skill, tool} from '@dynobox/sdk';
 
 export default defineDyno({
   name: 'commit-skill-smoke-test',
@@ -13,8 +11,6 @@ export default defineDyno({
         'git init',
         'git config user.email dynobox@example.com',
         'git config user.name Dynobox Test',
-        'mkdir -p .agents/skills/commit',
-        `cp ${here.q('../SKILL.md')} .agents/skills/commit/SKILL.md`,
         'git add .',
         'git commit -m "chore: initial commit"',
         'printf "\nCommit skill smoke change.\n" >> README.md',

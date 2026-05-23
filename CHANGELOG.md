@@ -14,6 +14,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   `tool.called('read_file', {path: 'package.json'})`.
 - Made `defineDyno(...)` automatically attach an adjacent `fixtures/`
   directory to scenarios that do not explicitly set fixtures.
+- Made `defineDyno(...)` automatically copy `SKILL.md` for dynos authored
+  under `.agents/skills/<name>/` or `.claude/skills/<name>/`.
 - Removed the fixture-aware `dyno.here(...).defineDyno(...)` wrapper so
   `dyno.here(...)` only provides path helpers.
 

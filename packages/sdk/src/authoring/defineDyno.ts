@@ -1,7 +1,8 @@
 import {existsSync} from 'node:fs';
-import {dirname, join} from 'node:path';
+import {dirname, join, sep} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
+import {shellQuote} from '../dyno/index.js';
 import type {Endpoint} from '../types/brands.js';
 import type {DynoboxConfig, ScenarioInput} from '../types/config.js';
 import type {HarnessRunConfig} from '../types/harness.js';
@@ -36,6 +37,9 @@ type ConstrainScenarios<
  *
  * When called from a JS/TS dyno file with an adjacent `fixtures/` directory,
  * scenarios that omit `fixtures` are automatically assigned that directory.
+ * Dynos inside `.agents/skills/<name>/...` or `.claude/skills/<name>/...`
+ * also get setup commands that copy the skill instructions into each scenario
+ * work directory.
  */
 export function defineDyno<
   const GE extends EndpointMap | undefined,
@@ -48,11 +52,24 @@ export function defineDyno<
   endpoints?: GE;
   scenarios: S & ConstrainScenarios<GE, S>;
 }): DynoboxConfig {
-  return applyDefaultFixtures(config as unknown as DynoboxConfig);
+  return applyAuthoringDefaults(config as unknown as DynoboxConfig);
 }
 
-function applyDefaultFixtures(config: DynoboxConfig): DynoboxConfig {
-  const defaultFixtures = defaultFixturesPath();
+function applyAuthoringDefaults(config: DynoboxConfig): DynoboxConfig {
+  const callerUrl = inferConfigModuleUrl();
+  if (callerUrl === undefined) return config;
+
+  return applyDefaultSkillSetup(
+    applyDefaultFixtures(config, callerUrl),
+    callerUrl,
+  );
+}
+
+function applyDefaultFixtures(
+  config: DynoboxConfig,
+  callerUrl: string,
+): DynoboxConfig {
+  const defaultFixtures = defaultFixturesPath(callerUrl);
   if (defaultFixtures === undefined) return config;
 
   const scenarios = config.scenarios.map((scenario) =>
@@ -63,11 +80,74 @@ function applyDefaultFixtures(config: DynoboxConfig): DynoboxConfig {
   return {...config, scenarios};
 }
 
-function defaultFixturesPath(): string | undefined {
-  const callerUrl = inferConfigModuleUrl();
-  if (callerUrl === undefined) return undefined;
+function applyDefaultSkillSetup(
+  config: DynoboxConfig,
+  callerUrl: string,
+): DynoboxConfig {
+  const skill = defaultSkillSetup(callerUrl);
+  if (skill === undefined) return config;
+
+  const skillSetup = [
+    `mkdir -p ${shellQuote(skill.targetDir)}`,
+    `cp ${shellQuote(skill.sourceFile)} ${shellQuote(skill.targetFile)}`,
+  ];
+  const scenarios = config.scenarios.map((scenario) => ({
+    ...scenario,
+    setup: [...skillSetup, ...(scenario.setup ?? [])],
+  }));
+
+  return {
+    ...config,
+    scenarios,
+  };
+}
+
+function defaultFixturesPath(callerUrl: string): string | undefined {
   const fixtures = join(dirname(fileURLToPath(callerUrl)), 'fixtures');
   return existsSync(fixtures) ? fixtures : undefined;
+}
+
+function defaultSkillSetup(callerUrl: string):
+  | {
+      sourceFile: string;
+      targetDir: string;
+      targetFile: string;
+    }
+  | undefined {
+  const skillDir = findAuthoredSkillDir(dirname(fileURLToPath(callerUrl)));
+  if (skillDir === undefined) return undefined;
+
+  const sourceFile = join(skillDir.dir, 'SKILL.md');
+  if (!existsSync(sourceFile)) return undefined;
+
+  const targetDir = `${skillDir.root}/skills/${skillDir.name}`;
+  return {
+    sourceFile,
+    targetDir,
+    targetFile: `${targetDir}/SKILL.md`,
+  };
+}
+
+function findAuthoredSkillDir(
+  startDir: string,
+): {dir: string; name: string; root: '.agents' | '.claude'} | undefined {
+  let current = startDir;
+  while (true) {
+    const parts = current.split(sep);
+    const skillName = parts.at(-1);
+    const root = parts.at(-3);
+    if (
+      skillName !== undefined &&
+      (root === '.agents' || root === '.claude') &&
+      parts.at(-2) === 'skills'
+    ) {
+      return {dir: current, name: skillName, root};
+    }
+
+    const parent = dirname(current);
+    if (parent === current) return undefined;
+    current = parent;
+  }
 }
 
 function inferConfigModuleUrl(): string | undefined {

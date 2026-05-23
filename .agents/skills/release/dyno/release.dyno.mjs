@@ -14,8 +14,6 @@ export default defineDyno({
         'git init -b main',
         'git config user.email dynobox@example.com',
         'git config user.name Dynobox Test',
-        'mkdir -p .agents/skills/release',
-        `cp ${here.q('../SKILL.md')} .agents/skills/release/SKILL.md`,
         `cp ${here.q('../../../../RELEASES.md')} RELEASES.md`,
         'git add .',
         'git commit -m "chore: initial release fixture"',

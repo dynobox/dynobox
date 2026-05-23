@@ -1,6 +1,4 @@
-import {defineDyno, dyno, finalMessage, skill, tool} from '@dynobox/sdk';
-
-const here = dyno.here(import.meta.url);
+import {defineDyno, finalMessage, skill, tool} from '@dynobox/sdk';
 
 export default defineDyno({
   name: 'dyno-debug-skill-smoke-test',
@@ -10,8 +8,7 @@ export default defineDyno({
       prompt:
         'Use the dyno-debug skill to investigate the failed Dynobox matrix run captured in matrix-failure-output.txt. I already ran the matrix with `--debug`; do not rerun Dynobox. Inspect the debug artifact paths before recommending a fix.',
       setup: [
-        'mkdir -p .agents/skills/dyno-debug runs/codex-fail',
-        `cp ${here.q('../SKILL.md')} .agents/skills/dyno-debug/SKILL.md`,
+        'mkdir -p runs/codex-fail',
         'printf "assistant inspected README.md and stopped before editing\\n" > runs/codex-fail/dynobox-transcript.log',
         'printf "no harness stderr\\n" > runs/codex-fail/dynobox-stderr.log',
         'printf \'[{"type":"shell","command":"sed -n \\"1,80p\\" README.md"}]\\n\' > runs/codex-fail/dynobox-tool-events.json',

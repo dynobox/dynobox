@@ -106,6 +106,121 @@ export default defineDyno({
     }
   });
 
+  it('defineDyno copies skill instructions for dynos inside .agents/skills', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dynobox-sdk-skill-'));
+    try {
+      const skillDir = join(dir, '.agents', 'skills', 'commit');
+      const dynoDir = join(skillDir, 'dyno');
+      mkdirSync(dynoDir, {recursive: true});
+      writeFileSync(join(skillDir, 'SKILL.md'), '# Commit skill');
+      const sdkUrl = pathToFileURL(join(process.cwd(), 'src/index.ts')).href;
+      const configPath = join(dynoDir, 'commit.dyno.mjs');
+      writeFileSync(
+        configPath,
+        `import {defineDyno} from ${JSON.stringify(sdkUrl)};
+
+export default defineDyno({
+  setup: ['echo author setup'],
+  scenarios: [{name: 'commit skill', prompt: 'p'}],
+});
+`,
+      );
+
+      const mod = await import(
+        `${pathToFileURL(configPath).href}?t=${Date.now()}`
+      );
+
+      expect(mod.default.setup).toEqual(['echo author setup']);
+      expect(mod.default.scenarios[0].setup).toEqual([
+        "mkdir -p '.agents/skills/commit'",
+        expect.stringMatching(
+          /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.agents\/skills\/commit\/SKILL\.md'$/u,
+        ),
+      ]);
+    } finally {
+      rmSync(dir, {force: true, recursive: true});
+    }
+  });
+
+  it('defineDyno preserves skill setup when imported scenarios are spread', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dynobox-sdk-skill-'));
+    try {
+      const skillDir = join(dir, '.agents', 'skills', 'commit');
+      const dynoDir = join(skillDir, 'dyno');
+      mkdirSync(dynoDir, {recursive: true});
+      writeFileSync(join(skillDir, 'SKILL.md'), '# Commit skill');
+      const sdkUrl = pathToFileURL(join(process.cwd(), 'src/index.ts')).href;
+      const childConfigPath = join(dynoDir, 'commit.dyno.mjs');
+      const parentConfigPath = join(dir, 'skillTests.dyno.mjs');
+      writeFileSync(
+        childConfigPath,
+        `import {defineDyno} from ${JSON.stringify(sdkUrl)};
+
+export default defineDyno({
+  scenarios: [{name: 'commit skill', prompt: 'p'}],
+});
+`,
+      );
+      writeFileSync(
+        parentConfigPath,
+        `import {defineDyno} from ${JSON.stringify(sdkUrl)};
+import commitSkillConfig from './.agents/skills/commit/dyno/commit.dyno.mjs';
+
+export default defineDyno({
+  scenarios: [...commitSkillConfig.scenarios],
+});
+`,
+      );
+
+      const mod = await import(
+        `${pathToFileURL(parentConfigPath).href}?t=${Date.now()}`
+      );
+
+      expect(mod.default.scenarios[0].setup).toEqual([
+        "mkdir -p '.agents/skills/commit'",
+        expect.stringMatching(
+          /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.agents\/skills\/commit\/SKILL\.md'$/u,
+        ),
+      ]);
+    } finally {
+      rmSync(dir, {force: true, recursive: true});
+    }
+  });
+
+  it('defineDyno copies claude skill instructions from matching skill roots', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dynobox-sdk-claude-skill-'));
+    try {
+      const skillDir = join(dir, '.claude', 'skills', 'commit');
+      const dynoDir = join(skillDir, 'dyno');
+      mkdirSync(dynoDir, {recursive: true});
+      writeFileSync(join(skillDir, 'SKILL.md'), '# Commit skill');
+      const sdkUrl = pathToFileURL(join(process.cwd(), 'src/index.ts')).href;
+      const configPath = join(dynoDir, 'commit.dyno.mjs');
+      writeFileSync(
+        configPath,
+        `import {defineDyno} from ${JSON.stringify(sdkUrl)};
+
+export default defineDyno({
+  scenarios: [{name: 'commit skill', prompt: 'p'}],
+});
+`,
+      );
+
+      const mod = await import(
+        `${pathToFileURL(configPath).href}?t=${Date.now()}`
+      );
+
+      expect(mod.default.scenarios[0].setup).toEqual([
+        "mkdir -p '.claude/skills/commit'",
+        expect.stringMatching(
+          /^cp '.*\/\.claude\/skills\/commit\/SKILL\.md' '\.claude\/skills\/commit\/SKILL\.md'$/u,
+        ),
+      ]);
+    } finally {
+      rmSync(dir, {force: true, recursive: true});
+    }
+  });
+
   it('preserves the endpoint key as a literal type on assertion helpers', () => {
     const a = http.called('getUser');
     expectTypeOf(a).toEqualTypeOf<CalledAssertion<'getUser'>>();
