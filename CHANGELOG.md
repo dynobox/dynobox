@@ -10,6 +10,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `@dynobox/sdk`
 
+- Fixed `dyno.here(...).fixtures('subpath')` to resolve subpaths inside the
+  adjacent `fixtures/` directory.
 - Added path matchers for file-oriented tool assertions such as
   `tool.called('read_file', {path: 'package.json'})`.
 - Made `defineDyno(...)` automatically attach an adjacent `fixtures/`
@@ -21,6 +23,9 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Fixed `dynobox run --scenario` so authored scenario IDs still match when
+  discovered dyno files use source-prefixed JSON job IDs.
+- Replaced the no-args placeholder banner with a starter usage hint.
 - Improved failed assertion output so `observed` lines show the actual
   observed evidence instead of repeating the expectation.
 - Render path-aware tool assertions in CLI output.

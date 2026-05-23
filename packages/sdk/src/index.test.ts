@@ -64,6 +64,9 @@ describe('packages/sdk', () => {
     const here = dyno.here('file:///tmp/dyno/test.dyno.mjs');
     expect(here.path('fixtures/repo/')).toBe('/tmp/dyno/fixtures/repo/');
     expect(here.q('fixtures/repo/.')).toBe("'/tmp/dyno/fixtures/repo/.'");
+    expect(here.fixtures()).toBe('/tmp/dyno/fixtures');
+    expect(here.fixtures('repo')).toBe('/tmp/dyno/fixtures/repo');
+    expect(here.fixtures('fixtures')).toBe('/tmp/dyno/fixtures/fixtures');
     expect(dyno.shellQuote('/tmp/path with spaces')).toBe(
       "'/tmp/path with spaces'",
     );

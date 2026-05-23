@@ -30,8 +30,8 @@ export type Here = {
  * Build path helpers scoped to a config module URL, usually `import.meta.url`.
  */
 export function here(baseUrl: string): Here {
-  const resolveFixtures = (subpath = 'fixtures'): string =>
-    fromUrl(baseUrl, subpath);
+  const resolveFixtures = (subpath?: string): string =>
+    fromUrl(baseUrl, subpath === undefined ? 'fixtures' : `fixtures/${subpath}`);
 
   return {
     path(path: string): string {

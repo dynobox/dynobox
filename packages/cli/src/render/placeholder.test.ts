@@ -8,7 +8,7 @@ const EXPECTED = `
 
   Cross-harness testing for multi-step agent flows.
 
-  This package is a placeholder. Dynobox is under active development.
+  Try \`dynobox init\` to create a starter dyno, or \`dynobox run --help\`.
 
   Follow along:  https://dynobox.xyz
   GitHub:        https://github.com/dynobox/dynobox

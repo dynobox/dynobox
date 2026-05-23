@@ -100,13 +100,27 @@ function scenarioMatchesPattern(
   const matcher = globPatternToRegExp(pattern);
   return (
     matcher.test(scenario.name) ||
-    matcher.test(scenario.id) ||
-    matcher.test(unprefixedScenarioId(scenario.id))
+    scenarioIdMatchCandidates(scenario.id).some((id) => matcher.test(id))
   );
+}
+
+function scenarioIdMatchCandidates(id: string): string[] {
+  return unique([
+    id,
+    unprefixedScenarioId(id),
+    unprefixedScenarioId(unprefixedSourceId(id)),
+    unprefixedSourceId(id),
+  ]);
 }
 
 function unprefixedScenarioId(id: string): string {
   return id.startsWith('scenario.') ? id.slice('scenario.'.length) : id;
+}
+
+function unprefixedSourceId(id: string): string {
+  const marker = '::';
+  const index = id.lastIndexOf(marker);
+  return index === -1 ? id : id.slice(index + marker.length);
 }
 
 function globPatternToRegExp(pattern: string): RegExp {

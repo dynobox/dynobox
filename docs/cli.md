@@ -83,9 +83,11 @@ dynobox run --scenario "lint*,deploy package"
 dynobox run --reporter json
 ```
 
-Scenario filters match the compiled scenario name or id. Patterns support `*`
-for any number of characters and `?` for one character. If no scenarios match,
-the run exits with code `1`.
+Scenario filters match the compiled scenario name or id. Authored scenario IDs
+can be matched with or without the `scenario.` prefix, even when JSON job IDs
+are source-prefixed during multi-file discovery. Patterns support `*` for any
+number of characters and `?` for one character. If no scenarios match, the run
+exits with code `1`.
 
 ## Output Modes
 
@@ -193,4 +195,6 @@ action, but they do not change job status, assertion results, or exit codes.
 
 ## Development Checkout
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for local checkout workflows.
+See
+[CONTRIBUTING.md](https://github.com/dynobox/dynobox/blob/main/CONTRIBUTING.md)
+for local checkout workflows.

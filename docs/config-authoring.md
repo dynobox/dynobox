@@ -72,7 +72,13 @@ from that directory after the harness exits.
 
 Scenario `id` is optional. When provided, it is used for stable compiled
 scenario IDs, job IDs, and `dynobox run --scenario` filters. Without an `id`,
-Dynobox derives one from the scenario name.
+Dynobox derives one from the scenario name. When running discovered files, the
+CLI prefixes IDs with a source-file slug so JSON job and assertion IDs remain
+unique across files; authored scenario IDs are still accepted by `--scenario`
+filters with or without the `scenario.` prefix.
+
+Scenario and assertion `id` values must be non-empty and may only contain
+letters, numbers, dots, underscores, and hyphens.
 
 ## Harnesses
 
@@ -231,6 +237,8 @@ and sets proxy environment variables on the harness child process:
 - `HTTPS_PROXY`
 - `http_proxy`
 - `https_proxy`
+- `NO_PROXY`
+- `no_proxy`
 
 Dynobox also sets common CA variables to a generated CA at
 `~/.dynobox/ca.pem`:
@@ -241,8 +249,10 @@ Dynobox also sets common CA variables to a generated CA at
 - `CURL_CA_BUNDLE`
 
 HTTP capture covers local child-process traffic that honors those proxy and CA
-environment variables. Harness-native web tools and binaries with their own
-trust stores may bypass capture.
+environment variables. Existing `NO_PROXY` and `no_proxy` entries are preserved,
+and Dynobox adds `localhost`, `127.0.0.1`, and `::1` so local services bypass
+the proxy. Harness-native web tools and binaries with their own trust stores may
+bypass capture.
 
 ## Path Helpers
 
@@ -340,6 +350,9 @@ JSON output.
 | `sequence.inOrder([tool.called('shell', {...}), ...])` | `{type: sequence.inOrder, steps: [{type: tool.called, ...}, ...]}` |
 | `http.called('npmPrettier', {status: 200})`            | `{type: http.called, endpoint: npmPrettier, status: 200}`          |
 | `http.notCalled('leftPad')`                            | `{type: http.notCalled, endpoint: leftPad}`                        |
+
+The optional assertion `id` field follows the same format as scenario IDs:
+letters, numbers, dots, underscores, and hyphens.
 
 Command matcher shapes accept exactly one of `equals`, `includes`,
 `startsWith`, or `matches`, and are only valid on `shell` tool assertions.

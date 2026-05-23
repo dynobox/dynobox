@@ -34,7 +34,9 @@ For targeted CI jobs, combine the JSON reporter with scenario filters:
 dynobox run dynobox --reporter json --scenario "release*" > dynobox-report.ndjson
 ```
 
-Scenario filters match the compiled scenario name or id. Repeat the flag or use
+Scenario filters match the compiled scenario name or id. Authored scenario IDs
+can be matched with or without the `scenario.` prefix, even when JSON job IDs
+are source-prefixed during multi-file discovery. Repeat the flag or use
 comma-separated values to select multiple patterns:
 
 ```bash

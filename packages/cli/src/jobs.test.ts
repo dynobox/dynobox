@@ -110,4 +110,32 @@ describe('buildLocalRunnerJobs', () => {
       ),
     ).toEqual(['lint package', 'deploy package']);
   });
+
+  it('filters source-prefixed scenario ids by authored id suffixes', () => {
+    const ir = {
+      version: '0.1' as const,
+      scenarios: [
+        {
+          id: 'dynobox-release.dyno.ts::scenario.release-notes',
+          name: 'release notes',
+          prompt: 'Write release notes.',
+          harnesses: [{id: 'claude-code' as const}],
+          setup: [],
+          endpoints: [],
+          assertions: [],
+        },
+      ],
+    };
+
+    expect(
+      buildLocalRunnerJobs(ir, {
+        scenarioPatterns: ['release-notes'],
+      }).map((job) => job.scenario.name),
+    ).toEqual(['release notes']);
+    expect(
+      buildLocalRunnerJobs(ir, {
+        scenarioPatterns: ['scenario.release-notes'],
+      }).map((job) => job.scenario.name),
+    ).toEqual(['release notes']);
+  });
 });
