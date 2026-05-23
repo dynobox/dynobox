@@ -8,6 +8,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## @dynobox/sdk@0.2.0 — 2026-05-23
+
 ### `@dynobox/sdk`
 
 - Fixed `dyno.here(...).fixtures('subpath')` to resolve subpaths inside the
@@ -21,6 +25,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Removed the fixture-aware `dyno.here(...).defineDyno(...)` wrapper so
   `dyno.here(...)` only provides path helpers.
 
+## dynobox@0.2.2 — 2026-05-23
+
 ### `dynobox` (CLI)
 
 - Fixed `dynobox run --scenario` so authored scenario IDs still match when
@@ -30,8 +36,6 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   observed evidence instead of repeating the expectation.
 - Render path-aware tool assertions in CLI output.
 - Covered JS dynos that rely on adjacent fixture auto-copying.
-
----
 
 ## @dynobox/sdk@0.1.1 — 2026-05-22
 
