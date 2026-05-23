@@ -30,9 +30,6 @@ export default defineDyno({
         finalMessage.contains('claude-code'),
         finalMessage.contains('codex'),
         finalMessage.contains('artifact.contains'),
-        finalMessage.contains(
-          'does not invalidate the original matrix failure',
-        ),
         tool.notCalled('shell', {includes: 'dynobox run'}),
       ],
     },

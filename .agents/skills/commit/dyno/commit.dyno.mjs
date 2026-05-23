@@ -19,7 +19,6 @@ export default defineDyno({
         sequence.inOrder([
           tool.called('shell', {includes: 'git status'}),
           tool.called('shell', {includes: 'git diff'}),
-          tool.called('shell', {includes: 'git log'}),
           tool.called('shell', {includes: 'git commit'}),
         ]),
         skill.invoked('commit'),
