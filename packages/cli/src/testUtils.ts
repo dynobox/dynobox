@@ -125,9 +125,7 @@ export default defineDyno({
 });
 `;
 
-const DYNO_MJS_CONFIG = `import {defineDyno, dyno, tool} from '@dynobox/sdk';
-
-const here = dyno.here(import.meta.url);
+const DYNO_MJS_CONFIG = `import {defineDyno, tool} from '@dynobox/sdk';
 
 export default defineDyno({
   scenarios: [
@@ -135,7 +133,7 @@ export default defineDyno({
       name: 'uses dyno mjs',
       prompt: 'Run pnpm test.',
       setup: [
-        'cp ' + here.q('fixtures/repo/marker.txt') + ' marker.txt',
+        'test -f repo/marker.txt',
       ],
       assertions: [tool.called('shell')],
     },
@@ -170,7 +168,7 @@ export function createFixtureSet(tag: string): FixtureSet {
   const multiScenarioConfigPath = join(dir, 'multi-scenario.config.ts');
   const modalitiesConfigPath = join(dir, 'modalities.config.ts');
   const sequenceFailConfigPath = join(dir, 'sequence-fail.config.ts');
-  const dynoMjsConfigPath = join(dir, 'typed.dyno.mjs');
+  const dynoMjsConfigPath = join(dir, 'typed-dyno', 'typed.dyno.mjs');
 
   return {
     dir,
@@ -190,8 +188,8 @@ export function createFixtureSet(tag: string): FixtureSet {
       writeFileSync(multiScenarioConfigPath, MULTI_SCENARIO_CONFIG);
       writeFileSync(modalitiesConfigPath, MODALITIES_CONFIG);
       writeFileSync(sequenceFailConfigPath, SEQUENCE_FAIL_CONFIG);
-      mkdirSync(join(dir, 'fixtures/repo'), {recursive: true});
-      writeFileSync(join(dir, 'fixtures/repo/marker.txt'), 'ready');
+      mkdirSync(join(dir, 'typed-dyno/fixtures/repo'), {recursive: true});
+      writeFileSync(join(dir, 'typed-dyno/fixtures/repo/marker.txt'), 'ready');
       writeFileSync(dynoMjsConfigPath, DYNO_MJS_CONFIG);
     },
     teardown() {

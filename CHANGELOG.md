@@ -8,6 +8,20 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `@dynobox/sdk`
+
+- Added path matchers for file-oriented tool assertions such as
+  `tool.called('read_file', {path: 'package.json'})`.
+- Made `defineDyno(...)` automatically attach an adjacent `fixtures/`
+  directory to scenarios that do not explicitly set fixtures.
+- Removed the fixture-aware `dyno.here(...).defineDyno(...)` wrapper so
+  `dyno.here(...)` only provides path helpers.
+
+### `dynobox` (CLI)
+
+- Render path-aware tool assertions in CLI output.
+- Covered JS dynos that rely on adjacent fixture auto-copying.
+
 ---
 
 ## @dynobox/sdk@0.1.1 — 2026-05-22

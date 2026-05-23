@@ -23,6 +23,10 @@ export const TOOL_KINDS = [
 ] as const;
 
 export type ToolKind = (typeof TOOL_KINDS)[number];
+export type FileToolKind = Extract<
+  ToolKind,
+  'read_file' | 'write_file' | 'edit_file' | 'search_files'
+>;
 
 const SHELL_COMMAND_MATCHER_KEYS = [
   'equals',
@@ -49,6 +53,11 @@ export type ShellCommandMatcher = {
 
 /** @deprecated Use `ShellCommandMatcher`. */
 export type ShellToolMatcher = ShellCommandMatcher;
+
+/** Matcher for tools that operate on filesystem paths. */
+export type ToolPathMatcher = {
+  readonly path: string;
+};
 
 const shellCommandMatcherKeys = new Set<string>(SHELL_COMMAND_MATCHER_KEYS);
 
@@ -107,13 +116,22 @@ export type ToolCalledAssertion<K extends ToolKind = ToolKind> =
         readonly tool: 'shell';
         readonly command?: ShellCommandMatcher;
       }
-    : {
-        readonly [ASSERTION_BRAND]: true;
-        readonly id?: string;
-        readonly label?: string;
-        readonly type: 'tool.called';
-        readonly tool: K;
-      };
+    : K extends FileToolKind
+      ? {
+          readonly [ASSERTION_BRAND]: true;
+          readonly id?: string;
+          readonly label?: string;
+          readonly type: 'tool.called';
+          readonly tool: K;
+          readonly path?: string;
+        }
+      : {
+          readonly [ASSERTION_BRAND]: true;
+          readonly id?: string;
+          readonly label?: string;
+          readonly type: 'tool.called';
+          readonly tool: K;
+        };
 
 /** Assertion that a harness should not call a tool. */
 export type ToolNotCalledAssertion<K extends ToolKind = ToolKind> =
@@ -126,13 +144,22 @@ export type ToolNotCalledAssertion<K extends ToolKind = ToolKind> =
         readonly tool: 'shell';
         readonly command?: ShellCommandMatcher;
       }
-    : {
-        readonly [ASSERTION_BRAND]: true;
-        readonly id?: string;
-        readonly label?: string;
-        readonly type: 'tool.notCalled';
-        readonly tool: K;
-      };
+    : K extends FileToolKind
+      ? {
+          readonly [ASSERTION_BRAND]: true;
+          readonly id?: string;
+          readonly label?: string;
+          readonly type: 'tool.notCalled';
+          readonly tool: K;
+          readonly path?: string;
+        }
+      : {
+          readonly [ASSERTION_BRAND]: true;
+          readonly id?: string;
+          readonly label?: string;
+          readonly type: 'tool.notCalled';
+          readonly tool: K;
+        };
 
 /** Assertion that a work-directory artifact exists. */
 export type ArtifactExistsAssertion = {

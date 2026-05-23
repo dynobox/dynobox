@@ -252,6 +252,12 @@ function findMatchingSequenceStep(
     if (event.kind !== step.toolKind) continue;
 
     if (step.matcher === undefined) {
+      if (
+        step.pathMatcher !== undefined &&
+        !toolEventMatchesPath(event, step.pathMatcher.path)
+      ) {
+        continue;
+      }
       return {
         event,
         nextCursor: {eventIndex: index + 1, commandOffset: 0},
@@ -309,12 +315,18 @@ function toolEventMatchesAssertion(
   assertion: ToolCalledStep | ToolNotCalledStep,
 ): boolean {
   if (event.kind !== assertion.toolKind) return false;
+  if (assertion.pathMatcher !== undefined) {
+    return toolEventMatchesPath(event, assertion.pathMatcher.path);
+  }
   if (assertion.matcher === undefined) return true;
   if (event.kind !== 'shell' || typeof event.command !== 'string') return false;
   return shellCommandMatches(event.command, assertion.matcher).passed;
 }
 
 function toolCalledPassMessage(assertion: ToolCalledStep): string {
+  if (assertion.pathMatcher !== undefined) {
+    return `Observed tool "${assertion.toolKind}" with path "${assertion.pathMatcher.path}".`;
+  }
   if (assertion.matcher === undefined) {
     return `Observed tool "${assertion.toolKind}".`;
   }
@@ -322,6 +334,9 @@ function toolCalledPassMessage(assertion: ToolCalledStep): string {
 }
 
 function toolCalledFailMessage(assertion: ToolCalledStep): string {
+  if (assertion.pathMatcher !== undefined) {
+    return `Expected tool "${assertion.toolKind}" with path "${assertion.pathMatcher.path}" to be called, but observed none.`;
+  }
   if (assertion.matcher === undefined) {
     return `Expected tool "${assertion.toolKind}" to be called, but observed none.`;
   }
@@ -329,6 +344,9 @@ function toolCalledFailMessage(assertion: ToolCalledStep): string {
 }
 
 function toolNotCalledPassMessage(assertion: ToolNotCalledStep): string {
+  if (assertion.pathMatcher !== undefined) {
+    return `Observed no tool "${assertion.toolKind}" calls with path "${assertion.pathMatcher.path}".`;
+  }
   if (assertion.matcher === undefined) {
     return `Observed no tool "${assertion.toolKind}" calls.`;
   }
@@ -336,6 +354,9 @@ function toolNotCalledPassMessage(assertion: ToolNotCalledStep): string {
 }
 
 function toolNotCalledFailMessage(assertion: ToolNotCalledStep): string {
+  if (assertion.pathMatcher !== undefined) {
+    return `Expected tool "${assertion.toolKind}" not to be called with path "${assertion.pathMatcher.path}", but observed a matching call.`;
+  }
   if (assertion.matcher === undefined) {
     return `Expected tool "${assertion.toolKind}" not to be called, but observed a matching call.`;
   }
@@ -343,8 +364,56 @@ function toolNotCalledFailMessage(assertion: ToolNotCalledStep): string {
 }
 
 function describeToolStep(step: ToolCalledStep): string {
+  if (step.pathMatcher !== undefined) {
+    return `tool.called(${step.toolKind}, path "${step.pathMatcher.path}")`;
+  }
   if (step.matcher === undefined) return `tool.called(${step.toolKind})`;
   return `tool.called(${step.toolKind}, ${describeShellMatcher(step.matcher)})`;
+}
+
+function toolEventMatchesPath(event: ToolEvent, expectedPath: string): boolean {
+  const expected = normalizePathForMatch(expectedPath);
+  return pathStringsFromToolInput(event.input).some((value) => {
+    const actual = normalizePathForMatch(value);
+    return actual === expected || actual.endsWith(`/${expected}`);
+  });
+}
+
+function normalizePathForMatch(value: string): string {
+  return value.replaceAll('\\', '/').replace(/^\.\/+/, '');
+}
+
+function pathStringsFromToolInput(value: unknown): string[] {
+  const paths: string[] = [];
+  const seen = new WeakSet<object>();
+  const pathKeys = new Set(['path', 'file_path', 'filepath', 'file']);
+
+  function visit(current: unknown): void {
+    if (typeof current === 'string') {
+      paths.push(current);
+      return;
+    }
+
+    if (typeof current !== 'object' || current === null) return;
+    if (seen.has(current)) return;
+    seen.add(current);
+
+    if (Array.isArray(current)) {
+      for (const item of current) visit(item);
+      return;
+    }
+
+    for (const [key, nested] of Object.entries(current)) {
+      if (pathKeys.has(key.toLowerCase()) && typeof nested === 'string') {
+        paths.push(nested);
+        continue;
+      }
+      if (Array.isArray(nested)) visit(nested);
+    }
+  }
+
+  visit(value);
+  return paths;
 }
 
 function evaluateSkillInvoked(

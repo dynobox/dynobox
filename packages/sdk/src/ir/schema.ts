@@ -1,6 +1,7 @@
 import {z} from 'zod';
 
 import {
+  type FileToolKind,
   isShellToolMatcher,
   type ShellToolMatcher,
   TOOL_KINDS,
@@ -39,12 +40,17 @@ const shellToolMatcherSchema = z.custom<ShellToolMatcher>(isShellToolMatcher, {
     'Shell tool matcher must specify exactly one string field: equals, includes, startsWith, or matches.',
 });
 
+const toolPathMatcherSchema = z.object({
+  path: z.string().min(1),
+});
+
 const irToolCalledAssertionSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1).optional(),
   kind: z.literal('tool.called'),
   toolKind: z.enum(TOOL_KINDS),
   matcher: shellToolMatcherSchema.optional(),
+  pathMatcher: toolPathMatcherSchema.optional(),
 });
 
 const irToolNotCalledAssertionSchema = z.object({
@@ -53,12 +59,14 @@ const irToolNotCalledAssertionSchema = z.object({
   kind: z.literal('tool.notCalled'),
   toolKind: z.enum(TOOL_KINDS),
   matcher: shellToolMatcherSchema.optional(),
+  pathMatcher: toolPathMatcherSchema.optional(),
 });
 
 const irSequenceToolCalledStepSchema = z.object({
   kind: z.literal('tool.called'),
   toolKind: z.enum(TOOL_KINDS),
   matcher: shellToolMatcherSchema.optional(),
+  pathMatcher: toolPathMatcherSchema.optional(),
 });
 
 export const irAssertionSchema = z
@@ -117,6 +125,13 @@ export const irAssertionSchema = z
     }),
   ])
   .superRefine((assertion, ctx) => {
+    const fileToolKinds = new Set<FileToolKind>([
+      'read_file',
+      'write_file',
+      'edit_file',
+      'search_files',
+    ]);
+
     if (
       (assertion.kind === 'tool.called' ||
         assertion.kind === 'tool.notCalled') &&
@@ -131,6 +146,34 @@ export const irAssertionSchema = z
       });
     }
 
+    if (
+      (assertion.kind === 'tool.called' ||
+        assertion.kind === 'tool.notCalled') &&
+      assertion.pathMatcher !== undefined &&
+      !fileToolKinds.has(assertion.toolKind as FileToolKind)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['pathMatcher'],
+        message:
+          'Tool assertion path matchers are only supported for file-oriented tool assertions.',
+      });
+    }
+
+    if (
+      (assertion.kind === 'tool.called' ||
+        assertion.kind === 'tool.notCalled') &&
+      assertion.matcher !== undefined &&
+      assertion.pathMatcher !== undefined
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['pathMatcher'],
+        message:
+          'Tool assertions may specify matcher or pathMatcher, not both.',
+      });
+    }
+
     if (assertion.kind === 'sequence.inOrder') {
       assertion.steps.forEach((step, index) => {
         if (step.matcher !== undefined && step.toolKind !== 'shell') {
@@ -139,6 +182,27 @@ export const irAssertionSchema = z
             path: ['steps', index, 'matcher'],
             message:
               'Tool assertion matchers are only supported for shell tool assertions.',
+          });
+        }
+
+        if (
+          step.pathMatcher !== undefined &&
+          !fileToolKinds.has(step.toolKind as FileToolKind)
+        ) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['steps', index, 'pathMatcher'],
+            message:
+              'Tool assertion path matchers are only supported for file-oriented tool assertions.',
+          });
+        }
+
+        if (step.matcher !== undefined && step.pathMatcher !== undefined) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['steps', index, 'pathMatcher'],
+            message:
+              'Tool assertions may specify matcher or pathMatcher, not both.',
           });
         }
       });

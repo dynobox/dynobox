@@ -1,3 +1,8 @@
+import {mkdtempSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
+
 import {describe, expect, expectTypeOf, it} from 'vitest';
 
 import {compile, DynoboxConfigError, resolveConfigModule} from './compiler.js';
@@ -68,6 +73,37 @@ describe('packages/sdk', () => {
     expect(dyno.shellQuote('$(rm -rf .) $HOME `pwd`')).toBe(
       "'$(rm -rf .) $HOME `pwd`'",
     );
+  });
+
+  it('defineDyno attaches adjacent fixtures from the config module by default', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dynobox-sdk-fixtures-'));
+    try {
+      mkdirSync(join(dir, 'fixtures'), {recursive: true});
+      writeFileSync(join(dir, 'fixtures', 'input.txt'), 'fixture');
+      const sdkUrl = pathToFileURL(join(process.cwd(), 'src/index.ts')).href;
+      const configPath = join(dir, 'fixture-config.mjs');
+      writeFileSync(
+        configPath,
+        `import {defineDyno} from ${JSON.stringify(sdkUrl)};
+
+export default defineDyno({
+  scenarios: [
+    {name: 'auto fixtures', prompt: 'p'},
+    {name: 'explicit fixtures', prompt: 'p', fixtures: 'custom-fixtures'},
+  ],
+});
+`,
+      );
+
+      const mod = await import(
+        `${pathToFileURL(configPath).href}?t=${Date.now()}`
+      );
+
+      expect(mod.default.scenarios[0].fixtures).toBe(join(dir, 'fixtures'));
+      expect(mod.default.scenarios[1].fixtures).toBe('custom-fixtures');
+    } finally {
+      rmSync(dir, {force: true, recursive: true});
+    }
   });
 
   it('preserves the endpoint key as a literal type on assertion helpers', () => {
@@ -224,6 +260,7 @@ describe('packages/sdk', () => {
           assertions: [
             tool.called('shell'),
             tool.called('shell', {includes: 'pnpm test'}),
+            tool.called('read_file', {path: 'README.md'}),
             tool.called('edit_file'),
           ],
         },
@@ -247,6 +284,12 @@ describe('packages/sdk', () => {
       {
         id: 'assertion.uses-shell.2',
         kind: 'tool.called',
+        toolKind: 'read_file',
+        pathMatcher: {path: 'README.md'},
+      },
+      {
+        id: 'assertion.uses-shell.3',
+        kind: 'tool.called',
         toolKind: 'edit_file',
       },
     ]);
@@ -261,12 +304,14 @@ describe('packages/sdk', () => {
           prompt: 'Test a skill.',
           assertions: [
             tool.notCalled('shell', {includes: 'git push'}),
+            tool.notCalled('read_file', {path: 'secrets.txt'}),
             artifact.exists('CHANGELOG.md'),
             artifact.contains('CHANGELOG.md', 'dynobox@0.0.4'),
             transcript.contains('EOTP'),
             finalMessage.contains('working tree is dirty'),
             sequence.inOrder([
               tool.called('shell', {includes: 'git status'}),
+              tool.called('read_file', {path: 'package.json'}),
               tool.called('shell', {includes: 'git commit'}),
             ]),
             skill.invoked('commit'),
@@ -286,27 +331,33 @@ describe('packages/sdk', () => {
       },
       {
         id: 'assertion.skill-flow.1',
+        kind: 'tool.notCalled',
+        toolKind: 'read_file',
+        pathMatcher: {path: 'secrets.txt'},
+      },
+      {
+        id: 'assertion.skill-flow.2',
         kind: 'artifact.exists',
         path: 'CHANGELOG.md',
       },
       {
-        id: 'assertion.skill-flow.2',
+        id: 'assertion.skill-flow.3',
         kind: 'artifact.contains',
         path: 'CHANGELOG.md',
         text: 'dynobox@0.0.4',
       },
       {
-        id: 'assertion.skill-flow.3',
+        id: 'assertion.skill-flow.4',
         kind: 'transcript.contains',
         text: 'EOTP',
       },
       {
-        id: 'assertion.skill-flow.4',
+        id: 'assertion.skill-flow.5',
         kind: 'finalMessage.contains',
         text: 'working tree is dirty',
       },
       {
-        id: 'assertion.skill-flow.5',
+        id: 'assertion.skill-flow.6',
         kind: 'sequence.inOrder',
         steps: [
           {
@@ -316,13 +367,18 @@ describe('packages/sdk', () => {
           },
           {
             kind: 'tool.called',
+            toolKind: 'read_file',
+            pathMatcher: {path: 'package.json'},
+          },
+          {
+            kind: 'tool.called',
             toolKind: 'shell',
             matcher: {includes: 'git commit'},
           },
         ],
       },
       {
-        id: 'assertion.skill-flow.6',
+        id: 'assertion.skill-flow.7',
         kind: 'skill.invoked',
         skill: 'commit',
       },
@@ -495,6 +551,26 @@ describe('packages/sdk', () => {
     } as unknown as Parameters<typeof compile>[0];
 
     expect(() => compile(bad)).toThrow(/only supported/);
+  });
+
+  it('rejects path matchers on non-file tool assertions', () => {
+    const bad = {
+      scenarios: [
+        {
+          name: 'bad path matcher',
+          prompt: 'p',
+          assertions: [
+            {
+              type: 'tool.called',
+              tool: 'web_search',
+              path: 'README.md',
+            },
+          ],
+        },
+      ],
+    } as unknown as Parameters<typeof compile>[0];
+
+    expect(() => compile(bad)).toThrow(/Path matchers/);
   });
 
   it('rejects unsupported sequence child assertion kinds', () => {
@@ -933,8 +1009,10 @@ describe('packages/sdk', () => {
           assertions: [
             tool.called('shell'),
             tool.called('shell', {includes: 'pnpm test'}),
+            tool.called('read_file', {path: 'package.json'}),
             tool.called('edit_file'),
             tool.notCalled('shell', {includes: 'git push'}),
+            tool.notCalled('read_file', {path: 'secrets.txt'}),
             artifact.exists('CHANGELOG.md'),
             artifact.contains('CHANGELOG.md', 'dynobox@0.0.4'),
             transcript.contains('EOTP'),
@@ -945,11 +1023,14 @@ describe('packages/sdk', () => {
       ],
     });
 
-    // @ts-expect-error matchers are only valid for tool.called('shell', matcher)
+    // @ts-expect-error shell matchers are only valid for tool.called('shell', matcher)
     tool.called('edit_file', {includes: 'src/index.ts'});
 
-    // @ts-expect-error matchers are only valid for tool.notCalled('shell', matcher)
+    // @ts-expect-error shell matchers are only valid for tool.notCalled('shell', matcher)
     tool.notCalled('edit_file', {includes: 'src/index.ts'});
+
+    // @ts-expect-error path matchers are only valid for file-oriented tools
+    tool.called('web_search', {path: 'src/index.ts'});
 
     // @ts-expect-error sequence.inOrder v0 only accepts tool.called steps
     sequence.inOrder([artifact.exists('CHANGELOG.md')]);

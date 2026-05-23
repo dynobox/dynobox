@@ -22,6 +22,7 @@ export type {
   Assertion,
   CalledAssertion,
   Endpoint,
+  FileToolKind,
   FinalMessageContainsAssertion,
   NotCalledAssertion,
   SequenceInOrderAssertion,
@@ -31,6 +32,7 @@ export type {
   ToolCalledAssertion,
   ToolKind,
   ToolNotCalledAssertion,
+  ToolPathMatcher,
   TranscriptContainsAssertion,
 } from './types/brands.js';
 export type {DynoboxConfig, ScenarioInput} from './types/config.js';

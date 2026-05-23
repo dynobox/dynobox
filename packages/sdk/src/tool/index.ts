@@ -3,23 +3,29 @@ import {
   createToolNotCalledAssertion,
 } from '../internal/brands.js';
 import type {
+  FileToolKind,
   ShellCommandMatcher,
   ToolCalledAssertion,
   ToolKind,
   ToolNotCalledAssertion,
+  ToolPathMatcher,
 } from '../types/brands.js';
 
-type NonShellToolKind = Exclude<ToolKind, 'shell'>;
+type PlainToolKind = Exclude<ToolKind, 'shell' | FileToolKind>;
 
 /** Assert that the harness should call a tool. */
 function called(
   kind: 'shell',
   matcher?: ShellCommandMatcher,
 ): ToolCalledAssertion<'shell'>;
-function called<K extends NonShellToolKind>(kind: K): ToolCalledAssertion<K>;
+function called<K extends FileToolKind>(
+  kind: K,
+  matcher?: ToolPathMatcher,
+): ToolCalledAssertion<K>;
+function called<K extends PlainToolKind>(kind: K): ToolCalledAssertion<K>;
 function called(
   kind: ToolKind,
-  matcher?: ShellCommandMatcher,
+  matcher?: ShellCommandMatcher | ToolPathMatcher,
 ): ToolCalledAssertion {
   return createToolCalledAssertion(kind, matcher);
 }
@@ -29,12 +35,14 @@ function notCalled(
   kind: 'shell',
   matcher?: ShellCommandMatcher,
 ): ToolNotCalledAssertion<'shell'>;
-function notCalled<K extends NonShellToolKind>(
+function notCalled<K extends FileToolKind>(
   kind: K,
+  matcher?: ToolPathMatcher,
 ): ToolNotCalledAssertion<K>;
+function notCalled<K extends PlainToolKind>(kind: K): ToolNotCalledAssertion<K>;
 function notCalled(
   kind: ToolKind,
-  matcher?: ShellCommandMatcher,
+  matcher?: ShellCommandMatcher | ToolPathMatcher,
 ): ToolNotCalledAssertion {
   return createToolNotCalledAssertion(kind, matcher);
 }

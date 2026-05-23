@@ -129,6 +129,87 @@ describe('evaluateAssertions', () => {
     });
   });
 
+  it('evaluates path matchers on file-oriented tool assertions', () => {
+    const readEvent: ToolEvent = {
+      kind: 'read_file',
+      rawName: 'Read',
+      input: {file_path: '/tmp/work/matrix-failure-output.txt'},
+    };
+
+    const pass = evaluateOne(
+      toolAssertion({
+        kind: 'tool.called',
+        toolKind: 'read_file',
+        pathMatcher: {path: 'matrix-failure-output.txt'},
+      }),
+      [readEvent],
+    );
+    const fail = evaluateOne(
+      toolAssertion({
+        kind: 'tool.called',
+        toolKind: 'read_file',
+        pathMatcher: {path: 'missing.txt'},
+      }),
+      [readEvent],
+    );
+    const notCalled = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'tool.notCalled',
+        toolKind: 'read_file',
+        pathMatcher: {path: 'secrets.txt'},
+      },
+      [readEvent],
+    );
+
+    expect(pass).toMatchObject({
+      passed: true,
+      message:
+        'Observed tool "read_file" with path "matrix-failure-output.txt".',
+      evidence: readEvent,
+    });
+    expect(fail).toMatchObject({
+      passed: false,
+      message:
+        'Expected tool "read_file" with path "missing.txt" to be called, but observed none.',
+    });
+    expect(notCalled).toMatchObject({
+      passed: true,
+      message: 'Observed no tool "read_file" calls with path "secrets.txt".',
+    });
+  });
+
+  it('matches nested path fields without treating arbitrary strings as paths', () => {
+    const editEvent: ToolEvent = {
+      kind: 'edit_file',
+      rawName: 'Edit',
+      input: {
+        content: 'README.md',
+        files: [{path: 'src/index.ts'}],
+      },
+    };
+
+    const nestedPath = evaluateOne(
+      toolAssertion({
+        kind: 'tool.called',
+        toolKind: 'edit_file',
+        pathMatcher: {path: 'src/index.ts'},
+      }),
+      [editEvent],
+    );
+    const contentString = evaluateOne(
+      toolAssertion({
+        kind: 'tool.called',
+        toolKind: 'edit_file',
+        pathMatcher: {path: 'README.md'},
+      }),
+      [editEvent],
+    );
+
+    expect(nestedPath.passed).toBe(true);
+    expect(contentString.passed).toBe(false);
+  });
+
   it('evaluates mcp, task, and unknown as kind-only tool assertions', () => {
     const toolEvents: ToolEvent[] = [
       {kind: 'mcp', rawName: 'mcp__github__search', input: {query: 'x'}},

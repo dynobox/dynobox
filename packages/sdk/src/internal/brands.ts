@@ -11,6 +11,7 @@ import type {
   ToolCalledAssertion,
   ToolKind,
   ToolNotCalledAssertion,
+  ToolPathMatcher,
   TranscriptContainsAssertion,
 } from '../types/brands.js';
 import {ASSERTION_BRAND, ENDPOINT_BRAND} from '../types/brands.js';
@@ -59,31 +60,35 @@ export function createHttpNotCalledAssertion<K extends string>(
 /** Create a positive tool-use assertion, optionally scoped by shell matcher. */
 export function createToolCalledAssertion<K extends ToolKind>(
   tool: K,
-  command?: ShellCommandMatcher,
+  matcher?: ShellCommandMatcher | ToolPathMatcher,
 ): ToolCalledAssertion<K> {
   const base = {
     [ASSERTION_BRAND]: true as const,
     type: 'tool.called' as const,
     tool,
   };
-  return (command === undefined
+  return (matcher === undefined
     ? base
-    : {...base, command}) as unknown as ToolCalledAssertion<K>;
+    : 'path' in matcher
+      ? {...base, ...matcher}
+      : {...base, command: matcher}) as unknown as ToolCalledAssertion<K>;
 }
 
 /** Create a negative tool-use assertion, optionally scoped by shell matcher. */
 export function createToolNotCalledAssertion<K extends ToolKind>(
   tool: K,
-  command?: ShellCommandMatcher,
+  matcher?: ShellCommandMatcher | ToolPathMatcher,
 ): ToolNotCalledAssertion<K> {
   const base = {
     [ASSERTION_BRAND]: true as const,
     type: 'tool.notCalled' as const,
     tool,
   };
-  return (command === undefined
+  return (matcher === undefined
     ? base
-    : {...base, command}) as unknown as ToolNotCalledAssertion<K>;
+    : 'path' in matcher
+      ? {...base, ...matcher}
+      : {...base, command: matcher}) as unknown as ToolNotCalledAssertion<K>;
 }
 
 /** Create an assertion that a path exists in the scenario work directory. */

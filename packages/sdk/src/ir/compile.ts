@@ -105,7 +105,9 @@ function normalizeHarnessConfig(harness: HarnessRunConfig): IrHarnessConfig {
   return typeof harness === 'string' ? {id: harness} : harness;
 }
 
-function toStringArray(value: string | readonly string[] | undefined): string[] {
+function toStringArray(
+  value: string | readonly string[] | undefined,
+): string[] {
   if (value === undefined) return [];
   return typeof value === 'string' ? [value] : [...value];
 }
@@ -153,9 +155,13 @@ function buildIrAssertion(
       kind: 'tool.notCalled',
       toolKind: assertion.tool,
     };
-    return assertion.command === undefined
-      ? base
-      : {...base, matcher: assertion.command};
+    if (assertion.command !== undefined) {
+      return {...base, matcher: assertion.command};
+    }
+    if (assertion.path !== undefined) {
+      return {...base, pathMatcher: {path: assertion.path}};
+    }
+    return base;
   }
 
   if (assertion.type === 'artifact.exists') {
@@ -228,11 +234,19 @@ function buildIrToolCalledStep(
     kind: 'tool.called' as const,
     toolKind: assertion.tool,
   };
-  return (
-    assertion.command === undefined
-      ? base
-      : {...base, matcher: assertion.command}
-  ) as Omit<Extract<IrAssertion, {kind: 'tool.called'}>, 'id'>;
+  if (assertion.command !== undefined) {
+    return {...base, matcher: assertion.command} as Omit<
+      Extract<IrAssertion, {kind: 'tool.called'}>,
+      'id'
+    >;
+  }
+  if (assertion.path !== undefined) {
+    return {...base, pathMatcher: {path: assertion.path}} as Omit<
+      Extract<IrAssertion, {kind: 'tool.called'}>,
+      'id'
+    >;
+  }
+  return base as Omit<Extract<IrAssertion, {kind: 'tool.called'}>, 'id'>;
 }
 
 function reserveAuthoredId(

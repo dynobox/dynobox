@@ -19,15 +19,23 @@ const SHELL_PREVIEW_MAX = 42;
  */
 export function describeAssertion(assertion: IrAssertion): string {
   if (assertion.kind === 'tool.called') {
-    return assertion.matcher === undefined
-      ? `tool.called(${assertion.toolKind})`
-      : `tool.called(${assertion.toolKind}, ${describeShellMatcher(assertion.matcher)})`;
+    if (assertion.matcher !== undefined) {
+      return `tool.called(${assertion.toolKind}, ${describeShellMatcher(assertion.matcher)})`;
+    }
+    if (assertion.pathMatcher !== undefined) {
+      return `tool.called(${assertion.toolKind}, path: ${assertion.pathMatcher.path})`;
+    }
+    return `tool.called(${assertion.toolKind})`;
   }
 
   if (assertion.kind === 'tool.notCalled') {
-    return assertion.matcher === undefined
-      ? `tool.notCalled(${assertion.toolKind})`
-      : `tool.notCalled(${assertion.toolKind}, ${describeShellMatcher(assertion.matcher)})`;
+    if (assertion.matcher !== undefined) {
+      return `tool.notCalled(${assertion.toolKind}, ${describeShellMatcher(assertion.matcher)})`;
+    }
+    if (assertion.pathMatcher !== undefined) {
+      return `tool.notCalled(${assertion.toolKind}, path: ${assertion.pathMatcher.path})`;
+    }
+    return `tool.notCalled(${assertion.toolKind})`;
   }
 
   if (assertion.kind === 'sequence.inOrder') {
@@ -69,9 +77,13 @@ export function describeAssertion(assertion: IrAssertion): string {
  */
 export function describeExpectation(assertion: IrAssertion): string {
   if (assertion.kind === 'tool.notCalled') {
-    return assertion.matcher === undefined
-      ? `no ${assertion.toolKind} tool call`
-      : `no ${describeShellMatcherExpectation(assertion.matcher)}`;
+    if (assertion.matcher !== undefined) {
+      return `no ${describeShellMatcherExpectation(assertion.matcher)}`;
+    }
+    if (assertion.pathMatcher !== undefined) {
+      return `no ${assertion.toolKind} tool call for path "${assertion.pathMatcher.path}"`;
+    }
+    return `no ${assertion.toolKind} tool call`;
   }
 
   if (assertion.kind === 'sequence.inOrder') {
@@ -99,6 +111,9 @@ export function describeExpectation(assertion: IrAssertion): string {
   }
 
   if (assertion.kind !== 'tool.called') return describeAssertion(assertion);
+  if (assertion.pathMatcher !== undefined) {
+    return `${assertion.toolKind} tool call for path "${assertion.pathMatcher.path}"`;
+  }
   if (assertion.matcher === undefined) return `${assertion.toolKind} tool call`;
   return describeShellMatcherExpectation(assertion.matcher);
 }
@@ -122,6 +137,9 @@ export function isShellToolEvent(event: ToolEvent): event is ShellToolEvent {
 function describeToolStepExpectation(
   step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
 ): string {
+  if (step.pathMatcher !== undefined) {
+    return `${step.toolKind} tool call for path "${step.pathMatcher.path}"`;
+  }
   if (step.matcher === undefined) return `${step.toolKind} tool call`;
   return describeShellMatcherExpectation(step.matcher);
 }
