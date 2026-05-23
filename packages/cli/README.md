@@ -53,6 +53,8 @@ Dynobox supports assertions for:
 
 - Tool calls with `tool.called(...)` and `tool.notCalled(...)`.
 - Shell command matchers with `equals`, `includes`, `startsWith`, or `matches`.
+- File tool path matchers such as
+  `tool.called('read_file', {path: 'package.json'})`.
 - Ordered tool-call sequences.
 - Skill instruction loading.
 - Work-directory artifacts.

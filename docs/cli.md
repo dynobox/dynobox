@@ -93,6 +93,10 @@ exits with code `1`.
 
 Default output prints the run header, job status, assertion details for failed
 or expanded jobs, and a final summary. Passing jobs collapse to one line.
+Assertion details include the expected behavior and an `observed` line with
+the evidence Dynobox actually saw. For path-aware tool assertions, the rendered
+expectation includes the matched path, such as
+`tool.called(read_file, path: package.json)`.
 
 `--quiet` prints compact CI-friendly progress and failure information.
 

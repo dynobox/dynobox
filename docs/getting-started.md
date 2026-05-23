@@ -131,6 +131,11 @@ scenarios:
 
 See [Config Authoring](./config-authoring.md) for the full assertion reference.
 
+For larger fixtures, put files in a `fixtures/` directory next to a JavaScript
+or TypeScript dyno that uses `defineDyno(...)`. Dynobox copies that directory
+into each scenario work directory automatically unless the scenario sets its
+own `fixtures` value.
+
 ## Run A Specific Target
 
 `dynobox run [path]` accepts:

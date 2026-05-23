@@ -26,6 +26,12 @@ Authoring helpers for user config files:
 - `sequence.inOrder()`
 - `dyno` helpers
 
+`defineDyno(...)` also applies authoring defaults for JavaScript and
+TypeScript dynos: adjacent `fixtures/` directories are attached to scenarios
+that do not set `fixtures`, and dynos authored under `.agents/skills/<name>/`
+or `.claude/skills/<name>/` get setup commands that copy that skill's
+`SKILL.md` into the scenario work directory.
+
 ### `@dynobox/sdk/compiler`
 
 Compiler and config-loader utilities used by the CLI and integrations:
@@ -49,3 +55,6 @@ Canonical IR contract used by runners and evaluators:
 - authoring import path: `@dynobox/sdk`
 - assertion objects use `type` plus assertion-specific fields, matching YAML
   declarations and SDK helper return values
+- file-oriented tool assertions can match paths with
+  `tool.called('read_file', {path: 'package.json'})` or the equivalent
+  `{type: tool.called, tool: read_file, path: package.json}` object shape

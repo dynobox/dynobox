@@ -41,7 +41,8 @@ assertions evaluate what happened.
 
 You can assert:
 
-- Tool calls, including expected and prohibited shell commands.
+- Tool calls, including expected and prohibited shell commands or path-aware
+  file tool calls.
 - Skill instruction loading with `skill.invoked(...)`.
 - Ordered tool-call sequences.
 - Files present inside the scenario work directory.
@@ -70,6 +71,12 @@ Supported authoring formats:
 - TypeScript or JavaScript with `defineDyno(...)` from `@dynobox/sdk`.
 - YAML with the same `type`-discriminated assertion objects that SDK helpers
   return.
+
+JavaScript and TypeScript dynos using `defineDyno(...)` automatically attach an
+adjacent `fixtures/` directory to scenarios that do not set `fixtures`
+explicitly. Dynos authored under `.agents/skills/<name>/` or
+`.claude/skills/<name>/` also automatically copy that skill's `SKILL.md` into
+each scenario work directory.
 
 CommonJS config files (`.cjs` and `.cts`) are not supported because the SDK is
 ESM-only.

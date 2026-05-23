@@ -61,14 +61,16 @@ type ScenarioInput = {
   prompt: string;
   harnesses?: HarnessRunConfig[];
   setup?: string[];
+  fixtures?: string | string[];
   endpoints?: Record<string, Endpoint>;
   assertions?: Assertion[];
 };
 ```
 
 Each scenario runs in a fresh temporary work directory. Setup commands run in
-that directory before the harness prompt, and artifact assertions read files
-from that directory after the harness exits.
+that directory before the harness prompt, fixture directories are copied into
+that directory before setup, and artifact assertions read files from that
+directory after the harness exits.
 
 Scenario `id` is optional. When provided, it is used for stable compiled
 scenario IDs, job IDs, and `dynobox run --scenario` filters. Without an `id`,
@@ -130,6 +132,8 @@ tool.called('shell');
 tool.notCalled('web_fetch');
 tool.called('shell', {includes: 'package.json'});
 tool.notCalled('shell', {matches: 'rm\\s+-rf'});
+tool.called('read_file', {path: 'package.json'});
+tool.notCalled('edit_file', {path: 'src/index.ts'});
 ```
 
 Supported tool kinds:
@@ -154,6 +158,19 @@ Shell tool assertions can include exactly one command matcher:
 
 `matches` is a JavaScript regular expression string. Command matchers are only
 valid on `shell` tool assertions.
+
+File-oriented tool assertions can include a path matcher:
+
+- `tool.called('read_file', {path: 'package.json'})`
+- `tool.called('write_file', {path: 'src/index.ts'})`
+- `tool.called('edit_file', {path: 'src/index.ts'})`
+- `tool.called('search_files', {path: 'src'})`
+
+Path matchers are valid on `read_file`, `write_file`, `edit_file`, and
+`search_files` tool assertions. They match path fields reported by the harness,
+including common nested fields such as `path`, `file_path`, `filepath`, and
+`file`. Tool assertions may specify either a shell command matcher or a path
+matcher, not both.
 
 ### Ordered Sequences
 
@@ -274,6 +291,69 @@ Available helpers:
 - `dyno.shellQuote(value)` or `dyno.q(value)`
 - `dyno.here(import.meta.url).path(path)`
 - `dyno.here(import.meta.url).q(path)`
+- `dyno.here(import.meta.url).fixtures(subpath?)`
+
+`dyno.here(...).fixtures()` resolves the adjacent `fixtures/` directory, or a
+subpath inside it. Use it when you need to attach a non-default fixture path
+explicitly.
+
+## Fixtures
+
+Scenarios can attach one or more fixture directories. Dynobox recursively
+copies each fixture directory into the scenario work directory before setup
+commands run.
+
+```ts
+import {defineDyno, dyno, tool} from '@dynobox/sdk';
+
+const here = dyno.here(import.meta.url);
+
+export default defineDyno({
+  scenarios: [
+    {
+      name: 'uses a fixture repo',
+      prompt: 'Inspect package.json.',
+      fixtures: here.fixtures('repo'),
+      assertions: [tool.called('read_file', {path: 'package.json'})],
+    },
+  ],
+});
+```
+
+When a JavaScript or TypeScript dyno uses `defineDyno(...)`, an adjacent
+`fixtures/` directory is attached automatically to scenarios that do not set
+`fixtures` themselves:
+
+```text
+my-skill.dyno.mjs
+fixtures/
+  package.json
+```
+
+With that layout, `fixtures/package.json` is copied to `package.json` in each
+scenario work directory. Set `fixtures` explicitly to use a different
+directory, or set `fixtures: []` to disable the adjacent fixture default.
+
+YAML dynos can set `fixtures` explicitly, but they do not get automatic
+adjacent fixture attachment because YAML configs do not execute
+`defineDyno(...)`.
+
+## Skill Dynos
+
+When a JavaScript or TypeScript dyno using `defineDyno(...)` is authored under a
+skill directory, Dynobox automatically copies that skill's `SKILL.md` into the
+scenario work directory before scenario setup runs.
+
+Supported skill roots:
+
+- `.agents/skills/<name>/`
+- `.claude/skills/<name>/`
+
+For example, a dyno at `.agents/skills/commit/dyno/commit.dyno.mjs` with
+`.agents/skills/commit/SKILL.md` gets setup commands that create
+`.agents/skills/commit/SKILL.md` in the scenario work directory. This makes
+skill invocation tests work without manually copying the instruction file in
+each scenario.
 
 ## Reusable Scenarios
 
@@ -341,6 +421,7 @@ JSON output.
 | ------------------------------------------------------ | ------------------------------------------------------------------ |
 | `tool.called('shell')`                                 | `{type: tool.called, tool: shell}`                                 |
 | `tool.called('shell', {includes: 'x'})`                | `{type: tool.called, tool: shell, command: {includes: x}}`         |
+| `tool.called('read_file', {path: 'README.md'})`        | `{type: tool.called, tool: read_file, path: README.md}`            |
 | `tool.notCalled('edit_file')`                          | `{type: tool.notCalled, tool: edit_file}`                          |
 | `artifact.exists('README.md')`                         | `{type: artifact.exists, path: README.md}`                         |
 | `artifact.contains('pkg.json', 'foo')`                 | `{type: artifact.contains, path: pkg.json, text: foo}`             |
@@ -356,9 +437,8 @@ letters, numbers, dots, underscores, and hyphens.
 
 Command matcher shapes accept exactly one of `equals`, `includes`,
 `startsWith`, or `matches`, and are only valid on `shell` tool assertions.
-
-Older YAML objects that used `kind`, `toolKind`, or `matcher` are not accepted.
-Use `type`, `tool`, and `command` instead.
+Path matchers use a top-level `path` field and are only valid on file-oriented
+tool assertions.
 
 When YAML parsing fails, the CLI emits a `line:column` pointer into the file so
 syntax errors are easy to locate.

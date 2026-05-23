@@ -132,12 +132,17 @@ reference.
   (`defineDyno`, `defineScenario`, `tool`, `skill`, `artifact`, `transcript`,
   `finalMessage`, `sequence`, `http`, `dyno`) or in YAML using the same shape
   with `type`-discriminated assertion objects.
+- Automatically copy adjacent `fixtures/` directories for JS/TS dynos authored
+  with `defineDyno(...)`, and automatically copy `SKILL.md` for dynos authored
+  under `.agents/skills/<name>/` or `.claude/skills/<name>/`.
 - Run locally against Claude Code, Codex, or both.
 - Override harnesses at runtime with `--harness claude-code`, `--harness codex`,
   or comma-separated values.
 - Configure harness permission behavior with `permissionMode` or
   `--permission-mode`; dangerous full-access modes are opt-in.
 - Assert tool calls with `tool.called(...)` and `tool.notCalled(...)`.
+- Match file-oriented tool calls by path, such as
+  `tool.called('read_file', {path: 'package.json'})`.
 - Assert skill instruction loading with `skill.invoked(...)`.
 - Match shell commands with `equals`, `includes`, `startsWith`, or `matches`.
 - Assert ordered tool-call sequences with `sequence.inOrder(...)`.
