@@ -107,6 +107,9 @@ importers:
         specifier: ^2.8.4
         version: 2.8.4
     devDependencies:
+      '@dynobox/evaluators':
+        specifier: workspace:*
+        version: link:../evaluators
       '@dynobox/runner-local':
         specifier: workspace:*
         version: link:../runner-local

@@ -46,6 +46,7 @@
     "yaml": "^2.8.4"
   },
   "devDependencies": {
+    "@dynobox/evaluators": "workspace:*",
     "@dynobox/runner-local": "workspace:*",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",

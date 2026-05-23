@@ -19,6 +19,7 @@ describe('renderAssertionDetails', () => {
         prompt: 'p',
         harnesses: [{id: 'claude-code'}],
         setup: [],
+        fixtures: [],
         endpoints: [],
         assertions: [
           {
@@ -62,6 +63,7 @@ describe('renderAssertionDetails', () => {
         prompt: 'p',
         harnesses: [{id: 'claude-code'}],
         setup: [],
+        fixtures: [],
         endpoints: [],
         assertions: [
           {
@@ -118,6 +120,7 @@ describe('renderAssertionDetails', () => {
         prompt: 'p',
         harnesses: [{id: 'claude-code'}],
         setup: [],
+        fixtures: [],
         endpoints: [],
         assertions: [
           {

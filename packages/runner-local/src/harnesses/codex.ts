@@ -2,13 +2,19 @@ import type {PermissionMode} from '@dynobox/sdk';
 import {execa} from 'execa';
 import {realpathSync} from 'fs';
 
-import {normalizeToolKind} from './toolEvents.js';
+import {
+  createToolEvent,
+  isRecord,
+  jsonLines,
+  type JsonObject,
+  parseJsonObjectLine,
+  textFromContent,
+} from './parsing.js';
 import type {
   Harness,
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
-  ShellToolEvent,
   ToolEvent,
 } from './types.js';
 
@@ -16,8 +22,6 @@ export type CodexHarnessOptions = {
   executable?: string;
   extraArgs?: readonly string[];
 };
-
-type JsonObject = Record<string, unknown>;
 
 export type CodexParsedOutput = {
   finalMessage: string | undefined;
@@ -145,7 +149,7 @@ export function parseCodexJsonLine(
   line: string,
   lineNumber = 1,
 ): CodexParsedLine {
-  const event = parseJsonObjectLine(line, lineNumber);
+  const event = parseJsonObjectLine(line, lineNumber, 'Codex JSON line');
   const toolEvents = parseToolEvents(event);
   const finalMessage = parseFinalMessage(event);
 
@@ -224,39 +228,6 @@ class CodexToolEventStream {
     this.seenItemIds.add(itemId);
     return true;
   }
-}
-
-function* jsonLines(
-  stdout: string,
-): Generator<{line: string; lineNumber: number}> {
-  const lines = stdout.split(/\r?\n/);
-  for (const [index, rawLine] of lines.entries()) {
-    const line = rawLine.trim();
-    if (line.length === 0) continue;
-    yield {line, lineNumber: index + 1};
-  }
-}
-
-function parseJsonObjectLine(line: string, lineNumber: number): JsonObject {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(line);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Failed to parse Codex JSON line ${lineNumber}: ${message}`,
-      {
-        cause: error,
-      },
-    );
-  }
-
-  if (!isRecord(parsed)) {
-    throw new Error(
-      `Failed to parse Codex JSON line ${lineNumber}: expected an object.`,
-    );
-  }
-  return parsed;
 }
 
 function parseToolEvents(event: JsonObject): ToolEvent[] {
@@ -386,36 +357,6 @@ function parseStatus(
   return undefined;
 }
 
-function createToolEvent(
-  rawName: string,
-  input: unknown,
-  status: ToolEvent['status'] | undefined = undefined,
-  message: string | undefined = undefined,
-): ToolEvent {
-  const kind = normalizeToolKind(rawName);
-  const base: ToolEvent = {
-    kind,
-    rawName,
-    input,
-    ...(status === undefined ? {} : {status}),
-    ...(message === undefined ? {} : {message}),
-  };
-
-  const command = shellCommand(input);
-  if (kind === 'shell' && command !== undefined) {
-    const shellEvent: ShellToolEvent = {...base, kind: 'shell', command};
-    return shellEvent;
-  }
-
-  return base;
-}
-
-function shellCommand(input: unknown): string | undefined {
-  if (!isRecord(input)) return undefined;
-  if (typeof input.command === 'string') return input.command;
-  return typeof input.cmd === 'string' ? input.cmd : undefined;
-}
-
 function parseFailureMessage(
   candidate: JsonObject,
   event: JsonObject,
@@ -467,23 +408,4 @@ function textFromMessageLike(
     if (text !== undefined) return text;
   }
   return undefined;
-}
-
-function textFromContent(content: unknown): string | undefined {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return undefined;
-
-  const text = content
-    .map((part) => {
-      if (!isRecord(part)) return undefined;
-      return typeof part.text === 'string' ? part.text : undefined;
-    })
-    .filter((part): part is string => part !== undefined)
-    .join('');
-
-  return text.length === 0 ? undefined : text;
-}
-
-function isRecord(value: unknown): value is JsonObject {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

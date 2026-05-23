@@ -37,6 +37,7 @@ function expectedPassingRunHeader(configPath: string): string {
         prompt: 'Run pnpm test and summarize the result.',
         harnesses: [{id: 'claude-code'}],
         setup: [],
+        fixtures: [],
         endpoints: [],
         assertions: [],
       },

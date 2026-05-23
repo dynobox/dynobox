@@ -14,6 +14,7 @@ const scenario: IrScenario = {
   prompt: 'Fetch the user endpoint',
   harnesses: [{id: 'claude-code'}],
   setup: [],
+  fixtures: [],
   endpoints: [
     {
       id: 'endpoint.http.getUser',

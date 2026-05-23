@@ -31,7 +31,10 @@ export type Here = {
  */
 export function here(baseUrl: string): Here {
   const resolveFixtures = (subpath?: string): string =>
-    fromUrl(baseUrl, subpath === undefined ? 'fixtures' : `fixtures/${subpath}`);
+    fromUrl(
+      baseUrl,
+      subpath === undefined ? 'fixtures' : `fixtures/${subpath}`,
+    );
 
   return {
     path(path: string): string {

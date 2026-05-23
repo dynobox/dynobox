@@ -2,23 +2,32 @@ import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import {
-  type AssertionResult,
-  evaluateAssertions,
-  type HttpEvent,
-} from '@dynobox/evaluators';
-import type {HarnessId, PermissionMode} from '@dynobox/sdk';
-import type {IrScenario} from '@dynobox/sdk/ir';
+import {evaluateAssertions} from '@dynobox/evaluators';
 
+import {
+  errorMessage,
+  harnessExitDiagnostic,
+  setupFailureDiagnostic,
+} from './diagnostics.js';
 import type {
-  Harness,
   HarnessResult,
   HarnessRunOutput,
-  ShellToolEvent,
   ToolEvent,
 } from './harnesses/index.js';
 import type {HttpCapture} from './http/proxy.js';
 import {startHttpCapture} from './http/proxy.js';
+import {
+  permissionWarningsFromHarnessFailure,
+  permissionWarningsFromToolEvents,
+} from './permissionWarnings.js';
+import {buildResult, buildTiming, setupDurationMs} from './result.js';
+import type {
+  LocalArtifact,
+  LocalRunnerJob,
+  LocalRunnerResult,
+  RunJobOptions,
+  RunJobProgressEvent,
+} from './runTypes.js';
 import type {SetupResult} from './setup.js';
 import {runScenarioFixtures, runScenarioSetup} from './setup.js';
 
@@ -41,9 +50,18 @@ export {
   FakeHarness,
   normalizeToolKind,
 } from './harnesses/index.js';
-export type {HttpEvent};
 export {ensureDynoboxCA} from './http/ca.js';
 export {buildHttpRoutes, matchHttpEndpointId} from './http/events.js';
+export type {
+  LocalArtifact,
+  LocalRunnerJob,
+  LocalRunnerResult,
+  LocalRunnerStatus,
+  LocalRunnerTiming,
+  LocalRunnerWarning,
+  RunJobOptions,
+  RunJobProgressEvent,
+} from './runTypes.js';
 export type {
   RunFixturesOptions,
   RunSetupOptions,
@@ -56,131 +74,7 @@ export {
   runScenarioSetup,
   runSetup,
 } from './setup.js';
-
-/** One compiled scenario/harness/iteration unit scheduled by the CLI. */
-export type LocalRunnerJob = {
-  id: string;
-  scenario: IrScenario;
-  harness: HarnessId;
-  model?: string;
-  permissionMode?: PermissionMode;
-  iteration: number;
-};
-
-/** Progress events emitted while `runJob` advances through setup/harness/assertions. */
-export type RunJobProgressEvent =
-  | {
-      type: 'fixtures.started';
-      job: LocalRunnerJob;
-      fixturesCount: number;
-    }
-  | {
-      type: 'fixtures.completed';
-      job: LocalRunnerJob;
-      fixturesResult: SetupResult;
-    }
-  | {
-      type: 'setup.started';
-      job: LocalRunnerJob;
-      commandCount: number;
-    }
-  | {
-      type: 'setup.completed';
-      job: LocalRunnerJob;
-      setupResult: SetupResult;
-    }
-  | {
-      type: 'harness.started';
-      job: LocalRunnerJob;
-      harnessId: string;
-    }
-  | {
-      type: 'harness.completed';
-      job: LocalRunnerJob;
-      harnessId: string;
-      success: boolean;
-      toolCount: number;
-      exitCode?: number;
-      durationMs?: number;
-    }
-  | {
-      type: 'harness.tool';
-      job: LocalRunnerJob;
-      harnessId: string;
-      toolEvent: ToolEvent;
-      toolCount: number;
-    }
-  | {
-      type: 'assertions.started';
-      job: LocalRunnerJob;
-      assertionCount: number;
-    }
-  | {
-      type: 'assertions.completed';
-      job: LocalRunnerJob;
-      assertionResults: AssertionResult[];
-    };
-
-/** Runtime options for local execution of one job. */
-export type RunJobOptions = {
-  harnesses?: readonly Harness[];
-  scratchRoot?: string;
-  env?: Record<string, string>;
-  timeoutMs?: number;
-  onProgress?: (event: RunJobProgressEvent) => void;
-};
-
-export type LocalRunnerStatus =
-  | 'passed'
-  | 'setup_failed'
-  | 'harness_failed'
-  | 'assertion_failed';
-
-/** Artifact produced by local execution and surfaced in debug output. */
-export type LocalArtifact = {
-  kind: 'work_dir';
-  path: string;
-};
-
-/** Timing breakdown for setup, harness execution, and assertions. */
-export type LocalRunnerTiming = {
-  setupMs: number;
-  harnessMs: number;
-  assertionsMs: number;
-  totalMs: number;
-};
-
-export type LocalRunnerWarning = {
-  kind: 'permission_denied';
-  message: string;
-  tool?: {
-    kind: string;
-    rawName: string;
-    command?: string;
-  };
-};
-
-/** Structured result returned by `runJob` for rendering and summaries. */
-export type LocalRunnerResult = {
-  jobId: string;
-  scenarioId: string;
-  harness: HarnessId;
-  model?: string;
-  permissionMode?: PermissionMode;
-  iteration: number;
-  status: LocalRunnerStatus;
-  passed: boolean;
-  workDir: string;
-  setupResult: SetupResult;
-  harnessOutput?: HarnessRunOutput;
-  harnessResult?: HarnessResult;
-  httpEvents: readonly HttpEvent[];
-  artifacts: LocalArtifact[];
-  assertionResults: AssertionResult[];
-  diagnostics: string[];
-  warnings: LocalRunnerWarning[];
-  timing: LocalRunnerTiming;
-};
+export type {HttpEvent} from '@dynobox/evaluators';
 
 /**
  * Run one compiled scenario/harness job locally.
@@ -479,183 +373,3 @@ async function stopHttpCapture(
   if (httpCapture === undefined) return;
   await httpCapture.stop();
 }
-
-function buildResult(
-  job: LocalRunnerJob,
-  result: Omit<
-    LocalRunnerResult,
-    | 'jobId'
-    | 'scenarioId'
-    | 'harness'
-    | 'iteration'
-    | 'passed'
-    | 'httpEvents'
-    | 'assertionResults'
-    | 'diagnostics'
-    | 'warnings'
-    | 'timing'
-  > & {
-    assertionResults?: AssertionResult[];
-    diagnostics?: string[];
-    warnings?: LocalRunnerWarning[];
-    httpEvents?: readonly HttpEvent[];
-    timing: LocalRunnerTiming;
-  },
-): LocalRunnerResult {
-  const assertionResults = result.assertionResults ?? [];
-  const diagnostics = result.diagnostics ?? [];
-  const warnings = result.warnings ?? [];
-  return {
-    jobId: job.id,
-    scenarioId: job.scenario.id,
-    harness: job.harness,
-    ...(job.model === undefined ? {} : {model: job.model}),
-    ...(job.permissionMode === undefined
-      ? {}
-      : {permissionMode: job.permissionMode}),
-    iteration: job.iteration,
-    status: result.status,
-    passed: result.status === 'passed',
-    workDir: result.workDir,
-    setupResult: result.setupResult,
-    ...(result.harnessOutput === undefined
-      ? {}
-      : {harnessOutput: result.harnessOutput}),
-    ...(result.harnessResult === undefined
-      ? {}
-      : {harnessResult: result.harnessResult}),
-    httpEvents: result.httpEvents ?? [],
-    artifacts: result.artifacts,
-    assertionResults,
-    diagnostics,
-    warnings,
-    timing: result.timing,
-  };
-}
-
-function setupDurationMs(setupResult: SetupResult): number {
-  return setupResult.logs.reduce((total, log) => total + log.durationMs, 0);
-}
-
-function buildTiming(input: {
-  setupMs: number;
-  harnessMs?: number;
-  assertionsMs?: number;
-}): LocalRunnerTiming {
-  const harnessMs = input.harnessMs ?? 0;
-  const assertionsMs = input.assertionsMs ?? 0;
-  return {
-    setupMs: input.setupMs,
-    harnessMs,
-    assertionsMs,
-    totalMs: input.setupMs + harnessMs + assertionsMs,
-  };
-}
-
-function setupFailureDiagnostic(setupResult: SetupResult): string {
-  const failed = setupResult.logs.find((log) => log.exitCode !== 0);
-  if (failed === undefined) return 'Scenario setup failed.';
-
-  const stderr = failed.stderr.trim();
-  return stderr.length === 0
-    ? `Setup command failed with exit code ${failed.exitCode}: ${failed.command}`
-    : `Setup command failed with exit code ${failed.exitCode}: ${failed.command}\n${stderr}`;
-}
-
-function harnessExitDiagnostic(
-  harnessResult: HarnessResult,
-  harnessOutput: HarnessRunOutput,
-): string {
-  const stderr = harnessOutput.stderr.trim();
-  return stderr.length === 0
-    ? `Harness exited with code ${harnessResult.exitCode}.`
-    : `Harness exited with code ${harnessResult.exitCode}: ${stderr}`;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function permissionWarningsFromToolEvents(
-  toolEvents: readonly ToolEvent[],
-): LocalRunnerWarning[] {
-  return dedupeWarnings(
-    toolEvents.flatMap((event) => {
-      if (event.status !== 'failure') return [];
-      if (event.message === undefined) return [];
-      if (!isPermissionDeniedText(event.message)) return [];
-      return [permissionWarningForTool(event)];
-    }),
-  );
-}
-
-function permissionWarningsFromHarnessFailure(
-  harnessOutput: HarnessRunOutput,
-  harnessResult: HarnessResult,
-): LocalRunnerWarning[] {
-  const text = [harnessOutput.stderr, harnessResult.transcript]
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0)
-    .join('\n');
-
-  if (!isPermissionDeniedText(text)) return [];
-  return [
-    {
-      kind: 'permission_denied',
-      message:
-        'Harness blocked an action. Use --permission-mode dangerous only for trusted evals that intentionally need this access.',
-    },
-  ];
-}
-
-function permissionWarningForTool(event: ToolEvent): LocalRunnerWarning {
-  return {
-    kind: 'permission_denied',
-    message:
-      'Harness blocked a tool action. Use --permission-mode dangerous only for trusted evals that intentionally need this access.',
-    tool: {
-      kind: event.kind,
-      rawName: event.rawName,
-      ...(isShellToolEvent(event) ? {command: event.command} : {}),
-    },
-  };
-}
-
-function dedupeWarnings(
-  warnings: readonly LocalRunnerWarning[],
-): LocalRunnerWarning[] {
-  const seen = new Set<string>();
-  const deduped: LocalRunnerWarning[] = [];
-  for (const warning of warnings) {
-    const key = [
-      warning.kind,
-      warning.tool?.kind ?? '',
-      warning.tool?.rawName ?? '',
-      warning.tool?.command ?? '',
-      warning.message,
-    ].join('\0');
-    if (seen.has(key)) continue;
-    seen.add(key);
-    deduped.push(warning);
-  }
-  return deduped;
-}
-
-function isShellToolEvent(event: ToolEvent): event is ShellToolEvent {
-  return event.kind === 'shell' && 'command' in event;
-}
-
-function isPermissionDeniedText(value: string): boolean {
-  return PERMISSION_DENIED_PATTERNS.some((pattern) => pattern.test(value));
-}
-
-const PERMISSION_DENIED_PATTERNS = [
-  /\bpermission denied\b/i,
-  /\boperation not permitted\b/i,
-  /\bnot approved\b/i,
-  /\bapproval denied\b/i,
-  /\brequires approval\b/i,
-  /\bdenied by policy\b/i,
-  /\bblocked by sandbox\b/i,
-  /\bsandbox denied\b/i,
-] as const;

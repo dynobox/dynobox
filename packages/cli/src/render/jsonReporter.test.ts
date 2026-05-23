@@ -13,6 +13,7 @@ describe('renderJsonRunOutput', () => {
         prompt: 'p',
         harnesses: [{id: 'claude-code'}],
         setup: [],
+        fixtures: [],
         endpoints: [],
         assertions: [
           {

@@ -15,6 +15,7 @@ describe('renderRunHeader', () => {
           prompt: 'Run a test.',
           harnesses: [{id: 'claude-code'}],
           setup: [],
+          fixtures: [],
           endpoints: [],
           assertions: [],
         },
