@@ -19,6 +19,20 @@ shipping a prompt, skill, or workflow change.
 - [CI Integration](./ci.md): run Dynobox in GitHub Actions and publish JSON
   reports as build artifacts.
 
+## Agent Resources
+
+The docs site publishes agent-oriented entry points for retrieval and indexing:
+
+- [`llms.txt`](https://docs.dynobox.xyz/llms.txt): concise docs map with
+  canonical HTML, markdown, source, package, and command references.
+- [`llms-full.txt`](https://docs.dynobox.xyz/llms-full.txt): the full public
+  docs corpus as one plain-text file.
+- [`docs-index.json`](https://docs.dynobox.xyz/docs-index.json):
+  machine-readable page metadata, topics, headings, and canonical URLs.
+- Raw markdown pages such as
+  [`getting-started.md`](https://docs.dynobox.xyz/getting-started.md) for
+  direct ingestion without HTML parsing.
+
 ## What Dynobox Tests
 
 Dynobox runs each scenario in an isolated temporary work directory. Setup

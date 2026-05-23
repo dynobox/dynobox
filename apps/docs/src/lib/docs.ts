@@ -6,6 +6,7 @@ import Markdoc, {type Config, type RenderableTreeNode} from '@markdoc/markdoc';
 const repoRoot = path.resolve(process.cwd(), '../..');
 const docsRoot = path.join(repoRoot, 'docs');
 const githubSourceBase = 'https://github.com/dynobox/dynobox/blob/main';
+export const docsSite = 'https://docs.dynobox.xyz';
 
 const docFiles = [
   'README.md',
@@ -18,11 +19,17 @@ const docFiles = [
 export type DocFile = (typeof docFiles)[number];
 
 export type DocPage = {
+  agentSummary: string;
+  description: string;
   file: DocFile;
   headings: DocHeading[];
   html: string;
+  markdownRoute: string;
   route: string;
+  source: string;
+  sourceUrl: string;
   slug: string;
+  topics: readonly string[];
   title: string;
 };
 
@@ -37,9 +44,72 @@ export type DocNavItem = {
   title: string;
 };
 
+const docMetadata: Record<
+  DocFile,
+  {
+    agentSummary: string;
+    description: string;
+    topics: readonly string[];
+  }
+> = {
+  'README.md': {
+    agentSummary:
+      'Overview of Dynobox, supported harnesses, config formats, observable assertions, and current local runner limits.',
+    description:
+      'Dynobox documentation for local agent and skill workflow testing.',
+    topics: [
+      'overview',
+      'agent testing',
+      'harnesses',
+      'assertions',
+      'config formats',
+    ],
+  },
+  'getting-started.md': {
+    agentSummary:
+      'Install the Dynobox CLI, scaffold a first dyno, choose harnesses, run targets, and debug local agent evals.',
+    description:
+      'Install Dynobox, create a first dyno, choose a harness, and run local agent workflow tests.',
+    topics: ['install', 'init', 'run', 'harnesses', 'debug'],
+  },
+  'config-authoring.md': {
+    agentSummary:
+      'Author JavaScript, TypeScript, and YAML dynos with @dynobox/sdk helpers, assertions, harness options, HTTP capture, and reusable scenarios.',
+    description:
+      'Write Dynobox configs with SDK helpers, YAML objects, harness settings, assertions, HTTP checks, and path helpers.',
+    topics: [
+      '@dynobox/sdk',
+      'defineDyno',
+      'YAML',
+      'assertions',
+      'HTTP capture',
+      'skills',
+    ],
+  },
+  'cli.md': {
+    agentSummary:
+      'Reference for dynobox init and dynobox run commands, flags, output modes, JSON reports, exit codes, and harness requirements.',
+    description:
+      'Dynobox CLI command reference, including init, run, reporters, exit codes, and harness requirements.',
+    topics: ['CLI', 'dynobox init', 'dynobox run', 'JSON reporter', 'exit codes'],
+  },
+  'ci.md': {
+    agentSummary:
+      'Run Dynobox in CI, use harness matrices, write NDJSON reports, upload artifacts, and parse summary records.',
+    description:
+      'Run Dynobox in CI with quiet output, JSON reports, GitHub Actions, and artifact naming patterns.',
+    topics: ['CI', 'GitHub Actions', 'JSON reports', 'artifacts'],
+  },
+};
+
 export function getDocRoute(file: string): string {
   if (file === 'README.md') return '/';
   return `/${file.replace(/\.md$/, '')}/`;
+}
+
+export function getDocMarkdownRoute(file: string): string {
+  if (file === 'README.md') return '/README.md';
+  return `/${file}`;
 }
 
 export function getDocSlug(file: string): string {
@@ -53,14 +123,21 @@ export async function getAllDocs(): Promise<DocPage[]> {
 
 export async function getDoc(file: DocFile): Promise<DocPage> {
   const source = await readFile(path.join(docsRoot, file), 'utf8');
+  const metadata = docMetadata[file];
   const title = extractTitle(source);
 
   return {
+    agentSummary: metadata.agentSummary,
+    description: metadata.description,
     file,
     headings: extractHeadings(source),
     html: renderMarkdown(source, file),
+    markdownRoute: getDocMarkdownRoute(file),
     route: getDocRoute(file),
+    source,
+    sourceUrl: `${githubSourceBase}/docs/${file}`,
     slug: getDocSlug(file),
+    topics: metadata.topics,
     title,
   };
 }

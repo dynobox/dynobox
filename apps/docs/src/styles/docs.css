@@ -402,6 +402,25 @@ a {
   content: '';
 }
 
+.page-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin: 0 0 22px;
+}
+
+.page-links a {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.page-links a:hover {
+  color: var(--accent);
+}
+
 .content h1,
 .content h2,
 .content h3,

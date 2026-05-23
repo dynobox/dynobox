@@ -8,6 +8,12 @@ type Props = {
 };
 
 const { navItems, page } = Astro.props;
+const canonicalUrl = new URL(page.route, Astro.site).toString();
+const markdownUrl = new URL(page.markdownRoute, Astro.site).toString();
+const llmsUrl = new URL('/llms.txt', Astro.site).toString();
+const docsIndexUrl = new URL('/docs-index.json', Astro.site).toString();
+const documentTitle =
+  page.title === 'Dynobox Docs' ? page.title : `${page.title} | Dynobox Docs`;
 ---
 
 <!doctype html>
@@ -16,6 +22,15 @@ const { navItems, page } = Astro.props;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="canonical" href={canonicalUrl} />
+    <link rel="alternate" type="text/markdown" href={markdownUrl} />
+    <link rel="alternate" type="text/plain" title="LLMs" href={llmsUrl} />
+    <link
+      rel="alternate"
+      type="application/json"
+      title="Docs index"
+      href={docsIndexUrl}
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -24,8 +39,15 @@ const { navItems, page } = Astro.props;
     />
     <meta
       name="description"
-      content="Dynobox documentation for local agent and skill workflow testing."
+      content={page.description}
     />
+    <meta name="docsearch:package" content="dynobox" />
+    <meta name="docsearch:sdk-package" content="@dynobox/sdk" />
+    <meta name="docsearch:topics" content={page.topics.join(', ')} />
+    <meta property="og:title" content={documentTitle} />
+    <meta property="og:description" content={page.description} />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content={canonicalUrl} />
     <script is:inline>
       (() => {
         const storageKey = 'dynobox-docs-theme';
@@ -40,7 +62,7 @@ const { navItems, page } = Astro.props;
           : system;
       })();
     </script>
-    <title>{page.title} | Dynobox Docs</title>
+    <title>{documentTitle}</title>
   </head>
   <body>
     <header class="topbar">
@@ -184,6 +206,11 @@ const { navItems, page } = Astro.props;
       </aside>
 
       <main class="content">
+        <div class="page-links" aria-label="Page resources">
+          <a href={page.markdownRoute}>Markdown</a>
+          <a href={page.sourceUrl} target="_blank">Source</a>
+          <a href="/llms.txt">llms.txt</a>
+        </div>
         <slot />
       </main>
     </div>
