@@ -20,7 +20,7 @@ import type {
 import type {HttpCapture} from './http/proxy.js';
 import {startHttpCapture} from './http/proxy.js';
 import type {SetupResult} from './setup.js';
-import {runScenarioSetup} from './setup.js';
+import {runScenarioFixtures, runScenarioSetup} from './setup.js';
 
 export type {
   Harness,
@@ -44,8 +44,18 @@ export {
 export type {HttpEvent};
 export {ensureDynoboxCA} from './http/ca.js';
 export {buildHttpRoutes, matchHttpEndpointId} from './http/events.js';
-export type {RunSetupOptions, SetupCommandLog, SetupResult} from './setup.js';
-export {runScenarioSetup, runSetup} from './setup.js';
+export type {
+  RunFixturesOptions,
+  RunSetupOptions,
+  SetupCommandLog,
+  SetupResult,
+} from './setup.js';
+export {
+  runFixtures,
+  runScenarioFixtures,
+  runScenarioSetup,
+  runSetup,
+} from './setup.js';
 
 /** One compiled scenario/harness/iteration unit scheduled by the CLI. */
 export type LocalRunnerJob = {
@@ -59,6 +69,16 @@ export type LocalRunnerJob = {
 
 /** Progress events emitted while `runJob` advances through setup/harness/assertions. */
 export type RunJobProgressEvent =
+  | {
+      type: 'fixtures.started';
+      job: LocalRunnerJob;
+      fixturesCount: number;
+    }
+  | {
+      type: 'fixtures.completed';
+      job: LocalRunnerJob;
+      fixturesResult: SetupResult;
+    }
   | {
       type: 'setup.started';
       job: LocalRunnerJob;
@@ -176,6 +196,28 @@ export async function runJob(
   const workDir = await createWorkDir(options.scratchRoot);
   const artifacts: LocalArtifact[] = [{kind: 'work_dir', path: workDir}];
 
+  emitProgress(options, {
+    type: 'fixtures.started',
+    job,
+    fixturesCount: job.scenario.fixtures.length,
+  });
+  const fixturesResult = await runScenarioFixtures({
+    scenario: job.scenario,
+    workDir,
+  });
+  emitProgress(options, {type: 'fixtures.completed', job, fixturesResult});
+  if (!fixturesResult.success) {
+    const setupMs = setupDurationMs(fixturesResult);
+    return buildResult(job, {
+      status: 'setup_failed',
+      workDir,
+      setupResult: fixturesResult,
+      artifacts,
+      diagnostics: [setupFailureDiagnostic(fixturesResult)],
+      timing: buildTiming({setupMs}),
+    });
+  }
+
   const setupOptions: Parameters<typeof runScenarioSetup>[0] = {
     scenario: job.scenario,
     workDir,
@@ -187,7 +229,11 @@ export async function runJob(
     job,
     commandCount: job.scenario.setup.length,
   });
-  const setupResult = await runScenarioSetup(setupOptions);
+  const commandSetupResult = await runScenarioSetup(setupOptions);
+  const setupResult: SetupResult = {
+    success: commandSetupResult.success,
+    logs: [...fixturesResult.logs, ...commandSetupResult.logs],
+  };
   const setupMs = setupDurationMs(setupResult);
   emitProgress(options, {type: 'setup.completed', job, setupResult});
   if (!setupResult.success) {

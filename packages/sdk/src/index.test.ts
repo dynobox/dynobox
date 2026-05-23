@@ -604,6 +604,7 @@ describe('packages/sdk', () => {
                 "url": "https://registry.npmjs.org/left-pad",
               },
             ],
+            "fixtures": [],
             "harnesses": [
               {
                 "id": "claude-code",
@@ -642,6 +643,7 @@ describe('packages/sdk', () => {
                 "url": "https://registry.npmjs.org/left-pad",
               },
             ],
+            "fixtures": [],
             "harnesses": [
               {
                 "id": "claude-code",
@@ -687,6 +689,7 @@ describe('packages/sdk', () => {
                 "url": "https://registry.npmjs.org/left-pad",
               },
             ],
+            "fixtures": [],
             "harnesses": [
               {
                 "id": "claude-code",

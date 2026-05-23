@@ -79,12 +79,15 @@ export function compile(config: DynoboxConfig): Ir {
       ...(scenario.setup ?? []),
     ];
 
+    const fixtures = dedupeStrings(toStringArray(scenario.fixtures));
+
     return {
       id: scenarioId,
       name: scenario.name,
       prompt: scenario.prompt,
       harnesses,
       setup,
+      fixtures,
       endpoints: irEndpoints,
       assertions: irAssertions,
     };
@@ -100,6 +103,15 @@ export function compile(config: DynoboxConfig): Ir {
 
 function normalizeHarnessConfig(harness: HarnessRunConfig): IrHarnessConfig {
   return typeof harness === 'string' ? {id: harness} : harness;
+}
+
+function toStringArray(value: string | readonly string[] | undefined): string[] {
+  if (value === undefined) return [];
+  return typeof value === 'string' ? [value] : [...value];
+}
+
+function dedupeStrings(values: readonly string[]): string[] {
+  return [...new Set(values)];
 }
 
 function buildIrEndpoint(

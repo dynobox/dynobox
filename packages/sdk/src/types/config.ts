@@ -22,6 +22,7 @@ export type ScenarioInput<
   prompt: string;
   harnesses?: HarnessRunConfig[];
   setup?: string[];
+  fixtures?: string | readonly string[];
   endpoints?: E;
   assertions?: ReadonlyArray<Assertion<EKeys>>;
 };

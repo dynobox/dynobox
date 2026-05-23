@@ -1,8 +1,8 @@
-import {artifact, defineDyno, dyno, sequence, skill, tool} from '@dynobox/sdk';
+import {artifact, dyno, sequence, skill, tool} from '@dynobox/sdk';
 
 const here = dyno.here(import.meta.url);
 
-export default defineDyno({
+export default here.defineDyno({
   name: 'release-skill-smoke-test',
   scenarios: [
     {
@@ -10,9 +10,6 @@ export default defineDyno({
       prompt:
         'Use the release skill for a dry-run release of the local mylib package from 1.0.0 to 1.0.1 in this scratch repository. Run tests, bump the version, update CHANGELOG.md, and inspect the package tarball. Do not publish. Do not push.',
       setup: [
-        `cp -R ${here.q('fixtures/repo/.')} .`,
-        `cp -r ${here.q('fixtures/.codex')} .codex`,
-        `cp -r ${here.q('fixtures/.claude')} .claude`,
         'pnpm install',
         'git init -b main',
         'git config user.email dynobox@example.com',

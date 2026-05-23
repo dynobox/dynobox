@@ -1,3 +1,5 @@
+import {cp} from 'node:fs/promises';
+
 import type {IrScenario} from '@dynobox/sdk/ir';
 import {execaCommand} from 'execa';
 
@@ -19,6 +21,11 @@ export type RunSetupOptions = {
   commands: readonly string[];
   workDir: string;
   env?: Record<string, string>;
+};
+
+export type RunFixturesOptions = {
+  fixtures: readonly string[];
+  workDir: string;
 };
 
 /**
@@ -65,4 +72,59 @@ export async function runScenarioSetup(opts: {
   };
   if (opts.env !== undefined) setupOptions.env = opts.env;
   return runSetup(setupOptions);
+}
+
+/**
+ * Recursively mirrors each fixtures directory into the scenario work dir.
+ * Each source directory is copied verbatim — nested structure is preserved.
+ * Stops at the first failure, mirroring `runSetup` semantics.
+ */
+export async function runFixtures(
+  opts: RunFixturesOptions,
+): Promise<SetupResult> {
+  const logs: SetupCommandLog[] = [];
+  for (const src of opts.fixtures) {
+    const command = `fixtures:${src}`;
+    const startedAt = process.hrtime.bigint();
+    try {
+      await cp(src, opts.workDir, {
+        recursive: true,
+        dereference: false,
+        errorOnExist: false,
+        force: true,
+      });
+      logs.push({
+        command,
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        durationMs: hrtimeMs(startedAt),
+      });
+    } catch (error) {
+      logs.push({
+        command,
+        exitCode: 1,
+        stdout: '',
+        stderr: error instanceof Error ? error.message : String(error),
+        durationMs: hrtimeMs(startedAt),
+      });
+      return {success: false, logs};
+    }
+  }
+  return {success: true, logs};
+}
+
+/** Mirror fixtures attached to a compiled scenario. */
+export async function runScenarioFixtures(opts: {
+  scenario: Pick<IrScenario, 'fixtures'>;
+  workDir: string;
+}): Promise<SetupResult> {
+  return runFixtures({
+    fixtures: opts.scenario.fixtures,
+    workDir: opts.workDir,
+  });
+}
+
+function hrtimeMs(startedAt: bigint): number {
+  return Number(process.hrtime.bigint() - startedAt) / 1_000_000;
 }

@@ -7,6 +7,7 @@ import type {LiveLine} from './writer.js';
 
 export type LiveJobState = {
   setupCommandCount: number;
+  fixturesCount: number;
   toolCount: number;
   assertionCount: number;
   phaseStartedAtMs: number;
@@ -22,6 +23,38 @@ export function renderLiveProgressEvent(
   state: LiveJobState,
   ctx: RenderContext,
 ): LiveLine {
+  if (event.type === 'fixtures.started') {
+    state.fixturesCount = event.fixturesCount;
+    if (event.fixturesCount === 0) return {kind: 'skip'};
+    state.phaseStartedAtMs = Date.now();
+    const detail = formatCount(event.fixturesCount, 'path');
+    return {
+      kind: 'update',
+      render: (frame, nowMs) =>
+        renderPhaseRow(ctx, {
+          status: 'running',
+          label: 'fixtures',
+          detail,
+          spinnerFrame: frame,
+          durationMs: nowMs - state.phaseStartedAtMs,
+        }),
+    };
+  }
+
+  if (event.type === 'fixtures.completed') {
+    if (state.fixturesCount === 0) return {kind: 'skip'};
+    const status = event.fixturesResult.success ? 'pass' : 'fail';
+    return {
+      kind: 'commit',
+      text: renderPhaseRow(ctx, {
+        status,
+        label: 'fixtures',
+        detail: formatCount(state.fixturesCount, 'path'),
+        durationMs: setupDurationMs(event.fixturesResult),
+      }),
+    };
+  }
+
   if (event.type === 'setup.started') {
     state.setupCommandCount = event.commandCount;
     state.phaseStartedAtMs = Date.now();

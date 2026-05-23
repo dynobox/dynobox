@@ -46,6 +46,7 @@ function createJob(scenario: Partial<IrScenario> = {}): LocalRunnerJob {
       prompt: 'Run pnpm test.',
       harnesses: [{id: 'claude-code'}],
       setup: [],
+      fixtures: [],
       endpoints: [],
       assertions: [],
       ...scenario,
@@ -422,6 +423,8 @@ describe('runJob', () => {
 
     expect(result.status).toBe('passed');
     expect(events.map((event) => event.type)).toEqual([
+      'fixtures.started',
+      'fixtures.completed',
       'setup.started',
       'setup.completed',
       'harness.started',
@@ -429,15 +432,15 @@ describe('runJob', () => {
       'assertions.started',
       'assertions.completed',
     ]);
-    expect(events[0]).toMatchObject({commandCount: 1});
-    expect(events[3]).toMatchObject({
+    expect(events[2]).toMatchObject({commandCount: 1});
+    expect(events[5]).toMatchObject({
       harnessId: 'claude-code',
       success: true,
       exitCode: 0,
       durationMs: 100,
     });
-    expect(events[4]).toMatchObject({assertionCount: 1});
-    expect(events[5]).toMatchObject({
+    expect(events[6]).toMatchObject({assertionCount: 1});
+    expect(events[7]).toMatchObject({
       assertionResults: [{passed: true}],
     });
   });
@@ -465,6 +468,8 @@ describe('runJob', () => {
 
     expect(result.status).toBe('passed');
     expect(events.map((event) => event.type)).toEqual([
+      'fixtures.started',
+      'fixtures.completed',
       'setup.started',
       'setup.completed',
       'harness.started',
@@ -473,13 +478,13 @@ describe('runJob', () => {
       'assertions.started',
       'assertions.completed',
     ]);
-    expect(events[3]).toMatchObject({
+    expect(events[5]).toMatchObject({
       type: 'harness.tool',
       harnessId: 'claude-code',
       toolCount: 1,
       toolEvent: {kind: 'shell', command: 'pnpm test'},
     });
-    expect(events[4]).toMatchObject({
+    expect(events[6]).toMatchObject({
       type: 'harness.completed',
       toolCount: 1,
     });
@@ -700,12 +705,14 @@ describe('runJob', () => {
       'No harness registered for scenario harness "claude-code".',
     ]);
     expect(events.map((event) => event.type)).toEqual([
+      'fixtures.started',
+      'fixtures.completed',
       'setup.started',
       'setup.completed',
       'harness.started',
       'harness.completed',
     ]);
-    expect(events[3]).toMatchObject({
+    expect(events[5]).toMatchObject({
       harnessId: 'claude-code',
       success: false,
     });

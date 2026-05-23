@@ -208,6 +208,9 @@ export const scenarioSchema = z.object({
   prompt: z.string().min(1),
   harnesses: z.array(harnessRunConfigSchema).min(1).optional(),
   setup: z.array(z.string().min(1)).optional(),
+  fixtures: z
+    .union([z.string().min(1), z.array(z.string().min(1))])
+    .optional(),
   endpoints: z.record(endpointKeySchema, endpointSchema).optional(),
   assertions: z.array(assertionSchema).optional(),
 });

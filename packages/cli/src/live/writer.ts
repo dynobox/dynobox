@@ -12,7 +12,8 @@ export type LiveRender = (frame: string, nowMs: number) => string;
 
 export type LiveLine =
   | {kind: 'update'; render: LiveRender}
-  | {kind: 'commit'; text: string};
+  | {kind: 'commit'; text: string}
+  | {kind: 'skip'};
 
 export type LiveWriter = {
   /** Begin a new job: prints the headline and resets internal counters. */
@@ -63,6 +64,7 @@ export function createLiveWriter(
     },
 
     emit(line: LiveLine): void {
+      if (line.kind === 'skip') return;
       if (line.kind === 'update') {
         currentRender = line.render;
         const text = line.render(currentFrame, Date.now());

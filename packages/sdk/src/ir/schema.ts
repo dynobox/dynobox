@@ -151,6 +151,7 @@ export const irScenarioSchema = z.object({
   prompt: z.string().min(1),
   harnesses: z.array(irHarnessConfigSchema).min(1),
   setup: z.array(z.string().min(1)),
+  fixtures: z.array(z.string().min(1)),
   endpoints: z.array(irEndpointSchema),
   assertions: z.array(irAssertionSchema),
 });

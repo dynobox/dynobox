@@ -298,6 +298,7 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
     for (const job of jobs) {
       const state: LiveJobState = {
         setupCommandCount: 0,
+        fixturesCount: 0,
         toolCount: 0,
         assertionCount: 0,
         phaseStartedAtMs: Date.now(),
