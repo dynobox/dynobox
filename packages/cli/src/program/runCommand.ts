@@ -37,6 +37,7 @@ import {
 import {
   renderHeadline,
   renderJsonRunOutput,
+  renderPassRateMatrix,
   renderRunConfigErrorMessage,
   renderRunHeader,
   renderRunOutput,
@@ -60,6 +61,7 @@ import {configErrorExitCode} from './exitCodes.js';
 import {
   buildRunJobOptions,
   validateHarnessOverrides,
+  validateIterations,
   validatePermissionModeOverride,
   validateReporterFormat,
   validateScenarioFilters,
@@ -72,6 +74,7 @@ export type RunCommandFlags = {
   debug?: boolean;
   reporter?: string;
   scenario?: string[];
+  iterations?: string;
   permissionMode?: string;
 };
 
@@ -112,6 +115,11 @@ export async function runCommandAction(
     targetLabel,
     writeStderr,
   );
+  const iterations = validateIterationCount(
+    commandFlags.iterations,
+    targetLabel,
+    writeStderr,
+  );
   const scenarioPatterns = validateScenarioFilters(commandFlags.scenario);
 
   const filePaths = await discoverOrFail(
@@ -139,7 +147,12 @@ export async function runCommandAction(
   const jobs = compiled.flatMap((entry) =>
     buildLocalRunnerJobs(
       entry.ir,
-      buildJobOptions(overrideHarnesses, permissionMode, scenarioPatterns),
+      buildJobOptions(
+        overrideHarnesses,
+        permissionMode,
+        scenarioPatterns,
+        iterations,
+      ),
     ),
   );
   if (jobs.length === 0 && scenarioPatterns !== undefined) {
@@ -343,6 +356,9 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
     spinner?.stop();
   }
 
+  if (jobs.some((job) => job.iteration > 0)) {
+    writeStdout(renderPassRateMatrix(jobs, results, ctx));
+  }
   writeStdout(renderRunSummary(jobs, results, ctx));
   return results;
 }
@@ -394,15 +410,31 @@ function validateReporter(
   }
 }
 
+function validateIterationCount(
+  rawIterations: string | undefined,
+  targetLabel: string,
+  writeStderr: OutputWriter,
+) {
+  try {
+    return validateIterations(rawIterations);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    writeStderr(renderRunConfigErrorMessage(targetLabel, message));
+    throw error;
+  }
+}
+
 function buildJobOptions(
   harnesses: ReturnType<typeof validateHarnessOverrides>,
   permissionMode: ReturnType<typeof validatePermissionModeOverride>,
   scenarioPatterns: ReturnType<typeof validateScenarioFilters>,
+  iterations: ReturnType<typeof validateIterations>,
 ): Parameters<typeof buildLocalRunnerJobs>[1] {
   return {
     ...(harnesses === undefined ? {} : {harnesses}),
     ...(permissionMode === undefined ? {} : {permissionMode}),
     ...(scenarioPatterns === undefined ? {} : {scenarioPatterns}),
+    iterations,
   };
 }
 

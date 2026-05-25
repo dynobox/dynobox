@@ -12,6 +12,7 @@ import {
   type RenderContext,
 } from '../terminal/index.js';
 import {describeAssertion} from './describe.js';
+import {renderPassRateMatrixFromMatrix} from './matrix.js';
 import {formatJobHarness, renderPlanFromMatrix} from './plan.js';
 import {describeWarning} from './warnings.js';
 
@@ -27,6 +28,8 @@ export function renderQuietRun(
     `  dynobox  ${renderPlanFromMatrix(matrix)}\n\n`,
     `  ${marks}\n`,
   ];
+  const matrixRun = jobs.some((job) => job.iteration > 0);
+  if (matrixRun) lines.push('\n', renderPassRateMatrixFromMatrix(matrix, ctx));
 
   const failed = results
     .map((result, index) => ({result, job: jobs[index]}))

@@ -8,6 +8,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "check": "npm run format && npm run lint",
+    "dynolocal": "tsx packages/cli/src/bin.ts",
     "format": "prettier --check \"**/*.{js,cjs,mjs,ts,cts,mts,tsx,jsx,json}\"",
     "format:write": "prettier --write \"**/*.{js,cjs,mjs,ts,cts,mts,tsx,jsx,json}\"",
     "lint": "eslint .",

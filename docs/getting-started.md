@@ -60,6 +60,15 @@ dynobox run --harness claude-code,codex
 If neither the config nor the CLI selects a harness, Dynobox defaults to
 `claude-code`.
 
+Repeat runs when you want a pass-rate signal instead of a single sample:
+
+```bash
+dynobox run --harness claude-code,codex --iterations 5
+```
+
+Iterations are chosen at runtime. The dyno still only describes what to test;
+the CLI decides how many times to execute each selected scenario/harness pair.
+
 ## Author A Minimal Dyno
 
 The example below asks the harness to inspect `package.json` and checks that it

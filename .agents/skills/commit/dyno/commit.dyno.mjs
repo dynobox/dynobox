@@ -4,7 +4,7 @@ export default defineDyno({
   name: 'commit-skill-smoke-test',
   scenarios: [
     {
-      name: 'commit skill safe commit workflow',
+      name: 'no-push commit skill',
       prompt:
         'Use the commit skill to commit the README.md change in this scratch repository. Do not push. Do not amend any commit.',
       setup: [

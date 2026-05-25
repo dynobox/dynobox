@@ -24,14 +24,21 @@ type RunMatrixCell = {
   scenarioId: string;
   scenarioName: string;
   harness: RunMatrixHarness;
-  iteration: number;
-  passed: boolean;
+  runs: Array<{
+    iteration: number;
+    passed: boolean;
+    jobId: string;
+  }>;
+  total: number;
+  passed: number;
+  failed: number;
   failedAssertions: string[];
+  failedJobs: string[];
   durationMs: number;
 };
 
 export type RunMatrix = {
-  scenarios: string[];
+  scenarios: Array<{id: string; name: string}>;
   harnesses: RunMatrixHarness[];
   iterations: number[];
   cells: RunMatrixCell[];
@@ -51,34 +58,38 @@ export function buildLocalRunnerJobs(
     harnesses?: readonly HarnessId[];
     permissionMode?: PermissionMode;
     scenarioPatterns?: readonly string[];
+    iterations?: number;
   } = {},
 ): LocalRunnerJob[] {
   const overrides = overrideHarnessConfigs(
     options.harnesses,
     options.permissionMode,
   );
+  const iterations = options.iterations ?? 1;
   const scenarios = filterScenarios(ir.scenarios, options.scenarioPatterns);
   return scenarios.flatMap((scenario) =>
-    (overrides ?? scenario.harnesses).map((harness) => {
-      const permissionMode = permissionModeForHarness(
-        harness,
-        options.permissionMode,
-      );
-      const jobHarness =
-        permissionMode === harness.permissionMode
-          ? harness
-          : {
-              ...harness,
-              ...(permissionMode === undefined ? {} : {permissionMode}),
-            };
-      return {
-        id: `${scenario.id}.${harnessJobSuffix(jobHarness)}.iteration.0`,
-        scenario,
-        harness: harness.id,
-        ...(harness.model === undefined ? {} : {model: harness.model}),
-        ...(permissionMode === undefined ? {} : {permissionMode}),
-        iteration: 0,
-      };
+    (overrides ?? scenario.harnesses).flatMap((harness) => {
+      return Array.from({length: iterations}, (_, iteration) => {
+        const permissionMode = permissionModeForHarness(
+          harness,
+          options.permissionMode,
+        );
+        const jobHarness =
+          permissionMode === harness.permissionMode
+            ? harness
+            : {
+                ...harness,
+                ...(permissionMode === undefined ? {} : {permissionMode}),
+              };
+        return {
+          id: `${scenario.id}.${harnessJobSuffix(jobHarness)}.iteration.${iteration}`,
+          scenario,
+          harness: harness.id,
+          ...(harness.model === undefined ? {} : {model: harness.model}),
+          ...(permissionMode === undefined ? {} : {permissionMode}),
+          iteration,
+        };
+      });
     }),
   );
 }
@@ -150,28 +161,56 @@ export function buildRunMatrix(
   jobs: readonly LocalRunnerJob[],
   results: readonly LocalRunnerResult[],
 ): RunMatrix {
-  const scenarios = unique(jobs.map((job) => job.scenario.name));
+  const scenarios = uniqueScenarios(jobs);
   const harnesses = uniqueHarnesses(jobs);
   const iterations = unique(jobs.map((job) => job.iteration + 1));
-  const cells = jobs.flatMap((job, index): RunMatrixCell[] => {
+  const byKey = new Map<string, RunMatrixCell>();
+
+  jobs.forEach((job, index) => {
     const result = results[index];
-    if (result === undefined) return [];
-    return [
-      {
+    if (result === undefined) return;
+    const harness = matrixHarness(job);
+    const key = `${job.scenario.id}\0${jobHarnessKey(job)}`;
+    const existing = byKey.get(key);
+    const failedAssertions = result.assertionResults
+      .filter((assertionResult) => !assertionResult.passed)
+      .map((assertionResult) => assertionResult.assertionId);
+    if (existing === undefined) {
+      byKey.set(key, {
         scenarioId: job.scenario.id,
         scenarioName: job.scenario.name,
-        harness: matrixHarness(job),
-        iteration: job.iteration + 1,
-        passed: result.passed,
-        failedAssertions: result.assertionResults
-          .filter((assertionResult) => !assertionResult.passed)
-          .map((assertionResult) => assertionResult.assertionId),
+        harness,
+        runs: [
+          {
+            iteration: job.iteration + 1,
+            passed: result.passed,
+            jobId: result.jobId,
+          },
+        ],
+        total: 1,
+        passed: result.passed ? 1 : 0,
+        failed: result.passed ? 0 : 1,
+        failedAssertions,
+        failedJobs: result.passed ? [] : [result.jobId],
         durationMs: result.timing.totalMs,
-      },
-    ];
+      });
+      return;
+    }
+
+    existing.runs.push({
+      iteration: job.iteration + 1,
+      passed: result.passed,
+      jobId: result.jobId,
+    });
+    existing.total += 1;
+    existing.passed += result.passed ? 1 : 0;
+    existing.failed += result.passed ? 0 : 1;
+    existing.durationMs += result.timing.totalMs;
+    existing.failedAssertions.push(...failedAssertions);
+    if (!result.passed) existing.failedJobs.push(result.jobId);
   });
 
-  return {scenarios, harnesses, iterations, cells};
+  return {scenarios, harnesses, iterations, cells: [...byKey.values()]};
 }
 
 /**
@@ -218,6 +257,19 @@ function uniqueHarnesses(jobs: readonly LocalRunnerJob[]): RunMatrixHarness[] {
     byKey.set(jobHarnessKey(job), matrixHarness(job));
   }
   return [...byKey.values()];
+}
+
+function uniqueScenarios(
+  jobs: readonly Pick<LocalRunnerJob, 'scenario'>[],
+): Array<{id: string; name: string}> {
+  const byId = new Map<string, {id: string; name: string}>();
+  for (const job of jobs) {
+    byId.set(job.scenario.id, {
+      id: job.scenario.id,
+      name: job.scenario.name,
+    });
+  }
+  return [...byId.values()];
 }
 
 function matrixHarness(

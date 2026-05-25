@@ -22,6 +22,10 @@ export {type HeadlineStatus, renderHeadline} from './headline.js';
 export {renderJobDetails} from './jobDetails.js';
 export {renderJsonRunOutput} from './jsonReporter.js';
 export {
+  renderPassRateMatrix,
+  renderPassRateMatrixFromMatrix,
+} from './matrix.js';
+export {
   type PhaseRowInput,
   type PhaseStatus,
   renderAssertionsPhase,

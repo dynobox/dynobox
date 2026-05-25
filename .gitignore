@@ -31,3 +31,4 @@ pnpm-debug.log*
 # Local ai + planning docs
 plans/
 .claude/
+.personal

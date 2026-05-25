@@ -3,7 +3,7 @@ import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {createFixtureSet, PassingHarness} from '../testUtils.js';
 import {executeCli} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
-import {validateScenarioFilters} from './options.js';
+import {validateIterations, validateScenarioFilters} from './options.js';
 
 const fixtures = createFixtureSet('options');
 
@@ -79,5 +79,16 @@ describe('--harness override validation', () => {
     expect(
       validateScenarioFilters(['lint*,deploy package', 'scenario.smoke']),
     ).toEqual(['lint*', 'deploy package', 'scenario.smoke']);
+  });
+
+  it('validates iteration counts', () => {
+    expect(validateIterations(undefined)).toBe(1);
+    expect(validateIterations('3')).toBe(3);
+    expect(() => validateIterations('0')).toThrow(
+      'Expected a positive integer',
+    );
+    expect(() => validateIterations('1.5')).toThrow(
+      'Expected a positive integer',
+    );
   });
 });

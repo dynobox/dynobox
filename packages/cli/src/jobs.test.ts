@@ -26,6 +26,35 @@ describe('buildLocalRunnerJobs', () => {
     ]);
   });
 
+  it('expands jobs across iterations', () => {
+    const jobs = buildLocalRunnerJobs(
+      {
+        version: '0.1',
+        scenarios: [
+          {
+            id: 'scenario.test',
+            name: 'test',
+            prompt: 'Run a test.',
+            harnesses: [{id: 'claude-code'}],
+            setup: [],
+            fixtures: [],
+            endpoints: [],
+            assertions: [],
+          },
+        ],
+      },
+      {iterations: 3},
+    );
+
+    expect(jobs.map((job) => ({id: job.id, iteration: job.iteration}))).toEqual(
+      [
+        {id: 'scenario.test.claude-code.iteration.0', iteration: 0},
+        {id: 'scenario.test.claude-code.iteration.1', iteration: 1},
+        {id: 'scenario.test.claude-code.iteration.2', iteration: 2},
+      ],
+    );
+  });
+
   it('preserves and overrides harness permission modes', () => {
     const ir = {
       version: '0.1' as const,

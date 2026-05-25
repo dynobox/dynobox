@@ -8,6 +8,12 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Added `dynobox run --iterations <count>` to repeat selected
+  scenario/harness pairs and render sparkline pass-rate matrices.
+- Added aggregate matrix data to JSON summary reports.
+
 ---
 
 ## @dynobox/sdk@0.2.0 — 2026-05-23

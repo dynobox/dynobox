@@ -60,6 +60,7 @@ export function buildProgram(input: BuildProgramInput): Command {
       collectOption,
       [] as string[],
     )
+    .option('--iterations <count>', 'run each scenario/harness pair N times')
     .option('--quiet', 'print compact CI-friendly output')
     .option('--verbose', 'expand scenario details even when passing')
     .option('--debug', 'include debug paths and artifacts')

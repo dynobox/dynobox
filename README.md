@@ -43,6 +43,12 @@ dynobox run --harness codex
 dynobox run --harness claude-code,codex
 ```
 
+Run each selected scenario/harness pair more than once to measure pass rates:
+
+```bash
+dynobox run --harness claude-code,codex --iterations 5
+```
+
 The selected harness executable must already be installed, authenticated, and
 available on `PATH`.
 
@@ -138,6 +144,8 @@ reference.
 - Run locally against Claude Code, Codex, or both.
 - Override harnesses at runtime with `--harness claude-code`, `--harness codex`,
   or comma-separated values.
+- Repeat each scenario/harness pair with `--iterations <count>` and view
+  sparkline pass-rate matrix cells such as `.F...`.
 - Configure harness permission behavior with `permissionMode` or
   `--permission-mode`; dangerous full-access modes are opt-in.
 - Assert tool calls with `tool.called(...)` and `tool.notCalled(...)`.

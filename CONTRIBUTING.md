@@ -43,7 +43,7 @@ node packages/cli/dist/bin.js run examples/local-observability
 For local iteration, run the TypeScript entrypoint directly:
 
 ```bash
-pnpm tsx packages/cli/src/bin.ts run examples/local-observability
+pnpm dynolocal run examples/local-observability
 ```
 
 ## Package Scripts

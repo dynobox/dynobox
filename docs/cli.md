@@ -63,6 +63,8 @@ non-zero if any file failed to load or any job failed.
                            dangerous.
 --scenario <pattern>       Run only scenarios whose name or id matches;
                            repeat or comma-separate for multiple patterns.
+--iterations <count>       Run each selected scenario/harness pair this many
+                           times. Defaults to 1.
 --quiet                    Print compact CI-friendly output.
 --verbose                  Expand scenario details even when passing.
 --debug                    Include debug paths and artifacts.
@@ -80,6 +82,7 @@ dynobox run --harness claude-code,codex
 dynobox run --harness codex --permission-mode dangerous
 dynobox run --scenario "release*"
 dynobox run --scenario "lint*,deploy package"
+dynobox run --harness claude-code,codex --iterations 5
 dynobox run --reporter json
 ```
 
@@ -89,21 +92,29 @@ are source-prefixed during multi-file discovery. Patterns support `*` for any
 number of characters and `?` for one character. If no scenarios match, the run
 exits with code `1`.
 
+Iterations are a runtime option, not part of dyno configs. `--iterations 5`
+runs every selected scenario/harness pair five times and reports aggregate
+pass-rate matrix cells such as `.F...`. Passing marks are `.` and failing
+marks are `F`; marks are colored when ANSI color output is enabled.
+
 ## Output Modes
 
-Default output prints the run header, job status, assertion details for failed
-or expanded jobs, and a final summary. Passing jobs collapse to one line.
+Default output prints the run header, a pass-rate matrix, assertion details for
+failed jobs, and a final summary. Passing jobs are represented by matrix cells.
 Assertion details include the expected behavior and an `observed` line with
 the evidence Dynobox actually saw. For path-aware tool assertions, the rendered
 expectation includes the matched path, such as
 `tool.called(read_file, path: package.json)`.
 
-`--quiet` prints compact CI-friendly progress and failure information.
+`--quiet` prints compact CI-friendly progress, the pass-rate matrix, and
+failure information.
 
-`--verbose` expands scenario details even when jobs pass.
+`--verbose` prints the pass-rate matrix and expands scenario details even when
+jobs pass.
 
-`--debug` includes temporary work-directory paths and writes debug logs inside
-each job's work directory when data is available. Debug logs can include:
+`--debug` prints the pass-rate matrix, includes temporary work-directory paths,
+and writes debug logs inside each job's work directory when data is available.
+Debug logs can include:
 
 - `dynobox-transcript.log`
 - `dynobox-chat-history.jsonl`
@@ -148,6 +159,9 @@ The summary record includes:
 - `totals.jobs`, `totals.passed`, `totals.failed`, `totals.configErrors`,
   `totals.warnings`, and `totals.durationMs`
 - `plan.scenarios`, `plan.harnesses`, and `plan.iterations`
+- `matrix.scenarios`, `matrix.harnesses`, `matrix.iterations`, and
+  `matrix.cells` with aggregate `passed`, `failed`, `total`, and `failedJobs`
+  fields
 - `failedJobs`
 - `warningJobs`
 

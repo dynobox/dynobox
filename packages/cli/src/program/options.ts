@@ -86,6 +86,19 @@ export function validateReporterFormat(
   );
 }
 
+export function validateIterations(value: string | undefined): number {
+  if (value === undefined) return 1;
+  const iterations = Number(value);
+  if (!Number.isInteger(iterations) || iterations < 1) {
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.iterations',
+      `Invalid iterations "${value}". Expected a positive integer.`,
+    );
+  }
+  return iterations;
+}
+
 export function validateScenarioFilters(
   values: readonly string[] | undefined,
 ): string[] | undefined {

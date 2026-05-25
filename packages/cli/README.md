@@ -47,6 +47,12 @@ dynobox run --harness codex
 dynobox run --harness claude-code,codex
 ```
 
+Repeat each selected scenario/harness pair when you want a pass-rate signal:
+
+```bash
+dynobox run --harness claude-code,codex --iterations 5
+```
+
 ## What You Can Assert
 
 Dynobox supports assertions for:
@@ -68,6 +74,7 @@ Dynobox supports assertions for:
 - `--verbose`: expand scenario details even when they pass.
 - `--debug`: include work directory, artifact paths, and debug log paths.
 - `--reporter json`: emit newline-delimited JSON reports.
+- `--iterations <count>`: repeat each selected scenario/harness pair.
 - `--permission-mode default|dangerous`: override harness permission behavior.
 
 ## Documentation

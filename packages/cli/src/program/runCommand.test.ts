@@ -133,10 +133,7 @@ describe('dynobox run — output modes', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('✓  uses shell');
     expect(result.stdout).toContain(
-      'warning permission denied for shell command: git commit -m test',
-    );
-    expect(result.stdout).toContain(
-      'Use --permission-mode dangerous only for trusted evals',
+      'permission denied for shell command: git commit -m test',
     );
     expect(result.stdout).toContain('permission warnings:');
   });
@@ -168,6 +165,7 @@ describe('dynobox run — output modes', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('✓  uses shell');
+    expect(result.stdout).not.toContain('pass-rate matrix');
     expect(result.stdout).not.toContain('✓ setup');
     expect(result.stdout).not.toContain('✓ harness');
     expect(result.stdout).not.toContain('tool.called(shell)');
@@ -275,6 +273,62 @@ describe('dynobox run — output modes', () => {
     expect(result.stdout).toContain('✓  deploy package');
     expect(result.stdout).not.toContain('lint package');
     expect(result.stdout).toContain('1 scenario · 1 harness · 1 iteration');
+  });
+
+  it('prints a pass-rate matrix for repeated iterations', async () => {
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--iterations', '2'],
+      {
+        harnesses: [createPassingHarness()],
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('pass-rate matrix');
+    expect(result.stdout).toContain('uses shell  ..');
+    expect(result.stdout).not.toContain('✓  uses shell');
+  });
+
+  it('runs each scenario and harness for the requested iterations', async () => {
+    const result = await executeCli(
+      [
+        'run',
+        fixtures.validConfigPath,
+        '--iterations',
+        '3',
+        '--reporter',
+        'json',
+      ],
+      {
+        harnesses: [createPassingHarness()],
+      },
+    );
+    const records = result.stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(result.exitCode).toBe(0);
+    expect(records.filter((record) => record.type === 'job')).toHaveLength(3);
+    expect(records.map((record) => record.iteration).filter(Boolean)).toEqual([
+      1, 2, 3,
+    ]);
+    expect(records.at(-1)).toMatchObject({
+      type: 'summary',
+      totals: {jobs: 3, passed: 3, failed: 0},
+      plan: {scenarios: 1, harnesses: 1, iterations: 3},
+      matrix: {
+        cells: [
+          {
+            scenarioName: 'uses shell',
+            passed: 3,
+            failed: 0,
+            total: 3,
+            failedJobs: [],
+          },
+        ],
+      },
+    });
   });
 
   it('exits with a config error when no scenarios match --scenario', async () => {

@@ -43,6 +43,13 @@ comma-separated values to select multiple patterns:
 dynobox run dynobox --scenario "release*,publish package"
 ```
 
+Use `--iterations <count>` when a CI job should measure pass rates over
+repeated local executions:
+
+```bash
+dynobox run dynobox --reporter json --iterations 5 > dynobox-report.ndjson
+```
+
 ## GitHub Actions
 
 A reference workflow lives at
@@ -85,7 +92,8 @@ Useful job fields include `jobId`, `scenario`, `harness`, `status`, `passed`,
 `warnings`, `observations`, and `assertions`.
 
 Useful summary fields include `status`, `totals`, `plan`, `failedJobs`, and
-`warningJobs`.
+`warningJobs`. The summary also includes a `matrix` object with aggregate
+scenario × harness pass-rate cells.
 
 Permission warnings are advisory. They explain when a harness blocked a tool
 action, but they do not change job status or exit codes. Use

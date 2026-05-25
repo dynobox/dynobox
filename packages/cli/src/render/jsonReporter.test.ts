@@ -63,4 +63,64 @@ describe('renderJsonRunOutput', () => {
       label: 'reads package.json',
     });
   });
+
+  it('includes aggregate matrix cells in the summary record', () => {
+    const jobs = [0, 1].map(
+      (iteration) =>
+        ({
+          id: `scenario.labels.claude-code.iteration.${iteration}`,
+          scenario: {
+            id: 'scenario.labels',
+            name: 'labels',
+            prompt: 'p',
+            harnesses: [{id: 'claude-code'}],
+            setup: [],
+            fixtures: [],
+            endpoints: [],
+            assertions: [],
+          },
+          harness: 'claude-code',
+          iteration,
+        }) satisfies LocalRunnerJob,
+    );
+    const results = jobs.map((job, index) => ({
+      jobId: job.id,
+      scenarioId: job.scenario.id,
+      harness: 'claude-code',
+      iteration: job.iteration,
+      status: index === 0 ? 'passed' : 'assertion_failed',
+      passed: index === 0,
+      setupResult: {success: true, logs: []},
+      httpEvents: [],
+      artifacts: [],
+      assertionResults: [],
+      diagnostics: [],
+      warnings: [],
+      timing: {setupMs: 0, harnessMs: 0, assertionsMs: 0, totalMs: 0},
+    })) as unknown as LocalRunnerResult[];
+
+    const records = renderJsonRunOutput({jobs, results})
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(records.at(-1)).toMatchObject({
+      type: 'summary',
+      matrix: {
+        scenarios: [{id: 'scenario.labels', name: 'labels'}],
+        harnesses: [{id: 'claude-code'}],
+        iterations: [1, 2],
+        cells: [
+          {
+            scenarioId: 'scenario.labels',
+            scenarioName: 'labels',
+            passed: 1,
+            failed: 1,
+            total: 2,
+            failedJobs: ['scenario.labels.claude-code.iteration.1'],
+          },
+        ],
+      },
+    });
+  });
 });

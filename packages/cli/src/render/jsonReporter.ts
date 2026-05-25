@@ -128,6 +128,20 @@ function summaryRecord(input: RenderJsonRunOutputInput) {
       harnesses: matrix.harnesses.length,
       iterations: matrix.iterations.length,
     },
+    matrix: {
+      scenarios: matrix.scenarios,
+      harnesses: matrix.harnesses,
+      iterations: matrix.iterations,
+      cells: matrix.cells.map((cell) => ({
+        scenarioId: cell.scenarioId,
+        scenarioName: cell.scenarioName,
+        harness: cell.harness,
+        passed: cell.passed,
+        failed: cell.failed,
+        total: cell.total,
+        failedJobs: cell.failedJobs,
+      })),
+    },
     failedJobs: input.results
       .filter((result) => !result.passed)
       .map((result) => result.jobId),

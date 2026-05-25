@@ -50,6 +50,10 @@ You can assert:
 - HTTP requests made by local child-process tools that honor proxy environment
   variables.
 
+Use `dynobox run --iterations <count>` to repeat every selected
+scenario/harness pair and render sparkline pass-rate matrix cells such as
+`.F...`.
+
 ## Supported Harnesses
 
 Dynobox currently runs local scenarios through:
@@ -89,4 +93,3 @@ execution. These areas are not complete yet:
 - HTTP capture for harness-native web tools and binaries that ignore proxy/CA
   environment variables.
 - Hosted or remote runner execution.
-- Rich multi-iteration controls from authored configs.
