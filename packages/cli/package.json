@@ -1,6 +1,6 @@
 {
   "name": "dynobox",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Cross-harness testing for multi-step agent and skill workflows",
   "keywords": [
     "agent",
