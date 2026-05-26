@@ -410,8 +410,9 @@ a {
 
 .content-grid {
   display: grid;
-  grid-template-columns:
-    minmax(0, min(100%, var(--reading-width))) var(--actions-width);
+  grid-template-columns: minmax(0, min(100%, var(--reading-width))) var(
+      --actions-width
+    );
   gap: var(--content-gap);
   align-items: start;
 }
@@ -642,6 +643,14 @@ button.page-action:disabled {
   background: transparent;
   overflow-wrap: normal;
   padding: 0;
+}
+
+.content pre.shiki {
+  background: var(--code);
+}
+
+:root:not([data-theme='light']) .content pre.shiki span {
+  color: var(--shiki-dark) !important;
 }
 
 .content table {

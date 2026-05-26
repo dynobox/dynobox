@@ -2,6 +2,7 @@ import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 
 import Markdoc, {type Config, type RenderableTreeNode} from '@markdoc/markdoc';
+import {createHighlighter, type HighlighterCore} from 'shiki';
 
 const repoRoot = path.resolve(process.cwd(), '../..');
 const docsRoot = path.join(repoRoot, 'docs');
@@ -15,6 +16,20 @@ const docFiles = [
   'cli.md',
   'ci.md',
 ] as const;
+
+const highlighter = createHighlighter({
+  langs: [
+    'bash',
+    'javascript',
+    'json',
+    'markdown',
+    'shellscript',
+    'text',
+    'typescript',
+    'yaml',
+  ],
+  themes: ['github-light', 'github-dark'],
+});
 
 export type DocFile = (typeof docFiles)[number];
 
@@ -131,13 +146,14 @@ export async function getDoc(file: DocFile): Promise<DocPage> {
   const source = await readFile(path.join(docsRoot, file), 'utf8');
   const metadata = docMetadata[file];
   const title = extractTitle(source);
+  const resolvedHighlighter = await highlighter;
 
   return {
     agentSummary: metadata.agentSummary,
     description: metadata.description,
     file,
     headings: extractHeadings(source),
-    html: renderMarkdown(source, file),
+    html: renderMarkdown(source, file, resolvedHighlighter),
     markdownRoute: getDocMarkdownRoute(file),
     route: getDocRoute(file),
     source,
@@ -203,10 +219,53 @@ function extractHeadings(source: string): DocHeading[] {
   return headings;
 }
 
-function renderMarkdown(source: string, file: DocFile): string {
+function renderMarkdown(
+  source: string,
+  file: DocFile,
+  highlighter: HighlighterCore,
+): string {
   const headingCounts = new Map<string, number>();
   const config: Config = {
     nodes: {
+      fence: {
+        render: 'pre',
+        attributes: {
+          content: {type: String, required: true},
+          language: {type: String},
+        },
+        transform(node) {
+          const language = normalizeCodeLanguage(
+            String(node.attributes.language ?? ''),
+          );
+          const highlighted = highlighter.codeToTokens(
+            String(node.attributes.content),
+            {
+              lang: language,
+              themes: {
+                dark: 'github-dark',
+                light: 'github-light',
+              },
+            },
+          );
+          const lines = highlighted.tokens.flatMap((line, index) => {
+            const children: RenderableTreeNode[] = line.map((token) => {
+              const style = styleObjectToString(token.htmlStyle);
+
+              return new Markdoc.Tag('span', style ? {style} : {}, [
+                token.content,
+              ]);
+            });
+
+            return index === highlighted.tokens.length - 1
+              ? children
+              : [...children, '\n'];
+          });
+
+          return new Markdoc.Tag('pre', {class: `shiki language-${language}`}, [
+            new Markdoc.Tag('code', {class: `language-${language}`}, lines),
+          ]);
+        },
+      },
       heading: {
         children: ['inline'],
         attributes: {
@@ -329,6 +388,28 @@ function rewriteHref(href: string, file: DocFile): string {
 
 function isExternalHref(href: string): boolean {
   return /^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith('//');
+}
+
+function normalizeCodeLanguage(language: string): string {
+  const normalized = language.trim().toLowerCase();
+
+  if (!normalized) return 'text';
+  if (normalized === 'js' || normalized === 'mjs') return 'javascript';
+  if (normalized === 'ts' || normalized === 'mts') return 'typescript';
+  if (normalized === 'yml') return 'yaml';
+  if (normalized === 'sh' || normalized === 'shell') return 'shellscript';
+
+  return normalized;
+}
+
+function styleObjectToString(
+  style: Record<string, string> | undefined,
+): string {
+  if (style === undefined) return '';
+
+  return Object.entries(style)
+    .map(([property, value]) => `${property}:${value}`)
+    .join(';');
 }
 
 function slugify(value: string): string {
