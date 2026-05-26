@@ -1,6 +1,7 @@
 {
   "compatibility_date": "2026-05-20",
   "compatibility_flags": ["global_fetch_strictly_public"],
+  "main": "./worker.js",
   "name": "dynobox-docs",
   "assets": {
     "directory": "./dist",
