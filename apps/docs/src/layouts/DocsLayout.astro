@@ -25,6 +25,18 @@ const llmCopyText = [
   page.source.trim(),
 ].join('\n');
 const llmCopyJson = JSON.stringify(llmCopyText).replaceAll('<', '\\u003c');
+const webMcpContext = JSON.stringify({
+  pages: navItems.map((item) => {
+    const markdownRoute =
+      item.route === '/' ? '/README.md' : `${item.route.replace(/\/$/, '')}.md`;
+
+    return {
+      route: item.route,
+      title: item.title,
+      markdownRoute,
+    };
+  }),
+}).replaceAll('<', '\\u003c');
 ---
 
 <!doctype html>
@@ -269,6 +281,12 @@ const llmCopyJson = JSON.stringify(llmCopyText).replaceAll('<', '\\u003c');
       type="application/json"
       set:html={llmCopyJson}
     />
+    <script
+      id="webmcp-docs-context"
+      is:inline
+      type="application/json"
+      set:html={webMcpContext}
+    />
     <script is:inline>
       (() => {
         const storageKey = 'dynobox-docs-theme';
@@ -345,6 +363,76 @@ const llmCopyJson = JSON.stringify(llmCopyText).replaceAll('<', '\\u003c');
           anchor.addEventListener('click', () => {
             void copySectionLink(anchor);
           });
+        }
+      })();
+    </script>
+    <script is:inline>
+      (() => {
+        const modelContext = navigator.modelContext;
+        if (!modelContext?.provideContext && !modelContext?.registerTool) return;
+
+        const contextSource = document.querySelector('#webmcp-docs-context');
+        const context =
+          contextSource instanceof HTMLScriptElement
+            ? JSON.parse(contextSource.textContent || '{"pages":[]}')
+            : { pages: [] };
+        const pages = Array.isArray(context.pages) ? context.pages : [];
+        const pageTitles = pages.map((page) => page.title);
+
+        const asTextContent = (text) => ({
+          content: [{ type: 'text', text }],
+        });
+        const findPage = (title) =>
+          pages.find((page) => page.title === title) || pages[0];
+
+        const tools = [
+          {
+            name: 'get_dynobox_docs_index',
+            description:
+              'Fetch the machine-readable Dynobox documentation index with pages, topics, headings, and Markdown URLs.',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+              additionalProperties: false,
+            },
+            execute: async () => {
+              const response = await fetch('/docs-index.json');
+              return asTextContent(await response.text());
+            },
+          },
+          {
+            name: 'get_dynobox_doc_markdown',
+            description:
+              'Fetch one Dynobox documentation page as Markdown for agent-readable answers.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                title: {
+                  type: 'string',
+                  enum: pageTitles,
+                  description: 'Documentation page title to fetch.',
+                },
+              },
+              required: ['title'],
+              additionalProperties: false,
+            },
+            execute: async ({ title }) => {
+              const page = findPage(title);
+              if (!page) return asTextContent('');
+
+              const response = await fetch(page.markdownRoute);
+              return asTextContent(await response.text());
+            },
+          },
+        ];
+
+        if (modelContext.provideContext) {
+          modelContext.provideContext({ tools });
+          return;
+        }
+
+        for (const tool of tools) {
+          modelContext.registerTool(tool);
         }
       })();
     </script>
