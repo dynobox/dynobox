@@ -69,6 +69,8 @@ export function authenticateForwardedIdentity(
   request: Request,
   env: ApiBindings,
 ): Identity | null {
+  // TODO (DYNO-14): Verify Supabase JWTs directly in the API Worker instead of trusting forwarded identity headers.
+  // https://linear.app/dynobox/issue/DYNO-14/todo-verify-supabase-jwts-directly-in-api-worker
   // The app validates Supabase sessions, then calls this Worker with a server-held secret.
   // Identity headers are only trusted after that secret check succeeds.
   const token = getBearerToken(request);
