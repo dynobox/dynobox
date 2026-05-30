@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 
 import {app} from './index.js';
+import {createTestEnv, type TokenRow} from './test-support.js';
 
 describe('api worker', () => {
   it('returns health status', async () => {
@@ -19,7 +20,7 @@ describe('api worker', () => {
     expect(response.status).toBe(404);
   });
 
-  it('registers initial API routes as explicit placeholders', async () => {
+  it('registers run API routes as explicit placeholders', async () => {
     const response = await app.request('/runs', {method: 'POST'});
 
     await expect(response.json()).resolves.toEqual({
@@ -29,5 +30,44 @@ describe('api worker', () => {
       },
     });
     expect(response.status).toBe(501);
+  });
+
+  it('mints CLI tokens for authenticated browser identities', async () => {
+    const rows: TokenRow[] = [];
+    const response = await app.request(
+      '/cli-tokens',
+      {
+        headers: {
+          authorization: 'Bearer browser-secret',
+          'x-dynobox-subject-id': 'user-123',
+        },
+        method: 'POST',
+      },
+      createTestEnv(rows),
+    );
+
+    const body = (await response.json()) as {token: string};
+
+    expect(response.status).toBe(201);
+    expect(body.token).toMatch(/^dyno_[A-Za-z0-9_-]{43}$/);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      provider: 'supabase',
+      subject_id: 'user-123',
+    });
+    expect(rows[0]?.token_hash).not.toBe(body.token);
+  });
+
+  it('rejects unauthenticated CLI token minting', async () => {
+    const response = await app.request(
+      '/cli-tokens',
+      {method: 'POST'},
+      createTestEnv(),
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      error: {code: 'unauthorized', message: 'Authentication required.'},
+    });
+    expect(response.status).toBe(401);
   });
 });
