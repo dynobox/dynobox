@@ -1,6 +1,7 @@
 import {Hono} from 'hono';
+import {cors} from 'hono/cors';
 
-import {authenticateForwardedIdentity, createCliToken} from './auth.js';
+import {authenticateSupabaseUser, createCliToken} from './auth.js';
 import type {ApiBindings} from './types.js';
 
 type ErrorCode =
@@ -12,6 +13,15 @@ type ErrorCode =
 type ErrorStatus = 401 | 404 | 500 | 501;
 
 export const app = new Hono<{Bindings: ApiBindings}>();
+
+app.use(
+  '/cli-tokens',
+  cors({
+    allowHeaders: ['authorization'],
+    allowMethods: ['POST', 'OPTIONS'],
+    origin: ['https://dash.dynobox.xyz', 'http://localhost:5173'],
+  }),
+);
 
 function jsonError(
   status: ErrorStatus,
@@ -36,7 +46,10 @@ app.get('/runs', () => notImplemented('Run listing'));
 app.get('/runs/:id', () => notImplemented('Run lookup'));
 app.patch('/runs/:id', () => notImplemented('Run update'));
 app.post('/cli-tokens', async (context) => {
-  const identity = authenticateForwardedIdentity(context.req.raw, context.env);
+  const identity = await authenticateSupabaseUser(
+    context.req.raw,
+    context.env,
+  );
   if (identity === null) {
     return jsonError(401, 'unauthorized', 'Authentication required.');
   }

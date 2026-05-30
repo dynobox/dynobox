@@ -3,6 +3,7 @@ import {describe, expect, it} from 'vitest';
 import {
   authenticateBearerToken,
   authenticateForwardedIdentity,
+  authenticateSupabaseUser,
   createCliToken,
   hashApiToken,
 } from './auth.js';
@@ -74,6 +75,25 @@ describe('api auth', () => {
         },
       }),
       createTestEnv(),
+    );
+
+    expect(identity).toEqual({provider: 'supabase', subjectId: 'user-123'});
+  });
+
+  it('authenticates Supabase browser access tokens', async () => {
+    const identity = await authenticateSupabaseUser(
+      new Request('https://api.dynobox.xyz/cli-tokens', {
+        headers: {authorization: 'Bearer supabase-token'},
+      }),
+      createTestEnv(),
+      async (input, init) => {
+        expect(input).toBe('https://supabase.example.test/auth/v1/user');
+        expect(init?.headers).toEqual({
+          apikey: 'supabase-anon-key',
+          authorization: 'Bearer supabase-token',
+        });
+        return Response.json({id: 'user-123'});
+      },
     );
 
     expect(identity).toEqual({provider: 'supabase', subjectId: 'user-123'});

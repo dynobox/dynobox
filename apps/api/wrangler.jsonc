@@ -6,6 +6,10 @@
   "routes": [
     {"pattern": "api.dynobox.xyz/*", "zone_name": "dynobox.xyz"},
   ],
+  "vars": {
+    "SUPABASE_ANON_KEY": "",
+    "SUPABASE_URL": "",
+  },
   "d1_databases": [
     {
       "binding": "DB",

@@ -12,6 +12,8 @@ export function createTestEnv(rows: TokenRow[] = []): ApiBindings {
   return {
     BROWSER_AUTH_SECRET: 'browser-secret',
     DB: createD1Mock(rows),
+    SUPABASE_ANON_KEY: 'supabase-anon-key',
+    SUPABASE_URL: 'https://supabase.example.test',
     TOKEN_PEPPER: 'test-pepper',
   };
 }

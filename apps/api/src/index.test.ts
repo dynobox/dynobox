@@ -1,9 +1,14 @@
-import {describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {app} from './index.js';
 import {createTestEnv, type TokenRow} from './test-support.js';
 
 describe('api worker', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it('returns health status', async () => {
     const response = await app.request('/health');
 
@@ -33,13 +38,14 @@ describe('api worker', () => {
   });
 
   it('mints CLI tokens for authenticated browser identities', async () => {
+    vi.stubGlobal('fetch', async () => Response.json({id: 'user-123'}));
+
     const rows: TokenRow[] = [];
     const response = await app.request(
       '/cli-tokens',
       {
         headers: {
-          authorization: 'Bearer browser-secret',
-          'x-dynobox-subject-id': 'user-123',
+          authorization: 'Bearer supabase-token',
         },
         method: 'POST',
       },

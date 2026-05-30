@@ -2,6 +2,8 @@
 export type ApiBindings = {
   DB: D1Database;
   BROWSER_AUTH_SECRET: string;
+  SUPABASE_ANON_KEY: string;
+  SUPABASE_URL: string;
   TOKEN_PEPPER: string;
 };
 

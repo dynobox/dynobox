@@ -5,6 +5,10 @@ type ApiTokenRow = {
   subject_id: string;
 };
 
+type SupabaseUserResponse = {
+  id?: unknown;
+};
+
 const API_TOKEN_BYTES = 32;
 const TOKEN_PREFIX = 'dyno_';
 const DEFAULT_BROWSER_PROVIDER = 'supabase';
@@ -91,6 +95,40 @@ export function authenticateForwardedIdentity(
   }
 
   return {provider, subjectId};
+}
+
+export async function authenticateSupabaseUser(
+  request: Request,
+  env: ApiBindings,
+  fetchUser = fetch,
+): Promise<Identity | null> {
+  const token = getBearerToken(request);
+  if (
+    token === null ||
+    env.SUPABASE_URL.length === 0 ||
+    env.SUPABASE_ANON_KEY.length === 0
+  ) {
+    return null;
+  }
+
+  const response = await fetchUser(`${env.SUPABASE_URL}/auth/v1/user`, {
+    headers: {
+      apikey: env.SUPABASE_ANON_KEY,
+      authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const user = (await response.json()) as SupabaseUserResponse;
+  const subjectId = typeof user.id === 'string' ? user.id : null;
+  if (!isValidSubjectId(subjectId)) {
+    return null;
+  }
+
+  return {provider: DEFAULT_BROWSER_PROVIDER, subjectId};
 }
 
 export async function createCliToken(
