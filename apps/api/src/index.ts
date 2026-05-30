@@ -1,14 +1,17 @@
 import {Hono} from 'hono';
 
-type Bindings = {
-  DB: D1Database;
-};
+import {authenticateBrowserIdentity, createCliToken} from './auth.js';
+import type {ApiBindings} from './types.js';
 
-type ErrorCode = 'internal_error' | 'not_found' | 'not_implemented';
+type ErrorCode =
+  | 'internal_error'
+  | 'not_found'
+  | 'not_implemented'
+  | 'unauthorized';
 
-type ErrorStatus = 404 | 500 | 501;
+type ErrorStatus = 401 | 404 | 500 | 501;
 
-export const app = new Hono<{Bindings: Bindings}>();
+export const app = new Hono<{Bindings: ApiBindings}>();
 
 function jsonError(
   status: ErrorStatus,
@@ -32,7 +35,15 @@ app.post('/runs', () => notImplemented('Run upload'));
 app.get('/runs', () => notImplemented('Run listing'));
 app.get('/runs/:id', () => notImplemented('Run lookup'));
 app.patch('/runs/:id', () => notImplemented('Run update'));
-app.post('/cli-tokens', () => notImplemented('CLI token minting'));
+app.post('/cli-tokens', async (context) => {
+  const identity = authenticateBrowserIdentity(context.req.raw, context.env);
+  if (identity === null) {
+    return jsonError(401, 'unauthorized', 'Authentication required.');
+  }
+
+  const token = await createCliToken(context.env, identity);
+  return context.json({token}, 201);
+});
 
 app.notFound(() => jsonError(404, 'not_found', 'Route not found.'));
 
