@@ -1,0 +1,20 @@
+{
+  "compatibility_date": "2026-05-20",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "main": "./src/index.ts",
+  "name": "dynobox-api",
+  "routes": [
+    {"pattern": "api.dynobox.xyz/*", "zone_name": "dynobox.xyz"},
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dynobox-api",
+      "database_id": "8a398dbf-06ba-4bb1-b731-e475d2254920",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "observability": {
+    "enabled": true,
+  },
+}

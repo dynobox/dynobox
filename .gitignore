@@ -6,6 +6,7 @@ dist/
 build/
 *.tsbuildinfo
 .astro/
+.wrangler/
 
 # Turborepo
 .turbo/
