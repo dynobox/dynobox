@@ -65,7 +65,7 @@ export async function authenticateBearerToken(
   return {provider: row.provider, subjectId: row.subject_id};
 }
 
-export function authenticateBrowserIdentity(
+export function authenticateForwardedIdentity(
   request: Request,
   env: ApiBindings,
 ): Identity | null {

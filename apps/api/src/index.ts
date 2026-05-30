@@ -1,6 +1,6 @@
 import {Hono} from 'hono';
 
-import {authenticateBrowserIdentity, createCliToken} from './auth.js';
+import {authenticateForwardedIdentity, createCliToken} from './auth.js';
 import type {ApiBindings} from './types.js';
 
 type ErrorCode =
@@ -36,7 +36,7 @@ app.get('/runs', () => notImplemented('Run listing'));
 app.get('/runs/:id', () => notImplemented('Run lookup'));
 app.patch('/runs/:id', () => notImplemented('Run update'));
 app.post('/cli-tokens', async (context) => {
-  const identity = authenticateBrowserIdentity(context.req.raw, context.env);
+  const identity = authenticateForwardedIdentity(context.req.raw, context.env);
   if (identity === null) {
     return jsonError(401, 'unauthorized', 'Authentication required.');
   }

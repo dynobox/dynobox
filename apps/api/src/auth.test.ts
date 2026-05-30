@@ -2,7 +2,7 @@ import {describe, expect, it} from 'vitest';
 
 import {
   authenticateBearerToken,
-  authenticateBrowserIdentity,
+  authenticateForwardedIdentity,
   createCliToken,
   hashApiToken,
 } from './auth.js';
@@ -64,8 +64,8 @@ describe('api auth', () => {
     expect(rows[0]?.last_used_at).toBeNull();
   });
 
-  it('extracts browser identity behind a browser auth secret', () => {
-    const identity = authenticateBrowserIdentity(
+  it('extracts forwarded identity behind a browser auth secret', () => {
+    const identity = authenticateForwardedIdentity(
       new Request('https://api.dynobox.xyz/cli-tokens', {
         headers: {
           authorization: 'Bearer browser-secret',
