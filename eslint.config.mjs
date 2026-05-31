@@ -12,6 +12,7 @@ export default [
       '**/build/**',
       '**/.astro/**',
       '**/.turbo/**',
+      '**/.wrangler/**',
     ],
   },
   js.configs.recommended,
