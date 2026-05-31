@@ -30,19 +30,21 @@ export function PasswordField({
           type={showPassword ? 'text' : 'password'}
           value={value}
         />
-        <button
-          aria-label={showPassword ? 'Hide password' : 'Show password'}
-          aria-pressed={showPassword}
-          className="password-toggle"
-          onClick={() => setShowPassword((value) => !value)}
-          type="button"
-        >
-          {showPassword ? (
-            <Eye aria-hidden="true" size={18} />
-          ) : (
-            <EyeOff aria-hidden="true" size={18} />
-          )}
-        </button>
+        {value.length > 0 && (
+          <button
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            aria-pressed={showPassword}
+            className="password-toggle"
+            onClick={() => setShowPassword((value) => !value)}
+            type="button"
+          >
+            {showPassword ? (
+              <Eye aria-hidden="true" size={18} />
+            ) : (
+              <EyeOff aria-hidden="true" size={18} />
+            )}
+          </button>
+        )}
       </span>
     </label>
   );
