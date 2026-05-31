@@ -1,3 +1,4 @@
+import {AppShell} from './AppShell';
 import {useAuth} from './AuthContext';
 import {CliAuth} from './CliAuth';
 import {Dashboard} from './Dashboard';
@@ -9,20 +10,40 @@ export function App() {
   const path = window.location.pathname;
 
   if (isLoading) {
-    return <main className="page">Loading...</main>;
+    return (
+      <AppShell>
+        <main className="page">Loading...</main>
+      </AppShell>
+    );
   }
 
   if (path === '/reset-password') {
-    return <ResetPassword />;
+    return (
+      <AppShell>
+        <ResetPassword />
+      </AppShell>
+    );
   }
 
   if (!isAuthenticated) {
-    return <Login />;
+    return (
+      <AppShell>
+        <Login />
+      </AppShell>
+    );
   }
 
   if (path === '/cli-auth') {
-    return <CliAuth />;
+    return (
+      <AppShell>
+        <CliAuth />
+      </AppShell>
+    );
   }
 
-  return <Dashboard />;
+  return (
+    <AppShell>
+      <Dashboard />
+    </AppShell>
+  );
 }

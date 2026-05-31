@@ -1,5 +1,6 @@
-import {useState, type FormEvent} from 'react';
+import {type SyntheticEvent, useState} from 'react';
 
+import {PasswordField} from './PasswordField';
 import {supabase} from './supabase';
 
 export function ResetPassword() {
@@ -8,7 +9,7 @@ export function ResetPassword() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  async function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setMessage(null);
@@ -22,25 +23,22 @@ export function ResetPassword() {
       return;
     }
 
-    setMessage('Password updated. You can return to the dashboard.');
+    setMessage('Password updated. Redirecting to sign in.');
+    await supabase.auth.signOut();
+    window.location.assign('/?reset=success');
   }
 
   return (
     <main className="auth-page">
-      <form className="card" onSubmit={handleSubmit}>
+      <form className="auth-card" onSubmit={handleSubmit}>
         <h1>Set a new password</h1>
-        <label>
-          New password
-          <input
-            autoComplete="new-password"
-            minLength={8}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-            type="password"
-            value={password}
-          />
-        </label>
-        <button disabled={isLoading} type="submit">
+        <PasswordField
+          autoComplete="new-password"
+          label="New password"
+          onChange={setPassword}
+          value={password}
+        />
+        <button className="auth-submit" disabled={isLoading} type="submit">
           {isLoading ? 'Saving...' : 'Update password'}
         </button>
         {message !== null && <p className="message">{message}</p>}

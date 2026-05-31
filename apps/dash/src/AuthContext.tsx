@@ -1,9 +1,16 @@
 import type {Session} from '@supabase/supabase-js';
-import {createContext, useContext, useEffect, useState, type ReactNode} from 'react';
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 
 import {supabase} from './supabase';
 
 type AuthContextValue = {
+  getAccessToken: () => Promise<string | null>;
   isAuthenticated: boolean;
   isLoading: boolean;
   session: Session | null;
@@ -35,9 +42,16 @@ export function AuthProvider({children}: {children: ReactNode}) {
     setSession(null);
   }
 
+  async function getAccessToken() {
+    const {data} = await supabase.auth.getSession();
+    setSession(data.session);
+    return data.session?.access_token ?? null;
+  }
+
   return (
     <AuthContext.Provider
       value={{
+        getAccessToken,
         isAuthenticated: session !== null,
         isLoading,
         session,

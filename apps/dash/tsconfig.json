@@ -7,5 +7,10 @@
     "moduleResolution": "Bundler",
     "types": ["@cloudflare/workers-types", "vite/client"]
   },
-  "include": ["functions/**/*.ts", "src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
+  "include": [
+    "functions/**/*.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "vite.config.ts"
+  ]
 }
