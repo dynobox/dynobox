@@ -14,6 +14,7 @@ import {initCommandAction, type InitCommandFlags} from './initCommand.js';
 import {loginCommandAction} from './loginCommand.js';
 import {collectOption} from './options.js';
 import {runCommandAction, type RunCommandFlags} from './runCommand.js';
+import {whoamiCommandAction} from './whoamiCommand.js';
 
 export type BuildProgramInput = {
   options: ExecuteCliOptions;
@@ -94,6 +95,17 @@ export function buildProgram(input: BuildProgramInput): Command {
         ...(options.readStdin === undefined
           ? {}
           : {readStdin: options.readStdin}),
+      });
+    });
+
+  program
+    .command('whoami')
+    .description('show the authenticated Dynobox CLI identity')
+    .action(async () => {
+      await whoamiCommandAction({
+        writeStdout,
+        writeStderr,
+        ...(options.env === undefined ? {} : {env: options.env}),
       });
     });
 
