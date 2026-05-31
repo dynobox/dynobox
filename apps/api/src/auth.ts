@@ -106,14 +106,14 @@ export async function authenticateSupabaseUser(
   if (
     token === null ||
     env.SUPABASE_URL.length === 0 ||
-    env.SUPABASE_ANON_KEY.length === 0
+    env.SUPABASE_PUBLISHABLE_KEY.length === 0
   ) {
     return null;
   }
 
   const response = await fetchUser(`${env.SUPABASE_URL}/auth/v1/user`, {
     headers: {
-      apikey: env.SUPABASE_ANON_KEY,
+      apikey: env.SUPABASE_PUBLISHABLE_KEY,
       authorization: `Bearer ${token}`,
     },
   });

@@ -89,7 +89,7 @@ describe('api auth', () => {
       async (input, init) => {
         expect(input).toBe('https://supabase.example.test/auth/v1/user');
         expect(init?.headers).toEqual({
-          apikey: 'supabase-anon-key',
+          apikey: 'supabase-publishable-key',
           authorization: 'Bearer supabase-token',
         });
         return Response.json({id: 'user-123'});
