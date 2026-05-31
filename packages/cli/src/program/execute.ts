@@ -27,6 +27,7 @@ export type ExecuteCliOptions = {
   harnesses?: readonly Harness[];
   scratchRoot?: string;
   env?: Record<string, string>;
+  readStdin?: () => Promise<string>;
   timeoutMs?: number;
   writeStdout?: OutputWriter;
   writeStderr?: OutputWriter;
