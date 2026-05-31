@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "wrangler deploy --dry-run --outdir dist",
+    "db:migrate:local": "wrangler d1 migrations apply dynobox-api --local",
     "deploy": "pnpm run build && wrangler deploy",
     "dev": "wrangler dev",
     "typecheck": "tsc -p tsconfig.json --noEmit",

@@ -46,10 +46,7 @@ app.get('/runs', () => notImplemented('Run listing'));
 app.get('/runs/:id', () => notImplemented('Run lookup'));
 app.patch('/runs/:id', () => notImplemented('Run update'));
 app.post('/cli-tokens', async (context) => {
-  const identity = await authenticateSupabaseUser(
-    context.req.raw,
-    context.env,
-  );
+  const identity = await authenticateSupabaseUser(context.req.raw, context.env);
   if (identity === null) {
     return jsonError(401, 'unauthorized', 'Authentication required.');
   }
