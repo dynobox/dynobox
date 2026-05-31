@@ -11,6 +11,7 @@ import {Command} from 'commander';
 import {DYNO_FILE_SUFFIXES} from './discoverDynos.js';
 import type {ExecuteCliOptions, OutputWriter} from './execute.js';
 import {initCommandAction, type InitCommandFlags} from './initCommand.js';
+import {loginCommandAction} from './loginCommand.js';
 import {collectOption} from './options.js';
 import {runCommandAction, type RunCommandFlags} from './runCommand.js';
 
@@ -81,6 +82,20 @@ export function buildProgram(input: BuildProgramInput): Command {
         if (failed) onRunFailure();
       },
     );
+
+  program
+    .command('login')
+    .description('save a Dynobox CLI token for authenticated runs')
+    .action(async () => {
+      await loginCommandAction({
+        writeStdout,
+        writeStderr,
+        ...(options.env === undefined ? {} : {env: options.env}),
+        ...(options.readStdin === undefined
+          ? {}
+          : {readStdin: options.readStdin}),
+      });
+    });
 
   program
     .command('init')
