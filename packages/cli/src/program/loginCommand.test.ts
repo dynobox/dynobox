@@ -1,7 +1,23 @@
-import {mkdirSync, readFileSync, rmSync, statSync, writeFileSync} from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import {join} from 'node:path';
 
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 
 import {authConfigPath, DYNOBOX_CONFIG_MODE, resolveAuthToken} from './auth.js';
 import {executeCli} from './execute.js';
@@ -13,10 +29,42 @@ function homeDir(name: string): string {
   return join(ROOT, name);
 }
 
+function stubFetch(response: () => Promise<Response>): typeof fetch {
+  const fetchMock = vi.fn(response);
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock as typeof fetch;
+}
+
+function stubValidTokenFetch(): typeof fetch {
+  return stubFetch(async () =>
+    Response.json({
+      identity: {provider: 'supabase', subjectId: 'user-123'},
+    }),
+  );
+}
+
+function stubUnauthorizedFetch(): typeof fetch {
+  return stubFetch(async () =>
+    Response.json(
+      {error: {code: 'unauthorized', message: 'Invalid or revoked token.'}},
+      {status: 401},
+    ),
+  );
+}
+
 describe('dynobox login', () => {
   beforeAll(() => {
     rmSync(ROOT, {force: true, recursive: true});
     mkdirSync(ROOT, {recursive: true});
+  });
+
+  beforeEach(() => {
+    stubValidTokenFetch();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   afterAll(() => {
@@ -39,6 +87,10 @@ describe('dynobox login', () => {
     expect(JSON.parse(readFileSync(filePath, 'utf8'))).toEqual({
       token: 'pasted-token',
     });
+    expect(fetch).toHaveBeenCalledWith(
+      'https://api.dynobox.xyz/auth/identity',
+      {headers: {authorization: 'Bearer pasted-token'}, method: 'GET'},
+    );
     expect(resolveAuthToken({env: {}, homeDir: home})).toBe('pasted-token');
     expect(statSync(filePath).mode & 0o777).toBe(DYNOBOX_CONFIG_MODE);
   });
@@ -48,6 +100,7 @@ describe('dynobox login', () => {
     const result = await executeCli(['login'], {
       env: {
         HOME: home,
+        DYNOBOX_API_URL: 'http://localhost:8787/',
         DYNOBOX_DASHBOARD_URL: 'http://localhost:5173/',
       },
       readStdin: async () => 'dev-token',
@@ -55,6 +108,10 @@ describe('dynobox login', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('http://localhost:5173/cli-auth');
+    expect(fetch).toHaveBeenCalledWith('http://localhost:8787/auth/identity', {
+      headers: {authorization: 'Bearer dev-token'},
+      method: 'GET',
+    });
   });
 
   it('rejects empty pasted tokens', async () => {
@@ -67,6 +124,59 @@ describe('dynobox login', () => {
     expect(result.exitCode).toBe(configErrorExitCode);
     expect(result.stderr).toContain('error: token cannot be empty');
     expect(resolveAuthToken({env: {}, homeDir: home})).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid or revoked pasted tokens without writing config', async () => {
+    stubUnauthorizedFetch();
+    const home = homeDir('invalid-token');
+    const filePath = authConfigPath({homeDir: home});
+
+    const result = await executeCli(['login'], {
+      env: {HOME: home},
+      readStdin: async () => 'invalid-token',
+    });
+
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(result.stderr).toContain('error: invalid or revoked token');
+    expect(existsSync(filePath)).toBe(false);
+    expect(resolveAuthToken({env: {}, homeDir: home})).toBeNull();
+  });
+
+  it('rejects unreachable token validation without writing config', async () => {
+    stubFetch(async () => {
+      throw new Error('network down');
+    });
+    const home = homeDir('network-failure');
+    const filePath = authConfigPath({homeDir: home});
+
+    const result = await executeCli(['login'], {
+      env: {HOME: home},
+      readStdin: async () => 'pasted-token',
+    });
+
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(result.stderr).toContain(
+      'error: could not validate token; unable to reach the Dynobox API',
+    );
+    expect(existsSync(filePath)).toBe(false);
+  });
+
+  it('leaves existing config unchanged when validation fails', async () => {
+    stubUnauthorizedFetch();
+    const home = homeDir('unchanged-config');
+    const filePath = authConfigPath({homeDir: home});
+    mkdirSync(join(home, '.dynobox'), {recursive: true});
+    writeFileSync(filePath, '{"token":"existing-token"}\n');
+
+    const result = await executeCli(['login'], {
+      env: {HOME: home},
+      readStdin: async () => 'replacement-token',
+    });
+
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(readFileSync(filePath, 'utf8')).toBe('{"token":"existing-token"}\n');
+    expect(resolveAuthToken({env: {}, homeDir: home})).toBe('existing-token');
   });
 
   it('overwrites existing malformed config', async () => {
