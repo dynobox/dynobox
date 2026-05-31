@@ -52,6 +52,10 @@ export async function whoamiCommandAction(
     );
   } else if (result.status === 'unauthorized') {
     input.writeStderr('error: invalid or revoked token\n');
+  } else if (result.status === 'expired') {
+    input.writeStderr(
+      'error: token expired; run `dynobox login` again to re-authenticate\n',
+    );
   } else {
     input.writeStderr(
       `error: could not verify identity; Dynobox API returned ${result.httpStatus}\n`,
