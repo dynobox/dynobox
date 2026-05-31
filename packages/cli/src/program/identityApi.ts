@@ -11,6 +11,7 @@ export type CliIdentity = {
 
 export type IdentityResult =
   | {status: 'authenticated'; identity: CliIdentity}
+  | {status: 'expired'}
   | {status: 'unauthorized'}
   | {status: 'network_failure'}
   | {status: 'api_error'; httpStatus: number};
@@ -31,6 +32,11 @@ export async function fetchAuthenticatedIdentity(input: {
   }
 
   if (response.status === 401) {
+    const body = await response.json().catch(() => null);
+    if (hasErrorCode(body, 'token_expired')) {
+      return {status: 'expired'};
+    }
+
     return {status: 'unauthorized'};
   }
 
@@ -40,6 +46,19 @@ export async function fetchAuthenticatedIdentity(input: {
 
   const body = await response.json().catch(() => null);
   return {status: 'authenticated', identity: parseIdentity(body)};
+}
+
+function hasErrorCode(body: unknown, code: string): boolean {
+  if (typeof body !== 'object' || body === null || !('error' in body)) {
+    return false;
+  }
+
+  const error = body.error;
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return false;
+  }
+
+  return error.code === code;
 }
 
 export function resolveApiUrl(env: AuthEnvironment = process.env): string {

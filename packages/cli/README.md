@@ -77,6 +77,12 @@ Dynobox supports assertions for:
 - `--iterations <count>`: repeat each selected scenario/harness pair.
 - `--permission-mode default|dangerous`: override harness permission behavior.
 
+## Auth
+
+Use `dynobox login` to paste a dashboard-generated CLI token into local config,
+then `dynobox whoami` to verify the saved identity. CLI tokens expire after 24
+hours; when a token expires, run `dynobox login` again to re-authenticate.
+
 ## Documentation
 
 - [Getting Started](https://docs.dynobox.xyz/getting-started)

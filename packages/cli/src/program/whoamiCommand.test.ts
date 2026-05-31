@@ -120,6 +120,27 @@ describe('dynobox whoami', () => {
     expect(result.stderr).toContain('error: invalid or revoked token');
   });
 
+  it('reports expired tokens', async () => {
+    stubFetch(async () =>
+      Response.json(
+        {error: {code: 'token_expired', message: 'Token expired.'}},
+        {status: 401},
+      ),
+    );
+    const home = homeDir('expired-token');
+    writeAuthConfig({homeDir: home, token: 'expired-token'});
+
+    const result = await executeCli(['whoami'], {
+      env: {HOME: home},
+    });
+
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain(
+      'error: token expired; run `dynobox login` again to re-authenticate',
+    );
+  });
+
   it('uses DYNOBOX_API_URL for identity lookup', async () => {
     const home = homeDir('custom-api-url');
     writeAuthConfig({homeDir: home, token: 'dev-token'});

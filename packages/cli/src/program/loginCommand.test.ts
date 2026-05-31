@@ -52,6 +52,15 @@ function stubUnauthorizedFetch(): typeof fetch {
   );
 }
 
+function stubExpiredFetch(): typeof fetch {
+  return stubFetch(async () =>
+    Response.json(
+      {error: {code: 'token_expired', message: 'Token expired.'}},
+      {status: 401},
+    ),
+  );
+}
+
 describe('dynobox login', () => {
   beforeAll(() => {
     rmSync(ROOT, {force: true, recursive: true});
@@ -144,6 +153,24 @@ describe('dynobox login', () => {
 
     expect(result.exitCode).toBe(configErrorExitCode);
     expect(result.stderr).toContain('error: invalid or revoked token');
+    expect(existsSync(filePath)).toBe(false);
+    expect(resolveAuthToken({env: {}, homeDir: home})).toBeNull();
+  });
+
+  it('rejects expired pasted tokens without writing config', async () => {
+    stubExpiredFetch();
+    const home = homeDir('expired-token');
+    const filePath = authConfigPath({homeDir: home});
+
+    const result = await executeCli(['login'], {
+      env: {HOME: home},
+      readStdin: async () => 'expired-token',
+    });
+
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(result.stderr).toContain(
+      'error: token expired; run `dynobox login` again to re-authenticate',
+    );
     expect(existsSync(filePath)).toBe(false);
     expect(resolveAuthToken({env: {}, homeDir: home})).toBeNull();
   });
