@@ -25,7 +25,9 @@ export type WriteAuthConfigInput = {
   homeDir?: string;
 };
 
-export function resolveAuthToken(input: ResolveAuthTokenInput = {}): string | null {
+export function resolveAuthToken(
+  input: ResolveAuthTokenInput = {},
+): string | null {
   const env = input.env ?? process.env;
   const envToken = normalizeToken(env.DYNOBOX_TOKEN);
   if (envToken !== null) return envToken;
