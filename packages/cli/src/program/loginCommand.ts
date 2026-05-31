@@ -12,6 +12,7 @@ import {configErrorExitCode} from './exitCodes.js';
 
 const DEFAULT_DASHBOARD_URL = 'https://dash.dynobox.xyz';
 const DEFAULT_API_URL = 'https://api.dynobox.xyz';
+const LOGIN_TOKEN_VALIDATION_TIMEOUT_MS = 10_000;
 
 export type LoginCommandActionInput = {
   writeStdout: OutputWriter;
@@ -70,6 +71,7 @@ async function validateLoginToken(input: {
     response = await fetch(`${input.apiUrl}/auth/identity`, {
       headers: {authorization: `Bearer ${input.token}`},
       method: 'GET',
+      signal: AbortSignal.timeout(LOGIN_TOKEN_VALIDATION_TIMEOUT_MS),
     });
   } catch {
     input.writeStderr(

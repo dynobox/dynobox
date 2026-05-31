@@ -29,7 +29,7 @@ function homeDir(name: string): string {
   return join(ROOT, name);
 }
 
-function stubFetch(response: () => Promise<Response>): typeof fetch {
+function stubFetch(response: typeof fetch): typeof fetch {
   const fetchMock = vi.fn(response);
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock as typeof fetch;
@@ -89,7 +89,11 @@ describe('dynobox login', () => {
     });
     expect(fetch).toHaveBeenCalledWith(
       'https://api.dynobox.xyz/auth/identity',
-      {headers: {authorization: 'Bearer pasted-token'}, method: 'GET'},
+      {
+        headers: {authorization: 'Bearer pasted-token'},
+        method: 'GET',
+        signal: expect.any(AbortSignal),
+      },
     );
     expect(resolveAuthToken({env: {}, homeDir: home})).toBe('pasted-token');
     expect(statSync(filePath).mode & 0o777).toBe(DYNOBOX_CONFIG_MODE);
@@ -111,6 +115,7 @@ describe('dynobox login', () => {
     expect(fetch).toHaveBeenCalledWith('http://localhost:8787/auth/identity', {
       headers: {authorization: 'Bearer dev-token'},
       method: 'GET',
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -160,6 +165,28 @@ describe('dynobox login', () => {
       'error: could not validate token; unable to reach the Dynobox API',
     );
     expect(existsSync(filePath)).toBe(false);
+  });
+
+  it('bounds token validation duration with an abort signal', async () => {
+    const signal = new AbortController().signal;
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(signal);
+    const home = homeDir('timeout-signal');
+
+    const result = await executeCli(['login'], {
+      env: {HOME: home},
+      readStdin: async () => 'pasted-token',
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(timeout).toHaveBeenCalledWith(10_000);
+    expect(fetch).toHaveBeenCalledWith(
+      'https://api.dynobox.xyz/auth/identity',
+      {
+        headers: {authorization: 'Bearer pasted-token'},
+        method: 'GET',
+        signal,
+      },
+    );
   });
 
   it('leaves existing config unchanged when validation fails', async () => {
