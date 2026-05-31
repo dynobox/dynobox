@@ -13,11 +13,7 @@ export function App() {
   const path = window.location.pathname;
 
   if (isLoading) {
-    return (
-      <AppShell>
-        <main className="page">Loading...</main>
-      </AppShell>
-    );
+    return null;
   }
 
   if (path === '/reset-password') {
