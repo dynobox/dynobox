@@ -8,6 +8,23 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Added `dynobox login` for saving dashboard-generated CLI tokens to local
+  config, with support for `DYNOBOX_TOKEN`, `DYNOBOX_API_URL`, and
+  `DYNOBOX_DASHBOARD_URL` overrides.
+- Added token validation during `dynobox login`, including clear errors for
+  invalid, revoked, expired, unreachable, or unexpected API responses.
+- Added `dynobox whoami` for verifying the saved CLI identity and reporting the
+  authenticated email when available.
+- Documented CLI token authentication and 24-hour token expiry in the npm README.
+
+### `@dynobox/run-schema`
+
+- Added a shared run upload contract package with Zod schemas and TypeScript
+  types for run totals, jobs, assertions, diagnostics, warnings, and upload
+  insert shapes.
+
 ---
 
 ## dynobox@0.3.0 — 2026-05-25
