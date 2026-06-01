@@ -8,6 +8,16 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `@dynobox/run-schema`
+
+- Added a shared run upload contract package with Zod schemas and TypeScript
+  types for run totals, jobs, assertions, diagnostics, warnings, and upload
+  insert shapes.
+
+---
+
+## dynobox@0.4.0 — 2026-05-31
+
 ### `dynobox` (CLI)
 
 - Added `dynobox login` for saving dashboard-generated CLI tokens to local
@@ -18,14 +28,6 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Added `dynobox whoami` for verifying the saved CLI identity and reporting the
   authenticated email when available.
 - Documented CLI token authentication and 24-hour token expiry in the npm README.
-
-### `@dynobox/run-schema`
-
-- Added a shared run upload contract package with Zod schemas and TypeScript
-  types for run totals, jobs, assertions, diagnostics, warnings, and upload
-  insert shapes.
-
----
 
 ## dynobox@0.3.0 — 2026-05-25
 
