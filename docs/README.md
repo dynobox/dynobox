@@ -19,6 +19,17 @@ shipping a prompt, skill, or workflow change.
 - [CI Integration](./ci.md): run Dynobox in GitHub Actions and publish JSON
   reports as build artifacts.
 
+## Dynobox Dashboard
+
+The web dashboard lives at [dash.dynobox.xyz](https://dash.dynobox.xyz). Today,
+it is where you create short-lived CLI tokens for authenticated Dynobox commands.
+Use `dynobox login`, open the dashboard URL it prints, create a token, and paste
+that token back into the CLI.
+
+Saved runs are **coming soon**. The dashboard will become the place to review run
+history, compare results across harnesses and iterations, and share run output
+without passing around local JSON artifacts.
+
 ## Agent Resources
 
 The docs site publishes agent-oriented entry points for retrieval and indexing:
@@ -93,3 +104,4 @@ execution. These areas are not complete yet:
 - HTTP capture for harness-native web tools and binaries that ignore proxy/CA
   environment variables.
 - Hosted or remote runner execution.
+- Saved run upload and dashboard history.

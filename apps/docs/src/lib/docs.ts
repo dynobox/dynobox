@@ -69,12 +69,13 @@ const docMetadata: Record<
 > = {
   'README.md': {
     agentSummary:
-      'Overview of Dynobox, supported harnesses, config formats, observable assertions, and current local runner limits.',
+      'Overview of Dynobox, the dashboard, supported harnesses, config formats, observable assertions, and current local runner limits.',
     description:
       'Dynobox documentation for local agent and skill workflow testing.',
     topics: [
       'overview',
       'agent testing',
+      'dashboard',
       'harnesses',
       'assertions',
       'config formats',
@@ -82,10 +83,18 @@ const docMetadata: Record<
   },
   'getting-started.md': {
     agentSummary:
-      'Install the Dynobox CLI, scaffold a first dyno, choose harnesses, run targets, and debug local agent evals.',
+      'Install the Dynobox CLI, connect it to the dashboard, scaffold a first dyno, choose harnesses, run targets, and debug local agent evals.',
     description:
       'Install Dynobox, create a first dyno, choose a harness, and run local agent workflow tests.',
-    topics: ['install', 'init', 'run', 'harnesses', 'debug'],
+    topics: [
+      'install',
+      'auth',
+      'dashboard',
+      'init',
+      'run',
+      'harnesses',
+      'debug',
+    ],
   },
   'config-authoring.md': {
     agentSummary:
@@ -103,12 +112,16 @@ const docMetadata: Record<
   },
   'cli.md': {
     agentSummary:
-      'Reference for dynobox init and dynobox run commands, flags, output modes, JSON reports, exit codes, and harness requirements.',
+      'Reference for dynobox init, login, whoami, and run commands, flags, output modes, JSON reports, exit codes, and harness requirements.',
     description:
       'Dynobox CLI command reference, including init, run, reporters, exit codes, and harness requirements.',
     topics: [
       'CLI',
+      'auth',
+      'dashboard',
       'dynobox init',
+      'dynobox login',
+      'dynobox whoami',
       'dynobox run',
       'JSON reporter',
       'exit codes',

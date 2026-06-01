@@ -24,6 +24,39 @@ writes `dynobox/example.dyno.yaml`. Existing starter files are not overwritten
 unless `--force` is passed. `--harness` accepts the same harness IDs as
 `dynobox run`; invalid harness IDs fail before writing a starter file.
 
+### `dynobox login`
+
+Save a Dynobox CLI token for authenticated commands.
+
+```bash
+dynobox login
+```
+
+The command prints a link to [dash.dynobox.xyz](https://dash.dynobox.xyz), where
+you can create a short-lived CLI token. Paste that token into the prompt and the
+CLI stores it in `~/.dynobox/config.json`.
+
+CLI tokens expire after 24 hours. When a token expires, run `dynobox login`
+again to create and save a new one.
+
+Environment overrides:
+
+- `DYNOBOX_TOKEN`: use a token from the environment instead of local config.
+- `DYNOBOX_API_URL`: point the CLI at a different API URL.
+- `DYNOBOX_DASHBOARD_URL`: point `dynobox login` at a different dashboard URL.
+
+### `dynobox whoami`
+
+Verify the saved Dynobox CLI identity.
+
+```bash
+dynobox whoami
+```
+
+The command checks the saved token against the Dynobox API and prints the
+authenticated email when the token includes one. Invalid, revoked, expired, or
+unreachable tokens return a non-zero exit code with a specific error message.
+
 ### `dynobox run [path]`
 
 Discover and run dyno files.
@@ -210,6 +243,13 @@ Dangerous mode maps to harness-specific flags:
 
 Permission warnings are advisory. They explain when a harness blocked a tool
 action, but they do not change job status, assertion results, or exit codes.
+
+## Dashboard
+
+[dash.dynobox.xyz](https://dash.dynobox.xyz) is the Dynobox web dashboard. It is
+currently used for CLI token creation. Saved runs are coming soon; once run
+upload is available, the dashboard will show run history and make it easier to
+review or share results from local and CI executions.
 
 ## Development Checkout
 

@@ -29,6 +29,25 @@ Check that it is available:
 dynobox --help
 ```
 
+## Connect The CLI
+
+Dynobox has a web dashboard at [dash.dynobox.xyz](https://dash.dynobox.xyz).
+Today, the dashboard is used to create short-lived CLI tokens. Run:
+
+```bash
+dynobox login
+```
+
+Open the URL printed by the CLI, create a token, and paste it back into your
+terminal. You can verify the saved identity with:
+
+```bash
+dynobox whoami
+```
+
+Saved runs are coming soon. For now, local CLI output and `--reporter json` are
+the primary ways to inspect and preserve run results.
+
 ## Create Your First Dyno
 
 Use `dynobox init` to scaffold a starter scenario:
@@ -199,3 +218,5 @@ dynobox run --permission-mode dangerous
 - Write more scenarios with [Config Authoring](./config-authoring.md).
 - Add Dynobox to automation with [CI Integration](./ci.md).
 - Check exact flags and output fields in the [CLI Reference](./cli.md).
+- Watch [dash.dynobox.xyz](https://dash.dynobox.xyz) for saved run history as it
+  rolls out.

@@ -19,6 +19,9 @@ dynobox run dynobox --reporter json --harness claude-code > dynobox-report.ndjso
 produces one `"type": "job"` record, followed by one `"type": "summary"` record.
 Every record includes `"schema": "dynobox.report.v1"`.
 
+Saved run upload is coming soon. Until then, keep JSON reports as CI artifacts
+when you need durable run history or a shareable record of a run.
+
 ## Recommended Pattern
 
 1. Install Node.js 22 or newer.
