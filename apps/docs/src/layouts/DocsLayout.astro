@@ -12,6 +12,7 @@ const canonicalUrl = new URL(page.route, Astro.site).toString();
 const markdownUrl = new URL(page.markdownRoute, Astro.site).toString();
 const llmsUrl = new URL('/llms.txt', Astro.site).toString();
 const docsIndexUrl = new URL('/docs-index.json', Astro.site).toString();
+const previewImageUrl = new URL('/link-preview.png', Astro.site).toString();
 const documentTitle =
   page.title === 'Dynobox Docs' ? page.title : `${page.title} | Dynobox Docs`;
 const llmCopyText = [
@@ -71,6 +72,14 @@ const webMcpContext = JSON.stringify({
     <meta property="og:description" content={page.description} />
     <meta property="og:type" content="article" />
     <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={previewImageUrl} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="dynobox | docs" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={documentTitle} />
+    <meta name="twitter:description" content={page.description} />
+    <meta name="twitter:image" content={previewImageUrl} />
     <script is:inline>
       (() => {
         const storageKey = 'dynobox-docs-theme';
