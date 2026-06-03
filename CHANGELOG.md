@@ -8,6 +8,20 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Added `dynobox --version` (`-V`) to print the installed CLI version.
+- Added `dynobox logout` to remove the saved CLI token, noting when
+  `DYNOBOX_TOKEN` remains set in the environment.
+- Added valid value hints for `--harness` and `--permission-mode` to
+  `dynobox run --help` (and `dynobox init --harness`).
+- Changed the no-argument `dynobox` invocation to print the starter banner to
+  stdout and exit 0 instead of stderr with a non-zero exit.
+- Changed `dynobox login` to read the pasted token without echoing it on a
+  terminal, while still accepting piped input for CI.
+- Changed `dynobox whoami` to report whether the active token came from the
+  saved config file or the `DYNOBOX_TOKEN` environment variable.
+
 ### `@dynobox/run-schema`
 
 - Added a shared run upload contract package with Zod schemas and TypeScript
