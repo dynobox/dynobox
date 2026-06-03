@@ -10,7 +10,8 @@ import {
   createPassingHarness,
   stripAnsi,
 } from '../testUtils.js';
-import {executeCli, placeholderExitCode, runCli} from './execute.js';
+import {readPackageVersion} from '../util/version.js';
+import {executeCli, runCli} from './execute.js';
 
 const fixtures = createFixtureSet('execute');
 
@@ -49,12 +50,20 @@ describe('executeCli — top-level entry', () => {
   beforeAll(fixtures.setup);
   afterAll(fixtures.teardown);
 
-  it('routes no args to the placeholder message', async () => {
+  it('routes no args to the placeholder message on stdout', async () => {
     await expect(executeCli([])).resolves.toEqual({
-      exitCode: placeholderExitCode,
-      stdout: '',
-      stderr: renderPlaceholderMessage(),
+      exitCode: 0,
+      stdout: renderPlaceholderMessage(),
+      stderr: '',
     });
+  });
+
+  it('prints the package version for --version', async () => {
+    const result = await executeCli(['--version']);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toBe(readPackageVersion());
+    expect(result.stderr).toBe('');
   });
 
   it('reports no dynos found when run is given an empty directory', async () => {
@@ -88,18 +97,18 @@ describe('runCli — process.stdout/stderr wiring', () => {
   beforeAll(fixtures.setup);
   afterAll(fixtures.teardown);
 
-  it('writes the placeholder message to stderr and returns the exit code', async () => {
-    const stderrWrite = vi
-      .spyOn(process.stderr, 'write')
+  it('writes the placeholder message to stdout and returns exit code 0', async () => {
+    const stdoutWrite = vi
+      .spyOn(process.stdout, 'write')
       .mockImplementation(() => true);
 
-    await expect(runCli([])).resolves.toBe(placeholderExitCode);
-    expect(stderrWrite).toHaveBeenCalledOnce();
-    expect(stripAnsi(stderrWrite.mock.calls[0]?.[0] as string)).toBe(
+    await expect(runCli([])).resolves.toBe(0);
+    expect(stdoutWrite).toHaveBeenCalledOnce();
+    expect(stripAnsi(stdoutWrite.mock.calls[0]?.[0] as string)).toBe(
       EXPECTED_PLACEHOLDER,
     );
 
-    stderrWrite.mockRestore();
+    stdoutWrite.mockRestore();
   });
 
   it('writes run output to stdout and returns the exit code', async () => {

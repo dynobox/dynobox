@@ -13,7 +13,7 @@ import {renderPlaceholderMessage} from '../render/index.js';
 import type {RunOutputMode} from '../terminal/index.js';
 import {buildProgram} from './builder.js';
 import {shouldUseLiveTerminalOutput} from './environment.js';
-import {placeholderExitCode, runFailureExitCode} from './exitCodes.js';
+import {runFailureExitCode} from './exitCodes.js';
 
 export type OutputWriter = (value: string) => void;
 
@@ -59,8 +59,8 @@ export async function executeCli(
   };
 
   if (args.length === 0) {
-    writeStderr(renderPlaceholderMessage());
-    return {exitCode: placeholderExitCode, stdout, stderr};
+    writeStdout(renderPlaceholderMessage());
+    return {exitCode: 0, stdout, stderr};
   }
 
   let runFailed = false;
@@ -111,8 +111,4 @@ export async function runCli(
 }
 
 // Re-export exit codes here for internal tests and command wiring.
-export {
-  configErrorExitCode,
-  placeholderExitCode,
-  runFailureExitCode,
-} from './exitCodes.js';
+export {configErrorExitCode, runFailureExitCode} from './exitCodes.js';

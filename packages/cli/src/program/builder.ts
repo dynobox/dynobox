@@ -8,6 +8,7 @@
 
 import {Command} from 'commander';
 
+import {readPackageVersion} from '../util/version.js';
 import {DYNO_FILE_SUFFIXES} from './discoverDynos.js';
 import type {ExecuteCliOptions, OutputWriter} from './execute.js';
 import {initCommandAction, type InitCommandFlags} from './initCommand.js';
@@ -34,6 +35,7 @@ export function buildProgram(input: BuildProgramInput): Command {
   const program = new Command();
   program
     .name('dynobox')
+    .version(readPackageVersion(), '-V, --version')
     .exitOverride()
     .configureOutput({
       writeOut: (value) => writeStdout(value),

@@ -5,9 +5,6 @@
  * against them numerically.
  */
 
-/** No subcommand supplied — printed the placeholder banner. */
-export const placeholderExitCode = 1;
-
 /** Config failed to load, parse, or validate; or CLI flags were invalid. */
 export const configErrorExitCode = 1;
 

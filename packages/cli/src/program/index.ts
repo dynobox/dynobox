@@ -9,7 +9,6 @@ export {
   executeCli,
   type ExecuteCliOptions,
   type OutputWriter,
-  placeholderExitCode,
   runCli,
   runFailureExitCode,
 } from './execute.js';

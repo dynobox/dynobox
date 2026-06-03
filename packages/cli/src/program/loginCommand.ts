@@ -17,6 +17,12 @@ import {
 
 const DEFAULT_DASHBOARD_URL = 'https://dash.dynobox.xyz';
 
+// Control bytes received from a TTY in raw mode.
+const CTRL_C = 0x03; // cancel
+const CTRL_D = 0x04; // end of transmission
+const BACKSPACE = 0x08;
+const DELETE = 0x7f;
+
 export type LoginCommandActionInput = {
   writeStdout: OutputWriter;
   writeStderr: OutputWriter;
@@ -102,7 +108,14 @@ async function validateLoginToken(input: {
   );
 }
 
+/**
+ * Read a single line from stdin. On a TTY we suppress echo so the pasted token
+ * never lands on screen or in scrollback; piped/non-TTY input (e.g. CI doing
+ * `echo "$TOKEN" | dynobox login`) falls back to a plain line read.
+ */
 async function readProcessStdin(): Promise<string> {
+  if (process.stdin.isTTY) return readSecretFromTty();
+
   const reader = createInterface({input: process.stdin, crlfDelay: Infinity});
   try {
     for await (const line of reader) return line;
@@ -110,4 +123,48 @@ async function readProcessStdin(): Promise<string> {
   } finally {
     reader.close();
   }
+}
+
+/**
+ * Read one line from a TTY without echoing keystrokes. Raw mode disables the
+ * terminal's own echo and signal handling, so we accumulate bytes ourselves:
+ * Enter and Ctrl-D submit, Ctrl-C cancels (surfacing as an empty token), and
+ * Backspace/Delete edits the buffer.
+ */
+function readSecretFromTty(): Promise<string> {
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    const wasRaw = stdin.isRaw ?? false;
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.setEncoding('utf8');
+
+    let token = '';
+    const finish = (value: string): void => {
+      stdin.removeListener('data', onData);
+      stdin.setRawMode(wasRaw);
+      stdin.pause();
+      process.stdout.write('\n');
+      resolve(value);
+    };
+    const onData = (chunk: string): void => {
+      for (const char of chunk) {
+        const code = char.charCodeAt(0);
+        if (char === '\n' || char === '\r' || code === CTRL_D) {
+          finish(token);
+          return;
+        }
+        if (code === CTRL_C) {
+          finish('');
+          return;
+        }
+        if (code === BACKSPACE || code === DELETE) {
+          token = token.slice(0, -1);
+          continue;
+        }
+        token += char;
+      }
+    };
+    stdin.on('data', onData);
+  });
 }
