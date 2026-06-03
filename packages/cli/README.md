@@ -80,8 +80,9 @@ Dynobox supports assertions for:
 ## Auth
 
 Use `dynobox login` to paste a dashboard-generated CLI token into local config,
-then `dynobox whoami` to verify the saved identity. CLI tokens expire after 24
-hours; when a token expires, run `dynobox login` again to re-authenticate.
+then `dynobox whoami` to verify the saved identity. `dynobox logout` removes the
+saved token. CLI tokens expire after 24 hours; when a token expires, run
+`dynobox login` again to re-authenticate.
 
 ## Documentation
 

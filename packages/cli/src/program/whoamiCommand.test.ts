@@ -73,7 +73,9 @@ describe('dynobox whoami', () => {
     });
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toBe('Authenticated as user@example.com\n');
+    expect(result.stdout).toBe(
+      'Authenticated as user@example.com\nToken loaded from ~/.dynobox/config.json\n',
+    );
     expect(result.stderr).toBe('');
     expect(fetch).toHaveBeenCalledWith(
       'https://api.dynobox.xyz/auth/identity',
@@ -96,7 +98,7 @@ describe('dynobox whoami', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe(
-      'Authenticated, but this token has no email metadata. Run `dynobox login` again to refresh it.\n',
+      'Authenticated, but this token has no email metadata. Run `dynobox login` again to refresh it.\nToken loaded from ~/.dynobox/config.json\n',
     );
     expect(result.stderr).toBe('');
   });

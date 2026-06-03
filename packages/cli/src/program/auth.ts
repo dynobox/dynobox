@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import {homedir} from 'node:os';
@@ -54,6 +55,17 @@ export function writeAuthConfig(input: WriteAuthConfigInput): string {
   );
   chmodSync(configPath, DYNOBOX_CONFIG_MODE);
   return configPath;
+}
+
+/**
+ * Remove the saved auth config file. Returns `true` if a file was removed,
+ * `false` if there was nothing to remove. Does not touch `DYNOBOX_TOKEN`.
+ */
+export function deleteAuthConfig(input: ResolveAuthTokenInput = {}): boolean {
+  const configPath = authConfigPath(input);
+  if (!existsSync(configPath)) return false;
+  rmSync(configPath);
+  return true;
 }
 
 export function authConfigPath(input: ResolveAuthTokenInput = {}): string {

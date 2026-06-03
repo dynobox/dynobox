@@ -1,6 +1,10 @@
 import {CommanderError} from 'commander';
 
-import {type AuthEnvironment, resolveAuthToken} from './auth.js';
+import {
+  type AuthEnvironment,
+  authConfigDisplayPath,
+  resolveAuthToken,
+} from './auth.js';
 import type {OutputWriter} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
 import {fetchAuthenticatedIdentity, resolveApiUrl} from './identityApi.js';
@@ -43,6 +47,7 @@ export async function whoamiCommandAction(
         'Authenticated, but this token has no email metadata. Run `dynobox login` again to refresh it.\n',
       );
     }
+    input.writeStdout(`${describeTokenSource(env)}\n`);
     return;
   }
 
@@ -67,4 +72,11 @@ export async function whoamiCommandAction(
     'dynobox.whoami',
     'identity verification failed',
   );
+}
+
+function describeTokenSource(env: AuthEnvironment): string {
+  if ((env.DYNOBOX_TOKEN ?? '').trim().length > 0) {
+    return 'Token loaded from the DYNOBOX_TOKEN environment variable';
+  }
+  return `Token loaded from ${authConfigDisplayPath()}`;
 }

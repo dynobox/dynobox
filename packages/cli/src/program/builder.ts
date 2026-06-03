@@ -6,6 +6,7 @@
  * stays scannable.
  */
 
+import {HARNESS_IDS, PERMISSION_MODES} from '@dynobox/sdk';
 import {Command} from 'commander';
 
 import {readPackageVersion} from '../util/version.js';
@@ -13,6 +14,7 @@ import {DYNO_FILE_SUFFIXES} from './discoverDynos.js';
 import type {ExecuteCliOptions, OutputWriter} from './execute.js';
 import {initCommandAction, type InitCommandFlags} from './initCommand.js';
 import {loginCommandAction} from './loginCommand.js';
+import {logoutCommandAction} from './logoutCommand.js';
 import {collectOption} from './options.js';
 import {runCommandAction, type RunCommandFlags} from './runCommand.js';
 import {whoamiCommandAction} from './whoamiCommand.js';
@@ -54,7 +56,7 @@ export function buildProgram(input: BuildProgramInput): Command {
     )
     .option(
       '--harness <id>',
-      'override config harnesses for this run; repeat for multiple harnesses',
+      `override config harnesses for this run; repeat for multiple harnesses (values: ${HARNESS_IDS.join(', ')})`,
       collectOption,
       [] as string[],
     )
@@ -71,7 +73,7 @@ export function buildProgram(input: BuildProgramInput): Command {
     .option('--reporter <fmt>', 'output reporter format: text or json', 'text')
     .option(
       '--permission-mode <mode>',
-      'override harness permission mode: default or dangerous',
+      `override harness permission mode (values: ${PERMISSION_MODES.join(', ')})`,
     )
     .action(
       async (configPath: string | undefined, commandFlags: RunCommandFlags) => {
@@ -112,12 +114,26 @@ export function buildProgram(input: BuildProgramInput): Command {
     });
 
   program
+    .command('logout')
+    .description('remove the saved Dynobox CLI token')
+    .action(() => {
+      logoutCommandAction({
+        writeStdout,
+        ...(options.env === undefined ? {} : {env: options.env}),
+      });
+    });
+
+  program
     .command('init')
     .description(
       'scaffold a starter *.dyno.mjs (or .dyno.yaml) under ./dynobox/',
     )
     .option('--yaml', 'generate a YAML dyno instead of an MJS dyno')
-    .option('--harness <id>', 'starter harness id', 'claude-code')
+    .option(
+      '--harness <id>',
+      `starter harness id (values: ${HARNESS_IDS.join(', ')})`,
+      'claude-code',
+    )
     .option('--force', 'overwrite an existing starter file')
     .action(async (commandFlags: InitCommandFlags) => {
       await initCommandAction({
