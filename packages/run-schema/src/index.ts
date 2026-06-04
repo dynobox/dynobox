@@ -100,6 +100,12 @@ export const RunUploadV1 = z
   })
   .strict();
 
+export const RunSharingUpdate = z
+  .object({
+    public: z.boolean(),
+  })
+  .strict();
+
 export type RunUploadStatus = (typeof RUN_UPLOAD_STATUS)[number];
 export type RunUploadJobStatus = (typeof RUN_UPLOAD_JOB_STATUS)[number];
 export type RunUploadTotalsV1 = z.infer<typeof runUploadTotalsV1Schema>;
@@ -129,7 +135,9 @@ export type RunAssertionInsertV1 = RunUploadAssertionV1 & {
   jobId: string;
 };
 
-export type RunSummaryV1 = {
+export type RunSharingUpdate = z.infer<typeof RunSharingUpdate>;
+
+export type RunSummary = {
   id: string;
   url: string;
   createdAt: string;
@@ -145,7 +153,7 @@ export type RunSummaryV1 = {
   public: boolean;
 };
 
-export type RunGitHashMetricV1 = {
+export type RunGitHashMetric = {
   gitHash: string | null;
   runCount: number;
   passCount: number;
@@ -154,7 +162,7 @@ export type RunGitHashMetricV1 = {
   durationMs: number;
 };
 
-export type RunAssertionDetailV1 = {
+export type RunAssertionDetail = {
   id: string;
   assertionId: string;
   label: string;
@@ -163,7 +171,7 @@ export type RunAssertionDetailV1 = {
   message: string | null;
 };
 
-export type RunJobDetailV1 = {
+export type RunJobDetail = {
   id: string;
   scenario: {
     id: string;
@@ -183,31 +191,31 @@ export type RunJobDetailV1 = {
   warningCount: number;
   diagnostics: string[];
   warnings: string[];
-  assertions: RunAssertionDetailV1[];
+  assertions: RunAssertionDetail[];
 };
 
-export type RunDetailV1 = RunSummaryV1 & {
+export type RunDetail = RunSummary & {
   isOwner: boolean;
   summary: RunUploadTotalsV1;
-  jobs: RunJobDetailV1[];
+  jobs: RunJobDetail[];
 };
 
-export type RunUploadResponseV1 = {
+export type RunUploadResponse = {
   id: string;
   url: string;
 };
 
-export type RunListResponseV1 = {
-  runs: RunSummaryV1[];
+export type RunListResponse = {
+  runs: RunSummary[];
   metrics: {
-    byGitHash: RunGitHashMetricV1[];
+    byGitHash: RunGitHashMetric[];
   };
 };
 
-export type RunDetailResponseV1 = {
-  run: RunDetailV1;
+export type RunDetailResponse = {
+  run: RunDetail;
 };
 
-export type RunUpdateResponseV1 = {
-  run: RunSummaryV1;
+export type RunUpdateResponse = {
+  run: RunSummary;
 };
