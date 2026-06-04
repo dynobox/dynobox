@@ -27,5 +27,10 @@
   ],
   "dependencies": {
     "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.2",
+    "vitest": "^4.0.10"
   }
 }
