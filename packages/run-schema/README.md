@@ -2,6 +2,26 @@
 
 Shared Dynobox run upload schemas and API response types.
 
-## Packaging note
+## Registry
 
-This package temporarily declares `tsup` and `typescript` as package dependencies so GitHub subdirectory installs can run `prepack` without relying on the monorepo root. Remove those package-local build dependencies after `@dynobox/run-schema` is published as a built package.
+This package is published to GitHub Packages under the `@dynobox` scope.
+
+Use this npm config in consuming repos:
+
+```ini
+@dynobox:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+Local installs require `GITHUB_TOKEN` with `read:packages`. Publishing requires `write:packages`.
+
+## Publishing
+
+Update the package version, then run:
+
+```sh
+pnpm --filter @dynobox/run-schema build
+pnpm --filter @dynobox/run-schema publish --no-git-checks
+```
+
+The package publishes built `dist/` output from the local build. Do not commit `dist/`.

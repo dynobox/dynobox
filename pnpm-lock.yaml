@@ -141,16 +141,16 @@ importers:
 
   packages/run-schema:
     dependencies:
+      zod:
+        specifier: ^4.1.12
+        version: 4.3.6
+    devDependencies:
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(postcss@8.5.15)(tsx@4.21.0)(typescript@6.0.3)(yaml@2.8.4)
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
-      zod:
-        specifier: ^4.1.12
-        version: 4.3.6
-    devDependencies:
       vitest:
         specifier: ^4.0.10
         version: 4.1.5(@types/node@22.19.17)(jsdom@29.1.1)(vite@8.0.14(@types/node@22.19.17)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.8.4))

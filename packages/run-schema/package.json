@@ -1,6 +1,6 @@
 {
   "name": "@dynobox/run-schema",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Shared Dynobox run upload schema and types",
   "license": "Apache-2.0",
   "type": "module",
@@ -13,24 +13,31 @@
     },
     "./package.json": "./package.json"
   },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dynobox/dynobox.git",
+    "directory": "packages/run-schema"
+  },
   "scripts": {
     "build": "tsup src/index.ts --format esm --splitting false --clean && tsc -p tsconfig.build.json --emitDeclarationOnly --declaration",
-    "prepack": "pnpm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm run build && vitest run"
   },
   "author": "dynobox (https://dynobox.xyz)",
   "files": [
     "dist",
-    "README.md",
-    "LICENSE"
+    "README.md"
   ],
   "dependencies": {
-    "tsup": "^8.5.1",
-    "typescript": "^6.0.2",
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.2",
     "vitest": "^4.0.10"
   }
 }
