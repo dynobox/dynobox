@@ -128,3 +128,86 @@ export type RunAssertionInsertV1 = RunUploadAssertionV1 & {
   runId: string;
   jobId: string;
 };
+
+export type RunSummaryV1 = {
+  id: string;
+  url: string;
+  createdAt: string;
+  cliVersion: string;
+  schemaVersion: typeof RUN_UPLOAD_SCHEMA_VERSION;
+  gitHash: string | null;
+  target: string | null;
+  status: RunUploadStatus;
+  passCount: number;
+  failCount: number;
+  warningCount: number;
+  durationMs: number;
+  public: boolean;
+};
+
+export type RunGitHashMetricV1 = {
+  gitHash: string | null;
+  runCount: number;
+  passCount: number;
+  failCount: number;
+  warningCount: number;
+  durationMs: number;
+};
+
+export type RunAssertionDetailV1 = {
+  id: string;
+  assertionId: string;
+  label: string;
+  kind: string;
+  passed: boolean;
+  message: string | null;
+};
+
+export type RunJobDetailV1 = {
+  id: string;
+  scenario: {
+    id: string;
+    name: string;
+  };
+  harness: {
+    id: string;
+    model: string | null;
+  };
+  iteration: number;
+  status: RunUploadJobStatus;
+  passed: boolean;
+  durationMs: number;
+  assertionCount: number;
+  passedAssertionCount: number;
+  failedAssertionCount: number;
+  warningCount: number;
+  diagnostics: string[];
+  warnings: string[];
+  assertions: RunAssertionDetailV1[];
+};
+
+export type RunDetailV1 = RunSummaryV1 & {
+  isOwner: boolean;
+  summary: RunUploadTotalsV1;
+  jobs: RunJobDetailV1[];
+};
+
+export type RunUploadResponseV1 = {
+  id: string;
+  url: string;
+};
+
+export type RunListResponseV1 = {
+  runs: RunSummaryV1[];
+  metrics: {
+    byGitHash: RunGitHashMetricV1[];
+  };
+};
+
+export type RunDetailResponseV1 = {
+  run: RunDetailV1;
+};
+
+export type RunUpdateResponseV1 = {
+  run: RunSummaryV1;
+};
