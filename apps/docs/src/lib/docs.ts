@@ -128,11 +128,10 @@ const docMetadata: Record<
     ],
   },
   'ci.md': {
-    agentSummary:
-      'Run Dynobox in CI, use harness matrices, write NDJSON reports, upload artifacts, and parse summary records.',
+    agentSummary: 'Preview work-in-progress Dynobox CI guidance.',
     description:
-      'Run Dynobox in CI with quiet output, JSON reports, GitHub Actions, and artifact naming patterns.',
-    topics: ['CI', 'GitHub Actions', 'JSON reports', 'artifacts'],
+      'Preview work-in-progress Dynobox CI guidance and the upcoming recommended approach.',
+    topics: ['CI'],
   },
 };
 
