@@ -128,10 +128,18 @@ const docMetadata: Record<
     ],
   },
   'ci.md': {
-    agentSummary: 'Preview work-in-progress Dynobox CI guidance.',
+    agentSummary:
+      'Temporary Dynobox CI pattern from the dynobox/skills repo, including GitHub Actions setup, JSON reports, summaries, PR comments, artifacts, secrets, and fork safety.',
     description:
-      'Preview work-in-progress Dynobox CI guidance and the upcoming recommended approach.',
-    topics: ['CI'],
+      'Example GitHub Actions pattern for running Dynobox in CI, based on the dynobox/skills repo.',
+    topics: [
+      'CI',
+      'GitHub Actions',
+      'skills repo',
+      'JSON reporter',
+      'PR comments',
+      'artifacts',
+    ],
   },
 };
 

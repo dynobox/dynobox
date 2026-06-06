@@ -16,7 +16,8 @@ shipping a prompt, skill, or workflow change.
   YAML dynos with the `@dynobox/sdk` helpers.
 - [CLI Reference](./cli.md): commands, flags, output modes, JSON reports, and
   exit behavior.
-- [CI Integration](./ci.md): preview work-in-progress CI guidance.
+- [CI Integration](./ci.md): temporary GitHub Actions pattern from the
+  [`dynobox/skills`](https://github.com/dynobox/skills) repo.
 
 ## Dynobox Dashboard
 
