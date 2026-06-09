@@ -71,6 +71,7 @@ export function buildProgram(input: BuildProgramInput): Command {
     .option('--verbose', 'expand scenario details even when passing')
     .option('--debug', 'include debug paths and artifacts')
     .option('--reporter <fmt>', 'output reporter format: text or json', 'text')
+    .option('--save-run', 'upload a compact run summary after execution')
     .option(
       '--permission-mode <mode>',
       `override harness permission mode (values: ${PERMISSION_MODES.join(', ')})`,

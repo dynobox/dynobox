@@ -66,6 +66,7 @@ import {
   validateReporterFormat,
   validateScenarioFilters,
 } from './options.js';
+import {uploadRun} from './uploadRun.js';
 
 export type RunCommandFlags = {
   harness?: string[];
@@ -73,6 +74,7 @@ export type RunCommandFlags = {
   verbose?: boolean;
   debug?: boolean;
   reporter?: string;
+  saveRun?: boolean;
   scenario?: string[];
   iterations?: string;
   permissionMode?: string;
@@ -196,7 +198,20 @@ export async function runCommandAction(
           });
 
   const anyJobFailed = results.some((result) => !result.passed);
-  return anyJobFailed || errors.length > 0;
+  const runFailed = anyJobFailed || errors.length > 0;
+
+  if (commandFlags.saveRun === true) {
+    await uploadRun({
+      jobs,
+      results,
+      runFailed,
+      target: targetLabel,
+      ...(options.env === undefined ? {} : {env: options.env}),
+      writeStderr,
+    });
+  }
+
+  return runFailed;
 }
 
 /**
