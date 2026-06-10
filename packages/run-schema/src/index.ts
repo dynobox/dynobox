@@ -13,7 +13,10 @@ export const RUN_UPLOAD_JOB_STATUS = [
 export const RUN_UPLOAD_LIMITS = {
   cliVersionLength: 64,
   gitHashLength: 128,
+  inputPathLength: 256,
   targetLength: 256,
+  dynoPathLength: 512,
+  dynoNameLength: 256,
   scenarioIdLength: 512,
   scenarioNameLength: 512,
   harnessIdLength: 64,
@@ -29,7 +32,8 @@ export const RUN_UPLOAD_LIMITS = {
   assertionDetailLength: 2_000,
   assertionChildren: 50,
   evidenceItems: 50,
-  jobs: 1_000,
+  dynos: 200,
+  jobsPerDyno: 1_000,
   assertionsPerJob: 200,
 } as const;
 
@@ -171,16 +175,32 @@ export const runUploadJobV1Schema = z
   })
   .strict();
 
+/**
+ * One authored `.dyno` test spec inside a run, grouped under the target it
+ * tests. Jobs nest here so per-dyno totals stay self-describing.
+ */
+export const runUploadDynoV1Schema = z
+  .object({
+    dynoPath: z.string().min(1).max(RUN_UPLOAD_LIMITS.dynoPathLength),
+    name: optionalNullableString(RUN_UPLOAD_LIMITS.dynoNameLength),
+    target: z.string().min(1).max(RUN_UPLOAD_LIMITS.targetLength),
+    status: z.enum(RUN_UPLOAD_STATUS),
+    totals: runUploadTotalsV1Schema,
+    jobs: z.array(runUploadJobV1Schema).max(RUN_UPLOAD_LIMITS.jobsPerDyno),
+  })
+  .strict();
+
 export const RunUploadV1 = z
   .object({
     schemaVersion: z.literal(RUN_UPLOAD_SCHEMA_VERSION),
     createdAt: z.iso.datetime(),
     cliVersion: z.string().min(1).max(RUN_UPLOAD_LIMITS.cliVersionLength),
     gitHash: optionalNullableString(RUN_UPLOAD_LIMITS.gitHashLength),
-    target: optionalNullableString(RUN_UPLOAD_LIMITS.targetLength),
+    /** The path the CLI was pointed at (`dynobox run <inputPath>`). */
+    inputPath: optionalNullableString(RUN_UPLOAD_LIMITS.inputPathLength),
     status: z.enum(RUN_UPLOAD_STATUS),
     totals: runUploadTotalsV1Schema,
-    jobs: z.array(runUploadJobV1Schema).max(RUN_UPLOAD_LIMITS.jobs),
+    dynos: z.array(runUploadDynoV1Schema).max(RUN_UPLOAD_LIMITS.dynos),
   })
   .strict();
 
@@ -207,29 +227,10 @@ export type RunUploadAssertionEvidenceV1 = z.infer<
 >;
 export type RunUploadAssertionV1 = z.infer<typeof runUploadAssertionV1Schema>;
 export type RunUploadJobV1 = z.infer<typeof runUploadJobV1Schema>;
+export type RunUploadDynoV1 = z.infer<typeof runUploadDynoV1Schema>;
 export type RunUploadV1 = z.infer<typeof RunUploadV1>;
 
 export type RunUploadCreateInputV1 = z.input<typeof RunUploadV1>;
-
-export type RunInsertV1 = Omit<RunUploadV1, 'jobs'> & {
-  passCount: number;
-  failCount: number;
-  warningCount: number;
-  summary: RunUploadTotalsV1;
-};
-
-export type RunJobInsertV1 = RunUploadJobV1 & {
-  runId: string;
-  assertionCount: number;
-  passedAssertionCount: number;
-  failedAssertionCount: number;
-  warningCount: number;
-};
-
-export type RunAssertionInsertV1 = RunUploadAssertionV1 & {
-  runId: string;
-  jobId: string;
-};
 
 export type RunSharingUpdate = z.infer<typeof RunSharingUpdate>;
 
@@ -240,22 +241,20 @@ export type RunSummary = {
   cliVersion: string;
   schemaVersion: typeof RUN_UPLOAD_SCHEMA_VERSION;
   gitHash: string | null;
-  target: string | null;
+  /** The path the CLI was pointed at when the run was created. */
+  inputPath: string | null;
   status: RunUploadStatus;
+  targetCount: number;
+  dynoCount: number;
+  /** Passed/failed job counts. */
   passCount: number;
   failCount: number;
+  assertionCount: number;
+  passedAssertionCount: number;
+  failedAssertionCount: number;
   warningCount: number;
   durationMs: number;
   public: boolean;
-};
-
-export type RunGitHashMetric = {
-  gitHash: string | null;
-  runCount: number;
-  passCount: number;
-  failCount: number;
-  warningCount: number;
-  durationMs: number;
 };
 
 export type RunAssertionDetail = {
@@ -270,8 +269,17 @@ export type RunAssertionDetail = {
   evidence: RunUploadAssertionEvidenceV1 | null;
 };
 
+/** The dyno a stored job belongs to. */
+export type RunJobDynoRef = {
+  dynoId: string;
+  dynoPath: string;
+  name: string | null;
+  target: string;
+};
+
 export type RunJobDetail = {
   id: string;
+  dyno: RunJobDynoRef;
   scenario: {
     id: string;
     name: string;
@@ -299,6 +307,91 @@ export type RunDetail = RunSummary & {
   jobs: RunJobDetail[];
 };
 
+export type TargetRunRef = {
+  runId: string;
+  createdAt: string;
+  status: RunUploadStatus;
+};
+
+/**
+ * Aggregate health for one target — the thing being tested — built from the
+ * most recent run that included the target plus a short run history.
+ */
+export type TargetSummary = {
+  target: string;
+  status: RunUploadStatus;
+  dynoCount: number;
+  scenarioCount: number;
+  jobCount: number;
+  assertionCount: number;
+  passedAssertionCount: number;
+  failedAssertionCount: number;
+  warningCount: number;
+  lastRunId: string;
+  lastRunAt: string;
+  /** Per-run status for this target, newest first. */
+  recentRuns: TargetRunRef[];
+};
+
+/** One dyno under a target, summarized from its most recent run. */
+export type TargetDynoSummary = {
+  /** Stable identifier for the dyno across runs (its authored path). */
+  dynoId: string;
+  dynoPath: string;
+  name: string | null;
+  target: string;
+  status: RunUploadStatus;
+  scenarioCount: number;
+  jobCount: number;
+  assertionCount: number;
+  passedAssertionCount: number;
+  failedAssertionCount: number;
+  warningCount: number;
+  lastRunId: string;
+  lastRunAt: string;
+};
+
+/** One scenario's results within a dyno for a selected run. */
+export type DynoScenarioResult = {
+  scenarioId: string;
+  scenarioName: string;
+  status: RunUploadStatus;
+  jobCount: number;
+  passedJobCount: number;
+  failedJobCount: number;
+  assertionCount: number;
+  passedAssertionCount: number;
+  failedAssertionCount: number;
+  warningCount: number;
+  durationMs: number;
+  jobs: RunJobDetail[];
+};
+
+/** A dyno's results scoped to a single selected run. */
+export type DynoRunDetail = {
+  runId: string;
+  createdAt: string;
+  status: RunUploadStatus;
+  gitHash: string | null;
+  cliVersion: string;
+  harnesses: string[];
+  scenarioCount: number;
+  jobCount: number;
+  assertionCount: number;
+  passedAssertionCount: number;
+  failedAssertionCount: number;
+  warningCount: number;
+  durationMs: number;
+  scenarios: DynoScenarioResult[];
+};
+
+export type DynoRunRef = {
+  runId: string;
+  createdAt: string;
+  status: RunUploadStatus;
+  gitHash: string | null;
+};
+
 export type RunUploadResponse = {
   id: string;
   url: string;
@@ -306,9 +399,6 @@ export type RunUploadResponse = {
 
 export type RunListResponse = {
   runs: RunSummary[];
-  metrics: {
-    byGitHash: RunGitHashMetric[];
-  };
 };
 
 export type RunDetailResponse = {
@@ -317,4 +407,24 @@ export type RunDetailResponse = {
 
 export type RunUpdateResponse = {
   run: RunSummary;
+};
+
+export type TargetListResponse = {
+  targets: TargetSummary[];
+};
+
+export type TargetDetailResponse = {
+  target: string;
+  dynos: TargetDynoSummary[];
+};
+
+export type DynoDetailResponse = {
+  dynoId: string;
+  dynoPath: string;
+  name: string | null;
+  target: string;
+  /** Runs that included this dyno, newest first (selector options). */
+  runs: DynoRunRef[];
+  /** The selected run's results, or null when the run has no data. */
+  run: DynoRunDetail | null;
 };

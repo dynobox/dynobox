@@ -223,5 +223,6 @@ export const irScenarioSchema = z.object({
 export const irSchema = z.object({
   version: irVersionSchema,
   name: z.string().optional(),
+  target: z.string().optional(),
   scenarios: z.array(irScenarioSchema).min(1),
 });

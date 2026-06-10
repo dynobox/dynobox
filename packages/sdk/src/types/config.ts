@@ -34,6 +34,12 @@ export type ScenarioInput<
  */
 export type DynoboxConfig = {
   name?: string;
+  /**
+   * The thing being tested (e.g. `github-pr-agent`). Dynos that share a
+   * target are grouped together in run reporting and on the dashboard.
+   * Defaults to the dyno file's parent directory name when omitted.
+   */
+  target?: string;
   version?: string;
   harnesses?: HarnessRunConfig[];
   setup?: string[];

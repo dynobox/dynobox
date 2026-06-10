@@ -1,4 +1,4 @@
-import {join} from 'node:path';
+import {basename, dirname, join} from 'node:path';
 
 import {
   FakeHarness,
@@ -169,16 +169,26 @@ describe('dynobox run — upload', () => {
     );
     expect(payload).toMatchObject({
       schemaVersion: 1,
-      target: fixtures.validConfigPath,
+      inputPath: fixtures.validConfigPath,
       status: 'passed',
       totals: {jobs: 1, passed: 1, failed: 0, warnings: 0},
-      jobs: [
+      dynos: [
         {
-          scenario: {name: 'uses shell'},
-          harness: {id: 'claude-code', model: null},
-          iteration: 1,
+          dynoPath: expect.stringContaining(
+            basename(fixtures.validConfigPath),
+          ),
+          target: basename(dirname(fixtures.validConfigPath)),
           status: 'passed',
-          passed: true,
+          totals: {jobs: 1, passed: 1, failed: 0, warnings: 0},
+          jobs: [
+            {
+              scenario: {name: 'uses shell'},
+              harness: {id: 'claude-code', model: null},
+              iteration: 1,
+              status: 'passed',
+              passed: true,
+            },
+          ],
         },
       ],
     });

@@ -5,7 +5,7 @@ import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 
 import {
   discoverDynos,
-  DynoTargetNotFoundError,
+  DynoPathNotFoundError,
   NoDynosFoundError,
 } from './discoverDynos.js';
 
@@ -105,10 +105,10 @@ describe('discoverDynos', () => {
     await expect(discoverDynos(dir)).rejects.toBeInstanceOf(NoDynosFoundError);
   });
 
-  it('throws DynoTargetNotFoundError when the path does not exist', async () => {
+  it('throws DynoPathNotFoundError when the path does not exist', async () => {
     await expect(
       discoverDynos(join(ROOT, 'does-not-exist')),
-    ).rejects.toBeInstanceOf(DynoTargetNotFoundError);
+    ).rejects.toBeInstanceOf(DynoPathNotFoundError);
   });
 
   it('does not follow symlinks back into itself', async () => {

@@ -272,6 +272,7 @@ export const scenarioSchema = z.object({
 
 export const configSchema = z.object({
   name: z.string().optional(),
+  target: z.string().min(1).optional(),
   version: z.string().optional(),
   harnesses: z.array(harnessRunConfigSchema).min(1).optional(),
   setup: z.array(z.string().min(1)).optional(),
