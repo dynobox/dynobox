@@ -165,4 +165,60 @@ describe('buildRunUploadPayload', () => {
       observedKinds: ['shell'],
     });
   });
+
+  it('preserves runner diagnostics, capped and truncated, for failing runs', () => {
+    const job = {
+      id: 'scenario.deploy.claude-code.iteration.0',
+      scenario: {
+        id: 'scenario.deploy',
+        name: 'deploy',
+        prompt: 'p',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        endpoints: [],
+        assertions: [],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const longDiagnostic = 'x'.repeat(2_500);
+    const result = {
+      jobId: job.id,
+      scenarioId: job.scenario.id,
+      harness: 'claude-code',
+      iteration: 0,
+      status: 'harness_failed',
+      passed: false,
+      setupResult: {success: true, logs: []},
+      httpEvents: [],
+      artifacts: [],
+      assertionResults: [],
+      diagnostics: [
+        '  setup command `pnpm install` exited with code 1  ',
+        '',
+        '   ',
+        longDiagnostic,
+        ...Array.from({length: 25}, (_, i) => `diag ${i}`),
+      ],
+      warnings: [],
+      timing: {setupMs: 0, harnessMs: 10, assertionsMs: 0, totalMs: 10},
+    } as unknown as LocalRunnerResult;
+
+    const payload = buildRunUploadPayload({
+      jobs: [job],
+      results: [result],
+      target: '.agents/skills/deploy',
+      gitHash: null,
+    });
+
+    expect(RunUploadV1.safeParse(payload).success).toBe(true);
+    const diagnostics = payload.jobs[0]!.diagnostics;
+    expect(diagnostics[0]).toBe(
+      'setup command `pnpm install` exited with code 1',
+    );
+    expect(diagnostics[1]).toBe(longDiagnostic.slice(0, 2_000));
+    expect(diagnostics).toHaveLength(20);
+    expect(diagnostics.every((entry) => entry.trim().length > 0)).toBe(true);
+  });
 });

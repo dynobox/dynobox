@@ -178,7 +178,13 @@ function buildRunUploadJob(
         source,
       });
     }),
-    diagnostics: diagnosticsForStatus(result.status),
+    diagnostics: result.diagnostics
+      .map((diagnostic) => diagnostic.trim())
+      .filter((diagnostic) => diagnostic.length > 0)
+      .slice(0, RUN_UPLOAD_LIMITS.diagnosticsPerJob)
+      .map((diagnostic) =>
+        truncate(diagnostic, RUN_UPLOAD_LIMITS.diagnosticLength),
+      ),
     warnings: result.warnings
       .slice(0, RUN_UPLOAD_LIMITS.warningsPerJob)
       .map((warning) =>
@@ -493,12 +499,6 @@ function truncateNullableDetail(value: string | null): string | null {
   if (value === null) return null;
   const trimmed = value.trim();
   return trimmed.length === 0 ? null : truncateDetail(trimmed);
-}
-
-function diagnosticsForStatus(status: LocalRunnerResult['status']): string[] {
-  if (status === 'setup_failed') return ['Setup failed.'];
-  if (status === 'harness_failed') return ['Harness failed.'];
-  return [];
 }
 
 function durationMs(value: number): number {
