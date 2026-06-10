@@ -98,6 +98,7 @@ export function compile(config: DynoboxConfig): Ir {
     scenarios: irScenarios,
   };
   if (parsed.name !== undefined) ir.name = parsed.name;
+  if (parsed.target !== undefined) ir.target = parsed.target;
   return ir;
 }
 

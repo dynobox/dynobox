@@ -57,15 +57,23 @@ describe('buildRunUploadPayload', () => {
     } as unknown as LocalRunnerResult;
 
     const payload = buildRunUploadPayload({
-      jobs: [job],
+      dynos: [
+        {
+          dynoPath: '.agents/skills/commit/commit.dyno.ts',
+          name: null,
+          target: 'commit',
+          jobs: [job],
+        },
+      ],
       results: [result],
-      target: '.agents/skills/commit',
+      inputPath: '.agents/skills/commit',
       gitHash: null,
     });
 
     expect(RunUploadV1.safeParse(payload).success).toBe(true);
     expect(payload.totals.durationMs).toBe(2);
-    expect(payload.jobs[0]?.durationMs).toBe(2);
+    expect(payload.dynos[0]?.target).toBe('commit');
+    expect(payload.dynos[0]?.jobs[0]?.durationMs).toBe(2);
   });
 
   it('includes nested sequence assertion display details', () => {
@@ -144,13 +152,20 @@ describe('buildRunUploadPayload', () => {
     } as unknown as LocalRunnerResult;
 
     const payload = buildRunUploadPayload({
-      jobs: [job],
+      dynos: [
+        {
+          dynoPath: '.agents/skills/commit/commit.dyno.ts',
+          name: null,
+          target: 'commit',
+          jobs: [job],
+        },
+      ],
       results: [result],
-      target: '.agents/skills/commit',
+      inputPath: '.agents/skills/commit',
       gitHash: null,
     });
     const parsed = RunUploadV1.parse(payload);
-    const assertion = parsed.jobs[0]!.assertions[0]!;
+    const assertion = parsed.dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.definition?.steps).toHaveLength(3);
     expect(assertion.display?.observed).toBe('matched 2 of 3 ordered steps');
@@ -206,14 +221,21 @@ describe('buildRunUploadPayload', () => {
     } as unknown as LocalRunnerResult;
 
     const payload = buildRunUploadPayload({
-      jobs: [job],
+      dynos: [
+        {
+          dynoPath: '.agents/skills/deploy/deploy.dyno.ts',
+          name: null,
+          target: 'deploy',
+          jobs: [job],
+        },
+      ],
       results: [result],
-      target: '.agents/skills/deploy',
+      inputPath: '.agents/skills/deploy',
       gitHash: null,
     });
 
     expect(RunUploadV1.safeParse(payload).success).toBe(true);
-    const diagnostics = payload.jobs[0]!.diagnostics;
+    const diagnostics = payload.dynos[0]!.jobs[0]!.diagnostics;
     expect(diagnostics[0]).toBe(
       'setup command `pnpm install` exited with code 1',
     );

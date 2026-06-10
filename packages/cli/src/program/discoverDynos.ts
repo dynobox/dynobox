@@ -55,10 +55,10 @@ export const DYNO_DEFAULT_IGNORE = [
 ] as const;
 
 /** Thrown when discovery is asked to look at a path that does not exist. */
-export class DynoTargetNotFoundError extends Error {
-  constructor(public readonly targetPath: string) {
-    super(`Path not found: ${targetPath}`);
-    this.name = 'DynoTargetNotFoundError';
+export class DynoPathNotFoundError extends Error {
+  constructor(public readonly inputPath: string) {
+    super(`Path not found: ${inputPath}`);
+    this.name = 'DynoPathNotFoundError';
   }
 }
 
@@ -88,33 +88,33 @@ export type DiscoverDynosOptions = {
  * Resolve an optional CLI path argument to an absolute list of dyno files
  * to load and run.
  *
- * @param targetPath  File or directory; `undefined` means "current dir".
- * @returns           Sorted, absolute file paths.
+ * @param inputPath  File or directory; `undefined` means "current dir".
+ * @returns          Sorted, absolute file paths.
  */
 export async function discoverDynos(
-  targetPath: string | undefined,
+  inputPath: string | undefined,
   options: DiscoverDynosOptions = {},
 ): Promise<string[]> {
   const cwd = options.cwd ?? process.cwd();
-  const absoluteTarget = resolveTarget(targetPath ?? '.', cwd);
+  const absoluteInputPath = resolveInputPath(inputPath ?? '.', cwd);
 
-  const stats = await statOrUndefined(absoluteTarget);
+  const stats = await statOrUndefined(absoluteInputPath);
   if (stats === undefined) {
-    throw new DynoTargetNotFoundError(targetPath ?? '.');
+    throw new DynoPathNotFoundError(inputPath ?? '.');
   }
 
   if (stats.isFile()) {
     // Legacy/explicit file path: return as-is so authored configs keep
     // working even when their filename does not match `*.dyno.*`.
-    return [absoluteTarget];
+    return [absoluteInputPath];
   }
 
   if (!stats.isDirectory()) {
-    throw new DynoTargetNotFoundError(targetPath ?? '.');
+    throw new DynoPathNotFoundError(inputPath ?? '.');
   }
 
   const matches = await glob(DYNO_FILE_GLOBS as unknown as string[], {
-    cwd: absoluteTarget,
+    cwd: absoluteInputPath,
     absolute: true,
     dot: true,
     ignore: DYNO_DEFAULT_IGNORE as unknown as string[],
@@ -123,14 +123,14 @@ export async function discoverDynos(
   });
 
   if (matches.length === 0) {
-    throw new NoDynosFoundError(absoluteTarget);
+    throw new NoDynosFoundError(absoluteInputPath);
   }
 
   return matches.slice().sort();
 }
 
-function resolveTarget(target: string, cwd: string): string {
-  return isAbsolute(target) ? target : resolve(cwd, target);
+function resolveInputPath(inputPath: string, cwd: string): string {
+  return isAbsolute(inputPath) ? inputPath : resolve(cwd, inputPath);
 }
 
 async function statOrUndefined(path: string) {

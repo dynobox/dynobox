@@ -2,7 +2,7 @@
  * Action handler for `dynobox run [path]`.
  *
  * Top-level flow:
- *   1. Validate `--harness` overrides, resolve the discovery target.
+ *   1. Validate `--harness` overrides, resolve the discovery input path.
  *   2. Discover `*.dyno.{mjs,js,ts,yaml,...}` files (or use a single
  *      explicit file path verbatim).
  *   3. Load + compile each file, accumulating per-file errors.
@@ -15,7 +15,7 @@
  * read; both share the same job-iteration shape.
  */
 
-import {resolve} from 'node:path';
+import {basename, dirname, relative, resolve} from 'node:path';
 
 import {
   type LocalRunnerJob,
@@ -53,7 +53,7 @@ import {resolveAuthToken} from './auth.js';
 import {compileDynos, type DynoCompileSuccess} from './compileDynos.js';
 import {
   discoverDynos,
-  DynoTargetNotFoundError,
+  DynoPathNotFoundError,
   NoDynosFoundError,
 } from './discoverDynos.js';
 import {shouldRenderLive} from './environment.js';
@@ -100,27 +100,27 @@ export async function runCommandAction(
   input: RunCommandActionInput,
 ): Promise<boolean> {
   const {configPath, commandFlags, options, writeStdout, writeStderr} = input;
-  const targetLabel = configPath ?? '.';
-  const resolvedTarget = resolve(targetLabel);
+  const inputLabel = configPath ?? '.';
+  const resolvedInputPath = resolve(inputLabel);
 
   const overrideHarnesses = validateOverrides(
     commandFlags.harness,
-    targetLabel,
+    inputLabel,
     writeStderr,
   );
   const permissionMode = validatePermissionMode(
     commandFlags.permissionMode,
-    targetLabel,
+    inputLabel,
     writeStderr,
   );
   const reporter = validateReporter(
     commandFlags.reporter,
-    targetLabel,
+    inputLabel,
     writeStderr,
   );
   const iterations = validateIterationCount(
     commandFlags.iterations,
-    targetLabel,
+    inputLabel,
     writeStderr,
   );
   const scenarioPatterns = validateScenarioFilters(commandFlags.scenario);
@@ -135,7 +135,7 @@ export async function runCommandAction(
     if (token === null) {
       writeStderr(
         renderRunConfigErrorMessage(
-          targetLabel,
+          inputLabel,
           '--save-run requires a Dynobox token. Run `dynobox login` or set DYNOBOX_TOKEN.',
         ),
       );
@@ -149,7 +149,7 @@ export async function runCommandAction(
 
   const filePaths = await discoverOrFail(
     configPath,
-    resolvedTarget,
+    resolvedInputPath,
     writeStderr,
   );
   const {compiled, errors} = await compileDynos(filePaths);
@@ -169,8 +169,11 @@ export async function runCommandAction(
     );
   }
 
-  const jobs = compiled.flatMap((entry) =>
-    buildLocalRunnerJobs(
+  // Jobs stay grouped by source dyno so the run upload can report each
+  // dyno (and its target) separately; execution flattens them in order.
+  const dynoGroups = compiled.map((entry) => ({
+    entry,
+    jobs: buildLocalRunnerJobs(
       entry.ir,
       buildJobOptions(
         overrideHarnesses,
@@ -179,11 +182,12 @@ export async function runCommandAction(
         iterations,
       ),
     ),
-  );
+  }));
+  const jobs = dynoGroups.flatMap((group) => group.jobs);
   if (jobs.length === 0 && scenarioPatterns !== undefined) {
     writeStderr(
       renderRunConfigErrorMessage(
-        targetLabel,
+        inputLabel,
         `No scenarios matched --scenario ${scenarioPatterns.map((pattern) => JSON.stringify(pattern)).join(', ')}.`,
       ),
     );
@@ -195,7 +199,7 @@ export async function runCommandAction(
   }
   const runOptions = buildRunJobOptions(options);
   const ctx = createRenderContext(options, commandFlags);
-  const headerLabel = renderHeaderLabel(targetLabel, compiled);
+  const headerLabel = renderHeaderLabel(inputLabel, compiled);
 
   const results =
     reporter === 'json'
@@ -225,10 +229,15 @@ export async function runCommandAction(
 
   if (commandFlags.saveRun === true) {
     await uploadRun({
-      jobs,
+      dynos: dynoGroups.map(({entry, jobs: dynoJobs}) => ({
+        dynoPath: dynoDisplayPath(entry.filePath),
+        name: entry.ir.name ?? null,
+        target: dynoTarget(entry),
+        jobs: dynoJobs,
+      })),
       results,
       runFailed,
-      target: targetLabel,
+      inputPath: inputLabel,
       ...(options.env === undefined ? {} : {env: options.env}),
       writeStderr,
     });
@@ -237,34 +246,51 @@ export async function runCommandAction(
   return runFailed;
 }
 
+/** The dyno file path as authored/discovered, relative to the working dir. */
+function dynoDisplayPath(filePath: string): string {
+  const rel = relative(process.cwd(), filePath);
+  return rel === '' || rel.startsWith('..') ? filePath : rel;
+}
+
+/**
+ * Resolve the dyno's target — the thing being tested. Prefers the authored
+ * `target` field; falls back to the dyno file's parent directory name (e.g.
+ * `examples/github-pr-agent/review.dyno.ts` -> `github-pr-agent`).
+ */
+function dynoTarget(entry: DynoCompileSuccess): string {
+  if (entry.ir.target !== undefined) return entry.ir.target;
+  const parent = basename(dirname(entry.filePath));
+  return parent === '' || parent === '.' ? basename(entry.filePath) : parent;
+}
+
 /**
  * Build a short label for the run header that captures what the user
  * asked to run. When discovery found multiple files, append the count
  * so a reader knows the run spans more than a single config.
  */
 function renderHeaderLabel(
-  targetLabel: string,
+  inputLabel: string,
   compiled: readonly DynoCompileSuccess[],
 ): string {
   if (compiled.length === 1) {
     const only = compiled[0];
-    if (only === undefined) return targetLabel;
+    if (only === undefined) return inputLabel;
     return only.filePath;
   }
-  return `${targetLabel}  (${compiled.length} dyno files)`;
+  return `${inputLabel}  (${compiled.length} dyno files)`;
 }
 
 async function discoverOrFail(
   configPath: string | undefined,
-  resolvedTarget: string,
+  resolvedInputPath: string,
   writeStderr: OutputWriter,
 ): Promise<readonly string[]> {
   try {
     return await discoverDynos(configPath);
   } catch (error) {
-    const label = configPath ?? resolvedTarget;
+    const label = configPath ?? resolvedInputPath;
     if (
-      error instanceof DynoTargetNotFoundError ||
+      error instanceof DynoPathNotFoundError ||
       error instanceof NoDynosFoundError
     ) {
       writeStderr(renderRunConfigErrorMessage(label, error.message));
@@ -408,56 +434,56 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
  */
 function validateOverrides(
   rawHarnesses: readonly string[] | undefined,
-  targetLabel: string,
+  inputLabel: string,
   writeStderr: OutputWriter,
 ) {
   try {
     return validateHarnessOverrides(rawHarnesses);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    writeStderr(renderRunConfigErrorMessage(targetLabel, message));
+    writeStderr(renderRunConfigErrorMessage(inputLabel, message));
     throw error;
   }
 }
 
 function validatePermissionMode(
   rawPermissionMode: string | undefined,
-  targetLabel: string,
+  inputLabel: string,
   writeStderr: OutputWriter,
 ) {
   try {
     return validatePermissionModeOverride(rawPermissionMode);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    writeStderr(renderRunConfigErrorMessage(targetLabel, message));
+    writeStderr(renderRunConfigErrorMessage(inputLabel, message));
     throw error;
   }
 }
 
 function validateReporter(
   rawReporter: string | undefined,
-  targetLabel: string,
+  inputLabel: string,
   writeStderr: OutputWriter,
 ) {
   try {
     return validateReporterFormat(rawReporter);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    writeStderr(renderRunConfigErrorMessage(targetLabel, message));
+    writeStderr(renderRunConfigErrorMessage(inputLabel, message));
     throw error;
   }
 }
 
 function validateIterationCount(
   rawIterations: string | undefined,
-  targetLabel: string,
+  inputLabel: string,
   writeStderr: OutputWriter,
 ) {
   try {
     return validateIterations(rawIterations);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    writeStderr(renderRunConfigErrorMessage(targetLabel, message));
+    writeStderr(renderRunConfigErrorMessage(inputLabel, message));
     throw error;
   }
 }

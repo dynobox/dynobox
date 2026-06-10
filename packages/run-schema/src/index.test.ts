@@ -13,7 +13,7 @@ function validPayload(): RunUploadCreateInputV1 {
     createdAt: '2026-05-30T00:00:00.000Z',
     cliVersion: '0.3.0',
     gitHash: 'abc123',
-    target: 'packages/cli',
+    inputPath: 'packages/cli',
     status: 'failed',
     totals: {
       jobs: 1,
@@ -22,66 +22,89 @@ function validPayload(): RunUploadCreateInputV1 {
       warnings: 1,
       durationMs: 1234,
     },
-    jobs: [
+    dynos: [
       {
-        jobId: 'scenario.login.claude.iteration.0',
-        scenario: {
-          id: 'scenario.login',
-          name: 'Login flow',
+        dynoPath: 'packages/cli/login.dyno.ts',
+        name: 'Login flows',
+        target: 'login-agent',
+        status: 'failed',
+        totals: {
+          jobs: 1,
+          passed: 0,
+          failed: 1,
+          warnings: 1,
+          durationMs: 1234,
         },
-        harness: {
-          id: 'claude-code',
-          model: 'sonnet',
-        },
-        iteration: 1,
-        status: 'assertion_failed',
-        passed: false,
-        durationMs: 1234,
-        assertions: [
+        jobs: [
           {
-            assertionId: 'assertion.login.0',
-            label: 'Shows login form',
-            kind: 'finalMessage.includes',
+            jobId: 'scenario.login.claude.iteration.0',
+            scenario: {
+              id: 'scenario.login',
+              name: 'Login flow',
+            },
+            harness: {
+              id: 'claude-code',
+              model: 'sonnet',
+            },
+            iteration: 1,
+            status: 'assertion_failed',
             passed: false,
-            message: 'Expected final message to include "login".',
-            definition: {
-              kind: 'sequence.inOrder',
-              steps: [
-                {
-                  kind: 'tool.called',
-                  toolKind: 'shell',
-                  matcher: {includes: 'pnpm test'},
+            durationMs: 1234,
+            assertions: [
+              {
+                assertionId: 'assertion.login.0',
+                label: 'Shows login form',
+                kind: 'finalMessage.includes',
+                passed: false,
+                message: 'Expected final message to include "login".',
+                definition: {
+                  kind: 'sequence.inOrder',
+                  steps: [
+                    {
+                      kind: 'tool.called',
+                      toolKind: 'shell',
+                      matcher: {includes: 'pnpm test'},
+                    },
+                  ],
                 },
-              ],
-            },
-            display: {
-              title: 'commit workflow',
-              expectation: 'shell command including "pnpm test"',
-              observed: 'matched 0 of 1 ordered steps',
-              children: [
-                {
-                  index: 1,
-                  kind: 'tool.called',
-                  title: 'tool.called(shell, includes: pnpm test)',
+                display: {
+                  title: 'commit workflow',
                   expectation: 'shell command including "pnpm test"',
-                  observed: null,
-                  passed: false,
+                  observed: 'matched 0 of 1 ordered steps',
+                  children: [
+                    {
+                      index: 1,
+                      kind: 'tool.called',
+                      title: 'tool.called(shell, includes: pnpm test)',
+                      expectation: 'shell command including "pnpm test"',
+                      observed: null,
+                      passed: false,
+                    },
+                  ],
                 },
-              ],
-            },
-            evidence: {
-              matchedCount: 0,
-              observedCount: 2,
-              observedKinds: ['shell'],
-              matches: ['Bash: npm test'],
-            },
+                evidence: {
+                  matchedCount: 0,
+                  observedCount: 2,
+                  observedKinds: ['shell'],
+                  matches: ['Bash: npm test'],
+                },
+              },
+            ],
+            diagnostics: ['Final message did not match.'],
+            warnings: ['Permission denied for one tool call.'],
           },
         ],
-        diagnostics: ['Final message did not match.'],
-        warnings: ['Permission denied for one tool call.'],
       },
     ],
   };
+}
+
+type ValidDyno = NonNullable<
+  ReturnType<typeof validPayload>['dynos']
+>[number];
+
+function validDyno(): ValidDyno {
+  return validPayload().dynos[0]!;
 }
 
 describe('RunUploadV1', () => {
@@ -89,14 +112,19 @@ describe('RunUploadV1', () => {
     const parsed = RunUploadV1.parse(validPayload());
 
     expect(parsed.schemaVersion).toBe(1);
-    expect(parsed.jobs[0]?.assertions[0]?.label).toBe('Shows login form');
-    expect(parsed.jobs[0]?.assertions[0]?.display?.children[0]?.passed).toBe(
-      false,
+    expect(parsed.inputPath).toBe('packages/cli');
+    expect(parsed.dynos[0]?.target).toBe('login-agent');
+    expect(parsed.dynos[0]?.jobs[0]?.assertions[0]?.label).toBe(
+      'Shows login form',
     );
+    expect(
+      parsed.dynos[0]?.jobs[0]?.assertions[0]?.display?.children[0]?.passed,
+    ).toBe(false);
   });
 
   it('rejects unknown fields at every payload level', () => {
     const payload = validPayload();
+    const dyno = validDyno();
 
     expect(() =>
       RunUploadV1.parse({
@@ -108,20 +136,37 @@ describe('RunUploadV1', () => {
     expect(() =>
       RunUploadV1.parse({
         ...payload,
-        jobs: [{...payload.jobs[0]!, workDir: '/tmp/dynobox-secret'}],
+        dynos: [{...dyno, sourceText: 'secret'}],
       }),
     ).toThrow();
 
     expect(() =>
       RunUploadV1.parse({
         ...payload,
-        jobs: [
+        dynos: [
           {
-            ...payload.jobs[0]!,
-            assertions: [
+            ...dyno,
+            jobs: [{...dyno.jobs[0]!, workDir: '/tmp/dynobox-secret'}],
+          },
+        ],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      RunUploadV1.parse({
+        ...payload,
+        dynos: [
+          {
+            ...dyno,
+            jobs: [
               {
-                ...payload.jobs[0]!.assertions[0]!,
-                evidence: {raw: 'tool input'},
+                ...dyno.jobs[0]!,
+                assertions: [
+                  {
+                    ...dyno.jobs[0]!.assertions[0]!,
+                    evidence: {raw: 'tool input'},
+                  },
+                ],
               },
             ],
           },
@@ -132,26 +177,24 @@ describe('RunUploadV1', () => {
 
   it('rejects oversized payload shapes', () => {
     const payload = validPayload();
+    const dyno = validDyno();
 
     expect(() =>
       RunUploadV1.parse({
         ...payload,
-        jobs: Array.from(
-          {length: RUN_UPLOAD_LIMITS.jobs + 1},
-          () => payload.jobs[0]!,
-        ),
+        dynos: Array.from({length: RUN_UPLOAD_LIMITS.dynos + 1}, () => dyno),
       }),
     ).toThrow();
 
     expect(() =>
       RunUploadV1.parse({
         ...payload,
-        jobs: [
+        dynos: [
           {
-            ...payload.jobs[0]!,
-            assertions: Array.from(
-              {length: RUN_UPLOAD_LIMITS.assertionsPerJob + 1},
-              () => payload.jobs[0]!.assertions[0]!,
+            ...dyno,
+            jobs: Array.from(
+              {length: RUN_UPLOAD_LIMITS.jobsPerDyno + 1},
+              () => dyno.jobs[0]!,
             ),
           },
         ],
@@ -161,15 +204,40 @@ describe('RunUploadV1', () => {
     expect(() =>
       RunUploadV1.parse({
         ...payload,
-        jobs: [
+        dynos: [
           {
-            ...payload.jobs[0]!,
-            assertions: [
+            ...dyno,
+            jobs: [
               {
-                ...payload.jobs[0]!.assertions[0]!,
-                message: 'x'.repeat(
-                  RUN_UPLOAD_LIMITS.assertionMessageLength + 1,
+                ...dyno.jobs[0]!,
+                assertions: Array.from(
+                  {length: RUN_UPLOAD_LIMITS.assertionsPerJob + 1},
+                  () => dyno.jobs[0]!.assertions[0]!,
                 ),
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      RunUploadV1.parse({
+        ...payload,
+        dynos: [
+          {
+            ...dyno,
+            jobs: [
+              {
+                ...dyno.jobs[0]!,
+                assertions: [
+                  {
+                    ...dyno.jobs[0]!.assertions[0]!,
+                    message: 'x'.repeat(
+                      RUN_UPLOAD_LIMITS.assertionMessageLength + 1,
+                    ),
+                  },
+                ],
               },
             ],
           },
@@ -178,8 +246,9 @@ describe('RunUploadV1', () => {
     ).toThrow();
   });
 
-  it('requires display fields for runs, jobs, and assertions', () => {
+  it('requires display fields for runs, dynos, jobs, and assertions', () => {
     const payload = validPayload();
+    const dyno = validDyno();
 
     expect(() =>
       RunUploadV1.parse({
@@ -191,10 +260,22 @@ describe('RunUploadV1', () => {
     expect(() =>
       RunUploadV1.parse({
         ...payload,
-        jobs: [
+        dynos: [{...dyno, target: undefined}],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      RunUploadV1.parse({
+        ...payload,
+        dynos: [
           {
-            ...payload.jobs[0]!,
-            scenario: {...payload.jobs[0]!.scenario, name: undefined},
+            ...dyno,
+            jobs: [
+              {
+                ...dyno.jobs[0]!,
+                scenario: {...dyno.jobs[0]!.scenario, name: undefined},
+              },
+            ],
           },
         ],
       }),
@@ -203,11 +284,16 @@ describe('RunUploadV1', () => {
     expect(() =>
       RunUploadV1.parse({
         ...payload,
-        jobs: [
+        dynos: [
           {
-            ...payload.jobs[0]!,
-            assertions: [
-              {...payload.jobs[0]!.assertions[0]!, label: undefined},
+            ...dyno,
+            jobs: [
+              {
+                ...dyno.jobs[0]!,
+                assertions: [
+                  {...dyno.jobs[0]!.assertions[0]!, label: undefined},
+                ],
+              },
             ],
           },
         ],

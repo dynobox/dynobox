@@ -46,6 +46,7 @@ export function defineDyno<
   const S extends ReadonlyArray<ScenarioInput<string, EndpointMap>>,
 >(config: {
   name?: string;
+  target?: string;
   version?: string;
   harnesses?: HarnessRunConfig[];
   setup?: string[];

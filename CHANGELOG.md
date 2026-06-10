@@ -10,6 +10,12 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Added an optional top-level `target` field to dyno files (TypeScript and
+  YAML) naming the thing being tested; when omitted it defaults to the dyno
+  file's parent directory name.
+- Changed `--save-run` uploads to report each dyno (with its target) as its
+  own group inside the run payload.
+
 - Added `dynobox --version` (`-V`) to print the installed CLI version.
 - Added `dynobox logout` to remove the saved CLI token, noting when
   `DYNOBOX_TOKEN` remains set in the environment.
@@ -23,6 +29,24 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   saved config file or the `DYNOBOX_TOKEN` environment variable.
 
 ---
+
+## @dynobox/run-schema@0.0.4 — 2026-06-10
+
+### `@dynobox/run-schema`
+
+- **Breaking:** Renamed the run-level `target` field to `inputPath` — it
+  records the path the CLI was pointed at, not the thing being tested.
+- **Breaking:** Restructured run uploads to group jobs by source dyno: the
+  top-level `jobs` array is replaced by `dynos`, where each dyno carries its
+  `dynoPath`, optional authored `name`, `target` (the thing being tested),
+  per-dyno `status`/`totals`, and its `jobs`.
+- Reworked the read types around the target-first hierarchy
+  (`Target -> Dyno -> Scenario -> Job -> Assertion`): `RunSummary` gains
+  target/dyno/assertion counts, `RunJobDetail` gains its owning `dyno`, and
+  new `TargetSummary`, `TargetDynoSummary`, `DynoRunDetail`, and matching
+  response types back the target/dyno dashboard endpoints.
+- Removed the unused `RunInsertV1`/`RunJobInsertV1`/`RunAssertionInsertV1`
+  helper types and the `RunGitHashMetric` metrics from `RunListResponse`.
 
 ## @dynobox/run-schema@0.0.3 — 2026-06-09
 

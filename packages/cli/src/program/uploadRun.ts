@@ -9,6 +9,7 @@ import {
   type RunUploadAssertionDisplayV1,
   type RunUploadAssertionEvidenceV1,
   type RunUploadAssertionV1,
+  type RunUploadDynoV1,
   type RunUploadJobV1,
   type RunUploadV1 as RunUploadPayloadV1,
   RunUploadV1,
@@ -34,11 +35,27 @@ import {resolveApiUrl} from './identityApi.js';
 const execFileAsync = promisify(execFile);
 const RUN_UPLOAD_TIMEOUT_MS = 10_000;
 
-export type UploadRunInput = {
+/**
+ * One compiled dyno file's slice of the run. `jobs` must appear in the same
+ * order they were executed so `results` can be re-aligned positionally.
+ */
+export type UploadRunDynoInput = {
+  /** Path of the authored .dyno file relative to the working directory. */
+  dynoPath: string;
+  /** Authored config name, when the dyno declared one. */
+  name: string | null;
+  /** The thing being tested; groups dynos on the dashboard. */
+  target: string;
   jobs: readonly LocalRunnerJob[];
+};
+
+export type UploadRunInput = {
+  dynos: readonly UploadRunDynoInput[];
+  /** One result per job, flattened across `dynos` in execution order. */
   results: readonly LocalRunnerResult[];
   runFailed: boolean;
-  target: string;
+  /** The path the CLI was pointed at (`dynobox run <inputPath>`). */
+  inputPath: string;
   env?: AuthEnvironment;
   writeStderr: (value: string) => void;
 };
@@ -55,10 +72,10 @@ export async function uploadRun(input: UploadRunInput): Promise<void> {
   }
 
   const payload = buildRunUploadPayload({
-    jobs: input.jobs,
+    dynos: input.dynos,
     results: input.results,
     runFailed: input.runFailed,
-    target: input.target,
+    inputPath: input.inputPath,
     gitHash: await collectGitHash(),
   });
   const payloadResult = RunUploadV1.safeParse(payload);
@@ -96,37 +113,70 @@ export async function uploadRun(input: UploadRunInput): Promise<void> {
 }
 
 export function buildRunUploadPayload(input: {
-  jobs: readonly LocalRunnerJob[];
+  dynos: readonly UploadRunDynoInput[];
   results: readonly LocalRunnerResult[];
   runFailed?: boolean;
-  target: string;
+  inputPath: string;
   gitHash: string | null;
 }): RunUploadPayloadV1 {
-  const assertionById = assertionByIdForJobs(input.jobs);
-  const jobs = input.results.map((result, index) => {
-    const job = input.jobs[index] ?? jobFromResult(result);
-    return buildRunUploadJob(job, result, assertionById);
-  });
-  const failed = jobs.filter((job) => !job.passed).length;
-  const warnings = jobs.reduce((count, job) => count + job.warnings.length, 0);
+  const allJobs = input.dynos.flatMap((dyno) => dyno.jobs);
+  const assertionById = assertionByIdForJobs(allJobs);
 
+  let offset = 0;
+  const dynos = input.dynos.map((dyno) => {
+    const results = input.results.slice(offset, offset + dyno.jobs.length);
+    offset += dyno.jobs.length;
+    return buildRunUploadDyno(dyno, results, assertionById);
+  });
+
+  const failed = dynos.reduce((count, dyno) => count + dyno.totals.failed, 0);
   return {
     schemaVersion: RUN_UPLOAD_SCHEMA_VERSION,
     createdAt: new Date().toISOString(),
     cliVersion: readPackageVersion(),
     gitHash: input.gitHash,
-    target: truncate(input.target, RUN_UPLOAD_LIMITS.targetLength),
+    inputPath: truncate(input.inputPath, RUN_UPLOAD_LIMITS.inputPathLength),
     status: input.runFailed === true || failed > 0 ? 'failed' : 'passed',
+    totals: {
+      jobs: dynos.reduce((count, dyno) => count + dyno.totals.jobs, 0),
+      passed: dynos.reduce((count, dyno) => count + dyno.totals.passed, 0),
+      failed,
+      warnings: dynos.reduce((count, dyno) => count + dyno.totals.warnings, 0),
+      durationMs: dynos.reduce(
+        (total, dyno) => total + dyno.totals.durationMs,
+        0,
+      ),
+    },
+    dynos,
+  };
+}
+
+function buildRunUploadDyno(
+  dyno: UploadRunDynoInput,
+  results: readonly LocalRunnerResult[],
+  assertionById: ReadonlyMap<string, IrAssertion>,
+): RunUploadDynoV1 {
+  const jobs = results.map((result, index) => {
+    const job = dyno.jobs[index] ?? jobFromResult(result);
+    return buildRunUploadJob(job, result, assertionById);
+  });
+  const failed = jobs.filter((job) => !job.passed).length;
+
+  return {
+    dynoPath: truncate(dyno.dynoPath, RUN_UPLOAD_LIMITS.dynoPathLength),
+    name:
+      dyno.name === null
+        ? null
+        : truncate(dyno.name, RUN_UPLOAD_LIMITS.dynoNameLength),
+    target: truncate(dyno.target, RUN_UPLOAD_LIMITS.targetLength),
+    status: failed > 0 ? 'failed' : 'passed',
     totals: {
       jobs: jobs.length,
       passed: jobs.length - failed,
       failed,
-      warnings,
+      warnings: jobs.reduce((count, job) => count + job.warnings.length, 0),
       durationMs: durationMs(
-        input.results.reduce(
-          (total, result) => total + result.timing.totalMs,
-          0,
-        ),
+        results.reduce((total, result) => total + result.timing.totalMs, 0),
       ),
     },
     jobs,
