@@ -22,13 +22,24 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Changed `dynobox whoami` to report whether the active token came from the
   saved config file or the `DYNOBOX_TOKEN` environment variable.
 
+---
+
+## @dynobox/run-schema@0.0.3 — 2026-06-09
+
+### `@dynobox/run-schema`
+
+- Added assertion `definition`, `display`, and `evidence` to the run upload
+  schema and the matching read types (`RunAssertionDetail`, `RunDetail`),
+  letting consumers render rich assertion expectation/observed detail and
+  ordered-sequence step breakdowns.
+
+## @dynobox/run-schema@0.0.2 — 2026-06-03
+
 ### `@dynobox/run-schema`
 
 - Added a shared run upload contract package with Zod schemas and TypeScript
   types for run totals, jobs, assertions, diagnostics, warnings, and upload
   insert shapes.
-
----
 
 ## dynobox@0.4.0 — 2026-05-31
 
