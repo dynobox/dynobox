@@ -1,8 +1,8 @@
 import {CommanderError} from 'commander';
 
 import {
-  type AuthEnvironment,
   authConfigDisplayPath,
+  type AuthEnvironment,
   resolveAuthToken,
 } from './auth.js';
 import type {OutputWriter} from './execute.js';

@@ -220,7 +220,7 @@ Dynobox exits with `1` for:
 
 - No subcommand supplied.
 - Config load, parse, validation, or flag errors.
-- No dynos found for a directory target.
+- No dynos found for a directory path.
 - At least one completed job failed.
 
 ## Harness Requirements

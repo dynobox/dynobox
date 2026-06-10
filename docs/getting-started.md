@@ -164,7 +164,7 @@ or TypeScript dyno that uses `defineDyno(...)`. Dynobox copies that directory
 into each scenario work directory automatically unless the scenario sets its
 own `fixtures` value.
 
-## Run A Specific Target
+## Run A Specific Path
 
 `dynobox run [path]` accepts:
 
