@@ -44,6 +44,37 @@ function validPayload(): RunUploadCreateInputV1 {
             kind: 'finalMessage.includes',
             passed: false,
             message: 'Expected final message to include "login".',
+            definition: {
+              kind: 'sequence.inOrder',
+              steps: [
+                {
+                  kind: 'tool.called',
+                  toolKind: 'shell',
+                  matcher: {includes: 'pnpm test'},
+                },
+              ],
+            },
+            display: {
+              title: 'commit workflow',
+              expectation: 'shell command including "pnpm test"',
+              observed: 'matched 0 of 1 ordered steps',
+              children: [
+                {
+                  index: 1,
+                  kind: 'tool.called',
+                  title: 'tool.called(shell, includes: pnpm test)',
+                  expectation: 'shell command including "pnpm test"',
+                  observed: null,
+                  passed: false,
+                },
+              ],
+            },
+            evidence: {
+              matchedCount: 0,
+              observedCount: 2,
+              observedKinds: ['shell'],
+              matches: ['Bash: npm test'],
+            },
           },
         ],
         diagnostics: ['Final message did not match.'],
@@ -59,6 +90,9 @@ describe('RunUploadV1', () => {
 
     expect(parsed.schemaVersion).toBe(1);
     expect(parsed.jobs[0]?.assertions[0]?.label).toBe('Shows login form');
+    expect(parsed.jobs[0]?.assertions[0]?.display?.children[0]?.passed).toBe(
+      false,
+    );
   });
 
   it('rejects unknown fields at every payload level', () => {
