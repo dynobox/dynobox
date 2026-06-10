@@ -1,16 +1,9 @@
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 
-import type {
-  HttpEvent,
-  LocalRunnerJob,
-  LocalRunnerResult,
-  ToolEvent,
-} from '@dynobox/runner-local';
 import {
   RUN_UPLOAD_LIMITS,
   RUN_UPLOAD_SCHEMA_VERSION,
-  RunUploadV1,
   type RunUploadAssertionDefinitionV1,
   type RunUploadAssertionDisplayChildV1,
   type RunUploadAssertionDisplayV1,
@@ -18,7 +11,14 @@ import {
   type RunUploadAssertionV1,
   type RunUploadJobV1,
   type RunUploadV1 as RunUploadPayloadV1,
+  RunUploadV1,
 } from '@dynobox/run-schema';
+import type {
+  HttpEvent,
+  LocalRunnerJob,
+  LocalRunnerResult,
+  ToolEvent,
+} from '@dynobox/runner-local';
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {assertionByIdForJobs} from '../jobs.js';
@@ -28,7 +28,7 @@ import {
   describeToolEvent,
 } from '../render/describe.js';
 import {readPackageVersion} from '../util/version.js';
-import {resolveAuthToken, type AuthEnvironment} from './auth.js';
+import {type AuthEnvironment, resolveAuthToken} from './auth.js';
 import {resolveApiUrl} from './identityApi.js';
 
 const execFileAsync = promisify(execFile);

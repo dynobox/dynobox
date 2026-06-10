@@ -1,5 +1,5 @@
-import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 import {RunUploadV1} from '@dynobox/run-schema';
+import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 import {describe, expect, it} from 'vitest';
 
 import {buildRunUploadPayload} from './uploadRun.js';
