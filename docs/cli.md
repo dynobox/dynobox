@@ -102,6 +102,8 @@ non-zero if any file failed to load or any job failed.
 --verbose                  Expand scenario details even when passing.
 --debug                    Include debug paths and artifacts.
 --reporter <fmt>           Output reporter format: text or json.
+--save-run                 Upload a compact run summary to the dashboard
+                           (requires a token; see Saving Runs below).
 ```
 
 Harness IDs are `claude-code` and `codex`.
@@ -243,6 +245,19 @@ Dangerous mode maps to harness-specific flags:
 
 Permission warnings are advisory. They explain when a harness blocked a tool
 action, but they do not change job status, assertion results, or exit codes.
+
+## Saving Runs
+
+`--save-run` uploads a compact summary of the run to the Dynobox dashboard after
+execution. It requires a token: sign in with `dynobox login` or set `DYNOBOX_TOKEN`.
+Without a token the run still completes and prints a warning; upload is best-effort
+and never changes job status, assertion results, or the exit code.
+
+The uploaded summary includes scenario and assertion details and, for failing jobs,
+**diagnostics (command and harness error output), the URLs of requested HTTP
+endpoints, and tool commands**. These values are length-capped but are **not
+redacted**, so avoid `--save-run` for runs whose command output or request URLs may
+contain secrets.
 
 ## Dashboard
 
