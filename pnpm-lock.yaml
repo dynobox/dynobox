@@ -88,9 +88,6 @@ importers:
 
   packages/cli:
     dependencies:
-      '@dynobox/run-schema':
-        specifier: workspace:*
-        version: link:../run-schema
       '@dynobox/sdk':
         specifier: workspace:*
         version: link:../sdk
@@ -116,6 +113,9 @@ importers:
       '@dynobox/evaluators':
         specifier: workspace:*
         version: link:../evaluators
+      '@dynobox/run-schema':
+        specifier: workspace:*
+        version: link:../run-schema
       '@dynobox/runner-local':
         specifier: workspace:*
         version: link:../runner-local
