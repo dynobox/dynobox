@@ -18,6 +18,7 @@
     "write": "npm run format:write && npm run lint:write"
   },
   "devDependencies": {
+    "@dynobox/sdk": "workspace:*",
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.19.17",
     "eslint": "^10.2.1",

@@ -47,6 +47,7 @@
   },
   "devDependencies": {
     "@dynobox/evaluators": "workspace:*",
+    "@dynobox/run-schema": "workspace:*",
     "@dynobox/runner-local": "workspace:*",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",

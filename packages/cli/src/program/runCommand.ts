@@ -49,6 +49,7 @@ import {
   hasDebugLogPaths,
   writeDebugLogs,
 } from '../util/transcript.js';
+import {resolveAuthToken} from './auth.js';
 import {compileDynos, type DynoCompileSuccess} from './compileDynos.js';
 import {
   discoverDynos,
@@ -66,6 +67,7 @@ import {
   validateReporterFormat,
   validateScenarioFilters,
 } from './options.js';
+import {uploadRun} from './uploadRun.js';
 
 export type RunCommandFlags = {
   harness?: string[];
@@ -73,6 +75,7 @@ export type RunCommandFlags = {
   verbose?: boolean;
   debug?: boolean;
   reporter?: string;
+  saveRun?: boolean;
   scenario?: string[];
   iterations?: string;
   permissionMode?: string;
@@ -121,6 +124,28 @@ export async function runCommandAction(
     writeStderr,
   );
   const scenarioPatterns = validateScenarioFilters(commandFlags.scenario);
+
+  // Fail fast: when --save-run is requested but no token is available, error
+  // before running any scenarios instead of running the whole suite and only
+  // warning at the end that the run could not be saved.
+  if (commandFlags.saveRun === true) {
+    const token = resolveAuthToken(
+      options.env === undefined ? {} : {env: options.env},
+    );
+    if (token === null) {
+      writeStderr(
+        renderRunConfigErrorMessage(
+          targetLabel,
+          '--save-run requires a Dynobox token. Run `dynobox login` or set DYNOBOX_TOKEN.',
+        ),
+      );
+      throw new CommanderError(
+        configErrorExitCode,
+        'dynobox.auth',
+        '--save-run requires a token',
+      );
+    }
+  }
 
   const filePaths = await discoverOrFail(
     configPath,
@@ -196,7 +221,20 @@ export async function runCommandAction(
           });
 
   const anyJobFailed = results.some((result) => !result.passed);
-  return anyJobFailed || errors.length > 0;
+  const runFailed = anyJobFailed || errors.length > 0;
+
+  if (commandFlags.saveRun === true) {
+    await uploadRun({
+      jobs,
+      results,
+      runFailed,
+      target: targetLabel,
+      ...(options.env === undefined ? {} : {env: options.env}),
+      writeStderr,
+    });
+  }
+
+  return runFailed;
 }
 
 /**

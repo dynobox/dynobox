@@ -26,6 +26,9 @@ export const RUN_UPLOAD_LIMITS = {
   diagnosticLength: 2_000,
   warningsPerJob: 20,
   warningLength: 2_000,
+  assertionDetailLength: 2_000,
+  assertionChildren: 50,
+  evidenceItems: 50,
   jobs: 1_000,
   assertionsPerJob: 200,
 } as const;
@@ -35,6 +38,84 @@ const durationMsSchema = z.number().int().nonnegative();
 
 const optionalNullableString = (maxLength: number) =>
   z.string().min(1).max(maxLength).nullable().optional();
+
+const assertionDetailString = z
+  .string()
+  .min(1)
+  .max(RUN_UPLOAD_LIMITS.assertionDetailLength);
+
+const assertionMatcherSchema = z
+  .object({
+    equals: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
+    includes: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
+    startsWith: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
+    matches: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
+  })
+  .strict();
+
+const runUploadAssertionDefinitionStepV1Schema = z
+  .object({
+    kind: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionKindLength),
+    toolKind: optionalNullableString(RUN_UPLOAD_LIMITS.assertionKindLength),
+    matcher: assertionMatcherSchema.optional(),
+    pathMatcher: z.object({path: assertionDetailString}).strict().optional(),
+  })
+  .strict();
+
+export const runUploadAssertionDefinitionV1Schema = z
+  .object({
+    kind: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionKindLength),
+    toolKind: optionalNullableString(RUN_UPLOAD_LIMITS.assertionKindLength),
+    matcher: assertionMatcherSchema.optional(),
+    pathMatcher: z.object({path: assertionDetailString}).strict().optional(),
+    endpointId: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
+    status: z.number().int().optional(),
+    skill: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
+    path: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
+    text: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
+    steps: z
+      .array(runUploadAssertionDefinitionStepV1Schema)
+      .max(RUN_UPLOAD_LIMITS.assertionChildren)
+      .optional(),
+  })
+  .strict();
+
+export const runUploadAssertionDisplayChildV1Schema = z
+  .object({
+    index: z.number().int().positive(),
+    kind: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionKindLength),
+    title: assertionDetailString,
+    expectation: assertionDetailString,
+    observed: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
+    passed: z.boolean().nullable(),
+  })
+  .strict();
+
+export const runUploadAssertionDisplayV1Schema = z
+  .object({
+    title: assertionDetailString,
+    expectation: assertionDetailString,
+    observed: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
+    children: z
+      .array(runUploadAssertionDisplayChildV1Schema)
+      .max(RUN_UPLOAD_LIMITS.assertionChildren),
+  })
+  .strict();
+
+export const runUploadAssertionEvidenceV1Schema = z
+  .object({
+    observedCount: countSchema.optional(),
+    matchedCount: countSchema.optional(),
+    observedKinds: z
+      .array(z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionKindLength))
+      .max(RUN_UPLOAD_LIMITS.evidenceItems)
+      .optional(),
+    matches: z
+      .array(assertionDetailString)
+      .max(RUN_UPLOAD_LIMITS.evidenceItems)
+      .optional(),
+  })
+  .strict();
 
 export const runUploadTotalsV1Schema = z
   .object({
@@ -53,6 +134,9 @@ export const runUploadAssertionV1Schema = z
     kind: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionKindLength),
     passed: z.boolean(),
     message: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionMessageLength),
+    definition: runUploadAssertionDefinitionV1Schema.optional(),
+    display: runUploadAssertionDisplayV1Schema.optional(),
+    evidence: runUploadAssertionEvidenceV1Schema.optional(),
   })
   .strict();
 
@@ -109,6 +193,18 @@ export const RunSharingUpdate = z
 export type RunUploadStatus = (typeof RUN_UPLOAD_STATUS)[number];
 export type RunUploadJobStatus = (typeof RUN_UPLOAD_JOB_STATUS)[number];
 export type RunUploadTotalsV1 = z.infer<typeof runUploadTotalsV1Schema>;
+export type RunUploadAssertionDefinitionV1 = z.infer<
+  typeof runUploadAssertionDefinitionV1Schema
+>;
+export type RunUploadAssertionDisplayChildV1 = z.infer<
+  typeof runUploadAssertionDisplayChildV1Schema
+>;
+export type RunUploadAssertionDisplayV1 = z.infer<
+  typeof runUploadAssertionDisplayV1Schema
+>;
+export type RunUploadAssertionEvidenceV1 = z.infer<
+  typeof runUploadAssertionEvidenceV1Schema
+>;
 export type RunUploadAssertionV1 = z.infer<typeof runUploadAssertionV1Schema>;
 export type RunUploadJobV1 = z.infer<typeof runUploadJobV1Schema>;
 export type RunUploadV1 = z.infer<typeof RunUploadV1>;
@@ -169,6 +265,9 @@ export type RunAssertionDetail = {
   kind: string;
   passed: boolean;
   message: string | null;
+  definition: RunUploadAssertionDefinitionV1 | null;
+  display: RunUploadAssertionDisplayV1 | null;
+  evidence: RunUploadAssertionEvidenceV1 | null;
 };
 
 export type RunJobDetail = {

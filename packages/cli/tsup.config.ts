@@ -13,7 +13,11 @@ export default defineConfig({
     'yaml',
   ],
   format: ['esm'],
-  noExternal: ['@dynobox/runner-local', '@dynobox/evaluators'],
+  noExternal: [
+    '@dynobox/runner-local',
+    '@dynobox/evaluators',
+    '@dynobox/run-schema',
+  ],
   platform: 'node',
   splitting: false,
 });

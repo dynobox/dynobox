@@ -5,7 +5,7 @@ import {
   type ShellToolEvent,
   type ToolEvent,
 } from '@dynobox/runner-local';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 
 import {
   createFixtureSet,
@@ -24,6 +24,12 @@ import {configErrorExitCode, runFailureExitCode} from './exitCodes.js';
 const fixtures = createFixtureSet('runCommand');
 const COMMIT_SKILL_PATH = '/tmp/work/.agents/skills/commit/SKILL.md';
 const RELEASE_SKILL_PATH = '/tmp/work/.agents/skills/release/SKILL.md';
+
+function stubFetch(response: typeof fetch) {
+  const fetchMock = vi.fn(response);
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
 
 const NESTED_COMMIT_SKILL_READ_EVENT: ToolEvent = {
   kind: 'read_file',
@@ -54,6 +60,9 @@ function expectStringArray(value: unknown): string[] {
 describe('dynobox run — config loading', () => {
   beforeAll(fixtures.setup);
   afterAll(fixtures.teardown);
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it('runs an explicit config path', async () => {
     await expect(
@@ -98,6 +107,126 @@ describe('dynobox run — config loading', () => {
     expect(result.stdout).toBe('');
     expect(result.stderr).toContain(`config: ${missingPath}`);
     expect(result.stderr).toContain('error:');
+  });
+});
+
+describe('dynobox run — upload', () => {
+  beforeAll(fixtures.setup);
+  afterAll(fixtures.teardown);
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('does not upload without --save-run even when a token exists', async () => {
+    const fetchMock = stubFetch(async () => Response.json({id: 'run-1'}));
+
+    const result = await executeCli(['run', fixtures.validConfigPath], {
+      env: {DYNOBOX_TOKEN: 'token'},
+      harnesses: [createPassingHarness()],
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.stderr).toBe('');
+  });
+
+  it('uploads compact JSON-reporter runs to stderr without changing stdout', async () => {
+    const fetchMock = stubFetch(async () =>
+      Response.json({id: 'run-1', url: 'https://dash.dynobox.xyz/runs/run-1'}),
+    );
+
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--reporter', 'json', '--save-run'],
+      {
+        env: {
+          DYNOBOX_API_URL: 'http://localhost:8787',
+          DYNOBOX_TOKEN: 'token',
+        },
+        harnesses: [createPassingHarness()],
+      },
+    );
+    const stdoutRecords = result.stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const [, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const payload = JSON.parse(String(request.body)) as Record<string, unknown>;
+
+    expect(result.exitCode).toBe(0);
+    expect(stdoutRecords).toHaveLength(2);
+    expect(result.stderr).toBe(
+      'Saved run: https://dash.dynobox.xyz/runs/run-1\n',
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8787/runs',
+      expect.objectContaining({
+        headers: {
+          authorization: 'Bearer token',
+          'content-type': 'application/json',
+        },
+        method: 'POST',
+      }),
+    );
+    expect(payload).toMatchObject({
+      schemaVersion: 1,
+      target: fixtures.validConfigPath,
+      status: 'passed',
+      totals: {jobs: 1, passed: 1, failed: 0, warnings: 0},
+      jobs: [
+        {
+          scenario: {name: 'uses shell'},
+          harness: {id: 'claude-code', model: null},
+          iteration: 1,
+          status: 'passed',
+          passed: true,
+        },
+      ],
+    });
+    expect(JSON.stringify(payload)).not.toContain('workDir');
+    expect(JSON.stringify(payload)).not.toContain('artifacts');
+    expect(JSON.stringify(payload)).not.toContain('harnessOutput');
+  });
+
+  it('errors before running when --save-run has no token', async () => {
+    const fetchMock = stubFetch(async () => Response.json({id: 'run-1'}));
+    const harness = createPassingHarness();
+    const runSpy = vi.spyOn(harness, 'run');
+
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--save-run'],
+      {
+        env: {HOME: join(fixtures.dir, 'missing-home')},
+        harnesses: [harness],
+      },
+    );
+
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(result.stderr).toContain('--save-run requires a Dynobox token');
+    // Fail fast: neither the harness nor the upload should have run.
+    expect(runSpy).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.stdout).toBe('');
+  });
+
+  it('keeps run failure exit code when upload fails', async () => {
+    stubFetch(async () => {
+      throw new Error('network down');
+    });
+
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--save-run'],
+      {
+        env: {DYNOBOX_TOKEN: 'token'},
+        harnesses: [
+          new FakeHarness(undefined, {toolEvents: [MISMATCHED_SHELL_EVENT]}),
+        ],
+      },
+    );
+
+    expect(result.exitCode).toBe(runFailureExitCode);
+    expect(result.stderr).toContain(
+      'warning: could not save run; upload request failed.',
+    );
   });
 });
 
