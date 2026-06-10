@@ -187,20 +187,25 @@ describe('dynobox run — upload', () => {
     expect(JSON.stringify(payload)).not.toContain('harnessOutput');
   });
 
-  it('skips upload when --save-run has no token', async () => {
+  it('errors before running when --save-run has no token', async () => {
     const fetchMock = stubFetch(async () => Response.json({id: 'run-1'}));
+    const harness = createPassingHarness();
+    const runSpy = vi.spyOn(harness, 'run');
 
     const result = await executeCli(
       ['run', fixtures.validConfigPath, '--save-run'],
       {
         env: {HOME: join(fixtures.dir, 'missing-home')},
-        harnesses: [createPassingHarness()],
+        harnesses: [harness],
       },
     );
 
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(result.stderr).toContain('--save-run requires a Dynobox token');
+    // Fail fast: neither the harness nor the upload should have run.
+    expect(runSpy).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(result.stderr).toContain('warning: run was not saved');
+    expect(result.stdout).toBe('');
   });
 
   it('keeps run failure exit code when upload fails', async () => {
