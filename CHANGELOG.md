@@ -30,6 +30,13 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ---
 
+## @dynobox/run-schema@0.0.5 — 2026-06-10
+
+### `@dynobox/run-schema`
+
+- Added harness IDs to target recent-run references so dashboard target history
+  can show which harnesses were tested in each run.
+
 ## @dynobox/run-schema@0.0.4 — 2026-06-10
 
 ### `@dynobox/run-schema`
