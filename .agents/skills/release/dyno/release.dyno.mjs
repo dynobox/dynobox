@@ -4,6 +4,7 @@ const here = dyno.here(import.meta.url);
 
 export default defineDyno({
   name: 'release-skill-smoke-test',
+  target: 'release-skill',
   scenarios: [
     {
       name: 'release skill dry run workflow',

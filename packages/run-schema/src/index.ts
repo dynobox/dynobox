@@ -311,6 +311,7 @@ export type TargetRunRef = {
   runId: string;
   createdAt: string;
   status: RunUploadStatus;
+  harnesses: string[];
 };
 
 /**

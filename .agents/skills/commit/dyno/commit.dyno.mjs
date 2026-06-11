@@ -2,6 +2,7 @@ import {artifact, defineDyno, sequence, skill, tool} from '@dynobox/sdk';
 
 export default defineDyno({
   name: 'commit-skill-smoke-test',
+  target: 'commit-skill',
   scenarios: [
     {
       name: 'no-push commit skill',

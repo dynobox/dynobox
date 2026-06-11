@@ -2,6 +2,7 @@ import {defineDyno, finalMessage, skill, tool} from '@dynobox/sdk';
 
 export default defineDyno({
   name: 'dyno-debug-skill-smoke-test',
+  target: 'dyno-debug-skill',
   scenarios: [
     {
       name: 'dyno-debug skill preserves matrix failure context',
