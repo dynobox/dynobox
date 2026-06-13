@@ -21,14 +21,14 @@ shipping a prompt, skill, or workflow change.
 
 ## Dynobox Dashboard
 
-The web dashboard lives at [dash.dynobox.xyz](https://dash.dynobox.xyz). Today,
-it is where you create short-lived CLI tokens for authenticated Dynobox commands.
-Use `dynobox login`, open the dashboard URL it prints, create a token, and paste
-that token back into the CLI.
+The web dashboard lives at [dash.dynobox.xyz](https://dash.dynobox.xyz). It is
+where you create short-lived CLI tokens for authenticated Dynobox commands. Use
+`dynobox login`, open the dashboard URL it prints, create a token, and paste that
+token back into the CLI.
 
-Saved runs are **coming soon**. The dashboard will become the place to review run
-history, compare results across harnesses and iterations, and share run output
-without passing around local JSON artifacts.
+Authenticated CLI runs can upload compact summaries with
+`dynobox run --save-run`. When an upload succeeds, the CLI prints a dashboard URL
+for reviewing or sharing the saved run.
 
 ## Agent Resources
 
@@ -104,4 +104,4 @@ execution. These areas are not complete yet:
 - HTTP capture for harness-native web tools and binaries that ignore proxy/CA
   environment variables.
 - Hosted or remote runner execution.
-- Saved run upload and dashboard history.
+- Richer hosted run comparison and reporting flows.

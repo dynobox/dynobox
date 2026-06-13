@@ -68,14 +68,16 @@ Dynobox supports assertions for:
 - HTTP requests from local child-process tools that honor proxy environment
   variables.
 
-## Output Modes
+## Common Run Flags
 
 - `--quiet`: compact dots-and-failures output for CI.
 - `--verbose`: expand scenario details even when they pass.
 - `--debug`: include work directory, artifact paths, and debug log paths.
 - `--reporter json`: emit newline-delimited JSON reports.
+- `--scenario <pattern>`: run only matching scenarios.
 - `--iterations <count>`: repeat each selected scenario/harness pair.
 - `--permission-mode default|dangerous`: override harness permission behavior.
+- `--save-run`: upload a compact dashboard summary when authenticated.
 
 ## Auth
 
@@ -83,6 +85,10 @@ Use `dynobox login` to paste a dashboard-generated CLI token into local config,
 then `dynobox whoami` to verify the saved identity. `dynobox logout` removes the
 saved token. CLI tokens expire after 24 hours; when a token expires, run
 `dynobox login` again to re-authenticate.
+
+Authenticated runs can upload a compact dashboard summary with
+`dynobox run --save-run`. You can also set `DYNOBOX_TOKEN` instead of using the
+saved local config.
 
 ## Documentation
 

@@ -8,6 +8,16 @@ npm install -g dynobox
 
 ## Commands
 
+### Global Options
+
+```bash
+dynobox --help
+dynobox --version
+dynobox -V
+```
+
+Running `dynobox` with no subcommand prints the starter banner and exits `0`.
+
 ### `dynobox init`
 
 Create a starter dyno under `./dynobox/`.
@@ -56,6 +66,18 @@ dynobox whoami
 The command checks the saved token against the Dynobox API and prints the
 authenticated email when the token includes one. Invalid, revoked, expired, or
 unreachable tokens return a non-zero exit code with a specific error message.
+
+### `dynobox logout`
+
+Remove the saved Dynobox CLI token.
+
+```bash
+dynobox logout
+```
+
+The command deletes `~/.dynobox/config.json` when it exists. If `DYNOBOX_TOKEN`
+is still set in the environment, the CLI notes that authenticated commands will
+continue to use that environment token.
 
 ### `dynobox run [path]`
 
@@ -216,9 +238,11 @@ dynobox run --reporter json dynobox > dynobox-report.ndjson
 
 Dynobox exits with `0` when all loaded jobs pass.
 
+A no-argument `dynobox` invocation prints the starter banner to stdout and exits
+with `0`.
+
 Dynobox exits with `1` for:
 
-- No subcommand supplied.
 - Config load, parse, validation, or flag errors.
 - No dynos found for a directory path.
 - At least one completed job failed.
@@ -264,9 +288,9 @@ contain secrets.
 ## Dashboard
 
 [dash.dynobox.xyz](https://dash.dynobox.xyz) is the Dynobox web dashboard. It is
-currently used for CLI token creation. Saved runs are coming soon; once run
-upload is available, the dashboard will show run history and make it easier to
-review or share results from local and CI executions.
+used for CLI token creation and saved run pages. When `--save-run` uploads
+successfully, the CLI prints the returned dashboard URL so you can review or
+share the run.
 
 ## Development Checkout
 

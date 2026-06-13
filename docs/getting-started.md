@@ -32,7 +32,7 @@ dynobox --help
 ## Connect The CLI
 
 Dynobox has a web dashboard at [dash.dynobox.xyz](https://dash.dynobox.xyz).
-Today, the dashboard is used to create short-lived CLI tokens. Run:
+Use it to create short-lived CLI tokens. Run:
 
 ```bash
 dynobox login
@@ -45,8 +45,9 @@ terminal. You can verify the saved identity with:
 dynobox whoami
 ```
 
-Saved runs are coming soon. For now, local CLI output and `--reporter json` are
-the primary ways to inspect and preserve run results.
+After authenticating, you can save a compact run summary with
+`dynobox run --save-run`. Local CLI output and `--reporter json` remain useful
+for CI logs and artifacts.
 
 ## Create Your First Dyno
 
@@ -195,6 +196,7 @@ Use these flags while developing scenarios:
 dynobox run --verbose
 dynobox run --debug
 dynobox run --reporter json
+dynobox run --save-run
 ```
 
 `--debug` includes each job's temporary work directory and writes debug logs
@@ -218,5 +220,5 @@ dynobox run --permission-mode dangerous
 - Write more scenarios with [Config Authoring](./config-authoring.md).
 - Add Dynobox to automation with [CI Integration](./ci.md).
 - Check exact flags and output fields in the [CLI Reference](./cli.md).
-- Watch [dash.dynobox.xyz](https://dash.dynobox.xyz) for saved run history as it
-  rolls out.
+- Use `dynobox run --save-run` when you want a dashboard URL for a compact run
+  summary.

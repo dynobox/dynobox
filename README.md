@@ -134,6 +134,8 @@ reference.
   run. Legacy explicit-file paths (e.g. `dynobox.config.ts`) keep working.
 - Scaffold a starter file with `dynobox init` (`--yaml` for YAML, `--harness`
   to pin the starter harness).
+- Authenticate with `dynobox login`, verify with `dynobox whoami`, and remove
+  saved tokens with `dynobox logout`.
 - Author dynos in TypeScript / JavaScript with `@dynobox/sdk` helpers
   (`defineDyno`, `defineScenario`, `tool`, `skill`, `artifact`, `transcript`,
   `finalMessage`, `sequence`, `http`, `dyno`) or in YAML using the same shape
@@ -144,10 +146,13 @@ reference.
 - Run locally against Claude Code, Codex, or both.
 - Override harnesses at runtime with `--harness claude-code`, `--harness codex`,
   or comma-separated values.
+- Filter scenarios at runtime with `--scenario <pattern>`.
 - Repeat each scenario/harness pair with `--iterations <count>` and view
   sparkline pass-rate matrix cells such as `.F...`.
 - Configure harness permission behavior with `permissionMode` or
   `--permission-mode`; dangerous full-access modes are opt-in.
+- Emit newline-delimited JSON reports with `--reporter json`.
+- Upload compact dashboard summaries with `--save-run` when authenticated.
 - Assert tool calls with `tool.called(...)` and `tool.notCalled(...)`.
 - Match file-oriented tool calls by path, such as
   `tool.called('read_file', {path: 'package.json'})`.
