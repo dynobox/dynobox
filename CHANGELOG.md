@@ -8,8 +8,22 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## @dynobox/sdk@0.3.0 — 2026-06-13
+
+### `@dynobox/sdk`
+
+- Added optional top-level `target` support to authored configs and compiled IR
+  so dynos can name the product or workflow surface used for saved-run grouping.
+
+## dynobox@0.5.0 — 2026-06-13
+
 ### `dynobox` (CLI)
 
+- Added `dynobox run --save-run` to upload compact run summaries to the
+  dashboard when authenticated, with best-effort upload warnings that do not
+  affect run status.
 - Added an optional top-level `target` field to dyno files (TypeScript and
   YAML) naming the thing being tested; when omitted it defaults to the dyno
   file's parent directory name.
