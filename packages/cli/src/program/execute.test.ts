@@ -16,7 +16,7 @@ import {executeCli, runCli} from './execute.js';
 const fixtures = createFixtureSet('execute');
 
 const EXPECTED_PLACEHOLDER = `
-  dynobox
+  ■ dynobox
 
   Cross-harness testing for multi-step agent flows.
 

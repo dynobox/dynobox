@@ -4,7 +4,7 @@ import {stripAnsi} from '../testUtils.js';
 import {renderPlaceholderMessage} from './placeholder.js';
 
 const EXPECTED = `
-  dynobox
+  ■ dynobox
 
   Cross-harness testing for multi-step agent flows.
 
