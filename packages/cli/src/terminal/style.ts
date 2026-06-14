@@ -3,7 +3,7 @@
  * `usePlainSymbols` settings.
  */
 
-import {DIM, GREEN, PURPLE, RED, RESET, YELLOW} from './ansi.js';
+import {DIM, GREEN, RED, RESET, YELLOW} from './ansi.js';
 import type {RenderContext} from './renderContext.js';
 
 type StatusKind = 'pass' | 'fail' | 'skip' | 'running';
@@ -45,6 +45,7 @@ export function style(
 ): string {
   if (!ctx.color) return value;
   const code = ANSI_BY_KIND[kind];
+  if (code === '') return value;
   return `${code}${value}${RESET}`;
 }
 
@@ -54,7 +55,7 @@ export function dim(ctx: Pick<RenderContext, 'color'>, value: string): string {
 }
 
 const ANSI_BY_KIND: Record<StyleKind, string> = {
-  brand: PURPLE,
+  brand: '',
   pass: GREEN,
   fail: RED,
   skip: YELLOW,
