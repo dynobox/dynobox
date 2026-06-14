@@ -8,6 +8,12 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Added `dynobox run --model` for positional model overrides alongside
+  `--harness`, and changed targeted harness runs to preserve configured harness
+  model and permission metadata.
+
 ---
 
 ## @dynobox/sdk@0.3.0 — 2026-06-13

@@ -112,8 +112,11 @@ non-zero if any file failed to load or any job failed.
 ## Run Options
 
 ```text
---harness <id>             Override config harnesses; repeat or comma-separate
-                           for multiple harnesses.
+--harness <id>             Select harnesses; repeat or comma-separate for
+                           multiple harnesses. Matching config metadata is
+                           preserved.
+--model <name>             Override selected harness models by position; repeat
+                           or comma-separate for multiple harnesses.
 --permission-mode <mode>   Override harness permission mode: default or
                            dangerous.
 --scenario <pattern>       Run only scenarios whose name or id matches;
@@ -136,6 +139,8 @@ Examples:
 dynobox run --harness claude-code
 dynobox run --harness codex
 dynobox run --harness claude-code,codex
+dynobox run --harness codex --model gpt-5.5
+dynobox run --harness claude-code,codex --model sonnet,gpt-5.5
 dynobox run --harness codex --permission-mode dangerous
 dynobox run --scenario "release*"
 dynobox run --scenario "lint*,deploy package"
@@ -148,6 +153,15 @@ can be matched with or without the `scenario.` prefix, even when JSON job IDs
 are source-prefixed during multi-file discovery. Patterns support `*` for any
 number of characters and `?` for one character. If no scenarios match, the run
 exits with code `1`.
+
+Harness selection preserves matching configured harness metadata. For example,
+`dynobox run --harness codex` keeps a configured Codex `model` and
+`permissionMode`. To temporarily use a different model, pass `--model` with one
+model per selected harness. Positional values are matched after comma-separated
+and repeated flags are flattened, so `--harness claude-code,codex --model
+sonnet,gpt-5.5` maps `sonnet` to `claude-code` and `gpt-5.5` to `codex`.
+`--permission-mode` still overrides the effective permission mode for every
+selected harness.
 
 Iterations are a runtime option, not part of dyno configs. `--iterations 5`
 runs every selected scenario/harness pair five times and reports aggregate

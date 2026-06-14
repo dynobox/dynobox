@@ -20,6 +20,8 @@ type RunMatrixHarness = {
   permissionMode?: PermissionMode;
 };
 
+type HarnessSelection = HarnessId | Pick<IrHarnessConfig, 'id' | 'model'>;
+
 type RunMatrixCell = {
   scenarioId: string;
   scenarioName: string;
@@ -55,42 +57,40 @@ export type RunMatrix = {
 export function buildLocalRunnerJobs(
   ir: Ir,
   options: {
-    harnesses?: readonly HarnessId[];
+    harnesses?: readonly HarnessSelection[];
     permissionMode?: PermissionMode;
     scenarioPatterns?: readonly string[];
     iterations?: number;
   } = {},
 ): LocalRunnerJob[] {
-  const overrides = overrideHarnessConfigs(
-    options.harnesses,
-    options.permissionMode,
-  );
   const iterations = options.iterations ?? 1;
   const scenarios = filterScenarios(ir.scenarios, options.scenarioPatterns);
   return scenarios.flatMap((scenario) =>
-    (overrides ?? scenario.harnesses).flatMap((harness) => {
-      return Array.from({length: iterations}, (_, iteration) => {
-        const permissionMode = permissionModeForHarness(
-          harness,
-          options.permissionMode,
-        );
-        const jobHarness =
-          permissionMode === harness.permissionMode
-            ? harness
-            : {
-                ...harness,
-                ...(permissionMode === undefined ? {} : {permissionMode}),
-              };
-        return {
-          id: `${scenario.id}.${harnessJobSuffix(jobHarness)}.iteration.${iteration}`,
-          scenario,
-          harness: harness.id,
-          ...(harness.model === undefined ? {} : {model: harness.model}),
-          ...(permissionMode === undefined ? {} : {permissionMode}),
-          iteration,
-        };
-      });
-    }),
+    selectHarnessConfigs(scenario.harnesses, options.harnesses).flatMap(
+      (harness) => {
+        return Array.from({length: iterations}, (_, iteration) => {
+          const permissionMode = permissionModeForHarness(
+            harness,
+            options.permissionMode,
+          );
+          const jobHarness =
+            permissionMode === harness.permissionMode
+              ? harness
+              : {
+                  ...harness,
+                  ...(permissionMode === undefined ? {} : {permissionMode}),
+                };
+          return {
+            id: `${scenario.id}.${harnessJobSuffix(jobHarness)}.iteration.${iteration}`,
+            scenario,
+            harness: harness.id,
+            ...(harness.model === undefined ? {} : {model: harness.model}),
+            ...(permissionMode === undefined ? {} : {permissionMode}),
+            iteration,
+          };
+        });
+      },
+    ),
   );
 }
 
@@ -231,13 +231,26 @@ export function assertionByIdForJobs(
   );
 }
 
-function overrideHarnessConfigs(
-  harnesses: readonly HarnessId[] | undefined,
-  permissionMode: PermissionMode | undefined,
-): IrHarnessConfig[] | undefined {
-  return harnesses?.map((id) =>
-    permissionMode === undefined ? {id} : {id, permissionMode},
-  );
+function selectHarnessConfigs(
+  configured: readonly IrHarnessConfig[],
+  selections: readonly HarnessSelection[] | undefined,
+): IrHarnessConfig[] {
+  if (selections === undefined) return [...configured];
+
+  return selections.flatMap((selection) => {
+    const selected = normalizeHarnessSelection(selection);
+    const matches = configured.filter((harness) => harness.id === selected.id);
+    if (selected.model !== undefined) {
+      return [{...(matches[0] ?? {id: selected.id}), model: selected.model}];
+    }
+    return matches.length > 0 ? matches : [{id: selected.id}];
+  });
+}
+
+function normalizeHarnessSelection(
+  selection: HarnessSelection,
+): IrHarnessConfig {
+  return typeof selection === 'string' ? {id: selection} : selection;
 }
 
 function harnessJobSuffix(harness: IrHarnessConfig): string {

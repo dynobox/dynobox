@@ -1,7 +1,12 @@
+import {writeFileSync} from 'node:fs';
 import {basename, dirname, join} from 'node:path';
 
 import {
   FakeHarness,
+  type Harness,
+  type HarnessInput,
+  type HarnessResult,
+  type HarnessRunOutput,
   type ShellToolEvent,
   type ToolEvent,
 } from '@dynobox/runner-local';
@@ -55,6 +60,27 @@ const PERMISSION_DENIED_GIT_EVENT: ShellToolEvent = {
 function expectStringArray(value: unknown): string[] {
   expect(Array.isArray(value)).toBe(true);
   return value as string[];
+}
+
+class CapturingHarness implements Harness {
+  readonly inputs: HarnessInput[] = [];
+
+  constructor(readonly id: 'claude-code' | 'codex') {}
+
+  async run(input: HarnessInput): Promise<HarnessRunOutput> {
+    this.inputs.push(input);
+    return {exitCode: 0, stdout: 'fake output', stderr: '', durationMs: 100};
+  }
+
+  extractResult(raw: HarnessRunOutput): HarnessResult {
+    return {
+      exitCode: raw.exitCode,
+      durationMs: raw.durationMs,
+      transcript: raw.stdout,
+      finalMessage: raw.stdout,
+      toolEvents: [SHELL_EVENT],
+    };
+  }
 }
 
 describe('dynobox run — config loading', () => {
@@ -174,9 +200,7 @@ describe('dynobox run — upload', () => {
       totals: {jobs: 1, passed: 1, failed: 0, warnings: 0},
       dynos: [
         {
-          dynoPath: expect.stringContaining(
-            basename(fixtures.validConfigPath),
-          ),
+          dynoPath: expect.stringContaining(basename(fixtures.validConfigPath)),
           target: basename(dirname(fixtures.validConfigPath)),
           status: 'passed',
           totals: {jobs: 1, passed: 1, failed: 0, warnings: 0},
@@ -398,6 +422,104 @@ describe('dynobox run — output modes', () => {
     });
     expect(result.stdout).not.toContain('dynobox  1 scenario');
     expect(result.stdout).not.toContain('✓');
+  });
+
+  it('preserves configured model metadata when selecting a harness', async () => {
+    const configPath = join(fixtures.dir, 'codex-model.config.ts');
+    writeFileSync(
+      configPath,
+      `import {defineDyno, tool} from '@dynobox/sdk';
+
+export default defineDyno({
+  harnesses: [{id: 'codex', model: 'gpt-5.4-mini', permissionMode: 'dangerous'}],
+  scenarios: [
+    {
+      name: 'uses shell',
+      prompt: 'Run pnpm test.',
+      assertions: [tool.called('shell')],
+    },
+  ],
+});
+`,
+    );
+    const harness = new CapturingHarness('codex');
+    const result = await executeCli(
+      ['run', configPath, '--harness', 'codex', '--reporter', 'json'],
+      {harnesses: [harness]},
+    );
+    const records = result.stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(result.exitCode).toBe(0);
+    expect(records[0]).toMatchObject({
+      type: 'job',
+      harness: {
+        id: 'codex',
+        model: 'gpt-5.4-mini',
+        permissionMode: 'dangerous',
+      },
+    });
+    expect(records[1]).toMatchObject({
+      type: 'summary',
+      matrix: {
+        harnesses: [
+          {id: 'codex', model: 'gpt-5.4-mini', permissionMode: 'dangerous'},
+        ],
+      },
+    });
+    expect(harness.inputs[0]).toMatchObject({
+      model: 'gpt-5.4-mini',
+      permissionMode: 'dangerous',
+    });
+  });
+
+  it('maps comma-separated model overrides to selected harnesses by index', async () => {
+    const configPath = join(fixtures.dir, 'positional-models.config.ts');
+    writeFileSync(
+      configPath,
+      `import {defineDyno, tool} from '@dynobox/sdk';
+
+export default defineDyno({
+  harnesses: [{id: 'claude-code'}, {id: 'codex'}],
+  scenarios: [
+    {
+      name: 'uses shell',
+      prompt: 'Run pnpm test.',
+      assertions: [tool.called('shell')],
+    },
+  ],
+});
+`,
+    );
+    const claude = new CapturingHarness('claude-code');
+    const codex = new CapturingHarness('codex');
+    const result = await executeCli(
+      [
+        'run',
+        configPath,
+        '--harness',
+        'claude-code,codex',
+        '--model',
+        'sonnet,gpt-5.5',
+        '--reporter',
+        'json',
+      ],
+      {harnesses: [claude, codex]},
+    );
+    const records = result.stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(result.exitCode).toBe(0);
+    expect(records.filter((record) => record.type === 'job')).toMatchObject([
+      {harness: {id: 'claude-code', model: 'sonnet'}},
+      {harness: {id: 'codex', model: 'gpt-5.5'}},
+    ]);
+    expect(claude.inputs[0]).toMatchObject({model: 'sonnet'});
+    expect(codex.inputs[0]).toMatchObject({model: 'gpt-5.5'});
   });
 
   it('runs only scenarios matching --scenario filters', async () => {

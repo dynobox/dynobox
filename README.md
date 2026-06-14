@@ -144,8 +144,10 @@ reference.
   with `defineDyno(...)`, and automatically copy `SKILL.md` for dynos authored
   under `.agents/skills/<name>/` or `.claude/skills/<name>/`.
 - Run locally against Claude Code, Codex, or both.
-- Override harnesses at runtime with `--harness claude-code`, `--harness codex`,
-  or comma-separated values.
+- Select harnesses at runtime with `--harness claude-code`, `--harness codex`,
+  or comma-separated values while preserving configured model metadata.
+- Override selected harness models positionally with `--model`, such as
+  `--harness claude-code,codex --model sonnet,gpt-5.5`.
 - Filter scenarios at runtime with `--scenario <pattern>`.
 - Repeat each scenario/harness pair with `--iterations <count>` and view
   sparkline pass-rate matrix cells such as `.F...`.

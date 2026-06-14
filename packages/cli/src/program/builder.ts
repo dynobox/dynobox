@@ -56,7 +56,13 @@ export function buildProgram(input: BuildProgramInput): Command {
     )
     .option(
       '--harness <id>',
-      `override config harnesses for this run; repeat for multiple harnesses (values: ${HARNESS_IDS.join(', ')})`,
+      `select harnesses for this run; repeat for multiple harnesses (values: ${HARNESS_IDS.join(', ')})`,
+      collectOption,
+      [] as string[],
+    )
+    .option(
+      '--model <name>',
+      'override selected harness models positionally; repeat or comma-separate',
       collectOption,
       [] as string[],
     )

@@ -86,6 +86,105 @@ describe('buildLocalRunnerJobs', () => {
     });
   });
 
+  it('preserves configured model and permission mode when selecting a harness', () => {
+    const jobs = buildLocalRunnerJobs(
+      {
+        version: '0.1',
+        scenarios: [
+          {
+            id: 'scenario.test',
+            name: 'test',
+            prompt: 'Run a test.',
+            harnesses: [
+              {id: 'claude-code'},
+              {
+                id: 'codex',
+                model: 'gpt-5.4-mini',
+                permissionMode: 'dangerous',
+              },
+            ],
+            setup: [],
+            fixtures: [],
+            endpoints: [],
+            assertions: [],
+          },
+        ],
+      },
+      {harnesses: [{id: 'codex'}]},
+    );
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      id: 'scenario.test.codex.gpt-5.4-mini.dangerous.iteration.0',
+      harness: 'codex',
+      model: 'gpt-5.4-mini',
+      permissionMode: 'dangerous',
+    });
+  });
+
+  it('maps positional model overrides to selected harnesses', () => {
+    const jobs = buildLocalRunnerJobs(
+      {
+        version: '0.1',
+        scenarios: [
+          {
+            id: 'scenario.test',
+            name: 'test',
+            prompt: 'Run a test.',
+            harnesses: [{id: 'claude-code'}, {id: 'codex'}],
+            setup: [],
+            fixtures: [],
+            endpoints: [],
+            assertions: [],
+          },
+        ],
+      },
+      {
+        harnesses: [
+          {id: 'claude-code', model: 'sonnet'},
+          {id: 'codex', model: 'gpt-5.5'},
+        ],
+      },
+    );
+
+    expect(
+      jobs.map((job) => ({harness: job.harness, model: job.model})),
+    ).toEqual([
+      {harness: 'claude-code', model: 'sonnet'},
+      {harness: 'codex', model: 'gpt-5.5'},
+    ]);
+  });
+
+  it('collapses duplicate configured harness ids when model is overridden', () => {
+    const ir = {
+      version: '0.1' as const,
+      scenarios: [
+        {
+          id: 'scenario.test',
+          name: 'test',
+          prompt: 'Run a test.',
+          harnesses: [
+            {id: 'codex' as const, model: 'gpt-5.4-mini'},
+            {id: 'codex' as const, model: 'gpt-5.5'},
+          ],
+          setup: [],
+          fixtures: [],
+          endpoints: [],
+          assertions: [],
+        },
+      ],
+    };
+
+    expect(buildLocalRunnerJobs(ir, {harnesses: [{id: 'codex'}]})).toHaveLength(
+      2,
+    );
+    expect(
+      buildLocalRunnerJobs(ir, {
+        harnesses: [{id: 'codex', model: 'gpt-5.6'}],
+      }).map((job) => job.model),
+    ).toEqual(['gpt-5.6']);
+  });
+
   it('filters scenarios by exact name, id, and glob pattern', () => {
     const ir = {
       version: '0.1' as const,
