@@ -522,6 +522,51 @@ export default defineDyno({
     expect(codex.inputs[0]).toMatchObject({model: 'gpt-5.5'});
   });
 
+  it('dedupes identical positional harness and model overrides', async () => {
+    const configPath = join(fixtures.dir, 'duplicate-models.config.ts');
+    writeFileSync(
+      configPath,
+      `import {defineDyno, tool} from '@dynobox/sdk';
+
+export default defineDyno({
+  harnesses: [{id: 'codex'}],
+  scenarios: [
+    {
+      name: 'uses shell',
+      prompt: 'Run pnpm test.',
+      assertions: [tool.called('shell')],
+    },
+  ],
+});
+`,
+    );
+    const codex = new CapturingHarness('codex');
+    const result = await executeCli(
+      [
+        'run',
+        configPath,
+        '--harness',
+        'codex,codex',
+        '--model',
+        'gpt-5.5,gpt-5.5',
+        '--reporter',
+        'json',
+      ],
+      {harnesses: [codex]},
+    );
+    const records = result.stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(result.exitCode).toBe(0);
+    expect(records.filter((record) => record.type === 'job')).toMatchObject([
+      {harness: {id: 'codex', model: 'gpt-5.5'}},
+    ]);
+    expect(codex.inputs).toHaveLength(1);
+    expect(codex.inputs[0]).toMatchObject({model: 'gpt-5.5'});
+  });
+
   it('runs only scenarios matching --scenario filters', async () => {
     const result = await executeCli(
       ['run', fixtures.multiScenarioConfigPath, '--scenario', 'deploy*'],

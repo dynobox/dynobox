@@ -13,6 +13,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Added `dynobox run --model` for positional model overrides alongside
   `--harness`, and changed targeted harness runs to preserve configured harness
   model and permission metadata.
+- Fixed duplicate `--harness`/`--model` pairs so identical selected runs execute
+  once instead of producing duplicate job IDs.
 
 ---
 

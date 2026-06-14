@@ -525,13 +525,27 @@ function buildJobOptions(
       ? undefined
       : models === undefined
         ? unique(harnesses).map((id) => ({id}))
-        : harnesses.map((id, index) => ({id, model: models[index]}));
+        : uniqueHarnessSelections(
+            harnesses.map((id, index) => ({id, model: models[index]!})),
+          );
   return {
     ...(selectedHarnesses === undefined ? {} : {harnesses: selectedHarnesses}),
     ...(permissionMode === undefined ? {} : {permissionMode}),
     ...(scenarioPatterns === undefined ? {} : {scenarioPatterns}),
     iterations,
   };
+}
+
+function uniqueHarnessSelections<T extends {id: string; model?: string}>(
+  selections: readonly T[],
+): T[] {
+  const seen = new Set<string>();
+  return selections.filter((selection) => {
+    const key = `${selection.id}\0${selection.model ?? ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /**
