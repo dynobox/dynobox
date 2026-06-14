@@ -99,9 +99,7 @@ function validPayload(): RunUploadCreateInputV1 {
   };
 }
 
-type ValidDyno = NonNullable<
-  ReturnType<typeof validPayload>['dynos']
->[number];
+type ValidDyno = NonNullable<ReturnType<typeof validPayload>['dynos']>[number];
 
 function validDyno(): ValidDyno {
   return validPayload().dynos[0]!;

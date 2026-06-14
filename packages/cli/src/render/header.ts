@@ -22,7 +22,7 @@ export function renderRunHeader(
 ): string {
   const plan = renderPlan(jobs);
   const jobCount = formatCount(jobs.length, 'job');
-  return `  ${style(ctx, 'dynobox', 'brand')}  ${readPackageVersion()}
+  return `  ${style(ctx, '■ dynobox', 'brand')}  ${readPackageVersion()}
 
   config   ${dim(ctx, configPath)}
   ${leftRight(`plan     ${plan}`, jobCount, ctx.width)}

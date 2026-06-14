@@ -49,6 +49,7 @@ import {
   hasDebugLogPaths,
   writeDebugLogs,
 } from '../util/transcript.js';
+import {unique} from '../util/unique.js';
 import {resolveAuthToken} from './auth.js';
 import {compileDynos, type DynoCompileSuccess} from './compileDynos.js';
 import {
@@ -63,6 +64,7 @@ import {
   buildRunJobOptions,
   validateHarnessOverrides,
   validateIterations,
+  validateModelOverrides,
   validatePermissionModeOverride,
   validateReporterFormat,
   validateScenarioFilters,
@@ -71,6 +73,7 @@ import {uploadRun} from './uploadRun.js';
 
 export type RunCommandFlags = {
   harness?: string[];
+  model?: string[];
   quiet?: boolean;
   verbose?: boolean;
   debug?: boolean;
@@ -105,6 +108,12 @@ export async function runCommandAction(
 
   const overrideHarnesses = validateOverrides(
     commandFlags.harness,
+    inputLabel,
+    writeStderr,
+  );
+  const overrideModels = validateModels(
+    commandFlags.model,
+    overrideHarnesses,
     inputLabel,
     writeStderr,
   );
@@ -177,6 +186,7 @@ export async function runCommandAction(
       entry.ir,
       buildJobOptions(
         overrideHarnesses,
+        overrideModels,
         permissionMode,
         scenarioPatterns,
         iterations,
@@ -460,6 +470,21 @@ function validatePermissionMode(
   }
 }
 
+function validateModels(
+  rawModels: readonly string[] | undefined,
+  harnesses: ReturnType<typeof validateHarnessOverrides>,
+  inputLabel: string,
+  writeStderr: OutputWriter,
+) {
+  try {
+    return validateModelOverrides(rawModels, harnesses);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    writeStderr(renderRunConfigErrorMessage(inputLabel, message));
+    throw error;
+  }
+}
+
 function validateReporter(
   rawReporter: string | undefined,
   inputLabel: string,
@@ -490,16 +515,37 @@ function validateIterationCount(
 
 function buildJobOptions(
   harnesses: ReturnType<typeof validateHarnessOverrides>,
+  models: ReturnType<typeof validateModelOverrides>,
   permissionMode: ReturnType<typeof validatePermissionModeOverride>,
   scenarioPatterns: ReturnType<typeof validateScenarioFilters>,
   iterations: ReturnType<typeof validateIterations>,
 ): Parameters<typeof buildLocalRunnerJobs>[1] {
+  const selectedHarnesses =
+    harnesses === undefined
+      ? undefined
+      : models === undefined
+        ? unique(harnesses).map((id) => ({id}))
+        : uniqueHarnessSelections(
+            harnesses.map((id, index) => ({id, model: models[index]!})),
+          );
   return {
-    ...(harnesses === undefined ? {} : {harnesses}),
+    ...(selectedHarnesses === undefined ? {} : {harnesses: selectedHarnesses}),
     ...(permissionMode === undefined ? {} : {permissionMode}),
     ...(scenarioPatterns === undefined ? {} : {scenarioPatterns}),
     iterations,
   };
+}
+
+function uniqueHarnessSelections<T extends {id: string; model?: string}>(
+  selections: readonly T[],
+): T[] {
+  const seen = new Set<string>();
+  return selections.filter((selection) => {
+    const key = `${selection.id}\0${selection.model ?? ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /**

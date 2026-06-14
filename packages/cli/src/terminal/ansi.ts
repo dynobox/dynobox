@@ -8,7 +8,6 @@
 
 export const RESET = '\x1b[0m';
 export const BOLD = '\x1b[1m';
-export const PURPLE = '\x1b[38;5;141m';
 export const GREEN = '\x1b[38;5;42m';
 export const RED = '\x1b[38;5;167m';
 export const YELLOW = '\x1b[38;5;220m';

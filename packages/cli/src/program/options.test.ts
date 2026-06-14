@@ -3,7 +3,11 @@ import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {createFixtureSet, PassingHarness} from '../testUtils.js';
 import {executeCli} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
-import {validateIterations, validateScenarioFilters} from './options.js';
+import {
+  validateIterations,
+  validateModelOverrides,
+  validateScenarioFilters,
+} from './options.js';
 
 const fixtures = createFixtureSet('options');
 
@@ -61,6 +65,24 @@ describe('--harness override validation', () => {
 
     expect(result.exitCode).toBe(configErrorExitCode);
     expect(result.stderr).toContain('Invalid permission mode "unsafe"');
+  });
+
+  it('parses comma-separated model overrides positionally', () => {
+    expect(
+      validateModelOverrides(['sonnet,gpt-5.5'], ['claude-code', 'codex']),
+    ).toEqual(['sonnet', 'gpt-5.5']);
+  });
+
+  it('requires --harness when --model is provided', () => {
+    expect(() => validateModelOverrides(['gpt-5.5'], undefined)).toThrow(
+      '--model requires --harness',
+    );
+  });
+
+  it('requires one model per selected harness', () => {
+    expect(() =>
+      validateModelOverrides(['sonnet'], ['claude-code', 'codex']),
+    ).toThrow('Expected one --model value per --harness value');
   });
 
   it('rejects an unknown reporter with the config-error exit code', async () => {

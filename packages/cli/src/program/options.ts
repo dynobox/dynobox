@@ -56,7 +56,41 @@ export function validateHarnessOverrides(
     );
   }
 
-  return unique(harnesses) as HarnessId[];
+  return harnesses as HarnessId[];
+}
+
+export function validateModelOverrides(
+  values: readonly string[] | undefined,
+  harnesses: readonly HarnessId[] | undefined,
+): string[] | undefined {
+  if (values === undefined || values.length === 0) return undefined;
+
+  const models = values.flatMap((value) =>
+    value.split(',').map((part) => part.trim()),
+  );
+  if (models.some((model) => model.length === 0)) {
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.model',
+      'Invalid model override. Model values cannot be empty.',
+    );
+  }
+  if (harnesses === undefined || harnesses.length === 0) {
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.model',
+      '--model requires --harness.',
+    );
+  }
+  if (models.length !== harnesses.length) {
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.model',
+      `Expected one --model value per --harness value; received ${harnesses.length} harnesses and ${models.length} models.`,
+    );
+  }
+
+  return models;
 }
 
 export function validatePermissionModeOverride(
