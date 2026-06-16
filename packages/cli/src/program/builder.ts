@@ -10,6 +10,10 @@ import {HARNESS_IDS, PERMISSION_MODES} from '@dynobox/sdk';
 import {Command} from 'commander';
 
 import {readPackageVersion} from '../util/version.js';
+import {
+  discoverCommandAction,
+  type DiscoverCommandFlags,
+} from './discoverCommand.js';
 import {DYNO_FILE_SUFFIXES} from './discoverDynos.js';
 import type {ExecuteCliOptions, OutputWriter} from './execute.js';
 import {initCommandAction, type InitCommandFlags} from './initCommand.js';
@@ -17,6 +21,10 @@ import {loginCommandAction} from './loginCommand.js';
 import {logoutCommandAction} from './logoutCommand.js';
 import {collectOption} from './options.js';
 import {runCommandAction, type RunCommandFlags} from './runCommand.js';
+import {
+  validateCommandAction,
+  type ValidateCommandFlags,
+} from './validateCommand.js';
 import {whoamiCommandAction} from './whoamiCommand.js';
 
 export type BuildProgramInput = {
@@ -77,6 +85,7 @@ export function buildProgram(input: BuildProgramInput): Command {
     .option('--verbose', 'expand scenario details even when passing')
     .option('--debug', 'include debug paths and artifacts')
     .option('--reporter <fmt>', 'output reporter format: text or json', 'text')
+    .option('--config <path>', 'path to dyno.config.json')
     .option('--save-run', 'upload a compact run summary after execution')
     .option(
       '--permission-mode <mode>',
@@ -92,6 +101,56 @@ export function buildProgram(input: BuildProgramInput): Command {
           writeStderr,
         });
         if (failed) onRunFailure();
+      },
+    );
+
+  program
+    .command('validate')
+    .argument(
+      '[path]',
+      'file or directory to validate; defaults to the current directory',
+    )
+    .description(
+      `validate discovered *.dyno.{${DYNO_FILE_SUFFIXES}} files (or an explicit file path) without running harnesses`,
+    )
+    .option('--reporter <fmt>', 'output reporter format: text or json', 'text')
+    .option('--config <path>', 'path to dyno.config.json')
+    .action(
+      async (
+        configPath: string | undefined,
+        commandFlags: ValidateCommandFlags,
+      ) => {
+        await validateCommandAction({
+          configPath,
+          commandFlags,
+          options,
+          writeStdout,
+          writeStderr,
+        });
+      },
+    );
+
+  program
+    .command('discover')
+    .argument(
+      '[path]',
+      'file or directory to discover; defaults to the current directory',
+    )
+    .description(
+      `print discovered *.dyno.{${DYNO_FILE_SUFFIXES}} files (or an explicit file path) without running harnesses`,
+    )
+    .option('--config <path>', 'path to dyno.config.json')
+    .action(
+      async (
+        configPath: string | undefined,
+        commandFlags: DiscoverCommandFlags,
+      ) => {
+        await discoverCommandAction({
+          configPath,
+          commandFlags,
+          writeStdout,
+          writeStderr,
+        });
       },
     );
 

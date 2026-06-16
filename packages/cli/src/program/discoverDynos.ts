@@ -7,10 +7,8 @@
  *   - a directory path  → discover under that directory (recursive)
  *   - a file path       → run that single file
  *
- * Discovery globs `**\/*.dyno.{mjs,js,ts,mts,yaml,yml}` and skips hidden
- * entries below the search root plus a default set of directories that should
- * never contain authored tests. Passing a hidden directory as the root still
- * searches inside that explicit root.
+ * Discovery globs `**\/*.dyno.{mjs,js,ts,mts,yaml,yml}` and skips a default
+ * set of generated directories that should never contain authored tests.
  * Existing config files passed by absolute or relative path (the legacy
  * `dynobox run examples/.../dynobox.config.ts` form) keep working — file
  * inputs are returned verbatim regardless of the `.dyno.*` suffix so that
@@ -21,6 +19,8 @@ import {stat} from 'node:fs/promises';
 import {isAbsolute, resolve} from 'node:path';
 
 import {glob} from 'tinyglobby';
+
+import {loadDynoConfig} from './dynoConfig.js';
 
 /**
  * Filename patterns that count as authored dyno files.
@@ -40,10 +40,8 @@ export const DYNO_FILE_GLOBS = [
   '**/*.dyno.yml',
 ] as const;
 
-/** Hidden entries and directories never traversed during discovery. */
+/** Generated directories never traversed during discovery. */
 export const DYNO_DEFAULT_IGNORE = [
-  '**/.*',
-  '**/.*/**',
   '**/node_modules/**',
   '**/dist/**',
   '**/build/**',
@@ -71,17 +69,11 @@ export const DYNO_FILE_SUFFIXES = DYNO_FILE_GLOBS.map((g) =>
   g.replace('**/*.dyno.', ''),
 ).join(',');
 
-/** Thrown when a directory contains no `*.dyno.*` files. */
-export class NoDynosFoundError extends Error {
-  constructor(public readonly directory: string) {
-    super(`No *.dyno.{${DYNO_FILE_SUFFIXES}} files found under ${directory}`);
-    this.name = 'NoDynosFoundError';
-  }
-}
-
 export type DiscoverDynosOptions = {
   /** Defaults to `process.cwd()`. Exposed for tests. */
   cwd?: string;
+  /** Explicit dyno.config.json path passed by --config. */
+  configPath?: string;
 };
 
 /**
@@ -113,24 +105,36 @@ export async function discoverDynos(
     throw new DynoPathNotFoundError(inputPath ?? '.');
   }
 
+  const config = await loadDynoConfig({
+    searchFrom: absoluteInputPath,
+    ...(options.configPath === undefined
+      ? {}
+      : {configPath: options.configPath}),
+    cwd,
+  });
+  const ignore = [
+    ...DYNO_DEFAULT_IGNORE,
+    ...config.ignoredDirectories.map(ignoredDirectoryGlob),
+  ];
+
   const matches = await glob(DYNO_FILE_GLOBS as unknown as string[], {
     cwd: absoluteInputPath,
     absolute: true,
     dot: true,
-    ignore: DYNO_DEFAULT_IGNORE as unknown as string[],
+    ignore: ignore as unknown as string[],
     onlyFiles: true,
     followSymbolicLinks: false,
   });
-
-  if (matches.length === 0) {
-    throw new NoDynosFoundError(absoluteInputPath);
-  }
 
   return matches.slice().sort();
 }
 
 function resolveInputPath(inputPath: string, cwd: string): string {
   return isAbsolute(inputPath) ? inputPath : resolve(cwd, inputPath);
+}
+
+function ignoredDirectoryGlob(directory: string): string {
+  return `**/${directory}/**`;
 }
 
 async function statOrUndefined(path: string) {

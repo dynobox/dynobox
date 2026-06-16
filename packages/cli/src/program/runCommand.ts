@@ -53,9 +53,9 @@ import {unique} from '../util/unique.js';
 import {resolveAuthToken} from './auth.js';
 import {compileDynos, type DynoCompileSuccess} from './compileDynos.js';
 import {
+  DYNO_FILE_SUFFIXES,
   discoverDynos,
   DynoPathNotFoundError,
-  NoDynosFoundError,
 } from './discoverDynos.js';
 import {shouldRenderLive} from './environment.js';
 import type {ExecuteCliOptions, OutputWriter} from './execute.js';
@@ -82,6 +82,7 @@ export type RunCommandFlags = {
   scenario?: string[];
   iterations?: string;
   permissionMode?: string;
+  config?: string;
 };
 
 export type RunCommandActionInput = {
@@ -159,8 +160,23 @@ export async function runCommandAction(
   const filePaths = await discoverOrFail(
     configPath,
     resolvedInputPath,
+    commandFlags.config,
     writeStderr,
   );
+  if (filePaths.length === 0) {
+    const label = configPath ?? resolvedInputPath;
+    writeStderr(
+      renderRunConfigErrorMessage(
+        label,
+        `No *.dyno.{${DYNO_FILE_SUFFIXES}} files found under ${label}`,
+      ),
+    );
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.config',
+      'no dynos found',
+    );
+  }
   const {compiled, errors} = await compileDynos(filePaths);
 
   for (const error of errors) {
@@ -293,16 +309,16 @@ function renderHeaderLabel(
 async function discoverOrFail(
   configPath: string | undefined,
   resolvedInputPath: string,
+  configFilePath: string | undefined,
   writeStderr: OutputWriter,
 ): Promise<readonly string[]> {
   try {
-    return await discoverDynos(configPath);
+    return await discoverDynos(configPath, {
+      ...(configFilePath === undefined ? {} : {configPath: configFilePath}),
+    });
   } catch (error) {
     const label = configPath ?? resolvedInputPath;
-    if (
-      error instanceof DynoPathNotFoundError ||
-      error instanceof NoDynosFoundError
-    ) {
+    if (error instanceof DynoPathNotFoundError) {
       writeStderr(renderRunConfigErrorMessage(label, error.message));
     } else {
       const message = error instanceof Error ? error.message : String(error);

@@ -182,11 +182,24 @@ dynobox run my-skill.dyno.yaml
 dynobox run dynobox.config.ts
 ```
 
-Directory discovery skips hidden entries, `node_modules`, `dist`, `build`,
-`coverage`, `.git`, `.dynobox`, `.next`, and `.cache`. Explicit file paths do
-not need to match the `*.dyno.*` naming pattern, but they still need to be
-loadable JavaScript, TypeScript, or YAML Dynobox configs. `.cjs` and `.cts`
-configs are not supported.
+Directory discovery includes dot directories such as `.agents` and `.claude`,
+and skips `node_modules`, `dist`, `build`, `coverage`, `.git`, `.dynobox`,
+`.next`, and `.cache`. Explicit file paths do not need to match the `*.dyno.*`
+naming pattern, but they still need to be loadable JavaScript, TypeScript, or
+YAML Dynobox configs. `.cjs` and `.cts` configs are not supported.
+
+To skip additional generated directories, add `dyno.config.json` near your
+dynos:
+
+```json
+{
+  "ignoredDirectories": ["generated", "vendor/examples"]
+}
+```
+
+`dynobox run`, `dynobox validate`, and `dynobox discover` use the nearest
+`dyno.config.json` by default. Pass `--config <path>` to use a specific JSON
+config file.
 
 ## Debug A Run
 
