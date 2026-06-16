@@ -55,6 +55,7 @@ import {compileDynos, type DynoCompileSuccess} from './compileDynos.js';
 import {
   DYNO_FILE_SUFFIXES,
   discoverDynos,
+  type DiscoverDynosResult,
   DynoPathNotFoundError,
 } from './discoverDynos.js';
 import {shouldRenderLive} from './environment.js';
@@ -157,13 +158,13 @@ export async function runCommandAction(
     }
   }
 
-  const filePaths = await discoverOrFail(
+  const {files, configPath: appliedConfigPath} = await discoverOrFail(
     configPath,
     resolvedInputPath,
     commandFlags.config,
     writeStderr,
   );
-  if (filePaths.length === 0) {
+  if (files.length === 0) {
     const label = configPath ?? resolvedInputPath;
     writeStderr(
       renderRunConfigErrorMessage(
@@ -177,7 +178,7 @@ export async function runCommandAction(
       'no dynos found',
     );
   }
-  const {compiled, errors} = await compileDynos(filePaths);
+  const {compiled, errors} = await compileDynos(files);
 
   for (const error of errors) {
     writeStderr(renderRunConfigErrorMessage(error.filePath, error.message));
@@ -225,6 +226,13 @@ export async function runCommandAction(
   }
   const runOptions = buildRunJobOptions(options);
   const ctx = createRenderContext(options, commandFlags);
+  if (
+    reporter !== 'json' &&
+    appliedConfigPath !== undefined &&
+    (ctx.mode === 'verbose' || ctx.mode === 'debug')
+  ) {
+    writeStdout(`config: ${dynoDisplayPath(appliedConfigPath)}\n`);
+  }
   const headerLabel = renderHeaderLabel(inputLabel, compiled);
 
   const results =
@@ -311,7 +319,7 @@ async function discoverOrFail(
   resolvedInputPath: string,
   configFilePath: string | undefined,
   writeStderr: OutputWriter,
-): Promise<readonly string[]> {
+): Promise<DiscoverDynosResult> {
   try {
     return await discoverDynos(configPath, {
       ...(configFilePath === undefined ? {} : {configPath: configFilePath}),

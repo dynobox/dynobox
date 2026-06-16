@@ -27,7 +27,7 @@ describe('discoverDynos', () => {
 
   it('returns a single file verbatim, even when the suffix is non-standard', async () => {
     const file = touch('legacy/dynobox.config.ts', 'export default {};');
-    const result = await discoverDynos(file);
+    const {files: result} = await discoverDynos(file);
     expect(result).toEqual([file]);
   });
 
@@ -42,7 +42,7 @@ describe('discoverDynos', () => {
     touch('tree/not-a-dyno.mjs');
     touch('tree/dyno.mjs'); // wrong shape — not "<name>.dyno.mjs"
 
-    const result = await discoverDynos(dir);
+    const {files: result} = await discoverDynos(dir);
     expect(result).toEqual([a, d, c, b].slice().sort());
   });
 
@@ -55,12 +55,13 @@ describe('discoverDynos', () => {
     touch('ignored/.dynobox/w.dyno.mjs');
     const kept = touch('ignored/keep.dyno.mjs');
 
-    const result = await discoverDynos(dir);
+    const {files: result} = await discoverDynos(dir);
     expect(result).toEqual([kept]);
   });
 
-  it('honors ignoredDirectories from the nearest dyno.config.json', async () => {
-    const dir = join(ROOT, 'configured/project/tests');
+  it('honors ignoredDirectories from dyno.config.json in the cwd', async () => {
+    const projectDir = join(ROOT, 'configured/project');
+    const dir = join(projectDir, 'tests');
     mkdirSync(dir, {recursive: true});
     touch(
       'configured/project/dyno.config.json',
@@ -69,8 +70,23 @@ describe('discoverDynos', () => {
     touch('configured/project/tests/generated/skip.dyno.mjs');
     const kept = touch('configured/project/tests/keep.dyno.mjs');
 
-    const result = await discoverDynos(dir);
+    const {files: result} = await discoverDynos(dir, {cwd: projectDir});
     expect(result).toEqual([kept]);
+  });
+
+  it('ignores a dyno.config.json that is not in the cwd', async () => {
+    const projectDir = join(ROOT, 'config-not-in-cwd');
+    const dir = join(projectDir, 'tests');
+    mkdirSync(dir, {recursive: true});
+    touch(
+      'config-not-in-cwd/dyno.config.json',
+      JSON.stringify({ignoredDirectories: ['generated']}),
+    );
+    const skipped = touch('config-not-in-cwd/tests/generated/skip.dyno.mjs');
+    const kept = touch('config-not-in-cwd/tests/keep.dyno.mjs');
+
+    const {files: result} = await discoverDynos(dir, {cwd: dir});
+    expect(result).toEqual([kept, skipped].sort());
   });
 
   it('uses an explicit config path when provided', async () => {
@@ -83,8 +99,27 @@ describe('discoverDynos', () => {
     touch('explicit-config/tests/fixtures/generated/skip.dyno.mjs');
     const kept = touch('explicit-config/tests/fixtures/keep.dyno.mjs');
 
-    const result = await discoverDynos(dir, {configPath: config});
+    const {files: result, configPath} = await discoverDynos(dir, {
+      configPath: config,
+    });
     expect(result).toEqual([kept]);
+    expect(configPath).toBe(config);
+  });
+
+  it('reports the resolved config path, or undefined when none applied', async () => {
+    const projectDir = join(ROOT, 'reported-config');
+    mkdirSync(projectDir, {recursive: true});
+    const config = touch(
+      'reported-config/dyno.config.json',
+      JSON.stringify({ignoredDirectories: []}),
+    );
+    touch('reported-config/keep.dyno.mjs');
+
+    const withConfig = await discoverDynos(projectDir, {cwd: projectDir});
+    expect(withConfig.configPath).toBe(config);
+
+    const noConfig = await discoverDynos(projectDir, {cwd: join(ROOT, 'empty')});
+    expect(noConfig.configPath).toBeUndefined();
   });
 
   it('rejects invalid dyno.config.json shape', async () => {
@@ -96,7 +131,7 @@ describe('discoverDynos', () => {
     );
     touch('invalid-config/keep.dyno.mjs');
 
-    await expect(discoverDynos(dir)).rejects.toThrow(
+    await expect(discoverDynos(dir, {cwd: dir})).rejects.toThrow(
       'ignoredDirectories must be an array of strings',
     );
   });
@@ -106,7 +141,7 @@ describe('discoverDynos', () => {
     mkdirSync(dir, {recursive: true});
     const file = touch('.agents/skills/demo/demo.dyno.mjs');
 
-    const result = await discoverDynos(dir);
+    const {files: result} = await discoverDynos(dir);
     expect(result).toEqual([file]);
   });
 
@@ -117,7 +152,7 @@ describe('discoverDynos', () => {
     const agent = touch('hidden-descendants/.agents/skills/agent.dyno.mjs');
     const claude = touch('hidden-descendants/.claude/skills/claude.dyno.yaml');
 
-    const result = await discoverDynos(dir);
+    const {files: result} = await discoverDynos(dir);
     expect(result).toEqual([kept, agent, claude].slice().sort());
   });
 
@@ -130,7 +165,7 @@ describe('discoverDynos', () => {
     touch('generated-hidden-descendants/.next/page.dyno.mjs');
     const kept = touch('generated-hidden-descendants/keep.dyno.mjs');
 
-    const result = await discoverDynos(dir);
+    const {files: result} = await discoverDynos(dir);
     expect(result).toEqual([kept]);
   });
 
@@ -141,7 +176,7 @@ describe('discoverDynos', () => {
     touch('.agents/hidden-descendants/.cache/cache.dyno.mjs');
     touch('.agents/hidden-descendants/skill/.hidden/hidden.dyno.mjs');
 
-    const result = await discoverDynos(dir);
+    const {files: result} = await discoverDynos(dir);
     expect(result).toEqual(
       [kept, join(dir, 'skill/.hidden/hidden.dyno.mjs')].sort(),
     );
@@ -151,7 +186,7 @@ describe('discoverDynos', () => {
     const dir = join(ROOT, 'empty');
     mkdirSync(dir, {recursive: true});
 
-    await expect(discoverDynos(dir)).resolves.toEqual([]);
+    await expect(discoverDynos(dir)).resolves.toEqual({files: []});
   });
 
   it('throws DynoPathNotFoundError when the path does not exist', async () => {
@@ -173,7 +208,7 @@ describe('discoverDynos', () => {
       return;
     }
 
-    const result = await discoverDynos(dir);
+    const {files: result} = await discoverDynos(dir);
     expect(result).toEqual([real]);
   });
 
@@ -182,7 +217,7 @@ describe('discoverDynos', () => {
     mkdirSync(dir, {recursive: true});
     const file = touch('default-cwd/sample.dyno.mjs');
 
-    const result = await discoverDynos(undefined, {cwd: dir});
+    const {files: result} = await discoverDynos(undefined, {cwd: dir});
     expect(result).toEqual([file]);
   });
 });

@@ -62,7 +62,7 @@ export async function validateCommandAction(
   const result = await compileDynos(filePaths);
 
   if (reporter === 'json') {
-    writeStdout(renderJsonValidateOutput(result));
+    writeStdout(renderJsonValidateOutput(result, filePaths));
   } else {
     for (const error of result.errors) {
       writeStderr(
@@ -97,20 +97,21 @@ async function discoverForValidate(
   const {configPath, resolvedInputPath, reporter, writeStdout, writeStderr} =
     input;
   try {
-    return await discoverDynos(configPath, {
+    const {files} = await discoverDynos(configPath, {
       ...(input.configFilePath === undefined
         ? {}
         : {configPath: input.configFilePath}),
     });
+    return files;
   } catch (error) {
     const label = configPath ?? resolvedInputPath;
     const message = discoveryErrorMessage(error);
     if (reporter === 'json') {
       writeStdout(
-        renderJsonValidateOutput({
-          compiled: [],
-          errors: [{filePath: label, message}],
-        }),
+        renderJsonValidateOutput(
+          {compiled: [], errors: [{filePath: label, message}]},
+          [label],
+        ),
       );
     } else {
       writeStderr(renderConfigErrorMessage('validate', label, message));
@@ -160,9 +161,6 @@ function renderTextValidateOutput(
   const compiledByPath = new Map(
     result.compiled.map((entry) => [entry.filePath, entry]),
   );
-  const errorsByPath = new Map(
-    result.errors.map((error) => [error.filePath, error]),
-  );
   const rows = filePaths.map((filePath) => {
     const compiled = compiledByPath.get(filePath);
     const status = compiled === undefined ? 'fail' : 'pass';
@@ -171,8 +169,7 @@ function renderTextValidateOutput(
         ? 'invalid'
         : `${compiled.ir.scenarios.length} scenario(s)`;
     const icon = colorStatus(ctx, symbol(ctx, status), status);
-    const label = displayPath(errorsByPath.get(filePath)?.filePath ?? filePath);
-    return `  ${icon}  ${label}   ${detail}\n`;
+    return `  ${icon}  ${displayPath(filePath)}   ${detail}\n`;
   });
 
   return `${rows.join('')}\n${summary}`;

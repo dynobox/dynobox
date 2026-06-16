@@ -28,12 +28,12 @@ export async function discoverCommandAction(
   const resolvedInputPath = resolve(inputLabel);
 
   try {
-    const filePaths = await discoverDynos(configPath, {
+    const {files} = await discoverDynos(configPath, {
       ...(commandFlags.config === undefined
         ? {}
         : {configPath: commandFlags.config}),
     });
-    writeStdout(renderDiscoverOutput(filePaths));
+    writeStdout(renderDiscoverOutput(files));
   } catch (error) {
     const label = configPath ?? resolvedInputPath;
     writeStderr(renderDiscoverError(label, discoveryErrorMessage(error)));

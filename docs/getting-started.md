@@ -188,8 +188,8 @@ and skips `node_modules`, `dist`, `build`, `coverage`, `.git`, `.dynobox`,
 naming pattern, but they still need to be loadable JavaScript, TypeScript, or
 YAML Dynobox configs. `.cjs` and `.cts` configs are not supported.
 
-To skip additional generated directories, add `dyno.config.json` near your
-dynos:
+To skip additional generated directories, add `dyno.config.json` to your
+project root:
 
 ```json
 {
@@ -197,9 +197,10 @@ dynos:
 }
 ```
 
-`dynobox run`, `dynobox validate`, and `dynobox discover` use the nearest
-`dyno.config.json` by default. Pass `--config <path>` to use a specific JSON
-config file.
+`dynobox run`, `dynobox validate`, and `dynobox discover` read
+`dyno.config.json` from the directory you run them in (no upward walk), so run
+them from your project root. Pass `--config <path>` to use a specific JSON config
+file from anywhere.
 
 ## Debug A Run
 

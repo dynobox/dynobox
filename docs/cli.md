@@ -101,8 +101,9 @@ Directory discovery matches `**/*.dyno.{mjs,js,ts,mts,yaml,yml}`. It includes
 dot directories such as `.agents` and `.claude`, and skips `node_modules`,
 `dist`, `build`, `coverage`, `.git`, `.dynobox`, `.next`, and `.cache`.
 
-Directory discovery also reads the nearest `dyno.config.json` found from the
-search directory upward. For now the config is JSON-only and supports
+Directory discovery also reads a `dyno.config.json` from the current working
+directory — the directory you run the command in, not the `[path]` argument and
+with no upward walk. For now the config is JSON-only and supports
 `ignoredDirectories`:
 
 ```json
@@ -112,8 +113,9 @@ search directory upward. For now the config is JSON-only and supports
 ```
 
 Each ignored directory is treated as a relative directory path and skipped
-recursively. Pass `--config <path>` to use a specific config file instead of the
-nearest `dyno.config.json`.
+recursively. Run commands from your project root so its `dyno.config.json`
+applies, or pass `--config <path>` to use a specific config file from anywhere.
+Run with `--verbose` (or `--debug`) to print which `dyno.config.json` applied.
 
 Explicit file paths do not need to match the `*.dyno.*` naming pattern. YAML
 files are parsed as YAML, and JavaScript or TypeScript files such as `.mjs`,

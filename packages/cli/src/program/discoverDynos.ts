@@ -76,17 +76,24 @@ export type DiscoverDynosOptions = {
   configPath?: string;
 };
 
+export type DiscoverDynosResult = {
+  /** Sorted, absolute dyno file paths. */
+  files: string[];
+  /** Absolute path of the `dyno.config.json` that applied, if any. */
+  configPath?: string;
+};
+
 /**
  * Resolve an optional CLI path argument to an absolute list of dyno files
  * to load and run.
  *
  * @param inputPath  File or directory; `undefined` means "current dir".
- * @returns          Sorted, absolute file paths.
+ * @returns          Sorted, absolute file paths plus the config that applied.
  */
 export async function discoverDynos(
   inputPath: string | undefined,
   options: DiscoverDynosOptions = {},
-): Promise<string[]> {
+): Promise<DiscoverDynosResult> {
   const cwd = options.cwd ?? process.cwd();
   const absoluteInputPath = resolveInputPath(inputPath ?? '.', cwd);
 
@@ -98,7 +105,7 @@ export async function discoverDynos(
   if (stats.isFile()) {
     // Legacy/explicit file path: return as-is so authored configs keep
     // working even when their filename does not match `*.dyno.*`.
-    return [absoluteInputPath];
+    return {files: [absoluteInputPath]};
   }
 
   if (!stats.isDirectory()) {
@@ -106,7 +113,7 @@ export async function discoverDynos(
   }
 
   const config = await loadDynoConfig({
-    searchFrom: absoluteInputPath,
+    searchFrom: cwd,
     ...(options.configPath === undefined
       ? {}
       : {configPath: options.configPath}),
@@ -126,7 +133,10 @@ export async function discoverDynos(
     followSymbolicLinks: false,
   });
 
-  return matches.slice().sort();
+  return {
+    files: matches.slice().sort(),
+    ...(config.configPath === undefined ? {} : {configPath: config.configPath}),
+  };
 }
 
 function resolveInputPath(inputPath: string, cwd: string): string {

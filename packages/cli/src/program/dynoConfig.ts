@@ -1,14 +1,20 @@
 import {readFile, stat} from 'node:fs/promises';
-import {dirname, isAbsolute, join, resolve} from 'node:path';
+import {isAbsolute, join, resolve} from 'node:path';
 
 export const DYNO_CONFIG_BASENAME = 'dyno.config.json';
 
 export type DynoConfig = {
   ignoredDirectories: string[];
+  /** Absolute path the config was loaded from, or undefined when none applied. */
+  configPath?: string;
 };
 
 export type LoadDynoConfigOptions = {
-  /** Directory to search from when no explicit config path is supplied. */
+  /**
+   * Directory to look in for `dyno.config.json` when no explicit config path
+   * is supplied. Checked once with no upward walk — config is tied to the
+   * invocation directory, matching how a test runner resolves config.
+   */
   searchFrom: string;
   /** Explicit config path passed by --config. */
   configPath?: string;
@@ -46,21 +52,15 @@ export async function loadDynoConfig(
     throw new DynoConfigError(configPath, `Invalid JSON. ${message}`);
   }
 
-  return parseDynoConfig(configPath, parsed);
+  return {...parseDynoConfig(configPath, parsed), configPath};
 }
 
 async function findDynoConfig(searchFrom: string): Promise<string | undefined> {
-  let current = resolve(searchFrom);
-  while (true) {
-    const candidate = join(current, DYNO_CONFIG_BASENAME);
-    if ((await statOrUndefined(candidate))?.isFile() === true) {
-      return candidate;
-    }
-
-    const parent = dirname(current);
-    if (parent === current) return undefined;
-    current = parent;
+  const candidate = join(resolve(searchFrom), DYNO_CONFIG_BASENAME);
+  if ((await statOrUndefined(candidate))?.isFile() === true) {
+    return candidate;
   }
+  return undefined;
 }
 
 async function readConfig(configPath: string): Promise<string> {
