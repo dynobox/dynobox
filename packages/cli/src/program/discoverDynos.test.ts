@@ -59,16 +59,31 @@ describe('discoverDynos', () => {
     expect(result).toEqual([kept]);
   });
 
-  it('honors ignoredDirectories from dyno.config.json in the cwd', async () => {
+  it('honors config-relative ignoredDirectories from dyno.config.json in the cwd', async () => {
     const projectDir = join(ROOT, 'configured/project');
     const dir = join(projectDir, 'tests');
     mkdirSync(dir, {recursive: true});
     touch(
       'configured/project/dyno.config.json',
-      JSON.stringify({ignoredDirectories: ['generated']}),
+      JSON.stringify({ignoredDirectories: ['tests/generated']}),
     );
     touch('configured/project/tests/generated/skip.dyno.mjs');
     const kept = touch('configured/project/tests/keep.dyno.mjs');
+
+    const {files: result} = await discoverDynos(dir, {cwd: projectDir});
+    expect(result).toEqual([kept]);
+  });
+
+  it('treats ignoredDirectories entries as literal directory paths, not globs', async () => {
+    const projectDir = join(ROOT, 'literal-ignore/project');
+    const dir = join(projectDir, 'tests');
+    mkdirSync(dir, {recursive: true});
+    touch(
+      'literal-ignore/project/dyno.config.json',
+      JSON.stringify({ignoredDirectories: ['tests/generated[old]']}),
+    );
+    touch('literal-ignore/project/tests/generated[old]/skip.dyno.mjs');
+    const kept = touch('literal-ignore/project/tests/generated-old/keep.dyno.mjs');
 
     const {files: result} = await discoverDynos(dir, {cwd: projectDir});
     expect(result).toEqual([kept]);
@@ -90,20 +105,48 @@ describe('discoverDynos', () => {
   });
 
   it('uses an explicit config path when provided', async () => {
-    const dir = join(ROOT, 'explicit-config/tests');
+    const dir = join(ROOT, 'explicit-config/settings/tests');
     mkdirSync(dir, {recursive: true});
     const config = touch(
       'explicit-config/settings/dyno.config.json',
-      JSON.stringify({ignoredDirectories: ['fixtures/generated']}),
+      JSON.stringify({ignoredDirectories: ['tests/fixtures/generated']}),
     );
-    touch('explicit-config/tests/fixtures/generated/skip.dyno.mjs');
-    const kept = touch('explicit-config/tests/fixtures/keep.dyno.mjs');
+    touch('explicit-config/settings/tests/fixtures/generated/skip.dyno.mjs');
+    const kept = touch('explicit-config/settings/tests/fixtures/keep.dyno.mjs');
 
     const {files: result, configPath} = await discoverDynos(dir, {
       configPath: config,
     });
     expect(result).toEqual([kept]);
     expect(configPath).toBe(config);
+  });
+
+  it('returns no files when the search root is inside a config-relative ignored directory', async () => {
+    const projectDir = join(ROOT, 'ignored-root');
+    const dir = join(projectDir, 'generated');
+    mkdirSync(dir, {recursive: true});
+    touch(
+      'ignored-root/dyno.config.json',
+      JSON.stringify({ignoredDirectories: ['generated']}),
+    );
+    touch('ignored-root/generated/skip.dyno.mjs');
+
+    const {files: result} = await discoverDynos(dir, {cwd: projectDir});
+    expect(result).toEqual([]);
+  });
+
+  it('rejects Windows-style absolute ignoredDirectories entries', async () => {
+    const projectDir = join(ROOT, 'windows-absolute-config');
+    mkdirSync(projectDir, {recursive: true});
+    touch(
+      'windows-absolute-config/dyno.config.json',
+      JSON.stringify({ignoredDirectories: ['C:\\generated']}),
+    );
+    touch('windows-absolute-config/keep.dyno.mjs');
+
+    await expect(discoverDynos(projectDir, {cwd: projectDir})).rejects.toThrow(
+      'ignoredDirectories[0] must be a relative directory path',
+    );
   });
 
   it('reports the resolved config path, or undefined when none applied', async () => {
@@ -145,12 +188,22 @@ describe('discoverDynos', () => {
     expect(result).toEqual([file]);
   });
 
+  it('searches an arbitrary explicitly provided hidden directory root', async () => {
+    const dir = join(ROOT, '.custom-dynos');
+    mkdirSync(dir, {recursive: true});
+    const file = touch('.custom-dynos/demo.dyno.mjs');
+
+    const {files: result} = await discoverDynos(dir);
+    expect(result).toEqual([file]);
+  });
+
   it('discovers dynos in hidden AI skill directories below the search root', async () => {
     const dir = join(ROOT, 'hidden-descendants');
     mkdirSync(dir, {recursive: true});
     const kept = touch('hidden-descendants/skill/skill.dyno.mjs');
     const agent = touch('hidden-descendants/.agents/skills/agent.dyno.mjs');
     const claude = touch('hidden-descendants/.claude/skills/claude.dyno.yaml');
+    touch('hidden-descendants/.custom/custom.dyno.mjs');
 
     const {files: result} = await discoverDynos(dir);
     expect(result).toEqual([kept, agent, claude].slice().sort());
@@ -177,9 +230,7 @@ describe('discoverDynos', () => {
     touch('.agents/hidden-descendants/skill/.hidden/hidden.dyno.mjs');
 
     const {files: result} = await discoverDynos(dir);
-    expect(result).toEqual(
-      [kept, join(dir, 'skill/.hidden/hidden.dyno.mjs')].sort(),
-    );
+    expect(result).toEqual([kept]);
   });
 
   it('returns an empty list for an empty directory', async () => {

@@ -1,6 +1,6 @@
 /** Action handler for `dynobox validate [path]`. */
 
-import {relative, resolve} from 'node:path';
+import {resolve} from 'node:path';
 
 import {CommanderError} from 'commander';
 
@@ -14,6 +14,7 @@ import {
   type RenderContext,
   symbol,
 } from '../terminal/index.js';
+import {displayPath} from '../util/displayPath.js';
 import {compileDynos, type CompileDynosResult} from './compileDynos.js';
 import {discoverDynos, DynoPathNotFoundError} from './discoverDynos.js';
 import type {ExecuteCliOptions, OutputWriter} from './execute.js';
@@ -173,9 +174,4 @@ function renderTextValidateOutput(
   });
 
   return `${rows.join('')}\n${summary}`;
-}
-
-function displayPath(filePath: string): string {
-  const rel = relative(process.cwd(), filePath);
-  return rel === '' || rel.startsWith('..') ? filePath : rel;
 }

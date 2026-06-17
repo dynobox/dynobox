@@ -16,7 +16,7 @@
  */
 
 import {stat} from 'node:fs/promises';
-import {isAbsolute, resolve} from 'node:path';
+import {dirname, isAbsolute, relative, resolve, sep} from 'node:path';
 
 import {glob} from 'tinyglobby';
 
@@ -51,6 +51,8 @@ export const DYNO_DEFAULT_IGNORE = [
   '**/.next/**',
   '**/.cache/**',
 ] as const;
+
+const DYNO_DISCOVERED_DOT_DIRECTORIES = ['.agents', '.claude'] as const;
 
 /** Thrown when discovery is asked to look at a path that does not exist. */
 export class DynoPathNotFoundError extends Error {
@@ -119,19 +121,18 @@ export async function discoverDynos(
       : {configPath: options.configPath}),
     cwd,
   });
-  const ignore = [
-    ...DYNO_DEFAULT_IGNORE,
-    ...config.ignoredDirectories.map(ignoredDirectoryGlob),
-  ];
+  const configuredIgnore = ignoredDirectoryGlobs(config, absoluteInputPath);
+  if (configuredIgnore === undefined) {
+    return {
+      files: [],
+      ...(config.configPath === undefined
+        ? {}
+        : {configPath: config.configPath}),
+    };
+  }
+  const ignore = [...DYNO_DEFAULT_IGNORE, ...configuredIgnore];
 
-  const matches = await glob(DYNO_FILE_GLOBS as unknown as string[], {
-    cwd: absoluteInputPath,
-    absolute: true,
-    dot: true,
-    ignore: ignore as unknown as string[],
-    onlyFiles: true,
-    followSymbolicLinks: false,
-  });
+  const matches = await discoverMatches(absoluteInputPath, ignore);
 
   return {
     files: matches.slice().sort(),
@@ -143,8 +144,67 @@ function resolveInputPath(inputPath: string, cwd: string): string {
   return isAbsolute(inputPath) ? inputPath : resolve(cwd, inputPath);
 }
 
-function ignoredDirectoryGlob(directory: string): string {
-  return `**/${directory}/**`;
+async function discoverMatches(
+  searchRoot: string,
+  ignore: readonly string[],
+): Promise<string[]> {
+  const visibleMatches = await glob(DYNO_FILE_GLOBS as unknown as string[], {
+    cwd: searchRoot,
+    absolute: true,
+    ignore: ignore as unknown as string[],
+    onlyFiles: true,
+    followSymbolicLinks: false,
+  });
+  const allowedDotMatches = await glob(discoveredDotDirectoryGlobs(), {
+    cwd: searchRoot,
+    absolute: true,
+    dot: true,
+    ignore: [...ignore, '**/.!(agents|claude)/**'],
+    onlyFiles: true,
+    followSymbolicLinks: false,
+  });
+
+  return Array.from(new Set([...visibleMatches, ...allowedDotMatches]));
+}
+
+function discoveredDotDirectoryGlobs(): string[] {
+  return [
+    ...DYNO_DISCOVERED_DOT_DIRECTORIES.flatMap((directory) =>
+      DYNO_FILE_GLOBS.map((glob) => glob.replace('**/', `**/${directory}/**/`)),
+    ),
+  ];
+}
+
+function ignoredDirectoryGlobs(
+  config: {configPath?: string; ignoredDirectories: readonly string[]},
+  searchRoot: string,
+): string[] | undefined {
+  if (config.configPath === undefined) return [];
+
+  const configDir = dirname(config.configPath);
+  const globs: string[] = [];
+  for (const directory of config.ignoredDirectories) {
+    const ignoredDirectory = resolve(configDir, directory);
+    if (isEqualOrDescendant(ignoredDirectory, searchRoot)) return undefined;
+    if (isEqualOrDescendant(searchRoot, ignoredDirectory)) {
+      globs.push(
+        `${toIgnoredDirectoryGlob(relative(searchRoot, ignoredDirectory))}/**`,
+      );
+    }
+  }
+  return globs;
+}
+
+function isEqualOrDescendant(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  return (
+    rel === '' ||
+    (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+  );
+}
+
+function toIgnoredDirectoryGlob(path: string): string {
+  return path.replace(/\\/g, '/').replace(/[!*+?()[\]{}@]/g, '\\$&');
 }
 
 async function statOrUndefined(path: string) {

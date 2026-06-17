@@ -1,9 +1,10 @@
 /** Action handler for `dynobox discover [path]`. */
 
-import {relative, resolve} from 'node:path';
+import {resolve} from 'node:path';
 
 import {CommanderError} from 'commander';
 
+import {displayPath} from '../util/displayPath.js';
 import {discoverDynos, DynoPathNotFoundError} from './discoverDynos.js';
 import type {OutputWriter} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
@@ -48,11 +49,6 @@ export async function discoverCommandAction(
 function renderDiscoverOutput(filePaths: readonly string[]): string {
   if (filePaths.length === 0) return '';
   return filePaths.map((filePath) => displayPath(filePath)).join('\n') + '\n';
-}
-
-function displayPath(filePath: string): string {
-  const rel = relative(process.cwd(), filePath);
-  return rel === '' || rel.startsWith('..') ? filePath : rel;
 }
 
 function renderDiscoverError(configPath: string, message: string): string {

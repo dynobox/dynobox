@@ -97,9 +97,11 @@ Path behavior:
 - Directory path: discover recursively under that directory.
 - File path: run that one loadable Dynobox config file.
 
-Directory discovery matches `**/*.dyno.{mjs,js,ts,mts,yaml,yml}`. It includes
-dot directories such as `.agents` and `.claude`, and skips `node_modules`,
-`dist`, `build`, `coverage`, `.git`, `.dynobox`, `.next`, and `.cache`.
+Directory discovery matches `**/*.dyno.{mjs,js,ts,mts,yaml,yml}`. It skips dot
+directories by default, but explicitly includes `.agents` and `.claude` skill
+directories. If you pass a hidden directory as `[path]`, Dynobox searches that
+directory. Discovery also skips `node_modules`, `dist`, `build`, `coverage`,
+`.git`, `.dynobox`, `.next`, and `.cache`.
 
 Directory discovery also reads a `dyno.config.json` from the current working
 directory — the directory you run the command in, not the `[path]` argument and
@@ -112,10 +114,11 @@ with no upward walk. For now the config is JSON-only and supports
 }
 ```
 
-Each ignored directory is treated as a relative directory path and skipped
-recursively. Run commands from your project root so its `dyno.config.json`
-applies, or pass `--config <path>` to use a specific config file from anywhere.
-Run with `--verbose` (or `--debug`) to print which `dyno.config.json` applied.
+Each ignored directory is treated as a directory path relative to the
+`dyno.config.json` file and skipped recursively. Run commands from your project
+root so its `dyno.config.json` applies, or pass `--config <path>` to use a
+specific config file from anywhere. Run with `--verbose` (or `--debug`) to print
+which `dyno.config.json` applied.
 
 Explicit file paths do not need to match the `*.dyno.*` naming pattern. YAML
 files are parsed as YAML, and JavaScript or TypeScript files such as `.mjs`,

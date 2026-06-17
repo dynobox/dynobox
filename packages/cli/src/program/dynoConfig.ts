@@ -1,5 +1,5 @@
 import {readFile, stat} from 'node:fs/promises';
-import {isAbsolute, join, resolve} from 'node:path';
+import {isAbsolute, join, resolve, win32} from 'node:path';
 
 export const DYNO_CONFIG_BASENAME = 'dyno.config.json';
 
@@ -113,15 +113,15 @@ function parseIgnoredDirectory(
     );
   }
 
-  const rawDirectory = value.trim().replace(/\\/g, '/');
-  if (isAbsolute(rawDirectory)) {
+  const rawDirectory = value.trim();
+  if (isAbsolute(rawDirectory) || win32.isAbsolute(rawDirectory)) {
     throw new DynoConfigError(
       configPath,
       `ignoredDirectories[${index}] must be a relative directory path.`,
     );
   }
 
-  const directory = rawDirectory.replace(/^\/+|\/+$/g, '');
+  const directory = rawDirectory.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
   if (directory.length === 0) {
     throw new DynoConfigError(
       configPath,

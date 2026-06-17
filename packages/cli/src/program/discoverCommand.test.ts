@@ -1,8 +1,9 @@
 import {mkdirSync, rmSync, writeFileSync} from 'node:fs';
-import {join, relative} from 'node:path';
+import {join} from 'node:path';
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 
+import {displayPath} from '../util/displayPath.js';
 import {executeCli} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
 
@@ -14,10 +15,6 @@ function touch(relPath: string, body = ''): string {
   if (lastSep > 0) mkdirSync(absolute.slice(0, lastSep), {recursive: true});
   writeFileSync(absolute, body);
   return absolute;
-}
-
-function displayPath(filePath: string): string {
-  return relative(process.cwd(), filePath) || filePath;
 }
 
 describe('dynobox discover', () => {
@@ -66,7 +63,7 @@ describe('dynobox discover', () => {
     const dir = join(ROOT, 'configured-tree');
     mkdirSync(dir, {recursive: true});
     const config = touch(
-      'configured-settings/dyno.config.json',
+      'configured-tree/dyno.config.json',
       JSON.stringify({ignoredDirectories: ['generated']}),
     );
     touch('configured-tree/generated/skip.dyno.mjs');

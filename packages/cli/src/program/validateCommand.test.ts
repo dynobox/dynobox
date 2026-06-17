@@ -1,9 +1,10 @@
 import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join, relative} from 'node:path';
+import {join} from 'node:path';
 
 import {afterAll, afterEach, beforeAll, describe, expect, it} from 'vitest';
 
+import {displayPath} from '../util/displayPath.js';
 import {createFixtureSet} from '../testUtils.js';
 import {executeCli} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
@@ -42,11 +43,6 @@ function makeTempRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'dynobox-cli-validate-'));
   TEMP_ROOTS.push(root);
   return root;
-}
-
-function displayPath(filePath: string): string {
-  const rel = relative(process.cwd(), filePath);
-  return rel === '' || rel.startsWith('..') ? filePath : rel;
 }
 
 describe('dynobox validate', () => {
