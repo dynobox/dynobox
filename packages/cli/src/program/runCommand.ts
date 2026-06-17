@@ -53,9 +53,9 @@ import {unique} from '../util/unique.js';
 import {resolveAuthToken} from './auth.js';
 import {compileDynos, type DynoCompileSuccess} from './compileDynos.js';
 import {
-  DYNO_FILE_SUFFIXES,
   discoverDynos,
   type DiscoverDynosResult,
+  DYNO_FILE_SUFFIXES,
   DynoPathNotFoundError,
 } from './discoverDynos.js';
 import {shouldRenderLive} from './environment.js';

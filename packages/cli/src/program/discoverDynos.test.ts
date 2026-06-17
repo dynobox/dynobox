@@ -83,7 +83,9 @@ describe('discoverDynos', () => {
       JSON.stringify({ignoredDirectories: ['tests/generated[old]']}),
     );
     touch('literal-ignore/project/tests/generated[old]/skip.dyno.mjs');
-    const kept = touch('literal-ignore/project/tests/generated-old/keep.dyno.mjs');
+    const kept = touch(
+      'literal-ignore/project/tests/generated-old/keep.dyno.mjs',
+    );
 
     const {files: result} = await discoverDynos(dir, {cwd: projectDir});
     expect(result).toEqual([kept]);
@@ -161,7 +163,9 @@ describe('discoverDynos', () => {
     const withConfig = await discoverDynos(projectDir, {cwd: projectDir});
     expect(withConfig.configPath).toBe(config);
 
-    const noConfig = await discoverDynos(projectDir, {cwd: join(ROOT, 'empty')});
+    const noConfig = await discoverDynos(projectDir, {
+      cwd: join(ROOT, 'empty'),
+    });
     expect(noConfig.configPath).toBeUndefined();
   });
 

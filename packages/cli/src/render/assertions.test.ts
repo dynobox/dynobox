@@ -231,7 +231,9 @@ describe('renderAssertionDetails', () => {
       'observed  1 read_file tool call observed, none for path "missing.txt"',
     );
     expect(output).toContain('observed  matching shell command "pnpm test"');
-    expect(output).toContain('observed  no matching SKILL.md reference observed');
+    expect(output).toContain(
+      'observed  no matching SKILL.md reference observed',
+    );
     expect(output).toContain(
       'observed  matching request: GET https://api.example.test/users/1 -> 200',
     );
