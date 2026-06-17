@@ -97,7 +97,21 @@ describe('dynobox discover', () => {
 
     expect(result).toEqual({
       exitCode: 0,
-      stdout: `config: ${displayPath(config)}\n${displayPath(file)}\n`,
+      stdout:
+        `path: ${dir}\n` + `config: ${config}\n` + `${displayPath(file)}\n`,
+      stderr: '',
+    });
+  });
+
+  it('prints the absolute search path and config status for an empty verbose result', async () => {
+    const dir = join(ROOT, 'empty-verbose');
+    mkdirSync(dir, {recursive: true});
+
+    const result = await executeCli(['discover', dir, '--verbose']);
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: `path: ${dir}\nconfig: none\n`,
       stderr: '',
     });
   });

@@ -37,7 +37,12 @@ export async function discoverCommandAction(
         : {configPath: commandFlags.config}),
     });
     writeStdout(
-      renderDiscoverOutput(result.files, result.configPath, commandFlags),
+      renderDiscoverOutput(
+        result.files,
+        resolvedInputPath,
+        result.configPath,
+        commandFlags,
+      ),
     );
   } catch (error) {
     const label = configPath ?? resolvedInputPath;
@@ -52,12 +57,14 @@ export async function discoverCommandAction(
 
 function renderDiscoverOutput(
   filePaths: readonly string[],
+  searchPath: string,
   configPath: string | undefined,
   flags: DiscoverCommandFlags,
 ): string {
   const lines = filePaths.map((filePath) => displayPath(filePath));
-  if ((flags.verbose || flags.debug) && configPath !== undefined) {
-    lines.unshift(`config: ${displayPath(configPath)}`);
+  if (flags.verbose || flags.debug) {
+    lines.unshift(`config: ${configPath ?? 'none'}`);
+    lines.unshift(`path: ${searchPath}`);
   }
   if (lines.length === 0) return '';
   return lines.join('\n') + '\n';

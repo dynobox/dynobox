@@ -104,8 +104,21 @@ describe('dynobox validate', () => {
     expect(result).toEqual({
       exitCode: 0,
       stdout:
-        `config: ${displayPath(config)}\n` +
+        `path: ${root}\n` +
+        `config: ${config}\n` +
         `  ✓  ${displayPath(file)}   1 scenario(s)\n\nValidated 1 dyno file(s).\n`,
+      stderr: '',
+    });
+  });
+
+  it('prints the absolute search path and config status for an empty verbose result', async () => {
+    const root = makeTempRoot();
+
+    const result = await executeCli(['validate', root, '--verbose']);
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: `path: ${root}\nconfig: none\nValidated 0 dyno file(s).\n`,
       stderr: '',
     });
   });

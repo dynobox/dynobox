@@ -78,7 +78,11 @@ export async function validateCommandAction(
       appliedConfigPath !== undefined &&
       (ctx.mode === 'verbose' || ctx.mode === 'debug')
     ) {
-      writeStdout(`config: ${displayPath(appliedConfigPath)}\n`);
+      writeStdout(
+        renderVerboseValidateMetadata(resolvedInputPath, appliedConfigPath),
+      );
+    } else if (ctx.mode === 'verbose' || ctx.mode === 'debug') {
+      writeStdout(renderVerboseValidateMetadata(resolvedInputPath, undefined));
     }
     writeStdout(renderTextValidateOutput(result, filePaths, ctx));
   }
@@ -132,6 +136,13 @@ async function discoverForValidate(
       'discovery failed',
     );
   }
+}
+
+function renderVerboseValidateMetadata(
+  searchPath: string,
+  configPath: string | undefined,
+): string {
+  return `path: ${searchPath}\nconfig: ${configPath ?? 'none'}\n`;
 }
 
 function validateReporter(
