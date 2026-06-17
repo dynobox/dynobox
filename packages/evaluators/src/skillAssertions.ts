@@ -4,8 +4,8 @@ import {stringsFromUnknown} from './inspection.js';
 import {failed} from './results.js';
 import type {AssertionResult, ToolEvent} from './types.js';
 
-export function evaluateSkillInvoked(
-  assertion: Extract<IrAssertion, {kind: 'skill.invoked'}>,
+export function evaluateSkillReferenced(
+  assertion: Extract<IrAssertion, {kind: 'skill.referenced'}>,
   toolEvents: readonly ToolEvent[],
 ): AssertionResult {
   const event = toolEvents.find((toolEvent) =>
@@ -17,14 +17,14 @@ export function evaluateSkillInvoked(
       assertionId: assertion.id,
       kind: assertion.kind,
       passed: true,
-      message: `Observed skill "${assertion.skill}" instruction file access.`,
+      message: `Observed skill "${assertion.skill}" instruction file reference.`,
       evidence: event,
     };
   }
 
   return failed(
     assertion,
-    `Expected skill "${assertion.skill}" to be invoked, but no access to its SKILL.md was observed.`,
+    `Expected skill "${assertion.skill}" to be referenced, but no reference to its SKILL.md was observed.`,
   );
 }
 

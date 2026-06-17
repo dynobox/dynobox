@@ -194,11 +194,11 @@ compound command when the command text appears in order.
 
 ### Skills
 
-Use `skill.invoked` to assert that the harness accessed a named skill's
-`SKILL.md` instruction file.
+Use `skill.referenced` to assert that observed harness events referenced a
+named skill's `SKILL.md` instruction file.
 
 ```ts
-skill.invoked('commit');
+skill.referenced('commit');
 ```
 
 This passes when observed tool events reference
@@ -358,7 +358,7 @@ Supported skill roots:
 For example, a dyno at `.agents/skills/commit/dyno/commit.dyno.mjs` with
 `.agents/skills/commit/SKILL.md` gets setup commands that create
 `.agents/skills/commit/SKILL.md` in the scenario work directory. This makes
-skill invocation tests work without manually copying the instruction file in
+skill reference tests work without manually copying the instruction file in
 each scenario.
 
 ## Reusable Scenarios
@@ -433,7 +433,7 @@ JSON output.
 | `artifact.contains('pkg.json', 'foo')`                 | `{type: artifact.contains, path: pkg.json, text: foo}`             |
 | `transcript.contains('done')`                          | `{type: transcript.contains, text: done}`                          |
 | `finalMessage.contains('ok')`                          | `{type: finalMessage.contains, text: ok}`                          |
-| `skill.invoked('commit')`                              | `{type: skill.invoked, skill: commit}`                             |
+| `skill.referenced('commit')`                           | `{type: skill.referenced, skill: commit}`                          |
 | `sequence.inOrder([tool.called('shell', {...}), ...])` | `{type: sequence.inOrder, steps: [{type: tool.called, ...}, ...]}` |
 | `http.called('npmPrettier', {status: 200})`            | `{type: http.called, endpoint: npmPrettier, status: 200}`          |
 | `http.notCalled('leftPad')`                            | `{type: http.notCalled, endpoint: leftPad}`                        |

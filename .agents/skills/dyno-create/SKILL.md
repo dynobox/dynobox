@@ -5,7 +5,7 @@ description: |
   agent and skill workflow testing with Claude Code or OpenAI Codex. Use this skill
   when the user wants to write, scaffold, generate, review, or edit dyno tests,
   dynobox configs, scenarios, assertions, fixtures, or evaluation harnesses,
-  including requests involving tool calls, shell commands, skill invocations,
+  including requests involving tool calls, shell commands, skill references,
   artifacts, transcripts, final messages, ordered sequences, or HTTP requests.
 ---
 
@@ -73,7 +73,7 @@ export default defineDyno({
         `cp ${here.q('../SKILL.md')} .agents/skills/demo/SKILL.md`,
       ],
       assertions: [
-        skill.invoked('demo'),
+        skill.referenced('demo'),
         tool.called('read_file', {path: 'input.txt'}),
         finalMessage.contains('tests'),
       ],
@@ -298,16 +298,16 @@ Use `finalMessage.contains` for the user-visible answer. Use
 `transcript.contains` when the relevant evidence may appear before the final
 assistant message.
 
-### skill.invoked
+### skill.referenced
 
-Asserts that the harness loaded a named skill's `SKILL.md`.
+Asserts that observed harness events referenced a named skill's `SKILL.md`.
 
 ```yaml
-- type: skill.invoked
+- type: skill.referenced
   skill: commit
 ```
 
-This is useful for testing skill routing, not general task success.
+This is useful for testing observable skill-file references, not general task success.
 
 ### sequence.inOrder
 
@@ -368,7 +368,7 @@ variables. Harness-native web tools with separate trust stores may bypass it.
    - `tool.called` for required interactions
    - `tool.notCalled` for dangerous or wrong behavior
    - `finalMessage.contains` for user-visible answers
-   - `skill.invoked` when testing skill use specifically
+   - `skill.referenced` when testing observed skill file references
 7. Use `sequence.inOrder` sparingly. It is powerful, but easy to make too
    brittle across harnesses.
 
@@ -388,7 +388,7 @@ Then assert both routing and behavior:
 
 ```js
 assertions: [
-  skill.invoked('<skill-name>'),
+  skill.referenced('<skill-name>'),
   tool.called('read_file', {path: 'input.txt'}),
   finalMessage.contains('Expected section'),
 ];

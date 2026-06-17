@@ -6,12 +6,12 @@ const sampleRun = `<span class="mut">$</span> <span class="cmd">dynobox run</spa
   dynobox 0.6.0
 
   <span class="ok">✓</span> commit-skill   claude-code   <span class="mut">14.2s</span>
-    <span class="ok">✓ skill.invoked(commit)</span>
+    <span class="ok">✓ skill.referenced(commit)</span>
     <span class="ok">✓ tool.called(shell, "git commit")</span>
     <span class="ok">✓ tool.notCalled(shell, "git push")</span>
 
   <span class="fail">✗</span> commit-skill   codex         <span class="mut">11.8s</span>
-    <span class="fail">✗ skill.invoked(commit)</span>
+    <span class="fail">✗ skill.referenced(commit)</span>
       <span class="mut">SKILL.md was never read</span>
     <span class="ok">✓ tool.called(shell, "git commit")</span>
     <span class="ok">✓ tool.notCalled(shell, "git push")</span>

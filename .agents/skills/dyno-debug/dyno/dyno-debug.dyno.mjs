@@ -16,7 +16,7 @@ export default defineDyno({
         'git init',
       ],
       assertions: [
-        skill.invoked('dyno-debug'),
+        skill.referenced('dyno-debug'),
         tool.called('read_file', {path: 'matrix-failure-output.txt'}),
         tool.called('read_file', {
           path: 'runs/failed-job/dynobox-transcript.log',

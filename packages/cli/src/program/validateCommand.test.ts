@@ -4,8 +4,8 @@ import {join} from 'node:path';
 
 import {afterAll, afterEach, beforeAll, describe, expect, it} from 'vitest';
 
-import {displayPath} from '../util/displayPath.js';
 import {createFixtureSet} from '../testUtils.js';
+import {displayPath} from '../util/displayPath.js';
 import {executeCli} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
 

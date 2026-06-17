@@ -6,7 +6,7 @@ import {
 } from './artifactAssertions.js';
 import {evaluateHttpCalled, evaluateHttpNotCalled} from './httpAssertions.js';
 import {unsupportedAssertionResult} from './results.js';
-import {evaluateSkillInvoked} from './skillAssertions.js';
+import {evaluateSkillReferenced} from './skillAssertions.js';
 import {evaluateTextContains} from './textAssertions.js';
 import {
   evaluateSequenceInOrder,
@@ -51,8 +51,8 @@ function evaluateAssertion(
     return evaluateSequenceInOrder(assertion, input.toolEvents);
   }
 
-  if (assertion.kind === 'skill.invoked') {
-    return evaluateSkillInvoked(assertion, input.toolEvents);
+  if (assertion.kind === 'skill.referenced') {
+    return evaluateSkillReferenced(assertion, input.toolEvents);
   }
 
   if (assertion.kind === 'http.called') {

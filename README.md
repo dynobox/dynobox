@@ -159,7 +159,7 @@ reference.
 - Assert tool calls with `tool.called(...)` and `tool.notCalled(...)`.
 - Match file-oriented tool calls by path, such as
   `tool.called('read_file', {path: 'package.json'})`.
-- Assert skill instruction loading with `skill.invoked(...)`.
+- Assert skill instruction file references with `skill.referenced(...)`.
 - Match shell commands with `equals`, `includes`, `startsWith`, or `matches`.
 - Assert ordered tool-call sequences with `sequence.inOrder(...)`.
 - Assert work-directory artifacts with `artifact.exists(...)` and

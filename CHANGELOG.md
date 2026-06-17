@@ -8,6 +8,17 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `@dynobox/sdk`
+
+- **Breaking:** Renamed `skill.invoked(...)` assertions to
+  `skill.referenced(...)`, including the authored config type and compiled IR
+  kind.
+
+### `dynobox` (CLI)
+
+- **Breaking:** Updated skill assertion evaluation and rendering to use
+  `skill.referenced(...)` for observed `SKILL.md` file references.
+
 ---
 
 ## dynobox@0.6.0 — 2026-06-16

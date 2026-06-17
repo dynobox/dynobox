@@ -317,7 +317,7 @@ function assertionDefinition(
   if (assertion.kind === 'http.notCalled') {
     return {...base, endpointId: assertion.endpointId};
   }
-  if (assertion.kind === 'skill.invoked') {
+  if (assertion.kind === 'skill.referenced') {
     return {...base, skill: assertion.skill};
   }
   if (assertion.kind === 'artifact.exists') {

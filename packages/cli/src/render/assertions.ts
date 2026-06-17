@@ -138,8 +138,8 @@ function describeObservedFailure(
     return `matched ${matched.length} of ${assertion.steps.length} ordered steps${suffix}`;
   }
 
-  if (assertion.kind === 'skill.invoked') {
-    return `no matching SKILL.md access observed`;
+  if (assertion.kind === 'skill.referenced') {
+    return `no matching SKILL.md reference observed`;
   }
 
   if (assertion.kind === 'http.called') {
@@ -321,7 +321,7 @@ function shouldShowObservedSkillFiles(
   return result.assertionResults.some((assertionResult) => {
     if (assertionResult.passed) return false;
     const assertion = assertionById.get(assertionResult.assertionId);
-    return assertion?.kind === 'skill.invoked';
+    return assertion?.kind === 'skill.referenced';
   });
 }
 

@@ -9,7 +9,7 @@ import {
 import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/httpMethod.js';
 
-export const IR_VERSION = '0.1' as const;
+export const IR_VERSION = '0.2' as const;
 
 export const irVersionSchema = z.literal(IR_VERSION);
 
@@ -120,7 +120,7 @@ export const irAssertionSchema = z
     z.object({
       id: z.string().min(1),
       label: z.string().min(1).optional(),
-      kind: z.literal('skill.invoked'),
+      kind: z.literal('skill.referenced'),
       skill: z.string().min(1),
     }),
   ])

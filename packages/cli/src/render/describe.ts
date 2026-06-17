@@ -42,8 +42,8 @@ export function describeAssertion(assertion: IrAssertion): string {
     return `sequence.inOrder(${assertion.steps.length} steps)`;
   }
 
-  if (assertion.kind === 'skill.invoked') {
-    return `skill.invoked(${assertion.skill})`;
+  if (assertion.kind === 'skill.referenced') {
+    return `skill.referenced(${assertion.skill})`;
   }
 
   if (assertion.kind === 'artifact.exists') {
@@ -90,8 +90,8 @@ export function describeExpectation(assertion: IrAssertion): string {
     return assertion.steps.map(describeToolStepExpectation).join(' before ');
   }
 
-  if (assertion.kind === 'skill.invoked') {
-    return `skill "${assertion.skill}" instruction file access`;
+  if (assertion.kind === 'skill.referenced') {
+    return `skill "${assertion.skill}" instruction file reference`;
   }
 
   if (assertion.kind === 'artifact.exists') {

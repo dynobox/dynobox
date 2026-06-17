@@ -54,7 +54,7 @@ You can assert:
 
 - Tool calls, including expected and prohibited shell commands or path-aware
   file tool calls.
-- Skill instruction loading with `skill.invoked(...)`.
+- Skill instruction file references with `skill.referenced(...)`.
 - Ordered tool-call sequences.
 - Files present inside the scenario work directory.
 - Harness transcript and final-message text.

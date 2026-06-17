@@ -207,12 +207,12 @@ export type SequenceInOrderAssertion = {
   readonly steps: readonly ToolCalledAssertion[];
 };
 
-/** Assertion that an agent loaded a named skill's instruction file. */
-export type SkillInvokedAssertion = {
+/** Assertion that observed harness events referenced a named skill instruction file. */
+export type SkillReferencedAssertion = {
   readonly [ASSERTION_BRAND]: true;
   readonly id?: string;
   readonly label?: string;
-  readonly type: 'skill.invoked';
+  readonly type: 'skill.referenced';
   readonly skill: string;
 };
 
@@ -227,4 +227,4 @@ export type Assertion<K extends string = string> =
   | TranscriptContainsAssertion
   | FinalMessageContainsAssertion
   | SequenceInOrderAssertion
-  | SkillInvokedAssertion;
+  | SkillReferencedAssertion;

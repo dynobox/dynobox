@@ -872,7 +872,7 @@ describe('dynobox run — failures and diagnostics', () => {
     expect(result.stdout).toContain('✓ transcript.contains');
     expect(result.stdout).toContain('✓ finalMessage.contains');
     expect(result.stdout).toContain('✓ sequence.inOrder(2 steps)');
-    expect(result.stdout).toContain('✓ skill.invoked(commit)');
+    expect(result.stdout).toContain('✓ skill.referenced(commit)');
   });
 
   it('shows observed skill files in verbose output without duplicates', async () => {
@@ -901,7 +901,7 @@ describe('dynobox run — failures and diagnostics', () => {
     expect(result.stdout).not.toContain(`2. ${COMMIT_SKILL_PATH}`);
   });
 
-  it('shows observed skill files when skill invocation assertions fail', async () => {
+  it('shows observed skill files when skill reference assertions fail', async () => {
     const result = await executeCli(['run', fixtures.modalitiesConfigPath], {
       harnesses: [
         new FakeHarness(
@@ -918,18 +918,18 @@ describe('dynobox run — failures and diagnostics', () => {
     });
 
     expect(result.exitCode).toBe(runFailureExitCode);
-    expect(result.stdout).toContain('✗ skill.invoked(commit)');
+    expect(result.stdout).toContain('✗ skill.referenced(commit)');
     expect(result.stdout).toContain(
-      'expected  skill "commit" instruction file access',
+      'expected  skill "commit" instruction file reference',
     );
     expect(result.stdout).toContain(
-      'observed  no matching SKILL.md access observed',
+      'observed  no matching SKILL.md reference observed',
     );
     expect(result.stdout).toContain('observed skill files during this run:');
     expect(result.stdout).toContain(`1. ${RELEASE_SKILL_PATH}`);
   });
 
-  it('shows no observed skill files when skill invocation evidence is absent', async () => {
+  it('shows no observed skill files when skill reference evidence is absent', async () => {
     const result = await executeCli(['run', fixtures.modalitiesConfigPath], {
       harnesses: [
         new FakeHarness(
