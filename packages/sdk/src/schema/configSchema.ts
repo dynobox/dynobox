@@ -155,9 +155,9 @@ const sequenceInOrderAssertionSchema = z
   .merge(assertionBaseSchema)
   .strict();
 
-const skillInvokedAssertionSchema = z
+const skillReferencedAssertionSchema = z
   .object({
-    type: z.literal('skill.invoked'),
+    type: z.literal('skill.referenced'),
     skill: z.string().min(1),
   })
   .merge(assertionBaseSchema)
@@ -174,7 +174,7 @@ export const assertionSchema = z
     transcriptContainsAssertionSchema,
     finalMessageContainsAssertionSchema,
     sequenceInOrderAssertionSchema,
-    skillInvokedAssertionSchema,
+    skillReferencedAssertionSchema,
   ])
   .superRefine((assertion, ctx) => {
     const fileToolKinds = new Set<FileToolKind>([

@@ -7,7 +7,7 @@ import type {
   NotCalledAssertion,
   SequenceInOrderAssertion,
   ShellCommandMatcher,
-  SkillInvokedAssertion,
+  SkillReferencedAssertion,
   ToolCalledAssertion,
   ToolKind,
   ToolNotCalledAssertion,
@@ -148,13 +148,13 @@ export function createSequenceInOrderAssertion(
   };
 }
 
-/** Create an assertion that a named skill instruction file was loaded. */
-export function createSkillInvokedAssertion(
+/** Create an assertion that a named skill instruction file was referenced. */
+export function createSkillReferencedAssertion(
   skill: string,
-): SkillInvokedAssertion {
+): SkillReferencedAssertion {
   return {
     [ASSERTION_BRAND]: true as const,
-    type: 'skill.invoked' as const,
+    type: 'skill.referenced' as const,
     skill,
   };
 }

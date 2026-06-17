@@ -120,7 +120,7 @@ export const irAssertionSchema = z
     z.object({
       id: z.string().min(1),
       label: z.string().min(1).optional(),
-      kind: z.literal('skill.invoked'),
+      kind: z.literal('skill.referenced'),
       skill: z.string().min(1),
     }),
   ])

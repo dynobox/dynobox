@@ -229,7 +229,7 @@ describe('evaluateAssertions', () => {
     expect(results.map((result) => result.passed)).toEqual([true, true, true]);
   });
 
-  it('passes skill.invoked when a Read event accesses the skill file', () => {
+  it('passes skill.referenced when a Read event accesses the skill file', () => {
     const event: ToolEvent = {
       kind: 'read_file',
       rawName: 'Read',
@@ -237,18 +237,18 @@ describe('evaluateAssertions', () => {
     };
 
     const result = evaluateOne(
-      {id: 'assertion.test.0', kind: 'skill.invoked', skill: 'commit'},
+      {id: 'assertion.test.0', kind: 'skill.referenced', skill: 'commit'},
       [event],
     );
 
     expect(result).toMatchObject({
       passed: true,
-      message: 'Observed skill "commit" instruction file access.',
+      message: 'Observed skill "commit" instruction file reference.',
       evidence: event,
     });
   });
 
-  it('passes skill.invoked when a shell command reads the skill file', () => {
+  it('passes skill.referenced when a shell command reads the skill file', () => {
     const event: ToolEvent = {
       kind: 'shell',
       rawName: 'Bash',
@@ -259,7 +259,7 @@ describe('evaluateAssertions', () => {
     };
 
     const result = evaluateOne(
-      {id: 'assertion.test.0', kind: 'skill.invoked', skill: 'release'},
+      {id: 'assertion.test.0', kind: 'skill.referenced', skill: 'release'},
       [event],
     );
 
@@ -267,7 +267,7 @@ describe('evaluateAssertions', () => {
     expect(result.evidence).toEqual(event);
   });
 
-  it('passes skill.invoked for .claude skill directories and nested inputs', () => {
+  it('passes skill.referenced for .claude skill directories and nested inputs', () => {
     const event: ToolEvent = {
       kind: 'search_files',
       rawName: 'Grep',
@@ -278,23 +278,23 @@ describe('evaluateAssertions', () => {
     };
 
     const result = evaluateOne(
-      {id: 'assertion.test.0', kind: 'skill.invoked', skill: 'commit'},
+      {id: 'assertion.test.0', kind: 'skill.referenced', skill: 'commit'},
       [event],
     );
 
     expect(result.passed).toBe(true);
   });
 
-  it('fails skill.invoked when no matching skill file access is observed', () => {
+  it('fails skill.referenced when no matching skill file reference is observed', () => {
     const result = evaluateOne(
-      {id: 'assertion.test.0', kind: 'skill.invoked', skill: 'commit'},
+      {id: 'assertion.test.0', kind: 'skill.referenced', skill: 'commit'},
       [shellEvent],
     );
 
     expect(result).toMatchObject({
       passed: false,
       message:
-        'Expected skill "commit" to be invoked, but no access to its SKILL.md was observed.',
+        'Expected skill "commit" to be referenced, but no reference to its SKILL.md was observed.',
     });
   });
 

@@ -19,7 +19,7 @@ Authoring helpers for user config files:
 - `http.called()`
 - `http.notCalled()`
 - `tool.called()`, `tool.notCalled()`
-- `skill.invoked()`
+- `skill.referenced()`
 - `artifact.exists()`, `artifact.contains()`
 - `transcript.contains()`
 - `finalMessage.contains()`

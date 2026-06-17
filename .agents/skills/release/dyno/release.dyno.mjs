@@ -25,7 +25,7 @@ export default defineDyno({
           tool.called('shell', {includes: 'npm version'}),
           tool.called('shell', {includes: 'pack'}),
         ]),
-        skill.invoked('release'),
+        skill.referenced('release'),
         artifact.contains('packages/mylib/package.json', '"version": "1.0.1"'),
         artifact.contains('CHANGELOG.md', 'mylib@1.0.1'),
         tool.notCalled('shell', {includes: 'npm publish'}),

@@ -22,7 +22,7 @@ export default defineDyno({
           tool.called('shell', {includes: 'git diff'}),
           tool.called('shell', {includes: 'git commit'}),
         ]),
-        skill.invoked('commit'),
+        skill.referenced('commit'),
         tool.called('shell', {includes: 'git add'}),
         artifact.exists('.agents/skills/commit/SKILL.md'),
         tool.notCalled('shell', {includes: 'git push'}),

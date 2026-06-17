@@ -64,7 +64,7 @@ Dynobox supports assertions for:
 - File tool path matchers such as
   `tool.called('read_file', {path: 'package.json'})`.
 - Ordered tool-call sequences.
-- Skill instruction loading.
+- Skill instruction file references.
 - Work-directory artifacts.
 - Harness transcript and final response text.
 - HTTP requests from local child-process tools that honor proxy environment

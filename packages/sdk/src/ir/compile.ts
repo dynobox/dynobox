@@ -201,8 +201,8 @@ function buildIrAssertion(
     };
   }
 
-  if (assertion.type === 'skill.invoked') {
-    return {id, ...metadata, kind: 'skill.invoked', skill: assertion.skill};
+  if (assertion.type === 'skill.referenced') {
+    return {id, ...metadata, kind: 'skill.referenced', skill: assertion.skill};
   }
 
   const endpointId = endpointIdByKey.get(assertion.endpoint);

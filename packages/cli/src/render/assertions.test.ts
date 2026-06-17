@@ -136,8 +136,8 @@ describe('renderAssertionDetails', () => {
             matcher: {includes: 'pnpm test'},
           },
           {
-            id: 'assertion.skill.invoked',
-            kind: 'skill.invoked',
+            id: 'assertion.skill.referenced',
+            kind: 'skill.referenced',
             skill: 'dyno-debug',
           },
           {
@@ -195,11 +195,11 @@ describe('renderAssertionDetails', () => {
           evidence: shellEvent,
         },
         {
-          assertionId: 'assertion.skill.invoked',
-          kind: 'skill.invoked',
+          assertionId: 'assertion.skill.referenced',
+          kind: 'skill.referenced',
           passed: false,
           message:
-            'Expected skill "dyno-debug" to be invoked, but no access to its SKILL.md was observed.',
+            'Expected skill "dyno-debug" to be referenced, but no reference to its SKILL.md was observed.',
         },
         {
           assertionId: 'assertion.http.not-called',
@@ -231,7 +231,7 @@ describe('renderAssertionDetails', () => {
       'observed  1 read_file tool call observed, none for path "missing.txt"',
     );
     expect(output).toContain('observed  matching shell command "pnpm test"');
-    expect(output).toContain('observed  no matching SKILL.md access observed');
+    expect(output).toContain('observed  no matching SKILL.md reference observed');
     expect(output).toContain(
       'observed  matching request: GET https://api.example.test/users/1 -> 200',
     );

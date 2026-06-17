@@ -21,7 +21,7 @@ import {
   sequence,
   type SequenceInOrderAssertion,
   skill,
-  type SkillInvokedAssertion,
+  type SkillReferencedAssertion,
   tool,
   type ToolCalledAssertion,
   type ToolNotCalledAssertion,
@@ -51,7 +51,7 @@ describe('packages/sdk', () => {
     expect(typeof transcript.contains).toBe('function');
     expect(typeof finalMessage.contains).toBe('function');
     expect(typeof sequence.inOrder).toBe('function');
-    expect(typeof skill.invoked).toBe('function');
+    expect(typeof skill.referenced).toBe('function');
   });
 
   it('provides dyno config path and shell quoting helpers', () => {
@@ -259,8 +259,8 @@ export default defineDyno({
       sequence.inOrder([tool.called('shell')]),
     ).toEqualTypeOf<SequenceInOrderAssertion>();
     expectTypeOf(
-      skill.invoked('commit'),
-    ).toEqualTypeOf<SkillInvokedAssertion>();
+      skill.referenced('commit'),
+    ).toEqualTypeOf<SkillReferencedAssertion>();
   });
 
   it('compile returns a deterministic IR for a minimal config', () => {
@@ -432,7 +432,7 @@ export default defineDyno({
               tool.called('read_file', {path: 'package.json'}),
               tool.called('shell', {includes: 'git commit'}),
             ]),
-            skill.invoked('commit'),
+            skill.referenced('commit'),
           ],
         },
       ],
@@ -497,7 +497,7 @@ export default defineDyno({
       },
       {
         id: 'assertion.skill-flow.7',
-        kind: 'skill.invoked',
+        kind: 'skill.referenced',
         skill: 'commit',
       },
     ]);

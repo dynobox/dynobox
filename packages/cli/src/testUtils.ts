@@ -100,7 +100,7 @@ export default defineDyno({
           tool.called('shell', {includes: 'git status'}),
           tool.called('shell', {includes: 'git commit'}),
         ]),
-        skill.invoked('commit'),
+        skill.referenced('commit'),
       ],
     },
   ],

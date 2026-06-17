@@ -28,7 +28,7 @@ export type {
   SequenceInOrderAssertion,
   ShellCommandMatcher,
   ShellToolMatcher,
-  SkillInvokedAssertion,
+  SkillReferencedAssertion,
   ToolCalledAssertion,
   ToolKind,
   ToolNotCalledAssertion,
