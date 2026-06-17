@@ -712,7 +712,7 @@ export default defineDyno({
 
   it('rejects malformed canonical IR shapes', () => {
     const result = irSchema.safeParse({
-      version: '0.2',
+      version: '0.1',
       scenarios: [],
     });
 
@@ -895,7 +895,7 @@ export default defineDyno({
             "setup": [],
           },
         ],
-        "version": "0.1",
+        "version": "0.2",
       }
     `);
   });
