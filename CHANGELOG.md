@@ -10,6 +10,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Added JSON project config via `dyno.config.json` and `--config <path>`, with
+  `ignoredDirectories` support for discovery-backed commands.
+- Changed discovery-backed commands to include `.agents` and `.claude` skill
+  directories while still skipping other dot directories by default.
 - Added `dynobox run --model` for positional model overrides alongside
   `--harness`, and changed targeted harness runs to preserve configured harness
   model and permission metadata.

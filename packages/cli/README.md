@@ -25,12 +25,14 @@ Create a starter dyno file, then run it:
 
 ```bash
 dynobox init
+dynobox discover
 dynobox run
 ```
 
 `dynobox init` writes `dynobox/example.dyno.mjs` by default. `dynobox run` with
 no argument discovers `*.dyno.{mjs,js,ts,mts,yaml,yml}` files recursively under
-the current directory.
+the current directory. `dynobox discover` prints the same file list without
+loading configs or running harnesses.
 
 Scope a run to a directory or file:
 

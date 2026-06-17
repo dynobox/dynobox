@@ -3,6 +3,7 @@
 ## Agent Behavior
 
 - when proposing changes only suggest one file at a time for review
+- DO NOT MAKE MULTI FILE PATCHES
 - tests should be colocated with the file they are testing
 - always use package manager install scripts when adding or updating packages; do not manually edit dependency versions in package manifests
 - package scripts should only build, typecheck, and test their own package; do not call another workspace package's scripts from inside a package script

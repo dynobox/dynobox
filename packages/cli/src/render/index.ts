@@ -5,7 +5,10 @@
  */
 
 export {renderAssertionDetails} from './assertions.js';
-export {renderRunConfigErrorMessage} from './configError.js';
+export {
+  renderConfigErrorMessage,
+  renderRunConfigErrorMessage,
+} from './configError.js';
 export {renderDebugDetails} from './debug.js';
 export {
   describeAssertion,
@@ -39,4 +42,5 @@ export {formatJobHarness, renderPlan, renderPlanFromMatrix} from './plan.js';
 export {renderQuietRun} from './quiet.js';
 export {renderRunOutput, type RenderRunOutputInput} from './runOutput.js';
 export {renderRunSummary} from './summary.js';
+export {renderJsonValidateOutput} from './validateReporter.js';
 export {describeWarning, renderWarningDetails} from './warnings.js';

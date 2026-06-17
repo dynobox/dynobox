@@ -7,10 +7,8 @@
  *   - a directory path  → discover under that directory (recursive)
  *   - a file path       → run that single file
  *
- * Discovery globs `**\/*.dyno.{mjs,js,ts,mts,yaml,yml}` and skips hidden
- * entries below the search root plus a default set of directories that should
- * never contain authored tests. Passing a hidden directory as the root still
- * searches inside that explicit root.
+ * Discovery globs `**\/*.dyno.{mjs,js,ts,mts,yaml,yml}` and skips a default
+ * set of generated directories that should never contain authored tests.
  * Existing config files passed by absolute or relative path (the legacy
  * `dynobox run examples/.../dynobox.config.ts` form) keep working — file
  * inputs are returned verbatim regardless of the `.dyno.*` suffix so that
@@ -18,9 +16,11 @@
  */
 
 import {stat} from 'node:fs/promises';
-import {isAbsolute, resolve} from 'node:path';
+import {dirname, isAbsolute, relative, resolve, sep} from 'node:path';
 
 import {glob} from 'tinyglobby';
+
+import {loadDynoConfig} from './dynoConfig.js';
 
 /**
  * Filename patterns that count as authored dyno files.
@@ -40,10 +40,8 @@ export const DYNO_FILE_GLOBS = [
   '**/*.dyno.yml',
 ] as const;
 
-/** Hidden entries and directories never traversed during discovery. */
+/** Generated directories never traversed during discovery. */
 export const DYNO_DEFAULT_IGNORE = [
-  '**/.*',
-  '**/.*/**',
   '**/node_modules/**',
   '**/dist/**',
   '**/build/**',
@@ -53,6 +51,8 @@ export const DYNO_DEFAULT_IGNORE = [
   '**/.next/**',
   '**/.cache/**',
 ] as const;
+
+const DYNO_DISCOVERED_DOT_DIRECTORIES = ['.agents', '.claude'] as const;
 
 /** Thrown when discovery is asked to look at a path that does not exist. */
 export class DynoPathNotFoundError extends Error {
@@ -71,17 +71,18 @@ export const DYNO_FILE_SUFFIXES = DYNO_FILE_GLOBS.map((g) =>
   g.replace('**/*.dyno.', ''),
 ).join(',');
 
-/** Thrown when a directory contains no `*.dyno.*` files. */
-export class NoDynosFoundError extends Error {
-  constructor(public readonly directory: string) {
-    super(`No *.dyno.{${DYNO_FILE_SUFFIXES}} files found under ${directory}`);
-    this.name = 'NoDynosFoundError';
-  }
-}
-
 export type DiscoverDynosOptions = {
   /** Defaults to `process.cwd()`. Exposed for tests. */
   cwd?: string;
+  /** Explicit dyno.config.json path passed by --config. */
+  configPath?: string;
+};
+
+export type DiscoverDynosResult = {
+  /** Sorted, absolute dyno file paths. */
+  files: string[];
+  /** Absolute path of the `dyno.config.json` that applied, if any. */
+  configPath?: string;
 };
 
 /**
@@ -89,12 +90,12 @@ export type DiscoverDynosOptions = {
  * to load and run.
  *
  * @param inputPath  File or directory; `undefined` means "current dir".
- * @returns          Sorted, absolute file paths.
+ * @returns          Sorted, absolute file paths plus the config that applied.
  */
 export async function discoverDynos(
   inputPath: string | undefined,
   options: DiscoverDynosOptions = {},
-): Promise<string[]> {
+): Promise<DiscoverDynosResult> {
   const cwd = options.cwd ?? process.cwd();
   const absoluteInputPath = resolveInputPath(inputPath ?? '.', cwd);
 
@@ -106,31 +107,104 @@ export async function discoverDynos(
   if (stats.isFile()) {
     // Legacy/explicit file path: return as-is so authored configs keep
     // working even when their filename does not match `*.dyno.*`.
-    return [absoluteInputPath];
+    return {files: [absoluteInputPath]};
   }
 
   if (!stats.isDirectory()) {
     throw new DynoPathNotFoundError(inputPath ?? '.');
   }
 
-  const matches = await glob(DYNO_FILE_GLOBS as unknown as string[], {
-    cwd: absoluteInputPath,
-    absolute: true,
-    dot: true,
-    ignore: DYNO_DEFAULT_IGNORE as unknown as string[],
-    onlyFiles: true,
-    followSymbolicLinks: false,
+  const config = await loadDynoConfig({
+    searchFrom: cwd,
+    ...(options.configPath === undefined
+      ? {}
+      : {configPath: options.configPath}),
+    cwd,
   });
-
-  if (matches.length === 0) {
-    throw new NoDynosFoundError(absoluteInputPath);
+  const configuredIgnore = ignoredDirectoryGlobs(config, absoluteInputPath);
+  if (configuredIgnore === undefined) {
+    return {
+      files: [],
+      ...(config.configPath === undefined
+        ? {}
+        : {configPath: config.configPath}),
+    };
   }
+  const ignore = [...DYNO_DEFAULT_IGNORE, ...configuredIgnore];
 
-  return matches.slice().sort();
+  const matches = await discoverMatches(absoluteInputPath, ignore);
+
+  return {
+    files: matches.slice().sort(),
+    ...(config.configPath === undefined ? {} : {configPath: config.configPath}),
+  };
 }
 
 function resolveInputPath(inputPath: string, cwd: string): string {
   return isAbsolute(inputPath) ? inputPath : resolve(cwd, inputPath);
+}
+
+async function discoverMatches(
+  searchRoot: string,
+  ignore: readonly string[],
+): Promise<string[]> {
+  const visibleMatches = await glob(DYNO_FILE_GLOBS as unknown as string[], {
+    cwd: searchRoot,
+    absolute: true,
+    ignore: ignore as unknown as string[],
+    onlyFiles: true,
+    followSymbolicLinks: false,
+  });
+  const allowedDotMatches = await glob(discoveredDotDirectoryGlobs(), {
+    cwd: searchRoot,
+    absolute: true,
+    dot: true,
+    ignore: [...ignore, '**/.!(agents|claude)/**'],
+    onlyFiles: true,
+    followSymbolicLinks: false,
+  });
+
+  return Array.from(new Set([...visibleMatches, ...allowedDotMatches]));
+}
+
+function discoveredDotDirectoryGlobs(): string[] {
+  return [
+    ...DYNO_DISCOVERED_DOT_DIRECTORIES.flatMap((directory) =>
+      DYNO_FILE_GLOBS.map((glob) => glob.replace('**/', `**/${directory}/**/`)),
+    ),
+  ];
+}
+
+function ignoredDirectoryGlobs(
+  config: {configPath?: string; ignoredDirectories: readonly string[]},
+  searchRoot: string,
+): string[] | undefined {
+  if (config.configPath === undefined) return [];
+
+  const configDir = dirname(config.configPath);
+  const globs: string[] = [];
+  for (const directory of config.ignoredDirectories) {
+    const ignoredDirectory = resolve(configDir, directory);
+    if (isEqualOrDescendant(ignoredDirectory, searchRoot)) return undefined;
+    if (isEqualOrDescendant(searchRoot, ignoredDirectory)) {
+      globs.push(
+        `${toIgnoredDirectoryGlob(relative(searchRoot, ignoredDirectory))}/**`,
+      );
+    }
+  }
+  return globs;
+}
+
+function isEqualOrDescendant(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  return (
+    rel === '' ||
+    (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+  );
+}
+
+function toIgnoredDirectoryGlob(path: string): string {
+  return path.replace(/\\/g, '/').replace(/[!*+?()[\]{}@]/g, '\\$&');
 }
 
 async function statOrUndefined(path: string) {

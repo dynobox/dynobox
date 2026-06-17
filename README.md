@@ -23,6 +23,7 @@ Install the CLI and a starter dyno file, then run it:
 ```bash
 npm install -g dynobox
 dynobox init        # writes dynobox/example.dyno.mjs
+dynobox discover    # prints the *.dyno.* files that run would load
 dynobox run         # discovers and runs every *.dyno.* file under the cwd
 ```
 

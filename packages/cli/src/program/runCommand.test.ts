@@ -1,5 +1,5 @@
-import {writeFileSync} from 'node:fs';
-import {basename, dirname, join} from 'node:path';
+import {mkdirSync, writeFileSync} from 'node:fs';
+import {basename, dirname, join, relative} from 'node:path';
 
 import {
   FakeHarness,
@@ -133,6 +133,38 @@ describe('dynobox run — config loading', () => {
     expect(result.stdout).toBe('');
     expect(result.stderr).toContain(`config: ${missingPath}`);
     expect(result.stderr).toContain('error:');
+  });
+
+  it('prints the resolved dyno.config.json under --verbose', async () => {
+    const configFile = join(fixtures.dir, 'verbose-config', 'dyno.config.json');
+    mkdirSync(dirname(configFile), {recursive: true});
+    writeFileSync(configFile, JSON.stringify({ignoredDirectories: []}));
+
+    const result = await executeCli(
+      ['run', fixtures.dir, '--config', configFile, '--verbose'],
+      {harnesses: [createPassingHarness()], mode: 'verbose'},
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(
+      `config: ${relative(process.cwd(), configFile)}`,
+    );
+  });
+
+  it('omits the config line without --verbose', async () => {
+    const configFile = join(fixtures.dir, 'quiet-config', 'dyno.config.json');
+    mkdirSync(dirname(configFile), {recursive: true});
+    writeFileSync(configFile, JSON.stringify({ignoredDirectories: []}));
+
+    const result = await executeCli(
+      ['run', fixtures.dir, '--config', configFile],
+      {harnesses: [createPassingHarness()]},
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).not.toContain(
+      `config: ${relative(process.cwd(), configFile)}`,
+    );
   });
 });
 

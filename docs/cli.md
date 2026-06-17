@@ -88,6 +88,7 @@ dynobox run
 dynobox run examples
 dynobox run my-skill.dyno.yaml
 dynobox run dynobox.config.ts
+dynobox run --config dyno.config.json
 ```
 
 Path behavior:
@@ -96,9 +97,28 @@ Path behavior:
 - Directory path: discover recursively under that directory.
 - File path: run that one loadable Dynobox config file.
 
-Directory discovery matches `**/*.dyno.{mjs,js,ts,mts,yaml,yml}`. It skips
-hidden entries, `node_modules`, `dist`, `build`, `coverage`, `.git`,
-`.dynobox`, `.next`, and `.cache`.
+Directory discovery matches `**/*.dyno.{mjs,js,ts,mts,yaml,yml}`. It skips dot
+directories by default, but explicitly includes `.agents` and `.claude` skill
+directories. If you pass a hidden directory as `[path]`, Dynobox searches that
+directory. Discovery also skips `node_modules`, `dist`, `build`, `coverage`,
+`.git`, `.dynobox`, `.next`, and `.cache`.
+
+Directory discovery also reads a `dyno.config.json` from the current working
+directory — the directory you run the command in, not the `[path]` argument and
+with no upward walk. For now the config is JSON-only and supports
+`ignoredDirectories`:
+
+```json
+{
+  "ignoredDirectories": ["generated", "vendor/examples"]
+}
+```
+
+Each ignored directory is treated as a directory path relative to the
+`dyno.config.json` file and skipped recursively. Run commands from your project
+root so its `dyno.config.json` applies, or pass `--config <path>` to use a
+specific config file from anywhere. Run with `--verbose` (or `--debug`) to print
+which `dyno.config.json` applied.
 
 Explicit file paths do not need to match the `*.dyno.*` naming pattern. YAML
 files are parsed as YAML, and JavaScript or TypeScript files such as `.mjs`,
@@ -108,6 +128,48 @@ configs are not supported because `@dynobox/sdk` is ESM-only.
 A load error in one discovered file does not stop other files from running.
 Each bad file prints a `config:` error block on stderr, and the process exits
 non-zero if any file failed to load or any job failed.
+
+### `dynobox discover [path]`
+
+Print the dyno files that `dynobox run [path]` would load, one path per line,
+without loading configs or running harnesses.
+
+```bash
+dynobox discover
+dynobox discover examples
+dynobox discover my-skill.dyno.yaml
+dynobox discover --config dyno.config.json
+```
+
+`dynobox discover` uses the same path behavior and directory discovery rules as
+`dynobox run`: no path discovers dynos under the current directory, a directory
+discovers all matching `*.dyno.*` files below it, and a file path prints that one
+loadable config path.
+
+### `dynobox validate [path]`
+
+Load and validate dyno files without running any harnesses.
+
+```bash
+dynobox validate
+dynobox validate dynobox/
+dynobox validate out.dyno.ts
+dynobox validate --reporter json out.dyno.ts
+```
+
+`dynobox validate` uses the same path behavior and directory discovery rules as
+`dynobox run`: no path validates discovered dynos under the current directory, a
+directory validates all discovered `*.dyno.*` files below it, and a file path
+validates that one loadable config file.
+
+Validation loads JavaScript and TypeScript configs through the CLI loader,
+parses YAML dynos, unwraps the config module, and compiles it through the SDK IR
+compiler. It exits `0` when every config is valid and `1` when discovery,
+loading, parsing, schema validation, or semantic compilation fails.
+
+Default output prints a compact summary on stdout and config errors on stderr.
+`--reporter json` emits newline-delimited JSON on stdout with one file record per
+validated config and a final summary record.
 
 ## Run Options
 
@@ -127,6 +189,7 @@ non-zero if any file failed to load or any job failed.
 --verbose                  Expand scenario details even when passing.
 --debug                    Include debug paths and artifacts.
 --reporter <fmt>           Output reporter format: text or json.
+--config <path>            Use a specific dyno.config.json file.
 --save-run                 Upload a compact run summary to the dashboard
                            (requires a token; see Saving Runs below).
 ```
