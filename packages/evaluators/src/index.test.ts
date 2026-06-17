@@ -334,6 +334,112 @@ describe('evaluateAssertions', () => {
     });
   });
 
+  it('passes command.called for normalized direct shell commands', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'command.called',
+        executable: 'git',
+        matcher: {args: ['status']},
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'git -C /tmp/repo status --short'},
+          command: 'git -C /tmp/repo status --short',
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: 'Observed command git with args ["status"].',
+      evidence: {
+        executable: 'git',
+        argv: ['-C', '/tmp/repo', 'status', '--short'],
+        cwdFlag: '/tmp/repo',
+      },
+    });
+  });
+
+  it('passes command.called for shell -lc wrappers and regex arg matching', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'command.called',
+        executable: 'pnpm',
+        matcher: {argsMatching: [{source: '^test$', flags: ''}]},
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: '/bin/zsh -lc "pnpm test"'},
+          command: '/bin/zsh -lc "pnpm test"',
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      evidence: {executable: 'pnpm', argv: ['test'], shell: '/bin/zsh'},
+    });
+  });
+
+  it('fails command.called with observed command details', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'command.called',
+        executable: 'git',
+        matcher: {args: ['commit']},
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'git status && git add README.md'},
+          command: 'git status && git add README.md',
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({passed: false});
+    expect(result.message).toContain(
+      'Expected command:\n  git with args ["commit"]',
+    );
+    expect(result.message).toContain('1. git status');
+    expect(result.message).toContain('2. git add README.md');
+    expect(result.message).toContain(
+      'No observed git command included arg "commit".',
+    );
+  });
+
+  it('passes command.notCalled when no matching command segment exists', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'command.notCalled',
+        executable: 'git',
+        matcher: {args: ['push']},
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'git status'},
+          command: 'git status',
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: 'Observed no command git with args ["push"].',
+    });
+  });
+
   it('passes sequence.inOrder with unrelated events between steps', () => {
     const first: ToolEvent = {
       kind: 'shell',
@@ -412,6 +518,50 @@ describe('evaluateAssertions', () => {
       passed: true,
       message: 'Observed 2 ordered tool steps.',
       evidence: [event, event],
+    });
+  });
+
+  it('passes sequence.inOrder with normalized command steps in one shell command', () => {
+    const event: ToolEvent = {
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {command: 'git status && git add README.md && git commit -m test'},
+      command: 'git status && git add README.md && git commit -m test',
+    };
+
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'sequence.inOrder',
+        steps: [
+          {
+            kind: 'command.called',
+            executable: 'git',
+            matcher: {args: ['status']},
+          },
+          {
+            kind: 'command.called',
+            executable: 'git',
+            matcher: {argsInOrder: ['add', 'README.md']},
+          },
+          {
+            kind: 'command.called',
+            executable: 'git',
+            matcher: {args: ['commit']},
+          },
+        ],
+      },
+      [event],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: 'Observed 3 ordered tool steps.',
+      evidence: [
+        {executable: 'git', argv: ['status']},
+        {executable: 'git', argv: ['add', 'README.md']},
+        {executable: 'git', argv: ['commit', '-m', 'test']},
+      ],
     });
   });
 

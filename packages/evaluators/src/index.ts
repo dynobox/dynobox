@@ -4,6 +4,10 @@ import {
   evaluateArtifactContains,
   evaluateArtifactExists,
 } from './artifactAssertions.js';
+import {
+  evaluateCommandCalledAssertion,
+  evaluateCommandNotCalledAssertion,
+} from './commandAssertions.js';
 import {evaluateHttpCalled, evaluateHttpNotCalled} from './httpAssertions.js';
 import {unsupportedAssertionResult} from './results.js';
 import {evaluateSkillReferenced} from './skillAssertions.js';
@@ -45,6 +49,14 @@ function evaluateAssertion(
 
   if (assertion.kind === 'tool.notCalled') {
     return evaluateToolNotCalledAssertion(assertion, input.toolEvents);
+  }
+
+  if (assertion.kind === 'command.called') {
+    return evaluateCommandCalledAssertion(assertion, input.toolEvents);
+  }
+
+  if (assertion.kind === 'command.notCalled') {
+    return evaluateCommandNotCalledAssertion(assertion, input.toolEvents);
   }
 
   if (assertion.kind === 'sequence.inOrder') {

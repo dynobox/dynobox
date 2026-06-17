@@ -38,6 +38,18 @@ export function describeAssertion(assertion: IrAssertion): string {
     return `tool.notCalled(${assertion.toolKind})`;
   }
 
+  if (assertion.kind === 'command.called') {
+    return assertion.matcher === undefined
+      ? `command.called(${assertion.executable})`
+      : `command.called(${assertion.executable}, ${describeCommandMatcher(assertion.matcher)})`;
+  }
+
+  if (assertion.kind === 'command.notCalled') {
+    return assertion.matcher === undefined
+      ? `command.notCalled(${assertion.executable})`
+      : `command.notCalled(${assertion.executable}, ${describeCommandMatcher(assertion.matcher)})`;
+  }
+
   if (assertion.kind === 'sequence.inOrder') {
     return `sequence.inOrder(${assertion.steps.length} steps)`;
   }
@@ -90,6 +102,12 @@ export function describeExpectation(assertion: IrAssertion): string {
     return assertion.steps.map(describeToolStepExpectation).join(' before ');
   }
 
+  if (assertion.kind === 'command.notCalled') {
+    return assertion.matcher === undefined
+      ? `no ${assertion.executable} command`
+      : `no ${assertion.executable} command with ${describeCommandMatcher(assertion.matcher)}`;
+  }
+
   if (assertion.kind === 'skill.referenced') {
     return `skill "${assertion.skill}" instruction file reference`;
   }
@@ -137,6 +155,11 @@ export function isShellToolEvent(event: ToolEvent): event is ShellToolEvent {
 function describeToolStepExpectation(
   step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
 ): string {
+  if (step.kind === 'command.called') {
+    return step.matcher === undefined
+      ? `${step.executable} command`
+      : `${step.executable} command with ${describeCommandMatcher(step.matcher)}`;
+  }
   if (step.pathMatcher !== undefined) {
     return `${step.toolKind} tool call for path "${step.pathMatcher.path}"`;
   }
@@ -162,6 +185,33 @@ function describeShellMatcher(matcher: ShellToolMatcher): string {
   if ('includes' in matcher) return `includes: ${matcher.includes}`;
   if ('startsWith' in matcher) return `startsWith: ${matcher.startsWith}`;
   return `matches: ${matcher.matches}`;
+}
+
+function describeCommandMatcher(
+  matcher: NonNullable<
+    Extract<IrAssertion, {kind: 'command.called'}>['matcher']
+  >,
+): string {
+  const parts: string[] = [];
+  if (matcher.args !== undefined)
+    parts.push(`args: ${JSON.stringify(matcher.args)}`);
+  if (matcher.argsInOrder !== undefined) {
+    parts.push(`argsInOrder: ${JSON.stringify(matcher.argsInOrder)}`);
+  }
+  if (matcher.argsMatching !== undefined) {
+    parts.push(
+      `argsMatching: ${matcher.argsMatching.map((pattern) => `/${pattern.source}/${pattern.flags}`).join(', ')}`,
+    );
+  }
+  if (matcher.originalIncludes !== undefined) {
+    parts.push(`originalIncludes: ${matcher.originalIncludes}`);
+  }
+  if (matcher.originalMatches !== undefined) {
+    parts.push(
+      `originalMatches: /${matcher.originalMatches.source}/${matcher.originalMatches.flags}`,
+    );
+  }
+  return parts.join(', ');
 }
 
 function toSingleLine(value: string): string {

@@ -1,5 +1,11 @@
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
+import {
+  commandMatchesAssertion,
+  describeCommandStep,
+  extractObservedCommands,
+  type ObservedCommand,
+} from './commandAssertions.js';
 import {pathStringsFromToolInput} from './inspection.js';
 import {
   describeShellMatcher,
@@ -11,6 +17,11 @@ import type {AssertionResult, ToolEvent} from './types.js';
 
 type ToolCalledAssertion = Extract<IrAssertion, {kind: 'tool.called'}>;
 type ToolCalledStep = Omit<ToolCalledAssertion, 'id'>;
+type CommandCalledStep = Omit<
+  Extract<IrAssertion, {kind: 'command.called'}>,
+  'id'
+>;
+type SequenceStep = ToolCalledStep | CommandCalledStep;
 type ToolNotCalledStep = Omit<
   Extract<IrAssertion, {kind: 'tool.notCalled'}>,
   'id'
@@ -91,11 +102,17 @@ export function evaluateSequenceInOrder(
   assertion: Extract<IrAssertion, {kind: 'sequence.inOrder'}>,
   toolEvents: readonly ToolEvent[],
 ): AssertionResult {
-  const matchedEvents: ToolEvent[] = [];
+  const observedCommands = extractObservedCommands(toolEvents);
+  const matchedEvents: (ToolEvent | ObservedCommand)[] = [];
   let cursor: SequenceCursor = {eventIndex: 0, commandOffset: 0};
 
   for (const [stepIndex, step] of assertion.steps.entries()) {
-    const match = findMatchingSequenceStep(step, toolEvents, cursor);
+    const match = findMatchingSequenceStep(
+      step,
+      toolEvents,
+      observedCommands,
+      cursor,
+    );
     if (match.error !== undefined) {
       return {
         assertionId: assertion.id,
@@ -110,7 +127,7 @@ export function evaluateSequenceInOrder(
         assertionId: assertion.id,
         kind: assertion.kind,
         passed: false,
-        message: `Expected ordered step #${stepIndex + 1} (${describeToolStep(step)}) to match an observed tool event, but none was observed after the previous step.`,
+        message: `Expected ordered step #${stepIndex + 1} (${describeSequenceStep(step)}) to match an observed tool event, but none was observed after the previous step.`,
         evidence: matchedEvents,
       };
     }
@@ -129,10 +146,36 @@ export function evaluateSequenceInOrder(
 }
 
 function findMatchingSequenceStep(
-  step: ToolCalledStep,
+  step: SequenceStep,
   toolEvents: readonly ToolEvent[],
+  observedCommands: readonly ObservedCommand[],
   cursor: SequenceCursor,
-): {event?: ToolEvent; nextCursor?: SequenceCursor; error?: string} {
+): {
+  event?: ToolEvent | ObservedCommand;
+  nextCursor?: SequenceCursor;
+  error?: string;
+} {
+  if (step.kind === 'command.called') {
+    for (const command of observedCommands) {
+      if (command.eventIndex < cursor.eventIndex) continue;
+      if (
+        command.eventIndex === cursor.eventIndex &&
+        command.segmentIndex < cursor.commandOffset
+      ) {
+        continue;
+      }
+      if (!commandMatchesAssertion(command, step)) continue;
+      return {
+        event: command,
+        nextCursor: {
+          eventIndex: command.eventIndex,
+          commandOffset: command.segmentIndex + 1,
+        },
+      };
+    }
+    return {};
+  }
+
   if (step.matcher !== undefined) {
     const invalidRegex = validateRegexMatcher(step.matcher);
     if (invalidRegex !== undefined) return {error: invalidRegex};
@@ -255,6 +298,12 @@ function describeToolStep(step: ToolCalledStep): string {
   }
   if (step.matcher === undefined) return `tool.called(${step.toolKind})`;
   return `tool.called(${step.toolKind}, ${describeShellMatcher(step.matcher)})`;
+}
+
+function describeSequenceStep(step: SequenceStep): string {
+  return step.kind === 'command.called'
+    ? describeCommandStep(step)
+    : describeToolStep(step);
 }
 
 function toolEventMatchesPath(event: ToolEvent, expectedPath: string): boolean {

@@ -44,6 +44,19 @@ const toolPathMatcherSchema = z.object({
   path: z.string().min(1),
 });
 
+const regexPatternSchema = z.object({
+  source: z.string(),
+  flags: z.string(),
+});
+
+const commandMatcherSchema = z.object({
+  args: z.array(z.string()).optional(),
+  argsInOrder: z.array(z.string()).optional(),
+  argsMatching: z.array(regexPatternSchema).optional(),
+  originalIncludes: z.string().optional(),
+  originalMatches: regexPatternSchema.optional(),
+});
+
 const irToolCalledAssertionSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1).optional(),
@@ -62,11 +75,33 @@ const irToolNotCalledAssertionSchema = z.object({
   pathMatcher: toolPathMatcherSchema.optional(),
 });
 
+const irCommandCalledAssertionSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1).optional(),
+  kind: z.literal('command.called'),
+  executable: z.string().min(1),
+  matcher: commandMatcherSchema.optional(),
+});
+
+const irCommandNotCalledAssertionSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1).optional(),
+  kind: z.literal('command.notCalled'),
+  executable: z.string().min(1),
+  matcher: commandMatcherSchema.optional(),
+});
+
 const irSequenceToolCalledStepSchema = z.object({
   kind: z.literal('tool.called'),
   toolKind: z.enum(TOOL_KINDS),
   matcher: shellToolMatcherSchema.optional(),
   pathMatcher: toolPathMatcherSchema.optional(),
+});
+
+const irSequenceCommandCalledStepSchema = z.object({
+  kind: z.literal('command.called'),
+  executable: z.string().min(1),
+  matcher: commandMatcherSchema.optional(),
 });
 
 export const irAssertionSchema = z
@@ -86,6 +121,8 @@ export const irAssertionSchema = z
     }),
     irToolCalledAssertionSchema,
     irToolNotCalledAssertionSchema,
+    irCommandCalledAssertionSchema,
+    irCommandNotCalledAssertionSchema,
     z.object({
       id: z.string().min(1),
       label: z.string().min(1).optional(),
@@ -115,7 +152,14 @@ export const irAssertionSchema = z
       id: z.string().min(1),
       label: z.string().min(1).optional(),
       kind: z.literal('sequence.inOrder'),
-      steps: z.array(irSequenceToolCalledStepSchema).min(1),
+      steps: z
+        .array(
+          z.discriminatedUnion('kind', [
+            irSequenceToolCalledStepSchema,
+            irSequenceCommandCalledStepSchema,
+          ]),
+        )
+        .min(1),
     }),
     z.object({
       id: z.string().min(1),
@@ -176,6 +220,8 @@ export const irAssertionSchema = z
 
     if (assertion.kind === 'sequence.inOrder') {
       assertion.steps.forEach((step, index) => {
+        if (step.kind !== 'tool.called') return;
+
         if (step.matcher !== undefined && step.toolKind !== 'shell') {
           ctx.addIssue({
             code: 'custom',

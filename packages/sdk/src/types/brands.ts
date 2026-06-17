@@ -59,6 +59,15 @@ export type ToolPathMatcher = {
   readonly path: string;
 };
 
+/** Matcher for normalized observed shell command segments. */
+export type CommandMatcher = {
+  readonly args?: readonly string[];
+  readonly argsInOrder?: readonly string[];
+  readonly argsMatching?: readonly RegExp[];
+  readonly originalIncludes?: string;
+  readonly originalMatches?: RegExp;
+};
+
 const shellCommandMatcherKeys = new Set<string>(SHELL_COMMAND_MATCHER_KEYS);
 
 /** Runtime guard used by Zod schemas and evaluator code for shell matchers. */
@@ -161,6 +170,26 @@ export type ToolNotCalledAssertion<K extends ToolKind = ToolKind> =
           readonly tool: K;
         };
 
+/** Assertion that a normalized command segment should be observed. */
+export type CommandCalledAssertion = {
+  readonly [ASSERTION_BRAND]: true;
+  readonly id?: string;
+  readonly label?: string;
+  readonly type: 'command.called';
+  readonly executable: string;
+  readonly command?: CommandMatcher;
+};
+
+/** Assertion that a normalized command segment should not be observed. */
+export type CommandNotCalledAssertion = {
+  readonly [ASSERTION_BRAND]: true;
+  readonly id?: string;
+  readonly label?: string;
+  readonly type: 'command.notCalled';
+  readonly executable: string;
+  readonly command?: CommandMatcher;
+};
+
 /** Assertion that a work-directory artifact exists. */
 export type ArtifactExistsAssertion = {
   readonly [ASSERTION_BRAND]: true;
@@ -204,7 +233,7 @@ export type SequenceInOrderAssertion = {
   readonly id?: string;
   readonly label?: string;
   readonly type: 'sequence.inOrder';
-  readonly steps: readonly ToolCalledAssertion[];
+  readonly steps: readonly (ToolCalledAssertion | CommandCalledAssertion)[];
 };
 
 /** Assertion that observed harness events referenced a named skill instruction file. */
@@ -220,6 +249,8 @@ export type SkillReferencedAssertion = {
 export type Assertion<K extends string = string> =
   | CalledAssertion<K>
   | NotCalledAssertion<K>
+  | CommandCalledAssertion
+  | CommandNotCalledAssertion
   | ToolCalledAssertion
   | ToolNotCalledAssertion
   | ArtifactExistsAssertion

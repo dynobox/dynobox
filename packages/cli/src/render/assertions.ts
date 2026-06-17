@@ -129,6 +129,17 @@ function describeObservedFailure(
       : `matching ${formatToolEvent(evidence)}`;
   }
 
+  if (assertion.kind === 'command.called') {
+    return fallback;
+  }
+
+  if (assertion.kind === 'command.notCalled') {
+    const evidence = assertionResultEvidence(result, assertion.id);
+    return isObservedCommand(evidence)
+      ? `matching command: ${formatObservedCommand(evidence)}`
+      : fallback;
+  }
+
   if (assertion.kind === 'sequence.inOrder') {
     const matched = toolEventArrayEvidence(result, assertion.id);
     if (matched === undefined) return fallback;
@@ -244,6 +255,15 @@ function httpEventEvidence(
   return isHttpEvent(evidence) ? evidence : undefined;
 }
 
+function assertionResultEvidence(
+  result: LocalRunnerResult,
+  assertionId: string,
+): unknown {
+  return result.assertionResults.find(
+    (candidate) => candidate.assertionId === assertionId,
+  )?.evidence;
+}
+
 function isToolEvent(value: unknown): value is ToolEvent {
   return (
     typeof value === 'object' &&
@@ -266,6 +286,19 @@ function isHttpEvent(value: unknown): value is HttpEvent {
   );
 }
 
+function isObservedCommand(
+  value: unknown,
+): value is {executable: string; argv: string[]} {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'executable' in value &&
+    typeof value.executable === 'string' &&
+    'argv' in value &&
+    Array.isArray(value.argv)
+  );
+}
+
 function formatToolEvent(event: ToolEvent): string {
   if (isShellToolEvent(event))
     return `shell command ${formatTextExcerpt(event.command)}`;
@@ -273,6 +306,13 @@ function formatToolEvent(event: ToolEvent): string {
   return input === undefined
     ? `${event.rawName} tool call`
     : `${event.rawName} tool call ${input}`;
+}
+
+function formatObservedCommand(command: {
+  executable: string;
+  argv: readonly string[];
+}): string {
+  return formatTextExcerpt([command.executable, ...command.argv].join(' '));
 }
 
 function inputPreview(input: unknown): string | undefined {
@@ -335,7 +375,9 @@ function assertionMentionsShell(assertion: IrAssertion | undefined): boolean {
   }
   return (
     assertion.kind === 'sequence.inOrder' &&
-    assertion.steps.some((step) => step.toolKind === 'shell')
+    assertion.steps.some(
+      (step) => step.kind === 'tool.called' && step.toolKind === 'shell',
+    )
   );
 }
 

@@ -9,6 +9,7 @@
 export {artifact} from './artifact/index.js';
 export {defineDyno} from './authoring/defineDyno.js';
 export {defineScenario} from './authoring/defineScenario.js';
+export {command} from './command/index.js';
 export {dyno} from './dyno/index.js';
 export {finalMessage} from './final-message/index.js';
 export {http} from './http/index.js';
@@ -21,6 +22,9 @@ export type {
   ArtifactExistsAssertion,
   Assertion,
   CalledAssertion,
+  CommandCalledAssertion,
+  CommandMatcher,
+  CommandNotCalledAssertion,
   Endpoint,
   FileToolKind,
   FinalMessageContainsAssertion,
