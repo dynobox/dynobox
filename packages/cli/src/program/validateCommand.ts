@@ -24,6 +24,8 @@ import {validateReporterFormat} from './options.js';
 export type ValidateCommandFlags = {
   reporter?: string;
   config?: string;
+  verbose?: boolean;
+  debug?: boolean;
 };
 
 export type ValidateCommandActionInput = {
@@ -50,16 +52,17 @@ export async function validateCommandAction(
     writeStderr,
   );
 
-  const filePaths = await discoverForValidate({
-    configPath,
-    resolvedInputPath,
-    ...(commandFlags.config === undefined
-      ? {}
-      : {configFilePath: commandFlags.config}),
-    reporter,
-    writeStdout,
-    writeStderr,
-  });
+  const {files: filePaths, configPath: appliedConfigPath} =
+    await discoverForValidate({
+      configPath,
+      resolvedInputPath,
+      ...(commandFlags.config === undefined
+        ? {}
+        : {configFilePath: commandFlags.config}),
+      reporter,
+      writeStdout,
+      writeStderr,
+    });
   const result = await compileDynos(filePaths);
 
   if (reporter === 'json') {
@@ -70,7 +73,13 @@ export async function validateCommandAction(
         renderConfigErrorMessage('validate', error.filePath, error.message),
       );
     }
-    const ctx = createRenderContext(options);
+    const ctx = createRenderContext(options, commandFlags);
+    if (
+      appliedConfigPath !== undefined &&
+      (ctx.mode === 'verbose' || ctx.mode === 'debug')
+    ) {
+      writeStdout(`config: ${displayPath(appliedConfigPath)}\n`);
+    }
     writeStdout(renderTextValidateOutput(result, filePaths, ctx));
   }
 
@@ -94,16 +103,16 @@ type DiscoverForValidateInput = {
 
 async function discoverForValidate(
   input: DiscoverForValidateInput,
-): Promise<readonly string[]> {
+): Promise<{files: readonly string[]; configPath?: string}> {
   const {configPath, resolvedInputPath, reporter, writeStdout, writeStderr} =
     input;
   try {
-    const {files} = await discoverDynos(configPath, {
+    const result = await discoverDynos(configPath, {
       ...(input.configFilePath === undefined
         ? {}
         : {configPath: input.configFilePath}),
     });
-    return files;
+    return result;
   } catch (error) {
     const label = configPath ?? resolvedInputPath;
     const message = discoveryErrorMessage(error);

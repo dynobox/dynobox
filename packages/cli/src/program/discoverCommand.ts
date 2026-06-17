@@ -19,6 +19,8 @@ export type DiscoverCommandActionInput = {
 
 export type DiscoverCommandFlags = {
   config?: string;
+  verbose?: boolean;
+  debug?: boolean;
 };
 
 export async function discoverCommandAction(
@@ -29,12 +31,14 @@ export async function discoverCommandAction(
   const resolvedInputPath = resolve(inputLabel);
 
   try {
-    const {files} = await discoverDynos(configPath, {
+    const result = await discoverDynos(configPath, {
       ...(commandFlags.config === undefined
         ? {}
         : {configPath: commandFlags.config}),
     });
-    writeStdout(renderDiscoverOutput(files));
+    writeStdout(
+      renderDiscoverOutput(result.files, result.configPath, commandFlags),
+    );
   } catch (error) {
     const label = configPath ?? resolvedInputPath;
     writeStderr(renderDiscoverError(label, discoveryErrorMessage(error)));
@@ -46,9 +50,17 @@ export async function discoverCommandAction(
   }
 }
 
-function renderDiscoverOutput(filePaths: readonly string[]): string {
-  if (filePaths.length === 0) return '';
-  return filePaths.map((filePath) => displayPath(filePath)).join('\n') + '\n';
+function renderDiscoverOutput(
+  filePaths: readonly string[],
+  configPath: string | undefined,
+  flags: DiscoverCommandFlags,
+): string {
+  const lines = filePaths.map((filePath) => displayPath(filePath));
+  if ((flags.verbose || flags.debug) && configPath !== undefined) {
+    lines.unshift(`config: ${displayPath(configPath)}`);
+  }
+  if (lines.length === 0) return '';
+  return lines.join('\n') + '\n';
 }
 
 function renderDiscoverError(configPath: string, message: string): string {

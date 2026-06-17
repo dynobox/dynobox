@@ -86,6 +86,46 @@ describe('dynobox validate', () => {
     expect(result.stderr).toBe('');
   });
 
+  it('prints the resolved dyno.config.json under --verbose', async () => {
+    const root = makeTempRoot();
+    const config = join(root, 'dyno.config.json');
+    const file = join(root, 'valid.dyno.mjs');
+    writeFileSync(config, JSON.stringify({ignoredDirectories: []}));
+    writeFileSync(file, VALID_DYNO);
+
+    const result = await executeCli([
+      'validate',
+      root,
+      '--config',
+      config,
+      '--verbose',
+    ]);
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout:
+        `config: ${displayPath(config)}\n` +
+        `  ✓  ${displayPath(file)}   1 scenario(s)\n\nValidated 1 dyno file(s).\n`,
+      stderr: '',
+    });
+  });
+
+  it('omits the config line without --verbose', async () => {
+    const root = makeTempRoot();
+    const config = join(root, 'dyno.config.json');
+    const file = join(root, 'valid.dyno.mjs');
+    writeFileSync(config, JSON.stringify({ignoredDirectories: []}));
+    writeFileSync(file, VALID_DYNO);
+
+    const result = await executeCli(['validate', root, '--config', config]);
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: `  ✓  ${displayPath(file)}   1 scenario(s)\n\nValidated 1 dyno file(s).\n`,
+      stderr: '',
+    });
+  });
+
   it('validates an empty directory as zero dyno files', async () => {
     const root = makeTempRoot();
 

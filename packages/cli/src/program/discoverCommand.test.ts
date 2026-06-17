@@ -78,6 +78,48 @@ describe('dynobox discover', () => {
     });
   });
 
+  it('prints the resolved dyno.config.json under --verbose', async () => {
+    const dir = join(ROOT, 'verbose-config');
+    mkdirSync(dir, {recursive: true});
+    const config = touch(
+      'verbose-config/dyno.config.json',
+      JSON.stringify({ignoredDirectories: []}),
+    );
+    const file = touch('verbose-config/keep.dyno.mjs');
+
+    const result = await executeCli([
+      'discover',
+      dir,
+      '--config',
+      config,
+      '--verbose',
+    ]);
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: `config: ${displayPath(config)}\n${displayPath(file)}\n`,
+      stderr: '',
+    });
+  });
+
+  it('omits the config line without --verbose', async () => {
+    const dir = join(ROOT, 'quiet-config');
+    mkdirSync(dir, {recursive: true});
+    const config = touch(
+      'quiet-config/dyno.config.json',
+      JSON.stringify({ignoredDirectories: []}),
+    );
+    const file = touch('quiet-config/keep.dyno.mjs');
+
+    const result = await executeCli(['discover', dir, '--config', config]);
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: `${displayPath(file)}\n`,
+      stderr: '',
+    });
+  });
+
   it('prints nothing for an empty directory', async () => {
     const dir = join(ROOT, 'empty');
     mkdirSync(dir, {recursive: true});

@@ -115,6 +115,8 @@ export function buildProgram(input: BuildProgramInput): Command {
     )
     .option('--reporter <fmt>', 'output reporter format: text or json', 'text')
     .option('--config <path>', 'path to dyno.config.json')
+    .option('--verbose', 'print validation details')
+    .option('--debug', 'print validation details')
     .action(
       async (
         configPath: string | undefined,
@@ -140,6 +142,8 @@ export function buildProgram(input: BuildProgramInput): Command {
       `print discovered *.dyno.{${DYNO_FILE_SUFFIXES}} files (or an explicit file path) without running harnesses`,
     )
     .option('--config <path>', 'path to dyno.config.json')
+    .option('--verbose', 'print discovery details')
+    .option('--debug', 'print discovery details')
     .action(
       async (
         configPath: string | undefined,
