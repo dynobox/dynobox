@@ -8,8 +8,16 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.6.0 — 2026-06-16
+
 ### `dynobox` (CLI)
 
+- Added `dynobox validate` to discover, load, and compile dyno configs without
+  running harnesses, with text and newline-delimited JSON reporters.
+- Added `dynobox discover` to preview discovery-backed dyno selection from the
+  CLI.
 - Added JSON project config via `dyno.config.json` and `--config <path>`, with
   `ignoredDirectories` support for discovery-backed commands.
 - Changed discovery-backed commands to include `.agents` and `.claude` skill
@@ -19,8 +27,6 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   model and permission metadata.
 - Fixed duplicate `--harness`/`--model` pairs so identical selected runs execute
   once instead of producing duplicate job IDs.
-
----
 
 ## @dynobox/sdk@0.3.0 — 2026-06-13
 
