@@ -1,11 +1,11 @@
 import {artifact, defineDyno, sequence, skill, tool} from '@dynobox/sdk';
 
 export default defineDyno({
-  name: 'commit-skill-smoke-test',
+  name: '[commit-skill] no writes',
   target: 'commit-skill',
   scenarios: [
     {
-      name: 'no-push commit skill',
+      name: 'no push',
       prompt:
         'Use the commit skill to commit the README.md change in this scratch repository. Do not push. Do not amend any commit.',
       setup: [
