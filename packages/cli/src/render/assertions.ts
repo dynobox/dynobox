@@ -133,7 +133,13 @@ function describeObservedFailure(
   }
 
   if (assertion.kind === 'command.called') {
-    return commandCalledObservedFailure(fallback);
+    const observed = observedCommandArrayEvidence(result, assertion.id);
+    if (observed === undefined || observed.length === 0) return fallback;
+    return observed
+      .map(
+        (command, index) => `${index + 1}. ${formatObservedCommand(command)}`,
+      )
+      .join(' ');
   }
 
   if (assertion.kind === 'command.notCalled') {
@@ -148,7 +154,9 @@ function describeObservedFailure(
     if (matched === undefined) return fallback;
     const last = matched.at(-1);
     const suffix =
-      last === undefined ? '' : `; last matched ${formatSequenceEvidence(last)}`;
+      last === undefined
+        ? ''
+        : `; last matched ${formatSequenceEvidence(last)}`;
     return `matched ${matched.length} of ${assertion.steps.length} ordered steps${suffix}`;
   }
 
@@ -226,15 +234,6 @@ function formatTextExcerpt(text: string, maxLength = 160): string {
   return `"${excerpt.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
 }
 
-function commandCalledObservedFailure(message: string): string {
-  const observedPrefix = 'Observed commands:\n';
-  const observedStart = message.indexOf(observedPrefix);
-  if (observedStart === -1) return message;
-  const observed = message.slice(observedStart + observedPrefix.length).trim();
-  if (observed.length === 0) return message;
-  return observed.replace(/\s+/g, ' ');
-}
-
 function toolEventEvidence(
   result: LocalRunnerResult,
   assertionId: string,
@@ -253,6 +252,18 @@ function sequenceEvidence(
     (candidate) => candidate.assertionId === assertionId,
   )?.evidence;
   return Array.isArray(evidence) && evidence.every(isSequenceEvidence)
+    ? evidence
+    : undefined;
+}
+
+function observedCommandArrayEvidence(
+  result: LocalRunnerResult,
+  assertionId: string,
+): ObservedCommandEvidence[] | undefined {
+  const evidence = result.assertionResults.find(
+    (candidate) => candidate.assertionId === assertionId,
+  )?.evidence;
+  return Array.isArray(evidence) && evidence.every(isObservedCommand)
     ? evidence
     : undefined;
 }
@@ -298,9 +309,7 @@ function isHttpEvent(value: unknown): value is HttpEvent {
   );
 }
 
-function isObservedCommand(
-  value: unknown,
-): value is ObservedCommandEvidence {
+function isObservedCommand(value: unknown): value is ObservedCommandEvidence {
   return (
     typeof value === 'object' &&
     value !== null &&

@@ -50,6 +50,7 @@ export function evaluateCommandCalledAssertion(
     kind: assertion.kind,
     passed: false,
     message: commandCalledFailMessage(assertion, observed),
+    evidence: observed,
   };
 }
 
@@ -248,8 +249,8 @@ function shellWrappedCommand(parsed: {
 }): {shell: string; command: string} | undefined {
   if (!new Set(['bash', 'sh', 'zsh']).has(parsed.executable)) return undefined;
 
-  const commandFlagIndex = parsed.argv.findIndex(
-    (arg) => arg.startsWith('-') && arg.includes('c'),
+  const commandFlagIndex = parsed.argv.findIndex((arg) =>
+    /^-[A-Za-z]*c$/.test(arg),
   );
   if (commandFlagIndex === -1) return undefined;
 

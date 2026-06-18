@@ -272,6 +272,10 @@ describe('renderAssertionDetails', () => {
           passed: false,
           message:
             'Expected command:\n  git with args ["commit"]\nObserved commands:\n  1. git status\n  2. git add README.md\nNo observed git command included arg "commit".',
+          evidence: [
+            {executable: 'git', argv: ['status']},
+            {executable: 'git', argv: ['add', 'README.md']},
+          ],
         },
       ],
       harnessResult: {toolEvents: []},
@@ -283,11 +287,9 @@ describe('renderAssertionDetails', () => {
       createRenderContext({usePlainSymbols: true}, {}),
     );
 
+    expect(output).toContain('expected  command.called(git, args: ["commit"])');
     expect(output).toContain(
-      'expected  command.called(git, args: ["commit"])',
-    );
-    expect(output).toContain(
-      'observed  1. git status 2. git add README.md No observed git command included arg "commit".',
+      'observed  1. "git status" 2. "git add README.md"',
     );
     expect(output).not.toContain('observed  Expected command:');
   });

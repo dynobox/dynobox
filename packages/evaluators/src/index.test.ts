@@ -387,6 +387,30 @@ describe('evaluateAssertions', () => {
     });
   });
 
+  it('does not treat long options containing "c" as the shell command flag', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'command.called',
+        executable: 'git',
+        matcher: {args: ['status']},
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'bash --rcfile /tmp/profile -c "git status"'},
+          command: 'bash --rcfile /tmp/profile -c "git status"',
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      evidence: {executable: 'git', argv: ['status'], shell: 'bash'},
+    });
+  });
+
   it('fails command.called with observed command details', () => {
     const result = evaluateOne(
       {
