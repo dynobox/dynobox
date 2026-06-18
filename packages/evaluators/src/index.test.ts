@@ -565,6 +565,87 @@ describe('evaluateAssertions', () => {
     });
   });
 
+  it('passes sequence.inOrder from a shell matcher to a normalized command in one shell command', () => {
+    const event: ToolEvent = {
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {command: 'git status && git commit -m test'},
+      command: 'git status && git commit -m test',
+    };
+
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'sequence.inOrder',
+        steps: [
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+            matcher: {includes: 'git status'},
+          },
+          {
+            kind: 'command.called',
+            executable: 'git',
+            matcher: {args: ['commit']},
+          },
+        ],
+      },
+      [event],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: 'Observed 2 ordered tool steps.',
+      evidence: [event, {executable: 'git', argv: ['commit', '-m', 'test']}],
+    });
+  });
+
+  it('passes sequence.inOrder across nested shell commands and later outer segments', () => {
+    const event: ToolEvent = {
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {
+        command: 'echo ok && bash -lc "git status && git diff" && git commit',
+      },
+      command: 'echo ok && bash -lc "git status && git diff" && git commit',
+    };
+
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'sequence.inOrder',
+        steps: [
+          {
+            kind: 'command.called',
+            executable: 'git',
+            matcher: {args: ['status']},
+          },
+          {
+            kind: 'command.called',
+            executable: 'git',
+            matcher: {args: ['diff']},
+          },
+          {
+            kind: 'command.called',
+            executable: 'git',
+            matcher: {args: ['commit']},
+          },
+        ],
+      },
+      [event],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: 'Observed 3 ordered tool steps.',
+      evidence: [
+        {executable: 'git', argv: ['status']},
+        {executable: 'git', argv: ['diff']},
+        {executable: 'git', argv: ['commit']},
+      ],
+    });
+  });
+
   it('fails sequence.inOrder when one shell command has steps out of order', () => {
     const result = evaluateOne(
       {

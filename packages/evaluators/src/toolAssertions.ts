@@ -29,6 +29,7 @@ type ToolNotCalledStep = Omit<
 
 type SequenceCursor = {
   eventIndex: number;
+  shellOffset: number;
   commandOffset: number;
 };
 
@@ -104,7 +105,11 @@ export function evaluateSequenceInOrder(
 ): AssertionResult {
   const observedCommands = extractObservedCommands(toolEvents);
   const matchedEvents: (ToolEvent | ObservedCommand)[] = [];
-  let cursor: SequenceCursor = {eventIndex: 0, commandOffset: 0};
+  let cursor: SequenceCursor = {
+    eventIndex: 0,
+    shellOffset: 0,
+    commandOffset: 0,
+  };
 
   for (const [stepIndex, step] of assertion.steps.entries()) {
     const match = findMatchingSequenceStep(
@@ -160,7 +165,8 @@ function findMatchingSequenceStep(
       if (command.eventIndex < cursor.eventIndex) continue;
       if (
         command.eventIndex === cursor.eventIndex &&
-        command.segmentIndex < cursor.commandOffset
+        (command.segmentIndex < cursor.commandOffset ||
+          command.end <= cursor.shellOffset)
       ) {
         continue;
       }
@@ -169,6 +175,7 @@ function findMatchingSequenceStep(
         event: command,
         nextCursor: {
           eventIndex: command.eventIndex,
+          shellOffset: command.end,
           commandOffset: command.segmentIndex + 1,
         },
       };
@@ -194,13 +201,13 @@ function findMatchingSequenceStep(
       }
       return {
         event,
-        nextCursor: {eventIndex: index + 1, commandOffset: 0},
+        nextCursor: {eventIndex: index + 1, shellOffset: 0, commandOffset: 0},
       };
     }
 
     if (event.kind !== 'shell' || typeof event.command !== 'string') continue;
 
-    const startAt = index === cursor.eventIndex ? cursor.commandOffset : 0;
+    const startAt = index === cursor.eventIndex ? cursor.shellOffset : 0;
     const match = shellCommandMatchPosition(
       event.command,
       step.matcher,
@@ -213,7 +220,11 @@ function findMatchingSequenceStep(
 
     return {
       event,
-      nextCursor: {eventIndex: index, commandOffset: match.end},
+      nextCursor: {
+        eventIndex: index,
+        shellOffset: match.end,
+        commandOffset: index === cursor.eventIndex ? cursor.commandOffset : 0,
+      },
     };
   }
 

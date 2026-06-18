@@ -13,6 +13,8 @@ export type ObservedCommand = {
   original: string;
   eventIndex: number;
   segmentIndex: number;
+  start: number;
+  end: number;
 };
 
 type CommandCalledAssertion = Extract<IrAssertion, {kind: 'command.called'}>;
@@ -170,45 +172,56 @@ function parseCommand(
   segmentStart: number,
   shell?: string,
   depth = 0,
+  sourceOffset = 0,
 ): ObservedCommand[] {
   if (depth > 2) return [];
 
   const segments = splitCommandSegments(command);
-  return segments.flatMap((segment, segmentOffset) => {
-    const parsed = parseSegment(segment);
-    if (parsed === undefined) return [];
+  const commands: ObservedCommand[] = [];
+  let segmentIndex = segmentStart;
+
+  for (const segment of segments) {
+    const parsed = parseSegment(segment.command);
+    if (parsed === undefined) continue;
 
     const shellCommand = shellWrappedCommand(parsed);
     if (shellCommand !== undefined) {
-      return parseCommand(
+      const nested = parseCommand(
         shellCommand.command,
         event,
         eventIndex,
-        segmentStart + segmentOffset,
+        segmentIndex,
         shellCommand.shell,
         depth + 1,
+        sourceOffset + segment.start,
       );
+      commands.push(...nested);
+      segmentIndex += Math.max(1, nested.length);
+      continue;
     }
 
     const cwdFlag = cwdFromGitArgs(parsed.executable, parsed.argv);
     const cwd = cwdFromInput(event.input);
-    return [
-      {
-        toolCallId: `${eventIndex}`,
-        executable: parsed.executable,
-        ...(parsed.executablePath === undefined
-          ? {}
-          : {executablePath: parsed.executablePath}),
-        argv: parsed.argv,
-        ...(cwd === undefined ? {} : {cwd}),
-        ...(cwdFlag === undefined ? {} : {cwdFlag}),
-        ...(shell === undefined ? {} : {shell}),
-        original: segment,
-        eventIndex,
-        segmentIndex: segmentStart + segmentOffset,
-      },
-    ];
-  });
+    commands.push({
+      toolCallId: `${eventIndex}`,
+      executable: parsed.executable,
+      ...(parsed.executablePath === undefined
+        ? {}
+        : {executablePath: parsed.executablePath}),
+      argv: parsed.argv,
+      ...(cwd === undefined ? {} : {cwd}),
+      ...(cwdFlag === undefined ? {} : {cwdFlag}),
+      ...(shell === undefined ? {} : {shell}),
+      original: segment.command,
+      eventIndex,
+      segmentIndex,
+      start: sourceOffset + segment.start,
+      end: sourceOffset + segment.end,
+    });
+    segmentIndex += 1;
+  }
+
+  return commands;
 }
 
 function parseSegment(
@@ -245,9 +258,12 @@ function shellWrappedCommand(parsed: {
   return {shell: parsed.executablePath ?? parsed.executable, command};
 }
 
-function splitCommandSegments(command: string): string[] {
-  const segments: string[] = [];
+function splitCommandSegments(
+  command: string,
+): {command: string; start: number; end: number}[] {
+  const segments: {command: string; start: number; end: number}[] = [];
   let current = '';
+  let currentStart = 0;
   let quote: 'single' | 'double' | undefined;
 
   for (let index = 0; index < command.length; index += 1) {
@@ -288,17 +304,31 @@ function splitCommandSegments(command: string): string[] {
       quote === undefined &&
       (char === ';' || `${char}${next}` === '&&' || `${char}${next}` === '||')
     ) {
-      segments.push(current.trim());
+      pushCommandSegment(segments, current, currentStart, index);
       current = '';
       if (char !== ';') index += 1;
+      currentStart = index + 1;
       continue;
     }
 
     current += char;
   }
 
-  segments.push(current.trim());
-  return segments.filter((segment) => segment.length > 0);
+  pushCommandSegment(segments, current, currentStart, command.length);
+  return segments;
+}
+
+function pushCommandSegment(
+  segments: {command: string; start: number; end: number}[],
+  raw: string,
+  rawStart: number,
+  rawEnd: number,
+): void {
+  const leadingWhitespace = raw.match(/^\s*/)?.[0].length ?? 0;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return;
+  const start = rawStart + leadingWhitespace;
+  segments.push({command: trimmed, start, end: Math.max(start, rawEnd)});
 }
 
 function tokenize(command: string): string[] {
