@@ -27,6 +27,9 @@ import {
   isShellToolEvent,
 } from './describe.js';
 
+type ObservedCommandEvidence = {executable: string; argv: string[]};
+type SequenceEvidence = ToolEvent | ObservedCommandEvidence;
+
 /**
  * Render the per-assertion checklist for a job. Failed assertions also show
  * `expected …` / `observed …` lines, and (when relevant) lists of shell
@@ -130,7 +133,7 @@ function describeObservedFailure(
   }
 
   if (assertion.kind === 'command.called') {
-    return fallback;
+    return commandCalledObservedFailure(fallback);
   }
 
   if (assertion.kind === 'command.notCalled') {
@@ -141,11 +144,11 @@ function describeObservedFailure(
   }
 
   if (assertion.kind === 'sequence.inOrder') {
-    const matched = toolEventArrayEvidence(result, assertion.id);
+    const matched = sequenceEvidence(result, assertion.id);
     if (matched === undefined) return fallback;
     const last = matched.at(-1);
     const suffix =
-      last === undefined ? '' : `; last matched ${formatToolEvent(last)}`;
+      last === undefined ? '' : `; last matched ${formatSequenceEvidence(last)}`;
     return `matched ${matched.length} of ${assertion.steps.length} ordered steps${suffix}`;
   }
 
@@ -223,6 +226,15 @@ function formatTextExcerpt(text: string, maxLength = 160): string {
   return `"${excerpt.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
 }
 
+function commandCalledObservedFailure(message: string): string {
+  const observedPrefix = 'Observed commands:\n';
+  const observedStart = message.indexOf(observedPrefix);
+  if (observedStart === -1) return message;
+  const observed = message.slice(observedStart + observedPrefix.length).trim();
+  if (observed.length === 0) return message;
+  return observed.replace(/\s+/g, ' ');
+}
+
 function toolEventEvidence(
   result: LocalRunnerResult,
   assertionId: string,
@@ -233,14 +245,14 @@ function toolEventEvidence(
   return isToolEvent(evidence) ? evidence : undefined;
 }
 
-function toolEventArrayEvidence(
+function sequenceEvidence(
   result: LocalRunnerResult,
   assertionId: string,
-): ToolEvent[] | undefined {
+): SequenceEvidence[] | undefined {
   const evidence = result.assertionResults.find(
     (candidate) => candidate.assertionId === assertionId,
   )?.evidence;
-  return Array.isArray(evidence) && evidence.every(isToolEvent)
+  return Array.isArray(evidence) && evidence.every(isSequenceEvidence)
     ? evidence
     : undefined;
 }
@@ -288,7 +300,7 @@ function isHttpEvent(value: unknown): value is HttpEvent {
 
 function isObservedCommand(
   value: unknown,
-): value is {executable: string; argv: string[]} {
+): value is ObservedCommandEvidence {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -297,6 +309,10 @@ function isObservedCommand(
     'argv' in value &&
     Array.isArray(value.argv)
   );
+}
+
+function isSequenceEvidence(value: unknown): value is SequenceEvidence {
+  return isToolEvent(value) || isObservedCommand(value);
 }
 
 function formatToolEvent(event: ToolEvent): string {
@@ -313,6 +329,12 @@ function formatObservedCommand(command: {
   argv: readonly string[];
 }): string {
   return formatTextExcerpt([command.executable, ...command.argv].join(' '));
+}
+
+function formatSequenceEvidence(evidence: SequenceEvidence): string {
+  return isToolEvent(evidence)
+    ? formatToolEvent(evidence)
+    : `command ${formatObservedCommand(evidence)}`;
 }
 
 function inputPreview(input: unknown): string | undefined {
