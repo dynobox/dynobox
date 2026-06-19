@@ -180,10 +180,19 @@ matcher, not both.
 
 ### Commands
 
+> **Experimental.** Command assertions are new; their matching behavior and
+> matcher options may change in a future release.
+
 `command.called` and `command.notCalled` assert on individual shell commands
-*after* normalization, instead of regex-matching the raw command string. The
-evaluator parses each observed shell tool call into normalized command segments
-(an `executable` plus an `argv` array) and matches against those.
+*after* normalization, instead of regex-matching the raw command string.
+
+How it works: dynobox parses each observed shell command into normalized
+`(executable, argv)` segments using best-effort shell parsing — it does **not**
+run a real shell — and matches your assertion against those segments. This is
+more robust than regex over raw command strings for common shapes (leading env
+assignments, `bash -lc "…"` wrappers, executable path basenames, pipelines), but
+it is intentionally incomplete; see [Limitations and
+oddities](#limitations-and-oddities) below.
 
 ```ts
 command.called('git', {args: ['status']});

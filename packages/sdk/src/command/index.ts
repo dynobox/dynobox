@@ -8,7 +8,11 @@ import type {
   CommandNotCalledAssertion,
 } from '../types/brands.js';
 
-/** Assert that the harness should run a normalized command segment. */
+/**
+ * Assert that the harness should run a normalized command segment.
+ *
+ * @experimental Matching behavior and matcher options may change.
+ */
 function called(
   executable: string,
   matcher?: CommandMatcher,
@@ -16,7 +20,11 @@ function called(
   return createCommandCalledAssertion(executable, matcher);
 }
 
-/** Assert that the harness should not run a normalized command segment. */
+/**
+ * Assert that the harness should not run a normalized command segment.
+ *
+ * @experimental Matching behavior and matcher options may change.
+ */
 function notCalled(
   executable: string,
   matcher?: CommandMatcher,
@@ -24,7 +32,11 @@ function notCalled(
   return createCommandNotCalledAssertion(executable, matcher);
 }
 
-/** Authoring helpers for normalized observed command assertions. */
+/**
+ * Authoring helpers for normalized observed command assertions.
+ *
+ * @experimental Matching behavior and matcher options may change.
+ */
 export const command = {
   called,
   notCalled,
