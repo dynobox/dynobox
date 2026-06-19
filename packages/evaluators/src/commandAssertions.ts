@@ -1,4 +1,5 @@
 import type {IrAssertion} from '@dynobox/sdk/ir';
+import {parse as parseShellCommand, type ParseEntry} from 'shell-quote';
 
 import type {AssertionResult, ToolEvent} from './types.js';
 
@@ -228,7 +229,7 @@ function parseCommand(
 function parseSegment(
   segment: string,
 ): {executable: string; executablePath?: string; argv: string[]} | undefined {
-  const tokens = tokenize(segment.trim());
+  const tokens = commandTokens(segment.trim());
   if (tokens.length === 0) return undefined;
 
   const executableToken = tokens[0]!;
@@ -332,18 +333,68 @@ function pushCommandSegment(
   segments.push({command: trimmed, start, end: Math.max(start, rawEnd)});
 }
 
-function tokenize(command: string): string[] {
+function commandTokens(command: string): string[] {
   const tokens: string[] = [];
-  let current = '';
+  const entries = parseCommandEntries(command);
+
+  for (const entry of entries) {
+    if (typeof entry === 'string') {
+      if (entry.length > 0) tokens.push(entry);
+      continue;
+    }
+
+    if (isGlobEntry(entry)) {
+      tokens.push(entry.pattern);
+      continue;
+    }
+
+    break;
+  }
+
+  return withoutLeadingEnvAssignments(tokens);
+}
+
+function parseCommandEntries(command: string): ParseEntry[] {
+  try {
+    return parseShellCommand(
+      preserveUnquotedHashes(command),
+      preserveShellVariable,
+    );
+  } catch {
+    return command.split(/\s+/).filter(Boolean);
+  }
+}
+
+function preserveShellVariable(key: string): string {
+  return key.length === 0 ? '$' : `$${key}`;
+}
+
+function isGlobEntry(entry: Exclude<ParseEntry, string>): entry is {
+  op: 'glob';
+  pattern: string;
+} {
+  return 'op' in entry && entry.op === 'glob';
+}
+
+function withoutLeadingEnvAssignments(tokens: readonly string[]): string[] {
+  const executableIndex = tokens.findIndex(
+    (token) => !/^[A-Za-z_][A-Za-z0-9_]*=.*/.test(token),
+  );
+  return executableIndex === -1 ? [] : [...tokens.slice(executableIndex)];
+}
+
+function preserveUnquotedHashes(command: string): string {
+  let result = '';
   let quote: 'single' | 'double' | undefined;
 
   for (let index = 0; index < command.length; index += 1) {
     const char = command[index]!;
     const next = command[index + 1];
 
-    if (char === '\\') {
+    if (char === '\\' && quote !== 'single') {
+      result += char;
       if (next !== undefined) {
-        current += next;
+        result += next;
         index += 1;
       }
       continue;
@@ -351,34 +402,29 @@ function tokenize(command: string): string[] {
 
     if (quote === undefined && char === "'") {
       quote = 'single';
+      result += char;
       continue;
     }
     if (quote === 'single' && char === "'") {
       quote = undefined;
+      result += char;
       continue;
     }
     if (quote === undefined && char === '"') {
       quote = 'double';
+      result += char;
       continue;
     }
     if (quote === 'double' && char === '"') {
       quote = undefined;
+      result += char;
       continue;
     }
 
-    if (quote === undefined && /\s/.test(char)) {
-      if (current.length > 0) {
-        tokens.push(current);
-        current = '';
-      }
-      continue;
-    }
-
-    current += char;
+    result += quote === undefined && char === '#' ? '\\#' : char;
   }
 
-  if (current.length > 0) tokens.push(current);
-  return tokens;
+  return result;
 }
 
 function cwdFromGitArgs(

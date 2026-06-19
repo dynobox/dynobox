@@ -440,6 +440,93 @@ describe('evaluateAssertions', () => {
     );
   });
 
+  it('preserves shell variables and unquoted hashes in command args', () => {
+    const toolEvents: ToolEvent[] = [
+      {
+        kind: 'shell',
+        rawName: 'Bash',
+        input: {command: 'gh pr view owner/repo#123 && echo $PWD'},
+        command: 'gh pr view owner/repo#123 && echo $PWD',
+      },
+    ];
+
+    const hashArg = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'command.called',
+        executable: 'gh',
+        matcher: {args: ['owner/repo#123']},
+      },
+      toolEvents,
+    );
+    const variableArg = evaluateOne(
+      {
+        id: 'assertion.test.1',
+        kind: 'command.called',
+        executable: 'echo',
+        matcher: {args: ['$PWD']},
+      },
+      toolEvents,
+    );
+
+    expect(hashArg).toMatchObject({
+      passed: true,
+      evidence: {executable: 'gh', argv: ['pr', 'view', 'owner/repo#123']},
+    });
+    expect(variableArg).toMatchObject({
+      passed: true,
+      evidence: {executable: 'echo', argv: ['$PWD']},
+    });
+  });
+
+  it('skips leading env assignments in normalized commands', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'command.called',
+        executable: 'pnpm',
+        matcher: {args: ['test']},
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'NODE_ENV=test pnpm test'},
+          command: 'NODE_ENV=test pnpm test',
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      evidence: {executable: 'pnpm', argv: ['test']},
+    });
+  });
+
+  it('does not treat redirection targets as command args', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'command.called',
+        executable: 'git',
+        matcher: {args: ['status.log']},
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'git status > status.log'},
+          command: 'git status > status.log',
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({passed: false});
+    expect(result.message).toContain(
+      'No observed git command included arg "status.log".',
+    );
+  });
+
   it('passes command.notCalled when no matching command segment exists', () => {
     const result = evaluateOne(
       {
