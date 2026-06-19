@@ -805,6 +805,40 @@ describe('evaluateAssertions', () => {
     });
   });
 
+  it('does not reuse a shell event for a matcherless tool step after a command step', () => {
+    const event: ToolEvent = {
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {command: 'git status'},
+      command: 'git status',
+    };
+
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'sequence.inOrder',
+        steps: [
+          {
+            kind: 'command.called',
+            executable: 'git',
+            matcher: {args: ['status']},
+          },
+          {
+            kind: 'tool.called',
+            toolKind: 'shell',
+          },
+        ],
+      },
+      [event],
+    );
+
+    expect(result).toMatchObject({
+      passed: false,
+      message:
+        'Expected ordered step #2 (tool.called(shell)) to match an observed tool event, but none was observed after the previous step.',
+    });
+  });
+
   it('passes sequence.inOrder from a shell matcher to a normalized command in one shell command', () => {
     const event: ToolEvent = {
       kind: 'shell',

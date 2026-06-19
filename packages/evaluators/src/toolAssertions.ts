@@ -194,6 +194,14 @@ function findMatchingSequenceStep(
 
     if (step.matcher === undefined) {
       if (
+        index === cursor.eventIndex &&
+        event.kind === 'shell' &&
+        (cursor.shellOffset > 0 || cursor.commandOffset > 0)
+      ) {
+        continue;
+      }
+
+      if (
         step.pathMatcher !== undefined &&
         !toolEventMatchesPath(event, step.pathMatcher.path)
       ) {
