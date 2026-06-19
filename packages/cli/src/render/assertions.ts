@@ -24,10 +24,11 @@ import {
 import {
   describeAssertion,
   describeExpectation,
+  isObservedCommand,
+  type ObservedCommandEvidence,
   isShellToolEvent,
 } from './describe.js';
 
-type ObservedCommandEvidence = {executable: string; argv: string[]};
 type SequenceEvidence = ToolEvent | ObservedCommandEvidence;
 
 /**
@@ -306,17 +307,6 @@ function isHttpEvent(value: unknown): value is HttpEvent {
     typeof value.method === 'string' &&
     'url' in value &&
     typeof value.url === 'string'
-  );
-}
-
-function isObservedCommand(value: unknown): value is ObservedCommandEvidence {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'executable' in value &&
-    typeof value.executable === 'string' &&
-    'argv' in value &&
-    Array.isArray(value.argv)
   );
 }
 

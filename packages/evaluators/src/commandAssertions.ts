@@ -451,8 +451,14 @@ function basename(path: string): string {
   return path.split('/').filter(Boolean).at(-1) ?? path;
 }
 
+const revivedRegexCache = new WeakMap<{source: string; flags: string}, RegExp>();
+
 function reviveRegex(pattern: {source: string; flags: string}): RegExp {
-  return new RegExp(pattern.source, pattern.flags);
+  const cached = revivedRegexCache.get(pattern);
+  if (cached !== undefined) return cached;
+  const regex = new RegExp(pattern.source, pattern.flags);
+  revivedRegexCache.set(pattern, regex);
+  return regex;
 }
 
 function commandCalledFailMessage(

@@ -152,6 +152,22 @@ export function isShellToolEvent(event: ToolEvent): event is ShellToolEvent {
   return event.kind === 'shell';
 }
 
+/** Evidence shape for a normalized observed command segment. */
+export type ObservedCommandEvidence = {executable: string; argv: string[]};
+
+export function isObservedCommand(
+  value: unknown,
+): value is ObservedCommandEvidence {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'executable' in value &&
+    typeof value.executable === 'string' &&
+    'argv' in value &&
+    Array.isArray(value.argv)
+  );
+}
+
 function describeToolStepExpectation(
   step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
 ): string {
