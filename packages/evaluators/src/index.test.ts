@@ -387,6 +387,34 @@ describe('evaluateAssertions', () => {
     });
   });
 
+  it('resets stateful command regex matchers before each test', () => {
+    const argsAssertion: IrAssertion = {
+      id: 'assertion.test.0',
+      kind: 'command.called',
+      executable: 'git',
+      matcher: {argsMatching: [{source: '^status$', flags: 'g'}]},
+    };
+    const originalAssertion: IrAssertion = {
+      id: 'assertion.test.1',
+      kind: 'command.called',
+      executable: 'git',
+      matcher: {originalMatches: {source: '^git status', flags: 'g'}},
+    };
+    const events: ToolEvent[] = [
+      {
+        kind: 'shell',
+        rawName: 'Bash',
+        input: {command: 'git status --porcelain'},
+        command: 'git status --porcelain',
+      },
+    ];
+
+    expect(evaluateOne(argsAssertion, events).passed).toBe(true);
+    expect(evaluateOne(argsAssertion, events).passed).toBe(true);
+    expect(evaluateOne(originalAssertion, events).passed).toBe(true);
+    expect(evaluateOne(originalAssertion, events).passed).toBe(true);
+  });
+
   it('does not treat long options containing "c" as the shell command flag', () => {
     const result = evaluateOne(
       {

@@ -132,8 +132,9 @@ function commandMatchesMatcher(
 
   if (matcher.argsMatching !== undefined) {
     for (const expected of matcher.argsMatching) {
-      const regex = reviveRegex(expected);
-      if (!observed.argv.some((arg) => regex.test(arg))) return false;
+      if (!observed.argv.some((arg) => regexMatches(expected, arg))) {
+        return false;
+      }
     }
   }
 
@@ -146,7 +147,7 @@ function commandMatchesMatcher(
 
   if (
     matcher.originalMatches !== undefined &&
-    !reviveRegex(matcher.originalMatches).test(observed.original)
+    !regexMatches(matcher.originalMatches, observed.original)
   ) {
     return false;
   }
@@ -494,6 +495,15 @@ function reviveRegex(pattern: {source: string; flags: string}): RegExp {
   const regex = new RegExp(pattern.source, pattern.flags);
   revivedRegexCache.set(pattern, regex);
   return regex;
+}
+
+function regexMatches(
+  pattern: {source: string; flags: string},
+  value: string,
+): boolean {
+  const regex = reviveRegex(pattern);
+  regex.lastIndex = 0;
+  return regex.test(value);
 }
 
 function commandCalledFailMessage(
