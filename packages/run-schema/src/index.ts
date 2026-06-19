@@ -57,11 +57,39 @@ const assertionMatcherSchema = z
   })
   .strict();
 
+const regexPatternSchema = z
+  .object({
+    source: assertionDetailString,
+    flags: z.string().max(16),
+  })
+  .strict();
+
+const commandMatcherSchema = z
+  .object({
+    args: z
+      .array(assertionDetailString)
+      .max(RUN_UPLOAD_LIMITS.assertionChildren)
+      .optional(),
+    argsInOrder: z
+      .array(assertionDetailString)
+      .max(RUN_UPLOAD_LIMITS.assertionChildren)
+      .optional(),
+    argsMatching: z
+      .array(regexPatternSchema)
+      .max(RUN_UPLOAD_LIMITS.assertionChildren)
+      .optional(),
+    originalIncludes: assertionDetailString.optional(),
+    originalMatches: regexPatternSchema.optional(),
+  })
+  .strict();
+
 const runUploadAssertionDefinitionStepV1Schema = z
   .object({
     kind: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionKindLength),
     toolKind: optionalNullableString(RUN_UPLOAD_LIMITS.assertionKindLength),
+    executable: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
     matcher: assertionMatcherSchema.optional(),
+    commandMatcher: commandMatcherSchema.optional(),
     pathMatcher: z.object({path: assertionDetailString}).strict().optional(),
   })
   .strict();
@@ -70,7 +98,9 @@ export const runUploadAssertionDefinitionV1Schema = z
   .object({
     kind: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionKindLength),
     toolKind: optionalNullableString(RUN_UPLOAD_LIMITS.assertionKindLength),
+    executable: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
     matcher: assertionMatcherSchema.optional(),
+    commandMatcher: commandMatcherSchema.optional(),
     pathMatcher: z.object({path: assertionDetailString}).strict().optional(),
     endpointId: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
     status: z.number().int().optional(),

@@ -4,6 +4,7 @@
  */
 
 import {
+  extractObservedCommands,
   extractSkillFiles,
   inspectArtifact,
   stringsFromUnknown,
@@ -24,8 +25,12 @@ import {
 import {
   describeAssertion,
   describeExpectation,
+  isObservedCommand,
   isShellToolEvent,
+  type ObservedCommandEvidence,
 } from './describe.js';
+
+type SequenceEvidence = ToolEvent | ObservedCommandEvidence;
 
 /**
  * Render the per-assertion checklist for a job. Failed assertions also show
@@ -60,6 +65,22 @@ export function renderAssertionDetails(
           assertionResult.message,
         )}\n`,
       );
+    }
+  }
+
+  if (shouldShowObservedCommandSegments(result, assertionById, ctx)) {
+    lines.push('\n        observed parsed commands during this run:\n');
+    const commands = observedCommandSegments(
+      result.harnessResult?.toolEvents ?? [],
+    );
+    if (commands.length === 0) {
+      lines.push(`           ${dim(ctx, '(none)')}\n`);
+    } else {
+      for (const [index, command] of commands.entries()) {
+        lines.push(
+          `           ${index + 1}. ${dim(ctx, formatObservedCommand(command))}\n`,
+        );
+      }
     }
   }
 
@@ -129,12 +150,27 @@ function describeObservedFailure(
       : `matching ${formatToolEvent(evidence)}`;
   }
 
+  if (assertion.kind === 'command.called') {
+    const observed = observedCommandArrayEvidence(result, assertion.id);
+    if (observed === undefined || observed.length === 0) return fallback;
+    return formatCommandCalledFailure(observed.length);
+  }
+
+  if (assertion.kind === 'command.notCalled') {
+    const evidence = assertionResultEvidence(result, assertion.id);
+    return isObservedCommand(evidence)
+      ? `matching command: ${formatObservedCommand(evidence)}`
+      : fallback;
+  }
+
   if (assertion.kind === 'sequence.inOrder') {
-    const matched = toolEventArrayEvidence(result, assertion.id);
+    const matched = sequenceEvidence(result, assertion.id);
     if (matched === undefined) return fallback;
     const last = matched.at(-1);
     const suffix =
-      last === undefined ? '' : `; last matched ${formatToolEvent(last)}`;
+      last === undefined
+        ? ''
+        : `; last matched ${formatSequenceEvidence(last)}`;
     return `matched ${matched.length} of ${assertion.steps.length} ordered steps${suffix}`;
   }
 
@@ -202,6 +238,10 @@ function formatCount(count: number, singular: string): string {
   return `${count} ${count === 1 ? singular : `${singular}s`}`;
 }
 
+function formatCommandCalledFailure(observedCount: number): string {
+  return `0/${observedCount} observed command segments matched`;
+}
+
 function formatTextExcerpt(text: string, maxLength = 160): string {
   const compact = text.replace(/\s+/g, ' ').trim();
   if (compact.length === 0) return '(empty)';
@@ -222,14 +262,26 @@ function toolEventEvidence(
   return isToolEvent(evidence) ? evidence : undefined;
 }
 
-function toolEventArrayEvidence(
+function sequenceEvidence(
   result: LocalRunnerResult,
   assertionId: string,
-): ToolEvent[] | undefined {
+): SequenceEvidence[] | undefined {
   const evidence = result.assertionResults.find(
     (candidate) => candidate.assertionId === assertionId,
   )?.evidence;
-  return Array.isArray(evidence) && evidence.every(isToolEvent)
+  return Array.isArray(evidence) && evidence.every(isSequenceEvidence)
+    ? evidence
+    : undefined;
+}
+
+function observedCommandArrayEvidence(
+  result: LocalRunnerResult,
+  assertionId: string,
+): ObservedCommandEvidence[] | undefined {
+  const evidence = result.assertionResults.find(
+    (candidate) => candidate.assertionId === assertionId,
+  )?.evidence;
+  return Array.isArray(evidence) && evidence.every(isObservedCommand)
     ? evidence
     : undefined;
 }
@@ -242,6 +294,15 @@ function httpEventEvidence(
     (candidate) => candidate.assertionId === assertionId,
   )?.evidence;
   return isHttpEvent(evidence) ? evidence : undefined;
+}
+
+function assertionResultEvidence(
+  result: LocalRunnerResult,
+  assertionId: string,
+): unknown {
+  return result.assertionResults.find(
+    (candidate) => candidate.assertionId === assertionId,
+  )?.evidence;
 }
 
 function isToolEvent(value: unknown): value is ToolEvent {
@@ -266,6 +327,10 @@ function isHttpEvent(value: unknown): value is HttpEvent {
   );
 }
 
+function isSequenceEvidence(value: unknown): value is SequenceEvidence {
+  return isToolEvent(value) || isObservedCommand(value);
+}
+
 function formatToolEvent(event: ToolEvent): string {
   if (isShellToolEvent(event))
     return `shell command ${formatTextExcerpt(event.command)}`;
@@ -273,6 +338,19 @@ function formatToolEvent(event: ToolEvent): string {
   return input === undefined
     ? `${event.rawName} tool call`
     : `${event.rawName} tool call ${input}`;
+}
+
+function formatObservedCommand(command: {
+  executable: string;
+  argv: readonly string[];
+}): string {
+  return formatTextExcerpt([command.executable, ...command.argv].join(' '));
+}
+
+function formatSequenceEvidence(evidence: SequenceEvidence): string {
+  return isToolEvent(evidence)
+    ? formatToolEvent(evidence)
+    : `command ${formatObservedCommand(evidence)}`;
 }
 
 function inputPreview(input: unknown): string | undefined {
@@ -307,6 +385,18 @@ function shouldShowObservedShellCommands(
   });
 }
 
+function shouldShowObservedCommandSegments(
+  result: LocalRunnerResult,
+  assertionById: Map<string, IrAssertion>,
+  ctx: RenderContext,
+): boolean {
+  if (ctx.mode !== 'verbose' && ctx.mode !== 'debug') return false;
+  if (![...assertionById.values()].some(assertionMentionsCommand)) return false;
+  return (
+    observedCommandSegments(result.harnessResult?.toolEvents ?? []).length > 0
+  );
+}
+
 function shouldShowObservedSkillFiles(
   result: LocalRunnerResult,
   assertionById: Map<string, IrAssertion>,
@@ -335,7 +425,22 @@ function assertionMentionsShell(assertion: IrAssertion | undefined): boolean {
   }
   return (
     assertion.kind === 'sequence.inOrder' &&
-    assertion.steps.some((step) => step.toolKind === 'shell')
+    assertion.steps.some(
+      (step) => step.kind === 'tool.called' && step.toolKind === 'shell',
+    )
+  );
+}
+
+function assertionMentionsCommand(assertion: IrAssertion): boolean {
+  if (
+    assertion.kind === 'command.called' ||
+    assertion.kind === 'command.notCalled'
+  ) {
+    return true;
+  }
+  return (
+    assertion.kind === 'sequence.inOrder' &&
+    assertion.steps.some((step) => step.kind === 'command.called')
   );
 }
 
@@ -343,6 +448,12 @@ function observedShellCommands(toolEvents: readonly ToolEvent[]): string[] {
   return toolEvents.flatMap((event) =>
     isShellToolEvent(event) ? [event.command] : [],
   );
+}
+
+function observedCommandSegments(
+  toolEvents: readonly ToolEvent[],
+): ObservedCommandEvidence[] {
+  return extractObservedCommands(toolEvents);
 }
 
 function observedSkillFiles(toolEvents: readonly ToolEvent[]): string[] {

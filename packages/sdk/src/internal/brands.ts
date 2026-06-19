@@ -2,6 +2,9 @@ import type {
   ArtifactContainsAssertion,
   ArtifactExistsAssertion,
   CalledAssertion,
+  CommandCalledAssertion,
+  CommandMatcher,
+  CommandNotCalledAssertion,
   Endpoint,
   FinalMessageContainsAssertion,
   NotCalledAssertion,
@@ -91,6 +94,32 @@ export function createToolNotCalledAssertion<K extends ToolKind>(
       : {...base, command: matcher}) as unknown as ToolNotCalledAssertion<K>;
 }
 
+/** Create a positive normalized command assertion. */
+export function createCommandCalledAssertion(
+  executable: string,
+  matcher?: CommandMatcher,
+): CommandCalledAssertion {
+  const base = {
+    [ASSERTION_BRAND]: true as const,
+    type: 'command.called' as const,
+    executable,
+  };
+  return matcher === undefined ? base : {...base, command: matcher};
+}
+
+/** Create a negative normalized command assertion. */
+export function createCommandNotCalledAssertion(
+  executable: string,
+  matcher?: CommandMatcher,
+): CommandNotCalledAssertion {
+  const base = {
+    [ASSERTION_BRAND]: true as const,
+    type: 'command.notCalled' as const,
+    executable,
+  };
+  return matcher === undefined ? base : {...base, command: matcher};
+}
+
 /** Create an assertion that a path exists in the scenario work directory. */
 export function createArtifactExistsAssertion(
   path: string,
@@ -139,7 +168,7 @@ export function createFinalMessageContainsAssertion(
 
 /** Create an ordered sequence assertion from positive tool-call steps. */
 export function createSequenceInOrderAssertion(
-  steps: readonly ToolCalledAssertion[],
+  steps: readonly (ToolCalledAssertion | CommandCalledAssertion)[],
 ): SequenceInOrderAssertion {
   return {
     [ASSERTION_BRAND]: true as const,

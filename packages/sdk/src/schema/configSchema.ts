@@ -91,6 +91,19 @@ const shellCommandMatcherSchema = z.custom<ShellCommandMatcher>(
   },
 );
 
+const commandMatcherSchema = z
+  .object({
+    args: z.array(z.string()).optional(),
+    argsInOrder: z.array(z.string()).optional(),
+    argsMatching: z.array(z.instanceof(RegExp)).optional(),
+    originalIncludes: z.string().optional(),
+    originalMatches: z.instanceof(RegExp).optional(),
+  })
+  .strict()
+  .refine((matcher) => Object.keys(matcher).length > 0, {
+    message: 'Command matcher must specify at least one matcher field.',
+  });
+
 const toolCalledStepSchema = z
   .object({
     type: z.literal('tool.called'),
@@ -101,6 +114,27 @@ const toolCalledStepSchema = z
   .strict();
 
 const toolCalledAssertionSchema = toolCalledStepSchema
+  .merge(assertionBaseSchema)
+  .strict();
+
+const commandCalledStepSchema = z
+  .object({
+    type: z.literal('command.called'),
+    executable: z.string().min(1),
+    command: commandMatcherSchema.optional(),
+  })
+  .strict();
+
+const commandCalledAssertionSchema = commandCalledStepSchema
+  .merge(assertionBaseSchema)
+  .strict();
+
+const commandNotCalledAssertionSchema = z
+  .object({
+    type: z.literal('command.notCalled'),
+    executable: z.string().min(1),
+    command: commandMatcherSchema.optional(),
+  })
   .merge(assertionBaseSchema)
   .strict();
 
@@ -150,7 +184,14 @@ const finalMessageContainsAssertionSchema = z
 const sequenceInOrderAssertionSchema = z
   .object({
     type: z.literal('sequence.inOrder'),
-    steps: z.array(toolCalledStepSchema).min(1),
+    steps: z
+      .array(
+        z.discriminatedUnion('type', [
+          toolCalledStepSchema,
+          commandCalledStepSchema,
+        ]),
+      )
+      .min(1),
   })
   .merge(assertionBaseSchema)
   .strict();
@@ -167,6 +208,8 @@ export const assertionSchema = z
   .discriminatedUnion('type', [
     calledAssertionSchema,
     notCalledAssertionSchema,
+    commandCalledAssertionSchema,
+    commandNotCalledAssertionSchema,
     toolCalledAssertionSchema,
     toolNotCalledAssertionSchema,
     artifactExistsAssertionSchema,
@@ -227,6 +270,8 @@ export const assertionSchema = z
 
     if (assertion.type === 'sequence.inOrder') {
       assertion.steps.forEach((step, index) => {
+        if (step.type !== 'tool.called') return;
+
         if (step.command !== undefined && step.tool !== 'shell') {
           ctx.addIssue({
             code: 'custom',

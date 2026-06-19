@@ -11,6 +11,9 @@ import {
   type ArtifactContainsAssertion,
   type ArtifactExistsAssertion,
   type CalledAssertion,
+  command,
+  type CommandCalledAssertion,
+  type CommandNotCalledAssertion,
   defineDyno,
   defineScenario,
   dyno,
@@ -44,6 +47,8 @@ describe('packages/sdk', () => {
     expect(typeof http.endpoint).toBe('function');
     expect(typeof http.called).toBe('function');
     expect(typeof http.notCalled).toBe('function');
+    expect(typeof command.called).toBe('function');
+    expect(typeof command.notCalled).toBe('function');
     expect(typeof tool.called).toBe('function');
     expect(typeof tool.notCalled).toBe('function');
     expect(typeof artifact.exists).toBe('function');
@@ -242,6 +247,15 @@ export default defineDyno({
     expectTypeOf(a.tool).toEqualTypeOf<'shell'>();
   });
 
+  it('types command assertion helpers', () => {
+    expectTypeOf(
+      command.called('git', {args: ['status']}),
+    ).toEqualTypeOf<CommandCalledAssertion>();
+    expectTypeOf(
+      command.notCalled('git', {argsInOrder: ['push', 'origin']}),
+    ).toEqualTypeOf<CommandNotCalledAssertion>();
+  });
+
   it('types non-tool assertion helpers', () => {
     expectTypeOf(
       artifact.exists('CHANGELOG.md'),
@@ -409,6 +423,65 @@ export default defineDyno({
         id: 'assertion.uses-shell.3',
         kind: 'tool.called',
         toolKind: 'edit_file',
+      },
+    ]);
+    expect(irSchema.parse(ir)).toEqual(ir);
+  });
+
+  it('compiles command assertions to canonical IR', () => {
+    const config = defineDyno({
+      scenarios: [
+        {
+          name: 'uses commands',
+          prompt: 'Check git status.',
+          assertions: [
+            command.called('git', {
+              args: ['status'],
+              argsMatching: [/^--short$/],
+            }),
+            command.notCalled('git', {args: ['push']}),
+            sequence.inOrder([
+              command.called('git', {args: ['status']}),
+              command.called('git', {argsInOrder: ['add', 'README.md']}),
+            ]),
+          ],
+        },
+      ],
+    });
+
+    const ir = compile(config);
+
+    expect(ir.scenarios[0]!.assertions).toEqual([
+      {
+        id: 'assertion.uses-commands.0',
+        kind: 'command.called',
+        executable: 'git',
+        matcher: {
+          args: ['status'],
+          argsMatching: [{source: '^--short$', flags: ''}],
+        },
+      },
+      {
+        id: 'assertion.uses-commands.1',
+        kind: 'command.notCalled',
+        executable: 'git',
+        matcher: {args: ['push']},
+      },
+      {
+        id: 'assertion.uses-commands.2',
+        kind: 'sequence.inOrder',
+        steps: [
+          {
+            kind: 'command.called',
+            executable: 'git',
+            matcher: {args: ['status']},
+          },
+          {
+            kind: 'command.called',
+            executable: 'git',
+            matcher: {argsInOrder: ['add', 'README.md']},
+          },
+        ],
       },
     ]);
     expect(irSchema.parse(ir)).toEqual(ir);

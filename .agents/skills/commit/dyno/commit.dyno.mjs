@@ -1,4 +1,4 @@
-import {artifact, defineDyno, sequence, skill, tool} from '@dynobox/sdk';
+import {artifact, command, defineDyno, sequence, skill} from '@dynobox/sdk';
 
 export default defineDyno({
   name: '[commit-skill] no writes',
@@ -18,15 +18,15 @@ export default defineDyno({
       ],
       assertions: [
         sequence.inOrder([
-          tool.called('shell', {includes: 'git status'}),
-          tool.called('shell', {includes: 'git diff'}),
-          tool.called('shell', {includes: 'git commit'}),
+          command.called('git', {args: ['status']}),
+          command.called('git', {args: ['diff']}),
+          command.called('git', {args: ['commit']}),
         ]),
         skill.referenced('commit'),
-        tool.called('shell', {includes: 'git add'}),
+        command.called('git', {args: ['add']}),
         artifact.exists('.agents/skills/commit/SKILL.md'),
-        tool.notCalled('shell', {includes: 'git push'}),
-        tool.notCalled('shell', {includes: 'git commit --amend'}),
+        command.notCalled('git', {args: ['push']}),
+        command.notCalled('git', {args: ['commit', '--amend']}),
       ],
     },
   ],

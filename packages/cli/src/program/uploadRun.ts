@@ -27,6 +27,7 @@ import {
   describeAssertion,
   describeExpectation,
   describeToolEvent,
+  isObservedCommand,
 } from '../render/describe.js';
 import {readPackageVersion} from '../util/version.js';
 import {type AuthEnvironment, resolveAuthToken} from './auth.js';
@@ -269,7 +270,12 @@ function compactAssertion(input: {
           definition: assertionDefinition(input.source),
           display: assertionDisplay(input.source, input.result, input.message),
         }),
-    evidence: assertionEvidence(input.result, input.assertionId),
+    evidence: assertionEvidence(
+      input.result,
+      input.assertionId,
+      input.source,
+      input.passed,
+    ),
   };
 }
 
@@ -296,15 +302,33 @@ function assertionDefinition(
       ...pathMatcherDefinition(assertion),
     };
   }
+  if (
+    assertion.kind === 'command.called' ||
+    assertion.kind === 'command.notCalled'
+  ) {
+    return {
+      ...base,
+      executable: assertion.executable,
+      ...commandMatcherDefinition(assertion),
+    };
+  }
   if (assertion.kind === 'sequence.inOrder') {
     return {
       ...base,
-      steps: assertion.steps.map((step) => ({
-        kind: step.kind,
-        toolKind: step.toolKind,
-        ...matcherDefinition(step),
-        ...pathMatcherDefinition(step),
-      })),
+      steps: assertion.steps.map((step) =>
+        step.kind === 'tool.called'
+          ? {
+              kind: step.kind,
+              toolKind: step.toolKind,
+              ...matcherDefinition(step),
+              ...pathMatcherDefinition(step),
+            }
+          : {
+              kind: step.kind,
+              executable: step.executable,
+              ...commandMatcherDefinition(step),
+            },
+      ),
     };
   }
   if (assertion.kind === 'http.called') {
@@ -386,9 +410,14 @@ function sequenceChildren(
 function assertionEvidence(
   result: LocalRunnerResult,
   assertionId: string,
+  assertion: IrAssertion | undefined,
+  passed: boolean,
 ): RunUploadAssertionEvidenceV1 {
   const evidence = assertionResultEvidence(result, assertionId);
-  const matches = evidenceMatches(evidence);
+  const matches =
+    assertion?.kind === 'command.called' && !passed
+      ? []
+      : evidenceMatches(evidence);
   return {
     observedCount:
       (result.harnessResult?.toolEvents.length ?? 0) + result.httpEvents.length,
@@ -412,6 +441,9 @@ function evidenceMatches(evidence: unknown): string[] {
   return values.flatMap((value) => {
     if (isToolEvent(value)) return [truncateDetail(describeToolEvent(value))];
     if (isHttpEvent(value)) return [truncateDetail(formatHttpEvent(value))];
+    if (isObservedCommand(value)) {
+      return [truncateDetail([value.executable, ...value.argv].join(' '))];
+    }
     return [];
   });
 }
@@ -432,6 +464,21 @@ function observedAssertionSummary(
   result: LocalRunnerResult,
   fallback: string,
 ): string {
+  if (assertion.kind === 'command.called') {
+    const evidence = assertionResultEvidence(result, assertion.id);
+    if (Array.isArray(evidence) && evidence.every(isObservedCommand)) {
+      return evidence.length === 0
+        ? 'no commands observed'
+        : evidence
+            .map((command, index) =>
+              truncateDetail(
+                `${index + 1}. ${[command.executable, ...command.argv].join(' ')}`,
+              ),
+            )
+            .join(' ');
+    }
+  }
+
   if (assertion.kind === 'sequence.inOrder') {
     const evidence = assertionResultEvidence(result, assertion.id);
     if (Array.isArray(evidence)) {
@@ -470,9 +517,55 @@ function pathMatcherDefinition(assertion: {
     : {pathMatcher: {path: truncateDetail(assertion.pathMatcher.path)}};
 }
 
+function commandMatcherDefinition(assertion: {
+  matcher?: Extract<
+    IrAssertion,
+    {kind: 'command.called'} | {kind: 'command.notCalled'}
+  >['matcher'];
+}) {
+  if (assertion.matcher === undefined) return {};
+  return {
+    commandMatcher: {
+      ...(assertion.matcher.args === undefined
+        ? {}
+        : {args: assertion.matcher.args.map(truncateDetail)}),
+      ...(assertion.matcher.argsInOrder === undefined
+        ? {}
+        : {argsInOrder: assertion.matcher.argsInOrder.map(truncateDetail)}),
+      ...(assertion.matcher.argsMatching === undefined
+        ? {}
+        : {
+            argsMatching: assertion.matcher.argsMatching.map((pattern) => ({
+              source: truncateDetail(pattern.source),
+              flags: pattern.flags,
+            })),
+          }),
+      ...(assertion.matcher.originalIncludes === undefined
+        ? {}
+        : {
+            originalIncludes: truncateDetail(
+              assertion.matcher.originalIncludes,
+            ),
+          }),
+      ...(assertion.matcher.originalMatches === undefined
+        ? {}
+        : {
+            originalMatches: {
+              source: truncateDetail(assertion.matcher.originalMatches.source),
+              flags: assertion.matcher.originalMatches.flags,
+            },
+          }),
+    },
+  };
+}
+
 function describeToolStep(
   step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
 ): string {
+  if (step.kind === 'command.called') {
+    if (step.matcher === undefined) return `command.called(${step.executable})`;
+    return `command.called(${step.executable}, ${describeCommandMatcher(step.matcher)})`;
+  }
   if (step.pathMatcher !== undefined) {
     return `tool.called(${step.toolKind}, path: ${step.pathMatcher.path})`;
   }
@@ -483,6 +576,10 @@ function describeToolStep(
 function describeToolStepExpectation(
   step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
 ): string {
+  if (step.kind === 'command.called') {
+    if (step.matcher === undefined) return `${step.executable} command`;
+    return `${step.executable} command with ${describeCommandMatcher(step.matcher)}`;
+  }
   if (step.pathMatcher !== undefined) {
     return `${step.toolKind} tool call for path "${step.pathMatcher.path}"`;
   }
@@ -512,6 +609,33 @@ function describeMatcherExpectation(
     return `shell command starting with "${matcher.startsWith}"`;
   }
   return `shell command matching /${matcher.matches}/`;
+}
+
+function describeCommandMatcher(
+  matcher: NonNullable<
+    Extract<IrAssertion, {kind: 'command.called'}>['matcher']
+  >,
+): string {
+  const parts: string[] = [];
+  if (matcher.args !== undefined)
+    parts.push(`args: ${JSON.stringify(matcher.args)}`);
+  if (matcher.argsInOrder !== undefined) {
+    parts.push(`argsInOrder: ${JSON.stringify(matcher.argsInOrder)}`);
+  }
+  if (matcher.argsMatching !== undefined) {
+    parts.push(
+      `argsMatching: ${matcher.argsMatching.map((pattern) => `/${pattern.source}/${pattern.flags}`).join(', ')}`,
+    );
+  }
+  if (matcher.originalIncludes !== undefined) {
+    parts.push(`originalIncludes: ${matcher.originalIncludes}`);
+  }
+  if (matcher.originalMatches !== undefined) {
+    parts.push(
+      `originalMatches: /${matcher.originalMatches.source}/${matcher.originalMatches.flags}`,
+    );
+  }
+  return parts.join(', ');
 }
 
 function isToolEvent(value: unknown): value is ToolEvent {

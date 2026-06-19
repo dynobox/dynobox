@@ -165,6 +165,22 @@ function buildIrAssertion(
     return base;
   }
 
+  if (assertion.type === 'command.called') {
+    return {id, ...metadata, ...buildIrCommandCalledStep(assertion)};
+  }
+
+  if (assertion.type === 'command.notCalled') {
+    const base: IrAssertion = {
+      id,
+      ...metadata,
+      kind: 'command.notCalled',
+      executable: assertion.executable,
+    };
+    return assertion.command === undefined
+      ? base
+      : {...base, matcher: serializeCommandMatcher(assertion.command)};
+  }
+
   if (assertion.type === 'artifact.exists') {
     return {id, ...metadata, kind: 'artifact.exists', path: assertion.path};
   }
@@ -197,7 +213,11 @@ function buildIrAssertion(
       id,
       ...metadata,
       kind: 'sequence.inOrder',
-      steps: assertion.steps.map(buildIrToolCalledStep),
+      steps: assertion.steps.map((step) =>
+        step.type === 'tool.called'
+          ? buildIrToolCalledStep(step)
+          : buildIrCommandCalledStep(step),
+      ),
     };
   }
 
@@ -248,6 +268,47 @@ function buildIrToolCalledStep(
     >;
   }
   return base as Omit<Extract<IrAssertion, {kind: 'tool.called'}>, 'id'>;
+}
+
+function buildIrCommandCalledStep(
+  assertion: Extract<z.infer<typeof assertionSchema>, {type: 'command.called'}>,
+): Omit<Extract<IrAssertion, {kind: 'command.called'}>, 'id'> {
+  const base = {
+    kind: 'command.called' as const,
+    executable: assertion.executable,
+  };
+  return assertion.command === undefined
+    ? base
+    : {...base, matcher: serializeCommandMatcher(assertion.command)};
+}
+
+function serializeCommandMatcher(
+  matcher: Extract<
+    z.infer<typeof assertionSchema>,
+    {type: 'command.called' | 'command.notCalled'}
+  >['command'],
+): NonNullable<Extract<IrAssertion, {kind: 'command.called'}>['matcher']> {
+  const serialized: NonNullable<
+    Extract<IrAssertion, {kind: 'command.called'}>['matcher']
+  > = {};
+  if (matcher?.args !== undefined) serialized.args = [...matcher.args];
+  if (matcher?.argsInOrder !== undefined) {
+    serialized.argsInOrder = [...matcher.argsInOrder];
+  }
+  if (matcher?.argsMatching !== undefined) {
+    serialized.argsMatching = matcher.argsMatching.map(serializeRegExp);
+  }
+  if (matcher?.originalIncludes !== undefined) {
+    serialized.originalIncludes = matcher.originalIncludes;
+  }
+  if (matcher?.originalMatches !== undefined) {
+    serialized.originalMatches = serializeRegExp(matcher.originalMatches);
+  }
+  return serialized;
+}
+
+function serializeRegExp(regex: RegExp): {source: string; flags: string} {
+  return {source: regex.source, flags: regex.flags};
 }
 
 function reserveAuthoredId(

@@ -19,9 +19,11 @@
     "test": "pnpm run build && vitest run"
   },
   "dependencies": {
-    "@dynobox/sdk": "workspace:*"
+    "@dynobox/sdk": "workspace:*",
+    "shell-quote": "^1.8.4"
   },
   "devDependencies": {
+    "@types/shell-quote": "^1.7.5",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"

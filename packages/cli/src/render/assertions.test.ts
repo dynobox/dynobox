@@ -240,4 +240,183 @@ describe('renderAssertionDetails', () => {
     expect(output).toContain('observed  artifact: "actual artifact contents"');
     expect(output).not.toContain('observed  Expected');
   });
+
+  it('shows compact observed details for failed command.called assertions', () => {
+    const job = {
+      id: 'job.1',
+      scenario: {
+        id: 'scenario.command-called',
+        name: 'command called',
+        prompt: 'p',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        endpoints: [],
+        assertions: [
+          {
+            id: 'assertion.command.called',
+            kind: 'command.called',
+            executable: 'git',
+            matcher: {args: ['commit']},
+          },
+        ],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const result = {
+      assertionResults: [
+        {
+          assertionId: 'assertion.command.called',
+          kind: 'command.called',
+          passed: false,
+          message:
+            'Expected command:\n  git with args ["commit"]\nObserved commands:\n  1. git status\n  2. git add README.md\nNo observed git command included arg "commit".',
+          evidence: [
+            {executable: 'git', argv: ['status']},
+            {executable: 'git', argv: ['add', 'README.md']},
+          ],
+        },
+      ],
+      harnessResult: {toolEvents: []},
+    } as unknown as LocalRunnerResult;
+
+    const output = renderAssertionDetails(
+      result,
+      assertionByIdForJobs([job]),
+      createRenderContext({usePlainSymbols: true}, {}),
+    );
+
+    expect(output).toContain('expected  command.called(git, args: ["commit"])');
+    expect(output).toContain('observed  0/2 observed command segments matched');
+    expect(output).not.toContain('observed parsed commands during this run');
+    expect(output).not.toContain('observed  Expected command:');
+  });
+
+  it('shows parsed command segments for command assertions in verbose mode', () => {
+    const job = {
+      id: 'job.1',
+      scenario: {
+        id: 'scenario.command-called-verbose',
+        name: 'command called verbose',
+        prompt: 'p',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        endpoints: [],
+        assertions: [
+          {
+            id: 'assertion.command.called',
+            kind: 'command.called',
+            executable: 'git',
+            matcher: {args: ['commit']},
+          },
+        ],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const result = {
+      assertionResults: [
+        {
+          assertionId: 'assertion.command.called',
+          kind: 'command.called',
+          passed: false,
+          message:
+            'Expected command:\n  git with args ["commit"]\nObserved commands:\n  1. git status\n  2. git add README.md\nNo observed git command included arg "commit".',
+          evidence: [
+            {executable: 'git', argv: ['status']},
+            {executable: 'git', argv: ['add', 'README.md']},
+          ],
+        },
+      ],
+      harnessResult: {
+        toolEvents: [
+          {
+            kind: 'shell',
+            rawName: 'shell',
+            input: {command: 'git status && git add README.md'},
+            command: 'git status && git add README.md',
+          },
+        ],
+      },
+    } as unknown as LocalRunnerResult;
+
+    const output = renderAssertionDetails(
+      result,
+      assertionByIdForJobs([job]),
+      createRenderContext({usePlainSymbols: true}, {verbose: true}),
+    );
+
+    expect(output).toContain('observed  0/2 observed command segments matched');
+    expect(output).toContain('observed parsed commands during this run:');
+    expect(output).toContain('1. "git status"');
+    expect(output).toContain('2. "git add README.md"');
+  });
+
+  it('shows command evidence for failed sequence.inOrder assertions', () => {
+    const job = {
+      id: 'job.1',
+      scenario: {
+        id: 'scenario.command-sequence',
+        name: 'command sequence',
+        prompt: 'p',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        endpoints: [],
+        assertions: [
+          {
+            id: 'assertion.sequence',
+            kind: 'sequence.inOrder',
+            steps: [
+              {
+                kind: 'command.called',
+                executable: 'git',
+                matcher: {args: ['status']},
+              },
+              {
+                kind: 'command.called',
+                executable: 'git',
+                matcher: {argsInOrder: ['add', 'README.md']},
+              },
+              {
+                kind: 'command.called',
+                executable: 'git',
+                matcher: {args: ['commit']},
+              },
+            ],
+          },
+        ],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const result = {
+      assertionResults: [
+        {
+          assertionId: 'assertion.sequence',
+          kind: 'sequence.inOrder',
+          passed: false,
+          message:
+            'Expected ordered step #3 (command.called(git)) to match an observed tool event, but none was observed after the previous step.',
+          evidence: [
+            {executable: 'git', argv: ['status']},
+            {executable: 'git', argv: ['add', 'README.md']},
+          ],
+        },
+      ],
+      harnessResult: {toolEvents: []},
+    } as unknown as LocalRunnerResult;
+
+    const output = renderAssertionDetails(
+      result,
+      assertionByIdForJobs([job]),
+      createRenderContext({usePlainSymbols: true}, {}),
+    );
+
+    expect(output).toContain(
+      'observed  matched 2 of 3 ordered steps; last matched command "git add README.md"',
+    );
+  });
 });
