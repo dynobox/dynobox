@@ -479,6 +479,39 @@ describe('evaluateAssertions', () => {
     });
   });
 
+  it('ignores text in a trailing shell comment', () => {
+    const toolEvents: ToolEvent[] = [
+      {
+        kind: 'shell',
+        rawName: 'Bash',
+        input: {command: 'git status # remember to commit'},
+        command: 'git status # remember to commit',
+      },
+    ];
+
+    const commented = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'command.called',
+        executable: 'git',
+        matcher: {args: ['commit']},
+      },
+      toolEvents,
+    );
+    const notCommented = evaluateOne(
+      {
+        id: 'assertion.test.1',
+        kind: 'command.notCalled',
+        executable: 'git',
+        matcher: {args: ['commit']},
+      },
+      toolEvents,
+    );
+
+    expect(commented).toMatchObject({passed: false});
+    expect(notCommented).toMatchObject({passed: true});
+  });
+
   it('skips leading env assignments in normalized commands', () => {
     const result = evaluateOne(
       {

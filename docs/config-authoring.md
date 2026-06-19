@@ -242,6 +242,9 @@ not observed:
   `eval`, and commands invoked via wrappers like `xargs`, are not expanded.
 - **Heredocs** and other multi-line constructs are not interpreted.
 - **Shell wrappers** deeper than two levels are not unwrapped.
+- **Shell comments** are dropped from a command's args, but a separator inside a
+  comment (for example `git status # do it && rm -rf`) can still split the line,
+  so text after it may be observed as its own command.
 - `originalIncludes` / `originalMatches` match the text of a **single** command
   segment, not the whole compound line.
 

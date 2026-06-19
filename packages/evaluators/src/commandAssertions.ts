@@ -443,7 +443,17 @@ function preserveUnquotedHashes(command: string): string {
       continue;
     }
 
-    result += quote === undefined && char === '#' ? '\\#' : char;
+    if (quote === undefined && char === '#') {
+      // An unquoted '#' at a word boundary starts a shell comment: drop the
+      // rest of the segment so commented-out text is not parsed as argv. A
+      // mid-word '#' (e.g. owner/repo#123) is literal, so escape it to stop
+      // shell-quote from treating it as a comment.
+      if (index === 0 || /\s/.test(command[index - 1]!)) break;
+      result += '\\#';
+      continue;
+    }
+
+    result += char;
   }
 
   return result;
