@@ -20,8 +20,8 @@ Local installs require `GITHUB_TOKEN` with `read:packages`. Publishing requires 
 Update the package version, then run:
 
 ```sh
-pnpm --filter @dynobox-internal/run-schema build
-pnpm --filter @dynobox-internal/run-schema publish --no-git-checks
+pnpm --filter @dynobox/run-schema build
+pnpm --filter @dynobox/run-schema publish --no-git-checks
 ```
 
 The package publishes built `dist/` output from the local build. Do not commit `dist/`.
