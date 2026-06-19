@@ -288,10 +288,70 @@ describe('renderAssertionDetails', () => {
     );
 
     expect(output).toContain('expected  command.called(git, args: ["commit"])');
-    expect(output).toContain(
-      'observed  1. "git status" 2. "git add README.md"',
-    );
+    expect(output).toContain('observed  0/2 observed command segments matched');
+    expect(output).not.toContain('observed parsed commands during this run');
     expect(output).not.toContain('observed  Expected command:');
+  });
+
+  it('shows parsed command segments for command assertions in verbose mode', () => {
+    const job = {
+      id: 'job.1',
+      scenario: {
+        id: 'scenario.command-called-verbose',
+        name: 'command called verbose',
+        prompt: 'p',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        endpoints: [],
+        assertions: [
+          {
+            id: 'assertion.command.called',
+            kind: 'command.called',
+            executable: 'git',
+            matcher: {args: ['commit']},
+          },
+        ],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const result = {
+      assertionResults: [
+        {
+          assertionId: 'assertion.command.called',
+          kind: 'command.called',
+          passed: false,
+          message:
+            'Expected command:\n  git with args ["commit"]\nObserved commands:\n  1. git status\n  2. git add README.md\nNo observed git command included arg "commit".',
+          evidence: [
+            {executable: 'git', argv: ['status']},
+            {executable: 'git', argv: ['add', 'README.md']},
+          ],
+        },
+      ],
+      harnessResult: {
+        toolEvents: [
+          {
+            kind: 'shell',
+            rawName: 'shell',
+            input: {command: 'git status && git add README.md'},
+            command: 'git status && git add README.md',
+          },
+        ],
+      },
+    } as unknown as LocalRunnerResult;
+
+    const output = renderAssertionDetails(
+      result,
+      assertionByIdForJobs([job]),
+      createRenderContext({usePlainSymbols: true}, {verbose: true}),
+    );
+
+    expect(output).toContain('observed  0/2 observed command segments matched');
+    expect(output).toContain('observed parsed commands during this run:');
+    expect(output).toContain('1. "git status"');
+    expect(output).toContain('2. "git add README.md"');
   });
 
   it('shows command evidence for failed sequence.inOrder assertions', () => {

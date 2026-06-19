@@ -19,6 +19,8 @@ import {
 } from './toolAssertions.js';
 import type {AssertionResult, EvaluationInput} from './types.js';
 
+export type {ObservedCommand} from './commandAssertions.js';
+export {extractObservedCommands} from './commandAssertions.js';
 export type {ArtifactInspection} from './inspection.js';
 export {
   extractSkillFiles,

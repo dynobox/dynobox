@@ -18,6 +18,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 - **Breaking:** Updated skill assertion evaluation and rendering to use
   `skill.referenced(...)` for observed `SKILL.md` file references.
+- Changed failed `command.called(...)` assertions to show a compact match-count
+  summary by default and parsed command segments in verbose output.
 
 ---
 

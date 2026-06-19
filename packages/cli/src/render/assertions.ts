@@ -4,6 +4,7 @@
  */
 
 import {
+  extractObservedCommands,
   extractSkillFiles,
   inspectArtifact,
   stringsFromUnknown,
@@ -64,6 +65,22 @@ export function renderAssertionDetails(
           assertionResult.message,
         )}\n`,
       );
+    }
+  }
+
+  if (shouldShowObservedCommandSegments(result, assertionById, ctx)) {
+    lines.push('\n        observed parsed commands during this run:\n');
+    const commands = observedCommandSegments(
+      result.harnessResult?.toolEvents ?? [],
+    );
+    if (commands.length === 0) {
+      lines.push(`           ${dim(ctx, '(none)')}\n`);
+    } else {
+      for (const [index, command] of commands.entries()) {
+        lines.push(
+          `           ${index + 1}. ${dim(ctx, formatObservedCommand(command))}\n`,
+        );
+      }
     }
   }
 
@@ -136,11 +153,7 @@ function describeObservedFailure(
   if (assertion.kind === 'command.called') {
     const observed = observedCommandArrayEvidence(result, assertion.id);
     if (observed === undefined || observed.length === 0) return fallback;
-    return observed
-      .map(
-        (command, index) => `${index + 1}. ${formatObservedCommand(command)}`,
-      )
-      .join(' ');
+    return formatCommandCalledFailure(observed.length);
   }
 
   if (assertion.kind === 'command.notCalled') {
@@ -223,6 +236,10 @@ function describeObservedFailure(
 
 function formatCount(count: number, singular: string): string {
   return `${count} ${count === 1 ? singular : `${singular}s`}`;
+}
+
+function formatCommandCalledFailure(observedCount: number): string {
+  return `0/${observedCount} observed command segments matched`;
 }
 
 function formatTextExcerpt(text: string, maxLength = 160): string {
@@ -368,6 +385,18 @@ function shouldShowObservedShellCommands(
   });
 }
 
+function shouldShowObservedCommandSegments(
+  result: LocalRunnerResult,
+  assertionById: Map<string, IrAssertion>,
+  ctx: RenderContext,
+): boolean {
+  if (ctx.mode !== 'verbose' && ctx.mode !== 'debug') return false;
+  if (![...assertionById.values()].some(assertionMentionsCommand)) return false;
+  return (
+    observedCommandSegments(result.harnessResult?.toolEvents ?? []).length > 0
+  );
+}
+
 function shouldShowObservedSkillFiles(
   result: LocalRunnerResult,
   assertionById: Map<string, IrAssertion>,
@@ -402,10 +431,29 @@ function assertionMentionsShell(assertion: IrAssertion | undefined): boolean {
   );
 }
 
+function assertionMentionsCommand(assertion: IrAssertion): boolean {
+  if (
+    assertion.kind === 'command.called' ||
+    assertion.kind === 'command.notCalled'
+  ) {
+    return true;
+  }
+  return (
+    assertion.kind === 'sequence.inOrder' &&
+    assertion.steps.some((step) => step.kind === 'command.called')
+  );
+}
+
 function observedShellCommands(toolEvents: readonly ToolEvent[]): string[] {
   return toolEvents.flatMap((event) =>
     isShellToolEvent(event) ? [event.command] : [],
   );
+}
+
+function observedCommandSegments(
+  toolEvents: readonly ToolEvent[],
+): ObservedCommandEvidence[] {
+  return extractObservedCommands(toolEvents);
 }
 
 function observedSkillFiles(toolEvents: readonly ToolEvent[]): string[] {
