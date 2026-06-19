@@ -188,6 +188,16 @@ function parseCommand(
 
     const shellCommand = shellWrappedCommand(parsed);
     if (shellCommand !== undefined) {
+      // Nested commands are parsed from the *unquoted* `-c` argument, so their
+      // `start`/`end` are re-based onto the outer string via `sourceOffset`.
+      // These offsets underestimate the true raw position by a constant: the
+      // wrapper preamble (`bash -c "`) that precedes the inner string. Because
+      // that shift is constant within a wrapper, the relative ordering of all
+      // observed commands (nested and top-level) is preserved — which is all
+      // the sequence cursor relies on. Known edge: a `tool.called` shell
+      // substring matcher uses exact raw offsets, so if its match ends within
+      // ~preamble-length characters just before a nested command, that command
+      // step can be skipped. Rare in practice; see docs/config-authoring.md.
       const nested = parseCommand(
         shellCommand.command,
         event,
@@ -302,13 +312,25 @@ function splitCommandSegments(
       continue;
     }
 
+    // Two-char separators: logical operators and the stderr pipe `|&`. These
+    // must be checked before the single-char `|` so `||` is not mistaken for an
+    // empty pipe stage. Backgrounding `&` is intentionally not a separator (see
+    // the limitations note in docs/config-authoring.md).
+    const twoChar = next === undefined ? '' : `${char}${next}`;
     if (
       quote === undefined &&
-      (char === ';' || `${char}${next}` === '&&' || `${char}${next}` === '||')
+      (twoChar === '&&' || twoChar === '||' || twoChar === '|&')
     ) {
       pushCommandSegment(segments, current, currentStart, index);
       current = '';
-      if (char !== ';') index += 1;
+      index += 1;
+      currentStart = index + 1;
+      continue;
+    }
+
+    if (quote === undefined && (char === ';' || char === '|')) {
+      pushCommandSegment(segments, current, currentStart, index);
+      current = '';
       currentStart = index + 1;
       continue;
     }
@@ -451,7 +473,10 @@ function basename(path: string): string {
   return path.split('/').filter(Boolean).at(-1) ?? path;
 }
 
-const revivedRegexCache = new WeakMap<{source: string; flags: string}, RegExp>();
+const revivedRegexCache = new WeakMap<
+  {source: string; flags: string},
+  RegExp
+>();
 
 function reviveRegex(pattern: {source: string; flags: string}): RegExp {
   const cached = revivedRegexCache.get(pattern);

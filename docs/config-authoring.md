@@ -178,6 +178,78 @@ including common nested fields such as `path`, `file_path`, `filepath`, and
 `file`. Tool assertions may specify either a shell command matcher or a path
 matcher, not both.
 
+### Commands
+
+`command.called` and `command.notCalled` assert on individual shell commands
+*after* normalization, instead of regex-matching the raw command string. The
+evaluator parses each observed shell tool call into normalized command segments
+(an `executable` plus an `argv` array) and matches against those.
+
+```ts
+command.called('git', {args: ['status']});
+command.notCalled('git', {args: ['push']});
+command.called('pnpm', {argsInOrder: ['run', 'build']});
+command.called('node', {argsMatching: [/--max-old-space-size=\d+/]});
+command.called('git', {originalIncludes: '--no-verify'});
+```
+
+Match the first argument against the command's normalized `executable`. The
+optional matcher accepts any combination of the following fields; when several
+are given, **all** must match:
+
+- `args` — every listed arg must appear in `argv` (order-independent).
+- `argsInOrder` — the listed args must appear in `argv` in the given order
+  (other args may appear between them).
+- `argsMatching` — an array of `RegExp`; each must match at least one `argv`
+  token.
+- `originalIncludes` — substring match against the raw text of the single
+  command segment.
+- `originalMatches` — `RegExp` match against the raw text of the single command
+  segment.
+
+With no matcher, `command.called('git')` passes if any observed command's
+executable is `git`.
+
+#### What normalization handles
+
+- **Compound commands** are split on `;`, `&&`, `||`, `|`, and `|&` into
+  separate command segments, so each side of a pipe or operator is matched
+  independently.
+- **Leading environment assignments** are skipped: `NODE_ENV=test pnpm test`
+  normalizes to executable `pnpm`.
+- **Shell wrappers** are unwrapped: `bash -lc "git status"` (and `sh`/`zsh`,
+  with any `-c`-style flag) normalizes to the inner command. Wrappers are
+  unwrapped up to two levels deep.
+- **Executable basename** is used: `/usr/bin/git status` normalizes to
+  executable `git` (the full path is retained separately).
+- **`git -C <dir>`** is recorded as the command's working directory; the
+  harness-reported `cwd`/`workdir` is captured when present.
+- **Redirection targets are excluded**: `git status > out.log` yields argv
+  `['status']`, not `out.log`.
+- **Shell variables and unquoted `#`** are preserved as literal arg text (for
+  example `$PWD` and `owner/repo#123`).
+
+#### Limitations and oddities
+
+Normalization is deterministic but **incomplete** — it does not run a full
+shell parser. The following are *not* parsed, so commands hidden inside them are
+not observed:
+
+- **Backgrounding `&`** is not a separator. In `server & curl localhost`, only
+  `server` is observed; `curl` is dropped. (`&&` and `|&` are handled; a bare
+  `&` is not.)
+- **Command/process substitution** (`$(...)`, `` `...` ``, `<(...)`) and
+  `eval`, and commands invoked via wrappers like `xargs`, are not expanded.
+- **Heredocs** and other multi-line constructs are not interpreted.
+- **Shell wrappers** deeper than two levels are not unwrapped.
+- `originalIncludes` / `originalMatches` match the text of a **single** command
+  segment, not the whole compound line.
+
+> `command.notCalled` is a behavioral check, not a security boundary. Because
+> the constructs above are not parsed, a forbidden command concealed inside one
+> (for example `eval "$(echo git push)"`) can evade detection. Do not rely on it
+> to prove a command never ran.
+
 ### Ordered Sequences
 
 Use `sequence.inOrder` when order matters.
@@ -189,8 +261,20 @@ sequence.inOrder([
 ]);
 ```
 
+Steps may be `tool.called('shell', …)` matchers, `command.called(…)` matchers,
+or a mix of both:
+
+```ts
+sequence.inOrder([
+  command.called('git', {args: ['add']}),
+  command.called('git', {args: ['commit']}),
+]);
+```
+
 For shell commands, ordered matching can match multiple steps against one
-compound command when the command text appears in order.
+compound command when the command text appears in order. Normalized command
+steps are ordered by their position within the compound command, including
+segments nested inside shell wrappers.
 
 ### Skills
 
@@ -429,6 +513,8 @@ JSON output.
 | `tool.called('shell', {includes: 'x'})`                | `{type: tool.called, tool: shell, command: {includes: x}}`         |
 | `tool.called('read_file', {path: 'README.md'})`        | `{type: tool.called, tool: read_file, path: README.md}`            |
 | `tool.notCalled('edit_file')`                          | `{type: tool.notCalled, tool: edit_file}`                          |
+| `command.called('git', {args: ['status']})`            | `{type: command.called, executable: git, command: {args: [status]}}` |
+| `command.notCalled('git', {args: ['push']})`           | `{type: command.notCalled, executable: git, command: {args: [push]}}` |
 | `artifact.exists('README.md')`                         | `{type: artifact.exists, path: README.md}`                         |
 | `artifact.contains('pkg.json', 'foo')`                 | `{type: artifact.contains, path: pkg.json, text: foo}`             |
 | `transcript.contains('done')`                          | `{type: transcript.contains, text: done}`                          |

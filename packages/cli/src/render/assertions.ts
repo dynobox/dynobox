@@ -25,8 +25,8 @@ import {
   describeAssertion,
   describeExpectation,
   isObservedCommand,
-  type ObservedCommandEvidence,
   isShellToolEvent,
+  type ObservedCommandEvidence,
 } from './describe.js';
 
 type SequenceEvidence = ToolEvent | ObservedCommandEvidence;
