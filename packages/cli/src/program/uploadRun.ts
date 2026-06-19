@@ -270,7 +270,12 @@ function compactAssertion(input: {
           definition: assertionDefinition(input.source),
           display: assertionDisplay(input.source, input.result, input.message),
         }),
-    evidence: assertionEvidence(input.result, input.assertionId),
+    evidence: assertionEvidence(
+      input.result,
+      input.assertionId,
+      input.source,
+      input.passed,
+    ),
   };
 }
 
@@ -405,9 +410,14 @@ function sequenceChildren(
 function assertionEvidence(
   result: LocalRunnerResult,
   assertionId: string,
+  assertion: IrAssertion | undefined,
+  passed: boolean,
 ): RunUploadAssertionEvidenceV1 {
   const evidence = assertionResultEvidence(result, assertionId);
-  const matches = evidenceMatches(evidence);
+  const matches =
+    assertion?.kind === 'command.called' && !passed
+      ? []
+      : evidenceMatches(evidence);
   return {
     observedCount:
       (result.harnessResult?.toolEvents.length ?? 0) + result.httpEvents.length,
@@ -454,6 +464,21 @@ function observedAssertionSummary(
   result: LocalRunnerResult,
   fallback: string,
 ): string {
+  if (assertion.kind === 'command.called') {
+    const evidence = assertionResultEvidence(result, assertion.id);
+    if (Array.isArray(evidence) && evidence.every(isObservedCommand)) {
+      return evidence.length === 0
+        ? 'no commands observed'
+        : evidence
+            .map((command, index) =>
+              truncateDetail(
+                `${index + 1}. ${[command.executable, ...command.argv].join(' ')}`,
+              ),
+            )
+            .join(' ');
+    }
+  }
+
   if (assertion.kind === 'sequence.inOrder') {
     const evidence = assertionResultEvidence(result, assertion.id);
     if (Array.isArray(evidence)) {

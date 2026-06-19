@@ -181,6 +181,97 @@ describe('buildRunUploadPayload', () => {
     });
   });
 
+  it('does not count failed command.called observed evidence as matches', () => {
+    const job = {
+      id: 'scenario.command.claude-code.iteration.0',
+      scenario: {
+        id: 'scenario.command',
+        name: 'command workflow',
+        prompt: 'commit safely',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        endpoints: [],
+        assertions: [
+          {
+            id: 'assertion.command.called',
+            kind: 'command.called',
+            executable: 'git',
+            matcher: {args: ['commit']},
+          },
+        ],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const result = {
+      jobId: job.id,
+      scenarioId: job.scenario.id,
+      harness: 'claude-code',
+      iteration: 0,
+      status: 'assertion_failed',
+      passed: false,
+      setupResult: {success: true, logs: []},
+      httpEvents: [],
+      artifacts: [],
+      assertionResults: [
+        {
+          assertionId: 'assertion.command.called',
+          kind: 'command.called',
+          passed: false,
+          message:
+            'Expected command:\n  git with args ["commit"]\nObserved commands:\n  1. git status\n  2. git add README.md\nNo observed git command included arg "commit".',
+          evidence: [
+            {executable: 'git', argv: ['status']},
+            {executable: 'git', argv: ['add', 'README.md']},
+          ],
+        },
+      ],
+      diagnostics: [],
+      warnings: [],
+      harnessResult: {
+        finalMessage: '',
+        success: true,
+        toolEvents: [
+          {
+            kind: 'shell',
+            rawName: 'Bash',
+            input: {},
+            command: 'git status && git add README.md',
+          },
+        ],
+        transcript: '',
+      },
+      timing: {setupMs: 0, harnessMs: 10, assertionsMs: 1, totalMs: 11},
+    } as unknown as LocalRunnerResult;
+
+    const payload = buildRunUploadPayload({
+      dynos: [
+        {
+          dynoPath: '.agents/skills/commit/commit.dyno.ts',
+          name: null,
+          target: 'commit',
+          jobs: [job],
+        },
+      ],
+      results: [result],
+      inputPath: '.agents/skills/commit',
+      gitHash: null,
+    });
+    const assertion =
+      RunUploadV1.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+
+    expect(assertion.display?.observed).toBe(
+      '1. git status 2. git add README.md',
+    );
+    expect(assertion.evidence).toMatchObject({
+      observedCount: 1,
+      observedKinds: ['shell'],
+    });
+    expect(assertion.evidence).not.toHaveProperty('matchedCount');
+    expect(assertion.evidence).not.toHaveProperty('matches');
+  });
+
   it('preserves runner diagnostics, capped and truncated, for failing runs', () => {
     const job = {
       id: 'scenario.deploy.claude-code.iteration.0',

@@ -184,7 +184,7 @@ matcher, not both.
 > matcher options may change in a future release.
 
 `command.called` and `command.notCalled` assert on individual shell commands
-*after* normalization, instead of regex-matching the raw command string.
+_after_ normalization, instead of regex-matching the raw command string.
 
 How it works: dynobox parses each observed shell command into normalized
 `(executable, argv)` segments using best-effort shell parsing — it does **not**
@@ -241,7 +241,7 @@ executable is `git`.
 #### Limitations and oddities
 
 Normalization is deterministic but **incomplete** — it does not run a full
-shell parser. The following are *not* parsed, so commands hidden inside them are
+shell parser. The following are _not_ parsed, so commands hidden inside them are
 not observed:
 
 - **Backgrounding `&`** is not a separator. In `server & curl localhost`, only
@@ -519,27 +519,27 @@ All assertion objects accept optional `id` and `label` fields. `id` stabilizes
 compiled assertion IDs and JSON report references. `label` appears in CLI and
 JSON output.
 
-| TypeScript helper                                      | Authoring object                                                   |
-| ------------------------------------------------------ | ------------------------------------------------------------------ |
-| `tool.called('shell')`                                 | `{type: tool.called, tool: shell}`                                 |
-| `tool.called('shell', {includes: 'x'})`                | `{type: tool.called, tool: shell, command: {includes: x}}`         |
-| `tool.called('read_file', {path: 'README.md'})`        | `{type: tool.called, tool: read_file, path: README.md}`            |
-| `tool.notCalled('edit_file')`                          | `{type: tool.notCalled, tool: edit_file}`                          |
-| `command.called('git', {args: ['status']})`            | `{type: command.called, executable: git, command: {args: [status]}}` |
+| TypeScript helper                                      | Authoring object                                                      |
+| ------------------------------------------------------ | --------------------------------------------------------------------- |
+| `tool.called('shell')`                                 | `{type: tool.called, tool: shell}`                                    |
+| `tool.called('shell', {includes: 'x'})`                | `{type: tool.called, tool: shell, command: {includes: x}}`            |
+| `tool.called('read_file', {path: 'README.md'})`        | `{type: tool.called, tool: read_file, path: README.md}`               |
+| `tool.notCalled('edit_file')`                          | `{type: tool.notCalled, tool: edit_file}`                             |
+| `command.called('git', {args: ['status']})`            | `{type: command.called, executable: git, command: {args: [status]}}`  |
 | `command.notCalled('git', {args: ['push']})`           | `{type: command.notCalled, executable: git, command: {args: [push]}}` |
-| `artifact.exists('README.md')`                         | `{type: artifact.exists, path: README.md}`                         |
-| `artifact.contains('pkg.json', 'foo')`                 | `{type: artifact.contains, path: pkg.json, text: foo}`             |
-| `transcript.contains('done')`                          | `{type: transcript.contains, text: done}`                          |
-| `finalMessage.contains('ok')`                          | `{type: finalMessage.contains, text: ok}`                          |
-| `skill.referenced('commit')`                           | `{type: skill.referenced, skill: commit}`                          |
-| `sequence.inOrder([tool.called('shell', {...}), ...])` | `{type: sequence.inOrder, steps: [{type: tool.called, ...}, ...]}` |
-| `http.called('npmPrettier', {status: 200})`            | `{type: http.called, endpoint: npmPrettier, status: 200}`          |
-| `http.notCalled('leftPad')`                            | `{type: http.notCalled, endpoint: leftPad}`                        |
+| `artifact.exists('README.md')`                         | `{type: artifact.exists, path: README.md}`                            |
+| `artifact.contains('pkg.json', 'foo')`                 | `{type: artifact.contains, path: pkg.json, text: foo}`                |
+| `transcript.contains('done')`                          | `{type: transcript.contains, text: done}`                             |
+| `finalMessage.contains('ok')`                          | `{type: finalMessage.contains, text: ok}`                             |
+| `skill.referenced('commit')`                           | `{type: skill.referenced, skill: commit}`                             |
+| `sequence.inOrder([tool.called('shell', {...}), ...])` | `{type: sequence.inOrder, steps: [{type: tool.called, ...}, ...]}`    |
+| `http.called('npmPrettier', {status: 200})`            | `{type: http.called, endpoint: npmPrettier, status: 200}`             |
+| `http.notCalled('leftPad')`                            | `{type: http.notCalled, endpoint: leftPad}`                           |
 
 The optional assertion `id` field follows the same format as scenario IDs:
 letters, numbers, dots, underscores, and hyphens.
 
-Command matcher shapes accept exactly one of `equals`, `includes`,
+Shell command matcher shapes accept exactly one of `equals`, `includes`,
 `startsWith`, or `matches`, and are only valid on `shell` tool assertions.
 Path matchers use a top-level `path` field and are only valid on file-oriented
 tool assertions.
