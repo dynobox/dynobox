@@ -23,6 +23,22 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ---
 
+## @dynobox/run-schema@0.0.9 — 2026-06-20
+
+### `@dynobox/run-schema`
+
+- Added `verify.command` assertion definition fields for command, exit code,
+  stdout, and stderr upload metadata.
+- Changed verify assertion stdout/stderr matchers to allow empty string
+  expectations while keeping other assertion matchers non-empty.
+
+## @dynobox/run-schema@0.0.8 — 2026-06-19
+
+### `@dynobox/run-schema`
+
+- Added normalized command assertion metadata, including executable, parsed
+  command matcher args, ordered args, regex args, and original command matching.
+
 ## dynobox@0.6.0 — 2026-06-16
 
 ### `dynobox` (CLI)
