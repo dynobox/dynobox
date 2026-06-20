@@ -34,6 +34,7 @@ export type {
   ShellCommandMatcher,
   ShellToolMatcher,
   SkillReferencedAssertion,
+  TextMatcher,
   ToolCalledAssertion,
   ToolKind,
   ToolNotCalledAssertion,

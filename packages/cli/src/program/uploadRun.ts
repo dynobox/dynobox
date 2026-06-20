@@ -20,6 +20,7 @@ import type {
   LocalRunnerResult,
   ToolEvent,
 } from '@dynobox/runner-local';
+import type {TextMatcher} from '@dynobox/sdk';
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {assertionByIdForJobs} from '../jobs.js';
@@ -30,6 +31,10 @@ import {
   isObservedCommand,
 } from '../render/describe.js';
 import {readPackageVersion} from '../util/version.js';
+import {
+  formatVerifyCommandResult,
+  isVerifyCommandResult,
+} from '../util/verifyCommandResult.js';
 import {type AuthEnvironment, resolveAuthToken} from './auth.js';
 import {resolveApiUrl} from './identityApi.js';
 
@@ -351,10 +356,10 @@ function assertionDefinition(
       ...(assertion.exitCode === undefined ? {} : {exitCode: assertion.exitCode}),
       ...(assertion.stdout === undefined
         ? {}
-        : {stdout: shellMatcherUploadValue(assertion.stdout)}),
+        : {stdout: textMatcherUploadValue(assertion.stdout)}),
       ...(assertion.stderr === undefined
         ? {}
-        : {stderr: shellMatcherUploadValue(assertion.stderr)}),
+        : {stderr: textMatcherUploadValue(assertion.stderr)}),
     };
   }
   if (assertion.kind === 'artifact.exists') {
@@ -532,10 +537,7 @@ function matcherDefinition(assertion: {
   return {matcher: {matches: truncateDetail(assertion.matcher.matches)}};
 }
 
-function shellMatcherUploadValue(
-  matcher: Extract<IrAssertion, {kind: 'tool.called'}>['matcher'],
-) {
-  if (matcher === undefined) return undefined;
+function textMatcherUploadValue(matcher: TextMatcher) {
   if ('equals' in matcher) return {equals: truncateDetail(matcher.equals)};
   if ('includes' in matcher) return {includes: truncateDetail(matcher.includes)};
   if ('startsWith' in matcher) {
@@ -695,34 +697,9 @@ function isHttpEvent(value: unknown): value is HttpEvent {
   );
 }
 
-function isVerifyCommandResult(value: unknown): value is {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-} {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'exitCode' in value &&
-    typeof value.exitCode === 'number' &&
-    'stdout' in value &&
-    typeof value.stdout === 'string' &&
-    'stderr' in value &&
-    typeof value.stderr === 'string'
-  );
-}
-
 function formatHttpEvent(event: HttpEvent): string {
   const status = event.status === undefined ? '' : ` -> ${event.status}`;
   return `${event.method} ${event.url}${status}`;
-}
-
-function formatVerifyCommandResult(result: {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-}): string {
-  return `exit ${result.exitCode}, stdout ${result.stdout}, stderr ${result.stderr}`;
 }
 
 function truncateDetail(value: string): string {

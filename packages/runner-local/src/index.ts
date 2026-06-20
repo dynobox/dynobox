@@ -2,7 +2,7 @@ import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import {evaluateAssertions} from '@dynobox/evaluators';
+import {type AssertionResult, evaluateAssertions} from '@dynobox/evaluators';
 
 import {
   errorMessage,
@@ -348,15 +348,22 @@ export async function runJob(
     toolEvents: harnessResult.toolEvents,
     verifyCommandResults,
   });
-  const resultByAssertionId = new Map(
-    [...nonVerifyAssertionResults, ...verifyAssertionResults].map((result) => [
-      result.assertionId,
-      result,
-    ]),
-  );
-  const assertionResults = job.scenario.assertions.map((assertion) =>
-    resultByAssertionId.get(assertion.id)!,
-  );
+  const resultsByAssertionId = new Map<string, AssertionResult[]>();
+  for (const result of [
+    ...nonVerifyAssertionResults,
+    ...verifyAssertionResults,
+  ]) {
+    const results = resultsByAssertionId.get(result.assertionId) ?? [];
+    results.push(result);
+    resultsByAssertionId.set(result.assertionId, results);
+  }
+  const assertionResults = job.scenario.assertions.map((assertion) => {
+    const result = resultsByAssertionId.get(assertion.id)?.shift();
+    if (result === undefined) {
+      throw new Error(`Missing assertion result for ${assertion.id}.`);
+    }
+    return result;
+  });
   const assertionsMs = Date.now() - assertionsStartedAt;
   emitProgress(options, {
     type: 'assertions.completed',

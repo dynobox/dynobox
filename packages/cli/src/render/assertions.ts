@@ -24,6 +24,10 @@ import {
   symbol,
 } from '../terminal/index.js';
 import {
+  formatVerifyCommandResult,
+  isVerifyCommandResult,
+} from '../util/verifyCommandResult.js';
+import {
   describeAssertion,
   describeExpectation,
   isObservedCommand,
@@ -182,7 +186,7 @@ function describeObservedFailure(
   if (assertion.kind === 'verify.command') {
     const evidence = assertionResultEvidence(result, assertion.id);
     return isVerifyCommandResult(evidence)
-      ? formatVerifyCommandResult(evidence)
+      ? formatVerifyCommandResult(evidence, formatTextExcerpt)
       : fallback;
   }
 
@@ -361,23 +365,6 @@ function isHttpEvent(value: unknown): value is HttpEvent {
   );
 }
 
-function isVerifyCommandResult(value: unknown): value is {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-} {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'exitCode' in value &&
-    typeof value.exitCode === 'number' &&
-    'stdout' in value &&
-    typeof value.stdout === 'string' &&
-    'stderr' in value &&
-    typeof value.stderr === 'string'
-  );
-}
-
 function isSequenceEvidence(value: unknown): value is SequenceEvidence {
   return isToolEvent(value) || isObservedCommand(value);
 }
@@ -416,14 +403,6 @@ function inputPreview(input: unknown): string | undefined {
 function formatHttpEvent(event: HttpEvent): string {
   const status = event.status === undefined ? '' : ` -> ${event.status}`;
   return `${event.method} ${event.url}${status}`;
-}
-
-function formatVerifyCommandResult(result: {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-}): string {
-  return `exit ${result.exitCode}, stdout ${formatTextExcerpt(result.stdout)}, stderr ${formatTextExcerpt(result.stderr)}`;
 }
 
 function shouldShowObservedShellCommands(
