@@ -116,6 +116,89 @@ const irSequenceCommandCalledStepSchema = z.object({
   matcher: commandMatcherSchema.optional(),
 });
 
+const irSequenceStepSchema: z.ZodTypeAny = z.lazy(() =>
+  z.discriminatedUnion('kind', [
+    irSequenceToolCalledStepSchema,
+    irSequenceCommandCalledStepSchema,
+    irAnyOfSequenceStepSchema,
+  ]),
+);
+
+const irAnyOfSequenceStepSchema = z.object({
+  kind: z.literal('anyOf'),
+  steps: z.array(irSequenceStepSchema).min(1),
+});
+
+const irHttpCalledAssertionNodeSchema = z.object({
+  kind: z.literal('http.called'),
+  endpointId: z.string().min(1),
+  status: z.number().int().optional(),
+});
+
+const irHttpNotCalledAssertionNodeSchema = z.object({
+  kind: z.literal('http.notCalled'),
+  endpointId: z.string().min(1),
+});
+
+const irArtifactExistsAssertionNodeSchema = z.object({
+  kind: z.literal('artifact.exists'),
+  path: z.string().min(1),
+});
+
+const irArtifactContainsAssertionNodeSchema = z.object({
+  kind: z.literal('artifact.contains'),
+  path: z.string().min(1),
+  text: z.string(),
+});
+
+const irTranscriptContainsAssertionNodeSchema = z.object({
+  kind: z.literal('transcript.contains'),
+  text: z.string(),
+});
+
+const irFinalMessageContainsAssertionNodeSchema = z.object({
+  kind: z.literal('finalMessage.contains'),
+  text: z.string(),
+});
+
+const irSequenceInOrderAssertionNodeSchema = z.object({
+  kind: z.literal('sequence.inOrder'),
+  steps: z.array(irSequenceStepSchema).min(1),
+});
+
+const irSkillReferencedAssertionNodeSchema = z.object({
+  kind: z.literal('skill.referenced'),
+  skill: z.string().min(1),
+});
+
+const irAnyOfAssertionNodeSchema = z.object({
+  kind: z.literal('anyOf'),
+  steps: z.array(z.lazy(() => irAssertionNodeSchema)).min(1),
+});
+
+const irAssertionNodeSchema: z.ZodTypeAny = z.lazy(() =>
+  z
+    .discriminatedUnion('kind', [
+      irHttpCalledAssertionNodeSchema,
+      irHttpNotCalledAssertionNodeSchema,
+      irToolCalledAssertionSchema.omit({id: true, label: true}),
+      irToolNotCalledAssertionSchema.omit({id: true, label: true}),
+      irCommandCalledAssertionSchema.omit({id: true, label: true}),
+      irCommandNotCalledAssertionSchema.omit({id: true, label: true}),
+      irVerifyCommandAssertionSchema.omit({id: true, label: true}),
+      irArtifactExistsAssertionNodeSchema,
+      irArtifactContainsAssertionNodeSchema,
+      irTranscriptContainsAssertionNodeSchema,
+      irFinalMessageContainsAssertionNodeSchema,
+      irSequenceInOrderAssertionNodeSchema,
+      irAnyOfAssertionNodeSchema,
+      irSkillReferencedAssertionNodeSchema,
+    ])
+    .superRefine((assertion, ctx) => {
+      validateIrAssertionNode(assertion, ctx, []);
+    }),
+);
+
 export const irAssertionSchema = z
   .discriminatedUnion('kind', [
     z.object({
@@ -165,14 +248,13 @@ export const irAssertionSchema = z
       id: z.string().min(1),
       label: z.string().min(1).optional(),
       kind: z.literal('sequence.inOrder'),
-      steps: z
-        .array(
-          z.discriminatedUnion('kind', [
-            irSequenceToolCalledStepSchema,
-            irSequenceCommandCalledStepSchema,
-          ]),
-        )
-        .min(1),
+      steps: z.array(irSequenceStepSchema).min(1),
+    }),
+    z.object({
+      id: z.string().min(1),
+      label: z.string().min(1).optional(),
+      kind: z.literal('anyOf'),
+      steps: z.array(irAssertionNodeSchema).min(1),
     }),
     z.object({
       id: z.string().min(1),
@@ -246,40 +328,171 @@ export const irAssertionSchema = z
 
     if (assertion.kind === 'sequence.inOrder') {
       assertion.steps.forEach((step, index) => {
-        if (step.kind !== 'tool.called') return;
-
-        if (step.matcher !== undefined && step.toolKind !== 'shell') {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['steps', index, 'matcher'],
-            message:
-              'Tool assertion matchers are only supported for shell tool assertions.',
-          });
-        }
-
-        if (
-          step.pathMatcher !== undefined &&
-          !fileToolKinds.has(step.toolKind as FileToolKind)
-        ) {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['steps', index, 'pathMatcher'],
-            message:
-              'Tool assertion path matchers are only supported for file-oriented tool assertions.',
-          });
-        }
-
-        if (step.matcher !== undefined && step.pathMatcher !== undefined) {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['steps', index, 'pathMatcher'],
-            message:
-              'Tool assertions may specify matcher or pathMatcher, not both.',
-          });
-        }
+        validateIrSequenceStep(step, ctx, ['steps', index], fileToolKinds);
       });
     }
+
+    if (assertion.kind === 'anyOf') {
+      validateIrAnyOfAssertion(assertion, ctx, ['steps']);
+    }
   });
+
+function validateIrAssertionNode(
+  assertion: unknown,
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+): void {
+  const fileToolKinds = new Set<FileToolKind>([
+    'read_file',
+    'write_file',
+    'edit_file',
+    'search_files',
+  ]);
+
+  if (
+    typeof assertion !== 'object' ||
+    assertion === null ||
+    !('kind' in assertion)
+  ) {
+    return;
+  }
+
+  if (assertion.kind === 'sequence.inOrder' && 'steps' in assertion) {
+    const steps = assertion.steps;
+    if (!Array.isArray(steps)) return;
+    steps.forEach((step, index) => {
+      validateIrSequenceStep(
+        step,
+        ctx,
+        [...path, 'steps', index],
+        fileToolKinds,
+      );
+    });
+    return;
+  }
+
+  if (assertion.kind === 'anyOf') {
+    validateIrAnyOfAssertion(assertion, ctx, path);
+    return;
+  }
+
+  validateIrToolNode(assertion, ctx, path, fileToolKinds);
+}
+
+function validateIrAnyOfAssertion(
+  assertion: unknown,
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+): void {
+  if (
+    typeof assertion !== 'object' ||
+    assertion === null ||
+    !('steps' in assertion) ||
+    !Array.isArray(assertion.steps)
+  ) {
+    return;
+  }
+
+  assertion.steps.forEach((step, index) => {
+    if (typeof step !== 'object' || step === null || !('kind' in step)) return;
+
+    if (step.kind === 'verify.command') {
+      ctx.addIssue({
+        code: 'custom',
+        path: [...path, index],
+        message:
+          'verify.command assertions cannot be nested inside anyOf because verification commands may mutate the work directory.',
+      });
+      return;
+    }
+
+    if (step.kind === 'anyOf') {
+      validateIrAnyOfAssertion(step, ctx, [...path, index, 'steps']);
+    }
+  });
+}
+
+function validateIrSequenceStep(
+  step: unknown,
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+  fileToolKinds: Set<FileToolKind>,
+): void {
+  if (typeof step !== 'object' || step === null || !('kind' in step)) return;
+
+  if (step.kind === 'anyOf' && 'steps' in step && Array.isArray(step.steps)) {
+    step.steps.forEach((branch, index) => {
+      validateIrSequenceStep(
+        branch,
+        ctx,
+        [...path, 'steps', index],
+        fileToolKinds,
+      );
+    });
+    return;
+  }
+
+  validateIrToolNode(step, ctx, path, fileToolKinds);
+}
+
+function validateIrToolNode(
+  assertion: unknown,
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+  fileToolKinds: Set<FileToolKind>,
+): void {
+  if (
+    typeof assertion !== 'object' ||
+    assertion === null ||
+    !('kind' in assertion)
+  ) {
+    return;
+  }
+  if (assertion.kind !== 'tool.called' && assertion.kind !== 'tool.notCalled') {
+    return;
+  }
+
+  const toolAssertion = assertion as {
+    matcher?: unknown;
+    pathMatcher?: unknown;
+    toolKind?: unknown;
+  };
+
+  if (
+    toolAssertion.matcher !== undefined &&
+    toolAssertion.toolKind !== 'shell'
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: [...path, 'matcher'],
+      message:
+        'Tool assertion matchers are only supported for shell tool assertions.',
+    });
+  }
+
+  if (
+    toolAssertion.pathMatcher !== undefined &&
+    !fileToolKinds.has(toolAssertion.toolKind as FileToolKind)
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: [...path, 'pathMatcher'],
+      message:
+        'Tool assertion path matchers are only supported for file-oriented tool assertions.',
+    });
+  }
+
+  if (
+    toolAssertion.matcher !== undefined &&
+    toolAssertion.pathMatcher !== undefined
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: [...path, 'pathMatcher'],
+      message: 'Tool assertions may specify matcher or pathMatcher, not both.',
+    });
+  }
+}
 
 export const irScenarioSchema = z.object({
   id: z.string().min(1),

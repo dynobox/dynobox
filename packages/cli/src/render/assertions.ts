@@ -35,7 +35,15 @@ import {
   type ObservedCommandEvidence,
 } from './describe.js';
 
-type SequenceEvidence = ToolEvent | ObservedCommandEvidence;
+type AnyOfSequenceEvidence = {
+  kind: 'anyOf';
+  branchIndex: number;
+  evidence: SequenceEvidence[];
+};
+type SequenceEvidence =
+  | ToolEvent
+  | ObservedCommandEvidence
+  | AnyOfSequenceEvidence;
 
 /**
  * Render the per-assertion checklist for a job. Failed assertions also show
@@ -177,6 +185,16 @@ function describeObservedFailure(
         ? ''
         : `; last matched ${formatSequenceEvidence(last)}`;
     return `matched ${matched.length} of ${assertion.steps.length} ordered steps${suffix}`;
+  }
+
+  if (assertion.kind === 'anyOf') {
+    const evidence = assertionResultEvidence(result, assertion.id);
+    const matchedBranch = anyOfMatchedBranch(evidence);
+    if (matchedBranch !== undefined) return `matched branch #${matchedBranch}`;
+    const failedBranches = anyOfFailedBranchCount(evidence);
+    if (failedBranches !== undefined) {
+      return `0/${failedBranches} branches matched`;
+    }
   }
 
   if (assertion.kind === 'skill.referenced') {
@@ -368,7 +386,27 @@ function isHttpEvent(value: unknown): value is HttpEvent {
 }
 
 function isSequenceEvidence(value: unknown): value is SequenceEvidence {
-  return isToolEvent(value) || isObservedCommand(value);
+  return (
+    isToolEvent(value) ||
+    isObservedCommand(value) ||
+    isAnyOfSequenceEvidence(value)
+  );
+}
+
+function isAnyOfSequenceEvidence(
+  value: unknown,
+): value is AnyOfSequenceEvidence {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'kind' in value &&
+    value.kind === 'anyOf' &&
+    'branchIndex' in value &&
+    typeof value.branchIndex === 'number' &&
+    'evidence' in value &&
+    Array.isArray(value.evidence) &&
+    value.evidence.every(isSequenceEvidence)
+  );
 }
 
 function formatToolEvent(event: ToolEvent): string {
@@ -388,6 +426,12 @@ function formatObservedCommand(command: {
 }
 
 function formatSequenceEvidence(evidence: SequenceEvidence): string {
+  if (isAnyOfSequenceEvidence(evidence)) {
+    const last = evidence.evidence.at(-1);
+    const suffix =
+      last === undefined ? '' : ` via ${formatSequenceEvidence(last)}`;
+    return `anyOf branch #${evidence.branchIndex}${suffix}`;
+  }
   return isToolEvent(evidence)
     ? formatToolEvent(evidence)
     : `command ${formatObservedCommand(evidence)}`;
@@ -464,10 +508,10 @@ function assertionMentionsShell(assertion: IrAssertion | undefined): boolean {
     return true;
   }
   return (
-    assertion.kind === 'sequence.inOrder' &&
-    assertion.steps.some(
-      (step) => step.kind === 'tool.called' && step.toolKind === 'shell',
-    )
+    (assertion.kind === 'sequence.inOrder' &&
+      assertion.steps.some(sequenceStepMentionsShell)) ||
+    (assertion.kind === 'anyOf' &&
+      assertion.steps.some(assertionNodeMentionsShell))
   );
 }
 
@@ -479,9 +523,62 @@ function assertionMentionsCommand(assertion: IrAssertion): boolean {
     return true;
   }
   return (
-    assertion.kind === 'sequence.inOrder' &&
-    assertion.steps.some((step) => step.kind === 'command.called')
+    (assertion.kind === 'sequence.inOrder' &&
+      assertion.steps.some(sequenceStepMentionsCommand)) ||
+    (assertion.kind === 'anyOf' &&
+      assertion.steps.some(assertionNodeMentionsCommand))
   );
+}
+
+function assertionNodeMentionsShell(
+  assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
+): boolean {
+  return assertionMentionsShell({
+    id: 'assertion.branch',
+    ...(assertion as Record<string, unknown>),
+  } as IrAssertion);
+}
+
+function assertionNodeMentionsCommand(
+  assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
+): boolean {
+  return assertionMentionsCommand({
+    id: 'assertion.branch',
+    ...(assertion as Record<string, unknown>),
+  } as IrAssertion);
+}
+
+function sequenceStepMentionsShell(
+  step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
+): boolean {
+  if (step.kind === 'anyOf') return step.steps.some(sequenceStepMentionsShell);
+  return step.kind === 'tool.called' && step.toolKind === 'shell';
+}
+
+function sequenceStepMentionsCommand(
+  step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
+): boolean {
+  if (step.kind === 'anyOf')
+    return step.steps.some(sequenceStepMentionsCommand);
+  return step.kind === 'command.called';
+}
+
+function anyOfMatchedBranch(evidence: unknown): number | undefined {
+  if (typeof evidence !== 'object' || evidence === null) return undefined;
+  if (!('kind' in evidence) || evidence.kind !== 'anyOf') return undefined;
+  if (!('branchIndex' in evidence)) return undefined;
+  return typeof evidence.branchIndex === 'number'
+    ? evidence.branchIndex
+    : undefined;
+}
+
+function anyOfFailedBranchCount(evidence: unknown): number | undefined {
+  if (typeof evidence !== 'object' || evidence === null) return undefined;
+  if (!('kind' in evidence) || evidence.kind !== 'anyOf') return undefined;
+  if (!('branches' in evidence) || !Array.isArray(evidence.branches)) {
+    return undefined;
+  }
+  return evidence.branches.length;
 }
 
 function observedShellCommands(toolEvents: readonly ToolEvent[]): string[] {

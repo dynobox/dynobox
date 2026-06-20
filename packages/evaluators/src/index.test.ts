@@ -817,6 +817,162 @@ describe('evaluateAssertions', () => {
     });
   });
 
+  it('passes anyOf with the first matching branch and reports it', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'anyOf',
+        steps: [
+          {
+            kind: 'tool.called',
+            toolKind: 'read_file',
+            pathMatcher: {path: 'package.json'},
+          },
+          {
+            kind: 'command.called',
+            executable: 'cat',
+            matcher: {args: ['package.json']},
+          },
+        ],
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'cat package.json'},
+          command: 'cat package.json',
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: expect.stringContaining('Matched anyOf branch #2'),
+      evidence: {kind: 'anyOf', branchIndex: 2},
+    });
+  });
+
+  it('fails anyOf with each branch failure message', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'anyOf',
+        steps: [
+          {kind: 'tool.called', toolKind: 'read_file'},
+          {
+            kind: 'command.called',
+            executable: 'cat',
+            matcher: {args: ['a.txt']},
+          },
+        ],
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'pwd'},
+          command: 'pwd',
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({passed: false});
+    expect(result.message).toContain('all 2 branches failed');
+    expect(result.message).toContain('Branch #1:');
+    expect(result.message).toContain('Branch #2:');
+  });
+
+  it('passes sequence.inOrder with an anyOf step', () => {
+    const event: ToolEvent = {
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {command: 'cat package.json && pnpm test'},
+      command: 'cat package.json && pnpm test',
+    };
+
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'sequence.inOrder',
+        steps: [
+          {
+            kind: 'anyOf',
+            steps: [
+              {
+                kind: 'tool.called',
+                toolKind: 'read_file',
+                pathMatcher: {path: 'package.json'},
+              },
+              {
+                kind: 'command.called',
+                executable: 'cat',
+                matcher: {args: ['package.json']},
+              },
+            ],
+          },
+          {
+            kind: 'command.called',
+            executable: 'pnpm',
+            matcher: {args: ['test']},
+          },
+        ],
+      },
+      [event],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: 'Observed 2 ordered tool steps.',
+      evidence: [
+        {kind: 'anyOf', branchIndex: 2},
+        {executable: 'pnpm', argv: ['test']},
+      ],
+    });
+  });
+
+  it('backtracks anyOf sequence branches when a later step needs the same shell event', () => {
+    const event: ToolEvent = {
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {command: 'cat package.json && pnpm test'},
+      command: 'cat package.json && pnpm test',
+    };
+
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'sequence.inOrder',
+        steps: [
+          {
+            kind: 'anyOf',
+            steps: [
+              {kind: 'tool.called', toolKind: 'shell'},
+              {
+                kind: 'command.called',
+                executable: 'cat',
+                matcher: {args: ['package.json']},
+              },
+            ],
+          },
+          {
+            kind: 'command.called',
+            executable: 'pnpm',
+            matcher: {args: ['test']},
+          },
+        ],
+      },
+      [event],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      evidence: [
+        {kind: 'anyOf', branchIndex: 2},
+        {executable: 'pnpm', argv: ['test']},
+      ],
+    });
+  });
+
   it('passes sequence.inOrder with ordered steps in one shell command', () => {
     const event: ToolEvent = {
       kind: 'shell',

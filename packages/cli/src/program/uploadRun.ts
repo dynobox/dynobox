@@ -320,20 +320,13 @@ function assertionDefinition(
   if (assertion.kind === 'sequence.inOrder') {
     return {
       ...base,
-      steps: assertion.steps.map((step) =>
-        step.kind === 'tool.called'
-          ? {
-              kind: step.kind,
-              toolKind: step.toolKind,
-              ...matcherDefinition(step),
-              ...pathMatcherDefinition(step),
-            }
-          : {
-              kind: step.kind,
-              executable: step.executable,
-              ...commandMatcherDefinition(step),
-            },
-      ),
+      steps: assertion.steps.map(sequenceStepDefinition),
+    };
+  }
+  if (assertion.kind === 'anyOf') {
+    return {
+      ...base,
+      steps: assertion.steps.map(assertionNodeDefinition),
     };
   }
   if (assertion.kind === 'http.called') {
@@ -383,6 +376,38 @@ function assertionDefinition(
   return base;
 }
 
+function assertionNodeDefinition(
+  assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
+): RunUploadAssertionDefinitionV1 {
+  return assertionDefinition({
+    id: 'assertion.branch',
+    ...(assertion as Record<string, unknown>),
+  } as IrAssertion);
+}
+
+function sequenceStepDefinition(
+  step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
+): NonNullable<RunUploadAssertionDefinitionV1['steps']>[number] {
+  if (step.kind === 'anyOf') {
+    return {
+      kind: step.kind,
+      steps: step.steps.map(sequenceStepDefinition),
+    };
+  }
+  return step.kind === 'tool.called'
+    ? {
+        kind: step.kind,
+        toolKind: step.toolKind,
+        ...matcherDefinition(step),
+        ...pathMatcherDefinition(step),
+      }
+    : {
+        kind: step.kind,
+        executable: step.executable,
+        ...commandMatcherDefinition(step),
+      };
+}
+
 function assertionDisplay(
   assertion: IrAssertion,
   result: LocalRunnerResult,
@@ -395,11 +420,21 @@ function assertionDisplay(
     observed: truncateNullableDetail(
       observedAssertionSummary(assertion, result, fallbackObserved),
     ),
-    children:
-      assertion.kind === 'sequence.inOrder'
-        ? sequenceChildren(assertion, evidence)
-        : [],
+    children: assertionChildren(assertion, evidence),
   };
+}
+
+function assertionChildren(
+  assertion: IrAssertion,
+  evidence: unknown,
+): RunUploadAssertionDisplayChildV1[] {
+  if (assertion.kind === 'sequence.inOrder') {
+    return sequenceChildren(assertion, evidence);
+  }
+  if (assertion.kind === 'anyOf') {
+    return anyOfChildren(assertion, evidence);
+  }
+  return [];
 }
 
 function sequenceChildren(
@@ -423,6 +458,24 @@ function sequenceChildren(
       expectation: truncateDetail(describeToolStepExpectation(step)),
       observed: null,
       passed,
+    };
+  });
+}
+
+function anyOfChildren(
+  assertion: Extract<IrAssertion, {kind: 'anyOf'}>,
+  evidence: unknown,
+): RunUploadAssertionDisplayChildV1[] {
+  const matchedBranch = anyOfMatchedBranch(evidence);
+  return assertion.steps.map((step, index) => {
+    const branch = stepWithId(step);
+    return {
+      index: index + 1,
+      kind: branch.kind,
+      title: truncateDetail(describeAssertion(branch)),
+      expectation: truncateDetail(describeExpectation(branch)),
+      observed: null,
+      passed: matchedBranch === undefined ? null : matchedBranch === index + 1,
     };
   });
 }
@@ -509,6 +562,15 @@ function observedAssertionSummary(
     }
   }
 
+  if (assertion.kind === 'anyOf') {
+    const evidence = assertionResultEvidence(result, assertion.id);
+    const matchedBranch = anyOfMatchedBranch(evidence);
+    if (matchedBranch !== undefined) return `matched branch #${matchedBranch}`;
+    if (isAnyOfFailureEvidence(evidence)) {
+      return `0 of ${evidence.branches.length} branches matched`;
+    }
+  }
+
   if (assertion.kind === 'verify.command') {
     const evidence = assertionResultEvidence(result, assertion.id);
     if (isVerifyCommandResult(evidence)) {
@@ -516,6 +578,37 @@ function observedAssertionSummary(
     }
   }
   return fallback;
+}
+
+function stepWithId(
+  assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
+): IrAssertion {
+  return {
+    id: 'assertion.branch',
+    ...(assertion as Record<string, unknown>),
+  } as IrAssertion;
+}
+
+function anyOfMatchedBranch(evidence: unknown): number | undefined {
+  if (typeof evidence !== 'object' || evidence === null) return undefined;
+  if (!('kind' in evidence) || evidence.kind !== 'anyOf') return undefined;
+  if (!('branchIndex' in evidence)) return undefined;
+  return typeof evidence.branchIndex === 'number'
+    ? evidence.branchIndex
+    : undefined;
+}
+
+function isAnyOfFailureEvidence(
+  evidence: unknown,
+): evidence is {kind: 'anyOf'; branches: unknown[]} {
+  return (
+    typeof evidence === 'object' &&
+    evidence !== null &&
+    'kind' in evidence &&
+    evidence.kind === 'anyOf' &&
+    'branches' in evidence &&
+    Array.isArray(evidence.branches)
+  );
 }
 
 function matcherDefinition(assertion: {
@@ -602,6 +695,7 @@ function commandMatcherDefinition(assertion: {
 function describeToolStep(
   step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
 ): string {
+  if (step.kind === 'anyOf') return `anyOf(${step.steps.length} branches)`;
   if (step.kind === 'command.called') {
     if (step.matcher === undefined) return `command.called(${step.executable})`;
     return `command.called(${step.executable}, ${describeCommandMatcher(step.matcher)})`;
@@ -616,6 +710,9 @@ function describeToolStep(
 function describeToolStepExpectation(
   step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
 ): string {
+  if (step.kind === 'anyOf') {
+    return step.steps.map(describeToolStepExpectation).join(' or ');
+  }
   if (step.kind === 'command.called') {
     if (step.matcher === undefined) return `${step.executable} command`;
     return `${step.executable} command with ${describeCommandMatcher(step.matcher)}`;

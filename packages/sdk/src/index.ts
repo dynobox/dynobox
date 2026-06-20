@@ -7,6 +7,7 @@
  */
 
 export {artifact} from './artifact/index.js';
+export {anyOf} from './any-of/index.js';
 export {defineDyno} from './authoring/defineDyno.js';
 export {defineScenario} from './authoring/defineScenario.js';
 export {command} from './command/index.js';
@@ -18,6 +19,8 @@ export {skill} from './skill/index.js';
 export {tool} from './tool/index.js';
 export {transcript} from './transcript/index.js';
 export type {
+  AnyOfAssertion,
+  AnyOfSequenceStepAssertion,
   ArtifactContainsAssertion,
   ArtifactExistsAssertion,
   Assertion,
@@ -30,6 +33,7 @@ export type {
   FinalMessageContainsAssertion,
   NotCalledAssertion,
   SequenceInOrderAssertion,
+  SequenceStepAssertion,
   ShellCommandMatcher,
   ShellToolMatcher,
   SkillReferencedAssertion,

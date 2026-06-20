@@ -58,6 +58,10 @@ export function describeAssertion(assertion: IrAssertion): string {
     return `sequence.inOrder(${assertion.steps.length} steps)`;
   }
 
+  if (assertion.kind === 'anyOf') {
+    return `anyOf(${assertion.steps.length} branches)`;
+  }
+
   if (assertion.kind === 'skill.referenced') {
     return `skill.referenced(${assertion.skill})`;
   }
@@ -104,6 +108,10 @@ export function describeExpectation(assertion: IrAssertion): string {
 
   if (assertion.kind === 'sequence.inOrder') {
     return assertion.steps.map(describeToolStepExpectation).join(' before ');
+  }
+
+  if (assertion.kind === 'anyOf') {
+    return assertion.steps.map(describeAssertionNodeExpectation).join(' or ');
   }
 
   if (assertion.kind === 'command.notCalled') {
@@ -194,11 +202,23 @@ function describeToolStepExpectation(
       ? `${step.executable} command`
       : `${step.executable} command with ${describeCommandMatcher(step.matcher)}`;
   }
+  if (step.kind === 'anyOf') {
+    return step.steps.map(describeToolStepExpectation).join(' or ');
+  }
   if (step.pathMatcher !== undefined) {
     return `${step.toolKind} tool call for path "${step.pathMatcher.path}"`;
   }
   if (step.matcher === undefined) return `${step.toolKind} tool call`;
   return describeShellMatcherExpectation(step.matcher);
+}
+
+function describeAssertionNodeExpectation(
+  assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
+): string {
+  return describeExpectation({
+    id: 'assertion.branch',
+    ...(assertion as Record<string, unknown>),
+  } as IrAssertion);
 }
 
 function describeShellMatcherExpectation(matcher: ShellToolMatcher): string {

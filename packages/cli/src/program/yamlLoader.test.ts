@@ -27,6 +27,15 @@ scenarios:
         tool: shell
         command:
           includes: package.json
+      - type: anyOf
+        steps:
+          - type: tool.called
+            tool: read_file
+            path: package.json
+          - type: command.called
+            executable: cat
+            command:
+              args: [package.json]
       - type: artifact.exists
         path: package.json
       - type: verify.command
@@ -86,6 +95,25 @@ describe('loadYamlDyno', () => {
       label: 'reads package.json',
     });
     expect(scenario.assertions[3]).toMatchObject({
+      kind: 'artifact.exists',
+      path: 'package.json',
+    });
+    expect(scenario.assertions[2]).toMatchObject({
+      kind: 'anyOf',
+      steps: [
+        {
+          kind: 'tool.called',
+          toolKind: 'read_file',
+          pathMatcher: {path: 'package.json'},
+        },
+        {
+          kind: 'command.called',
+          executable: 'cat',
+          matcher: {args: ['package.json']},
+        },
+      ],
+    });
+    expect(scenario.assertions[4]).toMatchObject({
       kind: 'verify.command',
       command: 'node --version',
       exitCode: 0,

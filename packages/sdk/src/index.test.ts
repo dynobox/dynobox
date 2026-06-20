@@ -7,6 +7,8 @@ import {describe, expect, expectTypeOf, it} from 'vitest';
 
 import {compile, DynoboxConfigError, resolveConfigModule} from './compiler.js';
 import {
+  anyOf,
+  type AnyOfAssertion,
   artifact,
   type ArtifactContainsAssertion,
   type ArtifactExistsAssertion,
@@ -58,6 +60,7 @@ describe('packages/sdk', () => {
     expect(typeof transcript.contains).toBe('function');
     expect(typeof finalMessage.contains).toBe('function');
     expect(typeof sequence.inOrder).toBe('function');
+    expect(typeof anyOf).toBe('function');
     expect(typeof skill.referenced).toBe('function');
     expect(typeof verify.command).toBe('function');
     expect(typeof verify.succeeds).toBe('function');
@@ -283,6 +286,11 @@ export default defineDyno({
       sequence.inOrder([tool.called('shell')]),
     ).toEqualTypeOf<SequenceInOrderAssertion>();
     expectTypeOf(
+      anyOf([tool.called('shell'), command.called('git')]),
+    ).toMatchTypeOf<AnyOfAssertion>();
+    // @ts-expect-error verify.command cannot be evaluated inside anyOf.
+    anyOf([verify.succeeds('dynobox validate out.dyno.ts')]);
+    expectTypeOf(
       skill.referenced('commit'),
     ).toEqualTypeOf<SkillReferencedAssertion>();
   });
@@ -495,6 +503,183 @@ export default defineDyno({
       },
     ]);
     expect(irSchema.parse(ir)).toEqual(ir);
+  });
+
+  it('compiles anyOf assertions to recursive canonical IR', () => {
+    const config = defineDyno({
+      scenarios: [
+        {
+          name: 'flexible file read',
+          prompt: 'Read package.json.',
+          assertions: [
+            anyOf([
+              tool.called('read_file', {path: 'package.json'}),
+              command.called('cat', {args: ['package.json']}),
+            ]),
+            anyOf([
+              sequence.inOrder([
+                tool.called('read_file', {path: 'package.json'}),
+                command.called('pnpm', {args: ['test']}),
+              ]),
+              sequence.inOrder([
+                command.called('cat', {args: ['package.json']}),
+                command.called('pnpm', {args: ['test']}),
+              ]),
+            ]),
+            sequence.inOrder([
+              anyOf([
+                tool.called('read_file', {path: 'package.json'}),
+                command.called('cat', {args: ['package.json']}),
+              ]),
+              command.called('pnpm', {args: ['test']}),
+            ]),
+          ],
+        },
+      ],
+    });
+
+    const ir = compile(config);
+
+    expect(ir.scenarios[0]!.assertions).toEqual([
+      {
+        id: 'assertion.flexible-file-read.0',
+        kind: 'anyOf',
+        steps: [
+          {
+            kind: 'tool.called',
+            toolKind: 'read_file',
+            pathMatcher: {path: 'package.json'},
+          },
+          {
+            kind: 'command.called',
+            executable: 'cat',
+            matcher: {args: ['package.json']},
+          },
+        ],
+      },
+      {
+        id: 'assertion.flexible-file-read.1',
+        kind: 'anyOf',
+        steps: [
+          {
+            kind: 'sequence.inOrder',
+            steps: [
+              {
+                kind: 'tool.called',
+                toolKind: 'read_file',
+                pathMatcher: {path: 'package.json'},
+              },
+              {
+                kind: 'command.called',
+                executable: 'pnpm',
+                matcher: {args: ['test']},
+              },
+            ],
+          },
+          {
+            kind: 'sequence.inOrder',
+            steps: [
+              {
+                kind: 'command.called',
+                executable: 'cat',
+                matcher: {args: ['package.json']},
+              },
+              {
+                kind: 'command.called',
+                executable: 'pnpm',
+                matcher: {args: ['test']},
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'assertion.flexible-file-read.2',
+        kind: 'sequence.inOrder',
+        steps: [
+          {
+            kind: 'anyOf',
+            steps: [
+              {
+                kind: 'tool.called',
+                toolKind: 'read_file',
+                pathMatcher: {path: 'package.json'},
+              },
+              {
+                kind: 'command.called',
+                executable: 'cat',
+                matcher: {args: ['package.json']},
+              },
+            ],
+          },
+          {
+            kind: 'command.called',
+            executable: 'pnpm',
+            matcher: {args: ['test']},
+          },
+        ],
+      },
+    ]);
+    expect(irSchema.parse(ir)).toEqual(ir);
+  });
+
+  it('rejects verify.command assertions inside anyOf', () => {
+    expect(() =>
+      compile(
+        {
+          scenarios: [
+            {
+              name: 'unsafe verification branch',
+              prompt: 'Create a file.',
+              assertions: [
+                {
+                  type: 'anyOf',
+                  steps: [
+                    {type: 'artifact.exists', path: 'created.txt'},
+                    {
+                      type: 'verify.command',
+                      command: 'touch created.txt',
+                      exitCode: 0,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        } as unknown as Parameters<typeof compile>[0],
+      ),
+    ).toThrow(/verify\.command assertions cannot be nested inside anyOf/);
+
+    expect(() =>
+      irSchema.parse({
+        version: IR_VERSION,
+        scenarios: [
+          {
+            id: 'scenario.unsafe-verification-branch',
+            name: 'unsafe verification branch',
+            prompt: 'Create a file.',
+            harnesses: [{id: 'claude-code'}],
+            setup: [],
+            fixtures: [],
+            endpoints: [],
+            assertions: [
+              {
+                id: 'assertion.unsafe-verification-branch.0',
+                kind: 'anyOf',
+                steps: [
+                  {kind: 'artifact.exists', path: 'created.txt'},
+                  {
+                    kind: 'verify.command',
+                    command: 'touch created.txt',
+                    exitCode: 0,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/verify\.command assertions cannot be nested inside anyOf/);
   });
 
   it('compiles verify command assertions to canonical IR', () => {

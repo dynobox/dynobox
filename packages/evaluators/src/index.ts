@@ -74,6 +74,10 @@ function evaluateAssertion(
     return evaluateSequenceInOrder(assertion, input.toolEvents);
   }
 
+  if (assertion.kind === 'anyOf') {
+    return evaluateAnyOf(assertion, input);
+  }
+
   if (assertion.kind === 'skill.referenced') {
     return evaluateSkillReferenced(assertion, input.toolEvents);
   }
@@ -115,4 +119,51 @@ function evaluateAssertion(
   }
 
   return unsupportedAssertionResult(assertion);
+}
+
+function evaluateAnyOf(
+  assertion: Extract<IrAssertion, {kind: 'anyOf'}>,
+  input: EvaluationInput,
+): AssertionResult {
+  const branchResults = assertion.steps.map((step, index) =>
+    evaluateAssertion(
+      {
+        id: `${assertion.id}.branch.${index + 1}`,
+        ...(step as Record<string, unknown>),
+      } as IrAssertion,
+      input,
+    ),
+  );
+  const matchedIndex = branchResults.findIndex((result) => result.passed);
+
+  if (matchedIndex !== -1) {
+    const matched = branchResults[matchedIndex]!;
+    return {
+      assertionId: assertion.id,
+      kind: assertion.kind,
+      passed: true,
+      message: `Matched anyOf branch #${matchedIndex + 1}: ${matched.message}`,
+      evidence: {
+        kind: 'anyOf',
+        branchIndex: matchedIndex + 1,
+        result: matched,
+      },
+    };
+  }
+
+  return {
+    assertionId: assertion.id,
+    kind: assertion.kind,
+    passed: false,
+    message: [
+      `Expected anyOf to match at least one branch, but all ${branchResults.length} branches failed.`,
+      ...branchResults.map(
+        (result, index) => `Branch #${index + 1}: ${result.message}`,
+      ),
+    ].join('\n'),
+    evidence: {
+      kind: 'anyOf',
+      branches: branchResults,
+    },
+  };
 }

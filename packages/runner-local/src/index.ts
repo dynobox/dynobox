@@ -3,6 +3,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
 import {type AssertionResult, evaluateAssertions} from '@dynobox/evaluators';
+import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {
   errorMessage,
@@ -323,14 +324,14 @@ export async function runJob(
     assertionCount: job.scenario.assertions.length,
   });
   const assertionsStartedAt = Date.now();
-  const nonVerifyAssertions = job.scenario.assertions.filter(
-    (assertion) => assertion.kind !== 'verify.command',
+  const preVerifyAssertions = job.scenario.assertions.filter(
+    (assertion) => !assertionRequiresVerify(assertion),
   );
-  const verifyAssertions = job.scenario.assertions.filter(
-    (assertion) => assertion.kind === 'verify.command',
+  const postVerifyAssertions = job.scenario.assertions.filter(
+    assertionRequiresVerify,
   );
   const nonVerifyAssertionResults = evaluateAssertions({
-    assertions: nonVerifyAssertions,
+    assertions: preVerifyAssertions,
     toolEvents: harnessResult.toolEvents,
     httpEvents,
     workDir,
@@ -344,9 +345,13 @@ export async function runJob(
   if (options.env !== undefined) verifyOptions.env = options.env;
   const verifyCommandResults = await runVerifyCommands(verifyOptions);
   const verifyAssertionResults = evaluateAssertions({
-    assertions: verifyAssertions,
+    assertions: postVerifyAssertions,
     toolEvents: harnessResult.toolEvents,
+    httpEvents,
     verifyCommandResults,
+    workDir,
+    transcript: harnessResult.transcript,
+    finalMessage: harnessResult.finalMessage,
   });
   const resultsByAssertionId = new Map<string, AssertionResult[]>();
   for (const result of [
@@ -389,6 +394,10 @@ export async function runJob(
       assertionsMs,
     }),
   });
+}
+
+function assertionRequiresVerify(assertion: IrAssertion): boolean {
+  return assertion.kind === 'verify.command';
 }
 
 async function createWorkDir(scratchRoot: string | undefined): Promise<string> {

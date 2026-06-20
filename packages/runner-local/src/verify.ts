@@ -16,9 +16,7 @@ export async function runVerifyCommands(
     opts.env === undefined ? process.env : {...process.env, ...opts.env};
   const results: VerifyCommandResult[] = [];
 
-  for (const assertion of opts.scenario.assertions) {
-    if (assertion.kind !== 'verify.command') continue;
-
+  for (const assertion of verifyCommandAssertions(opts.scenario.assertions)) {
     const result = await execaCommand(assertion.command, {
       cwd: opts.workDir,
       env,
@@ -37,4 +35,19 @@ export async function runVerifyCommands(
   }
 
   return results;
+}
+
+type RunnableVerifyCommandAssertion = {
+  id: string;
+  kind: 'verify.command';
+  command: string;
+};
+
+function verifyCommandAssertions(
+  assertions: IrScenario['assertions'],
+): RunnableVerifyCommandAssertion[] {
+  return assertions.filter(
+    (assertion): assertion is RunnableVerifyCommandAssertion =>
+      assertion.kind === 'verify.command',
+  );
 }
