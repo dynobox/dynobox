@@ -2,7 +2,7 @@ import {existsSync, readFileSync} from 'node:fs';
 
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
-import {resolveArtifactPath} from './inspection.js';
+import {type ArtifactInspection, resolveArtifactPath} from './inspection.js';
 import {failed} from './results.js';
 import type {AssertionResult} from './types.js';
 
@@ -12,7 +12,10 @@ export function evaluateArtifactExists(
 ): AssertionResult {
   const resolved = resolveArtifactPath(assertion.path, workDir);
   if (resolved.error !== undefined) {
-    return failed(assertion, resolved.error);
+    return failedWithEvidence(assertion, resolved.error, {
+      kind: 'invalid',
+      message: resolved.error,
+    });
   }
 
   if (existsSync(resolved.path)) {
@@ -21,11 +24,15 @@ export function evaluateArtifactExists(
       kind: assertion.kind,
       passed: true,
       message: `Artifact "${assertion.path}" exists.`,
-      evidence: {path: resolved.path},
+      evidence: {kind: 'exists', path: resolved.path},
     };
   }
 
-  return failed(assertion, `Expected artifact "${assertion.path}" to exist.`);
+  return failedWithEvidence(
+    assertion,
+    `Expected artifact "${assertion.path}" to exist.`,
+    {kind: 'missing', path: resolved.path},
+  );
 }
 
 export function evaluateArtifactContains(
@@ -34,7 +41,10 @@ export function evaluateArtifactContains(
 ): AssertionResult {
   const resolved = resolveArtifactPath(assertion.path, workDir);
   if (resolved.error !== undefined) {
-    return failed(assertion, resolved.error);
+    return failedWithEvidence(assertion, resolved.error, {
+      kind: 'invalid',
+      message: resolved.error,
+    });
   }
 
   try {
@@ -45,19 +55,31 @@ export function evaluateArtifactContains(
         kind: assertion.kind,
         passed: true,
         message: `Artifact "${assertion.path}" contains expected text.`,
-        evidence: {path: resolved.path},
+        evidence: {kind: 'exists', path: resolved.path},
       };
     }
 
-    return failed(
+    return failedWithEvidence(
       assertion,
       `Expected artifact "${assertion.path}" to contain "${assertion.text}".`,
+      {kind: 'exists', path: resolved.path, contents},
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return failed(
+    return failedWithEvidence(
       assertion,
       `Could not read artifact "${assertion.path}" as UTF-8: ${message}`,
+      existsSync(resolved.path)
+        ? {kind: 'exists', path: resolved.path}
+        : {kind: 'missing', path: resolved.path},
     );
   }
+}
+
+function failedWithEvidence(
+  assertion: Pick<IrAssertion, 'id' | 'kind'>,
+  message: string,
+  evidence: ArtifactInspection,
+): AssertionResult {
+  return {...failed(assertion, message), evidence};
 }

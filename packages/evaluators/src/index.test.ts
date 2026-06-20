@@ -1222,9 +1222,14 @@ describe('evaluateAssertions', () => {
     );
 
     expect(pass.passed).toBe(true);
+    expect(pass.evidence).toEqual({
+      kind: 'exists',
+      path: join(workDir, 'CHANGELOG.md'),
+    });
     expect(fail).toMatchObject({
       passed: false,
       message: 'Expected artifact "missing.txt" to exist.',
+      evidence: {kind: 'missing', path: join(workDir, 'missing.txt')},
     });
   });
 
@@ -1254,9 +1259,18 @@ describe('evaluateAssertions', () => {
     );
 
     expect(pass.passed).toBe(true);
+    expect(pass.evidence).toEqual({
+      kind: 'exists',
+      path: join(workDir, 'CHANGELOG.md'),
+    });
     expect(fail).toMatchObject({
       passed: false,
       message: 'Expected artifact "CHANGELOG.md" to contain "missing".',
+      evidence: {
+        kind: 'exists',
+        path: join(workDir, 'CHANGELOG.md'),
+        contents: 'dynobox@0.0.4',
+      },
     });
   });
 

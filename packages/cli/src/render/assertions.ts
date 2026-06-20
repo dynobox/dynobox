@@ -4,6 +4,7 @@
  */
 
 import {
+  type ArtifactInspection,
   extractObservedCommands,
   extractSkillFiles,
   inspectArtifact,
@@ -204,24 +205,17 @@ function describeObservedFailure(
   }
 
   if (assertion.kind === 'artifact.exists') {
-    const artifact = inspectArtifact(assertion.path, result.workDir);
-    if (artifact.kind === 'exists')
-      return `artifact exists at ${artifact.path}`;
-    if (artifact.kind === 'missing')
-      return `artifact missing at ${artifact.path}`;
-    return artifact.message;
+    const artifact =
+      artifactInspectionEvidence(result, assertion.id) ??
+      inspectArtifact(assertion.path, result.workDir);
+    return formatArtifactExists(artifact);
   }
 
   if (assertion.kind === 'artifact.contains') {
-    const artifact = inspectArtifact(assertion.path, result.workDir);
-    if (artifact.kind === 'exists') {
-      return artifact.contents === undefined
-        ? `artifact exists at ${artifact.path}, but could not be read as UTF-8`
-        : `artifact: ${formatTextExcerpt(artifact.contents)}`;
-    }
-    if (artifact.kind === 'missing')
-      return `artifact missing at ${artifact.path}`;
-    return artifact.message;
+    const artifact =
+      artifactInspectionEvidence(result, assertion.id) ??
+      inspectArtifact(assertion.path, result.workDir);
+    return formatArtifactContains(artifact);
   }
 
   if (assertion.kind === 'finalMessage.contains') {
@@ -257,6 +251,39 @@ function formatTextExcerpt(text: string, maxLength = 160): string {
       ? `${compact.slice(0, Math.max(0, maxLength - 3))}...`
       : compact;
   return `"${excerpt.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+}
+
+function artifactInspectionEvidence(
+  result: LocalRunnerResult,
+  assertionId: string,
+): ArtifactInspection | undefined {
+  const evidence = assertionResultEvidence(result, assertionId);
+  return isArtifactInspection(evidence) ? evidence : undefined;
+}
+
+function formatArtifactExists(artifact: ArtifactInspection): string {
+  if (artifact.kind === 'exists') return `artifact exists at ${artifact.path}`;
+  if (artifact.kind === 'missing') return `artifact missing at ${artifact.path}`;
+  return artifact.message;
+}
+
+function formatArtifactContains(artifact: ArtifactInspection): string {
+  if (artifact.kind === 'exists') {
+    return artifact.contents === undefined
+      ? `artifact exists at ${artifact.path}, but could not be read as UTF-8`
+      : `artifact: ${formatTextExcerpt(artifact.contents)}`;
+  }
+  if (artifact.kind === 'missing') return `artifact missing at ${artifact.path}`;
+  return artifact.message;
+}
+
+function isArtifactInspection(value: unknown): value is ArtifactInspection {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Partial<ArtifactInspection>;
+  if (candidate.kind === 'exists' || candidate.kind === 'missing') {
+    return typeof candidate.path === 'string';
+  }
+  return candidate.kind === 'invalid' && typeof candidate.message === 'string';
 }
 
 function toolEventEvidence(

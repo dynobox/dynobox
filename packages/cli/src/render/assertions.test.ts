@@ -241,6 +241,57 @@ describe('renderAssertionDetails', () => {
     expect(output).not.toContain('observed  Expected');
   });
 
+  it('renders artifact failures from captured evidence', () => {
+    const workDir = mkdtempSync(join(tmpdir(), 'dynobox-render-'));
+    writeFileSync(join(workDir, 'created.txt'), 'created later');
+
+    const job = {
+      id: 'job.1',
+      scenario: {
+        id: 'scenario.artifact-evidence',
+        name: 'artifact evidence',
+        prompt: 'p',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        endpoints: [],
+        assertions: [
+          {
+            id: 'assertion.artifact.exists',
+            kind: 'artifact.exists',
+            path: 'created.txt',
+          },
+        ],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const result = {
+      workDir,
+      assertionResults: [
+        {
+          assertionId: 'assertion.artifact.exists',
+          kind: 'artifact.exists',
+          passed: false,
+          message: 'Expected artifact "created.txt" to exist.',
+          evidence: {kind: 'missing', path: join(workDir, 'created.txt')},
+        },
+      ],
+      harnessResult: {toolEvents: []},
+    } as unknown as LocalRunnerResult;
+
+    const output = renderAssertionDetails(
+      result,
+      assertionByIdForJobs([job]),
+      createRenderContext({usePlainSymbols: true}, {}),
+    );
+
+    expect(output).toContain(
+      `observed  artifact missing at ${join(workDir, 'created.txt')}`,
+    );
+    expect(output).not.toContain('observed  artifact exists at');
+  });
+
   it('shows compact observed details for failed command.called assertions', () => {
     const job = {
       id: 'job.1',

@@ -47,13 +47,18 @@ const assertionDetailString = z
   .string()
   .min(1)
   .max(RUN_UPLOAD_LIMITS.assertionDetailLength);
+const assertionMatcherString = z
+  .string()
+  .max(RUN_UPLOAD_LIMITS.assertionDetailLength)
+  .nullable()
+  .optional();
 
 const assertionMatcherSchema = z
   .object({
-    equals: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
-    includes: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
-    startsWith: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
-    matches: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
+    equals: assertionMatcherString,
+    includes: assertionMatcherString,
+    startsWith: assertionMatcherString,
+    matches: assertionMatcherString,
   })
   .strict();
 
