@@ -30,11 +30,11 @@ import {
   describeToolEvent,
   isObservedCommand,
 } from '../render/describe.js';
-import {readPackageVersion} from '../util/version.js';
 import {
   formatVerifyCommandResult,
   isVerifyCommandResult,
 } from '../util/verifyCommandResult.js';
+import {readPackageVersion} from '../util/version.js';
 import {type AuthEnvironment, resolveAuthToken} from './auth.js';
 import {resolveApiUrl} from './identityApi.js';
 
@@ -353,7 +353,9 @@ function assertionDefinition(
     return {
       ...base,
       command: truncateDetail(assertion.command),
-      ...(assertion.exitCode === undefined ? {} : {exitCode: assertion.exitCode}),
+      ...(assertion.exitCode === undefined
+        ? {}
+        : {exitCode: assertion.exitCode}),
       ...(assertion.stdout === undefined
         ? {}
         : {stdout: textMatcherUploadValue(assertion.stdout)}),
@@ -539,7 +541,8 @@ function matcherDefinition(assertion: {
 
 function textMatcherUploadValue(matcher: TextMatcher) {
   if ('equals' in matcher) return {equals: truncateDetail(matcher.equals)};
-  if ('includes' in matcher) return {includes: truncateDetail(matcher.includes)};
+  if ('includes' in matcher)
+    return {includes: truncateDetail(matcher.includes)};
   if ('startsWith' in matcher) {
     return {startsWith: truncateDetail(matcher.startsWith)};
   }

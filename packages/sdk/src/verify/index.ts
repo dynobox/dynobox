@@ -12,10 +12,7 @@ export const verify = {
   },
 
   /** Assert that a verification command satisfies explicit output/exit checks. */
-  command(
-    command: string,
-    opts: VerifyCommandOptions,
-  ): VerifyCommandAssertion {
+  command(command: string, opts: VerifyCommandOptions): VerifyCommandAssertion {
     return createVerifyCommandAssertion(command, opts);
   },
 };

@@ -267,7 +267,8 @@ function artifactInspectionEvidence(
 
 function formatArtifactExists(artifact: ArtifactInspection): string {
   if (artifact.kind === 'exists') return `artifact exists at ${artifact.path}`;
-  if (artifact.kind === 'missing') return `artifact missing at ${artifact.path}`;
+  if (artifact.kind === 'missing')
+    return `artifact missing at ${artifact.path}`;
   return artifact.message;
 }
 
@@ -277,7 +278,8 @@ function formatArtifactContains(artifact: ArtifactInspection): string {
       ? `artifact exists at ${artifact.path}, but could not be read as UTF-8`
       : `artifact: ${formatTextExcerpt(artifact.contents)}`;
   }
-  if (artifact.kind === 'missing') return `artifact missing at ${artifact.path}`;
+  if (artifact.kind === 'missing')
+    return `artifact missing at ${artifact.path}`;
   return artifact.message;
 }
 

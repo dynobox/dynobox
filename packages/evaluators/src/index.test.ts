@@ -495,8 +495,7 @@ describe('evaluateAssertions', () => {
 
     expect(result).toMatchObject({
       passed: true,
-      message:
-        'Verification command "dynobox validate out.dyno.ts" passed.',
+      message: 'Verification command "dynobox validate out.dyno.ts" passed.',
       evidence: {exitCode: 0, stdout: 'valid dyno', stderr: ''},
     });
   });
@@ -527,7 +526,9 @@ describe('evaluateAssertions', () => {
 
     expect(result).toMatchObject({passed: false});
     expect(result.message).toContain('exit code 2, expected 0');
-    expect(result.message).toContain('stderr did not match includes "0 errors"');
+    expect(result.message).toContain(
+      'stderr did not match includes "0 errors"',
+    );
   });
 
   it('fails verify.command without an explicit exit or output check', () => {

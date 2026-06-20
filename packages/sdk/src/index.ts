@@ -17,7 +17,6 @@ export {sequence} from './sequence/index.js';
 export {skill} from './skill/index.js';
 export {tool} from './tool/index.js';
 export {transcript} from './transcript/index.js';
-export {verify} from './verify/index.js';
 export type {
   ArtifactContainsAssertion,
   ArtifactExistsAssertion,
@@ -53,3 +52,4 @@ export {
   type PermissionMode,
 } from './types/harness.js';
 export {HTTP_METHODS, type HttpMethod} from './types/httpMethod.js';
+export {verify} from './verify/index.js';

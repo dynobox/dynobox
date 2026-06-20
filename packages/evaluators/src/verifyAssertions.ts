@@ -38,14 +38,20 @@ export function evaluateVerifyCommandAssertion(
   }
 
   const failures: string[] = [];
-  if (assertion.exitCode !== undefined && result.exitCode !== assertion.exitCode) {
-    failures.push(`exit code ${result.exitCode}, expected ${assertion.exitCode}`);
+  if (
+    assertion.exitCode !== undefined &&
+    result.exitCode !== assertion.exitCode
+  ) {
+    failures.push(
+      `exit code ${result.exitCode}, expected ${assertion.exitCode}`,
+    );
   }
   if (assertion.stdout !== undefined) {
     const matched = shellCommandMatches(result.stdout, assertion.stdout);
     if (!matched.passed) {
       failures.push(
-        matched.error ?? `stdout did not match ${describeShellMatcher(assertion.stdout)}`,
+        matched.error ??
+          `stdout did not match ${describeShellMatcher(assertion.stdout)}`,
       );
     }
   }
@@ -53,7 +59,8 @@ export function evaluateVerifyCommandAssertion(
     const matched = shellCommandMatches(result.stderr, assertion.stderr);
     if (!matched.passed) {
       failures.push(
-        matched.error ?? `stderr did not match ${describeShellMatcher(assertion.stderr)}`,
+        matched.error ??
+          `stderr did not match ${describeShellMatcher(assertion.stderr)}`,
       );
     }
   }

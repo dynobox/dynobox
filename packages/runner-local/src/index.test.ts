@@ -284,7 +284,7 @@ describe('runJob', () => {
             id: 'assertion.verify.0',
             kind: 'verify.command',
             command:
-              'node -e "require(\'node:fs\').writeFileSync(\'created.txt\', \'created\')"',
+              "node -e \"require('node:fs').writeFileSync('created.txt', 'created')\"",
             exitCode: 0,
           },
         ],
