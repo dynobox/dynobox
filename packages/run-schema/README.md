@@ -1,15 +1,15 @@
-# @dynobox-internal/run-schema
+# @dynobox/run-schema
 
 Shared Dynobox run upload schemas and API response types.
 
 ## Registry
 
-This package is published to GitHub Packages under the `@dynobox-internal` scope.
+This package is published to GitHub Packages under the `@dynobox` scope.
 
 Use this npm config in consuming repos:
 
 ```ini
-@dynobox-internal:registry=https://npm.pkg.github.com
+@dynobox:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
 
@@ -17,7 +17,8 @@ Local installs require `GITHUB_TOKEN` with `read:packages`. Publishing requires 
 
 ## Publishing
 
-Update the package version, then run:
+See `RELEASES.md` for the full release flow. After updating the package version,
+changelog, and release tag, publish with:
 
 ```sh
 pnpm --filter @dynobox/run-schema build

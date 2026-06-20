@@ -72,6 +72,77 @@ When releasing packages that depend on each other (e.g. `@dynobox/sdk` then `dyn
 5. Push once.
 6. Publish in dependency order: SDK first, then CLI.
 
+## Releasing @dynobox/run-schema
+
+`@dynobox/run-schema` is published to GitHub Packages, not the public npm
+registry. Its `package.json` owns the registry and access settings via
+`publishConfig`:
+
+```json
+{
+  "registry": "https://npm.pkg.github.com",
+  "access": "restricted"
+}
+```
+
+Prerequisites:
+
+- Clean working tree on `main`, unless intentionally releasing from another
+  branch.
+- All tests pass: `pnpm test` from the repo root.
+- Authenticated to GitHub Packages with a token that has `write:packages`:
+  `npm whoami --registry=https://npm.pkg.github.com`.
+
+Release steps:
+
+1. **Bump the version** without creating an automatic git tag:
+   ```bash
+   pnpm --filter @dynobox/run-schema exec npm version <patch|minor|major> --no-git-tag-version
+   pnpm --filter @dynobox/run-schema exec node -p "require('./package.json').version"
+   ```
+
+2. **Update CHANGELOG.md**
+   - Move entries from the `[Unreleased]` section for `@dynobox/run-schema`
+     into a new version section.
+   - Use the format: `## @dynobox/run-schema@<version> — YYYY-MM-DD`.
+
+3. **Build and inspect the package**
+   ```bash
+   pnpm --filter @dynobox/run-schema build
+   pnpm --filter @dynobox/run-schema pack --pack-destination /tmp
+   tar tf /tmp/dynobox-run-schema-<version>.tgz
+   tar -xOf /tmp/dynobox-run-schema-<version>.tgz package/package.json
+   ```
+
+4. **Commit**
+   ```bash
+   git add packages/run-schema/package.json CHANGELOG.md
+   git commit -m "chore(release): @dynobox/run-schema@<version>"
+   ```
+
+5. **Tag** using the package-specific tag convention:
+   ```bash
+   git tag @dynobox/run-schema@<version>
+   ```
+
+6. **Push**
+   ```bash
+   git push && git push --tags
+   ```
+
+7. **Publish** to GitHub Packages. Do not pass `--access public`.
+   ```bash
+   pnpm --filter @dynobox/run-schema publish --no-git-checks
+   ```
+
+8. **Verify**
+   ```bash
+   npm view @dynobox/run-schema@<version> --registry=https://npm.pkg.github.com
+   ```
+
+Do not commit `packages/run-schema/dist`; it is built locally and included in
+the package tarball via the package's `files` list.
+
 ## Dry-run
 
 To verify what will be published without actually publishing:
