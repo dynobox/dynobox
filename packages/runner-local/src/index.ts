@@ -30,6 +30,7 @@ import type {
 } from './runTypes.js';
 import type {SetupResult} from './setup.js';
 import {runScenarioFixtures, runScenarioSetup} from './setup.js';
+import {runVerifyCommands} from './verify.js';
 
 export type {
   Harness,
@@ -74,6 +75,7 @@ export {
   runScenarioSetup,
   runSetup,
 } from './setup.js';
+export {runVerifyCommands} from './verify.js';
 export type {HttpEvent} from '@dynobox/evaluators';
 
 /**
@@ -321,14 +323,40 @@ export async function runJob(
     assertionCount: job.scenario.assertions.length,
   });
   const assertionsStartedAt = Date.now();
-  const assertionResults = evaluateAssertions({
-    assertions: job.scenario.assertions,
+  const nonVerifyAssertions = job.scenario.assertions.filter(
+    (assertion) => assertion.kind !== 'verify.command',
+  );
+  const verifyAssertions = job.scenario.assertions.filter(
+    (assertion) => assertion.kind === 'verify.command',
+  );
+  const nonVerifyAssertionResults = evaluateAssertions({
+    assertions: nonVerifyAssertions,
     toolEvents: harnessResult.toolEvents,
     httpEvents,
     workDir,
     transcript: harnessResult.transcript,
     finalMessage: harnessResult.finalMessage,
   });
+  const verifyOptions: Parameters<typeof runVerifyCommands>[0] = {
+    scenario: job.scenario,
+    workDir,
+  };
+  if (options.env !== undefined) verifyOptions.env = options.env;
+  const verifyCommandResults = await runVerifyCommands(verifyOptions);
+  const verifyAssertionResults = evaluateAssertions({
+    assertions: verifyAssertions,
+    toolEvents: harnessResult.toolEvents,
+    verifyCommandResults,
+  });
+  const resultByAssertionId = new Map(
+    [...nonVerifyAssertionResults, ...verifyAssertionResults].map((result) => [
+      result.assertionId,
+      result,
+    ]),
+  );
+  const assertionResults = job.scenario.assertions.map((assertion) =>
+    resultByAssertionId.get(assertion.id)!,
+  );
   const assertionsMs = Date.now() - assertionsStartedAt;
   emitProgress(options, {
     type: 'assertions.completed',

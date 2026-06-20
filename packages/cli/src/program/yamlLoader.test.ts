@@ -29,6 +29,11 @@ scenarios:
           includes: package.json
       - type: artifact.exists
         path: package.json
+      - type: verify.command
+        command: node --version
+        exitCode: 0
+        stdout:
+          startsWith: v
 `;
 
 const MALFORMED_YAML = `name: bad
@@ -80,7 +85,13 @@ describe('loadYamlDyno', () => {
       id: 'assertion.inspect-package.reads-package',
       label: 'reads package.json',
     });
-    expect(scenario.assertions.length).toBeGreaterThanOrEqual(3);
+    expect(scenario.assertions[3]).toMatchObject({
+      kind: 'verify.command',
+      command: 'node --version',
+      exitCode: 0,
+      stdout: {startsWith: 'v'},
+    });
+    expect(scenario.assertions.length).toBeGreaterThanOrEqual(4);
   });
 
   it('throws YamlDynoParseError with a line:column pointer on malformed YAML', async () => {

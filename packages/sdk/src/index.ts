@@ -17,6 +17,7 @@ export {sequence} from './sequence/index.js';
 export {skill} from './skill/index.js';
 export {tool} from './tool/index.js';
 export {transcript} from './transcript/index.js';
+export {verify} from './verify/index.js';
 export type {
   ArtifactContainsAssertion,
   ArtifactExistsAssertion,
@@ -38,6 +39,8 @@ export type {
   ToolNotCalledAssertion,
   ToolPathMatcher,
   TranscriptContainsAssertion,
+  VerifyCommandAssertion,
+  VerifyCommandOptions,
 } from './types/brands.js';
 export type {DynoboxConfig, ScenarioInput} from './types/config.js';
 export type {EndpointSpec} from './types/endpointSpec.js';

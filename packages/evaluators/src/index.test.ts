@@ -468,6 +468,96 @@ describe('evaluateAssertions', () => {
     );
   });
 
+  it('passes verify.command when exit code and output match', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'verify.command',
+        command: 'dynobox validate out.dyno.ts',
+        exitCode: 0,
+        stdout: {includes: 'valid'},
+        stderr: {equals: ''},
+      },
+      [],
+      {
+        verifyCommandResults: [
+          {
+            assertionId: 'assertion.test.0',
+            command: 'dynobox validate out.dyno.ts',
+            exitCode: 0,
+            stdout: 'valid dyno',
+            stderr: '',
+            durationMs: 12,
+          },
+        ],
+      },
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message:
+        'Verification command "dynobox validate out.dyno.ts" passed.',
+      evidence: {exitCode: 0, stdout: 'valid dyno', stderr: ''},
+    });
+  });
+
+  it('fails verify.command with exit code and output mismatch details', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'verify.command',
+        command: 'tsc --noEmit out.ts',
+        exitCode: 0,
+        stderr: {includes: '0 errors'},
+      },
+      [],
+      {
+        verifyCommandResults: [
+          {
+            assertionId: 'assertion.test.0',
+            command: 'tsc --noEmit out.ts',
+            exitCode: 2,
+            stdout: '',
+            stderr: '1 error',
+            durationMs: 12,
+          },
+        ],
+      },
+    );
+
+    expect(result).toMatchObject({passed: false});
+    expect(result.message).toContain('exit code 2, expected 0');
+    expect(result.message).toContain('stderr did not match includes "0 errors"');
+  });
+
+  it('fails verify.command without an explicit exit or output check', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'verify.command',
+        command: 'false',
+      },
+      [],
+      {
+        verifyCommandResults: [
+          {
+            assertionId: 'assertion.test.0',
+            command: 'false',
+            exitCode: 1,
+            stdout: '',
+            stderr: '',
+            durationMs: 12,
+          },
+        ],
+      },
+    );
+
+    expect(result).toMatchObject({passed: false});
+    expect(result.message).toBe(
+      'Verification command assertions must specify exitCode, stdout, or stderr.',
+    );
+  });
+
   it('preserves shell variables and unquoted hashes in command args', () => {
     const toolEvents: ToolEvent[] = [
       {

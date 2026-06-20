@@ -91,6 +91,8 @@ const shellCommandMatcherSchema = z.custom<ShellCommandMatcher>(
   },
 );
 
+const textMatcherSchema = shellCommandMatcherSchema;
+
 const commandMatcherSchema = z
   .object({
     args: z.array(z.string()).optional(),
@@ -137,6 +139,27 @@ const commandNotCalledAssertionSchema = z
   })
   .merge(assertionBaseSchema)
   .strict();
+
+const verifyCommandAssertionSchema = z
+  .object({
+    type: z.literal('verify.command'),
+    command: z.string().min(1),
+    exitCode: z.number().int().optional(),
+    stdout: textMatcherSchema.optional(),
+    stderr: textMatcherSchema.optional(),
+  })
+  .merge(assertionBaseSchema)
+  .strict()
+  .refine(
+    (assertion) =>
+      assertion.exitCode !== undefined ||
+      assertion.stdout !== undefined ||
+      assertion.stderr !== undefined,
+    {
+      message:
+        'Verify command assertions must specify exitCode, stdout, or stderr.',
+    },
+  );
 
 const toolNotCalledAssertionSchema = z
   .object({
@@ -210,6 +233,7 @@ export const assertionSchema = z
     notCalledAssertionSchema,
     commandCalledAssertionSchema,
     commandNotCalledAssertionSchema,
+    verifyCommandAssertionSchema,
     toolCalledAssertionSchema,
     toolNotCalledAssertionSchema,
     artifactExistsAssertionSchema,

@@ -230,6 +230,75 @@ describe('runJob', () => {
     });
   });
 
+  it('runs verify.command assertions after a successful harness', async () => {
+    const scratchRoot = createScratchRoot();
+    const command =
+      'node -e "process.stdout.write(process.env.DYNOBOX_TEST_ENV ?? \'\')"';
+
+    const result = await runJob(
+      createJob({
+        assertions: [
+          {
+            id: 'assertion.verify.0',
+            kind: 'verify.command',
+            command,
+            exitCode: 0,
+            stdout: {equals: 'available'},
+          },
+        ],
+      }),
+      {
+        scratchRoot,
+        harnesses: [new RecordingHarness()],
+        env: {DYNOBOX_TEST_ENV: 'available'},
+      },
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.harnessResult?.toolEvents).toEqual([]);
+    expect(result.assertionResults[0]).toMatchObject({
+      assertionId: 'assertion.verify.0',
+      kind: 'verify.command',
+      passed: true,
+      evidence: {
+        command,
+        exitCode: 0,
+        stdout: 'available',
+        stderr: '',
+      },
+    });
+  });
+
+  it('evaluates artifact assertions before running verify.command assertions', async () => {
+    const scratchRoot = createScratchRoot();
+
+    const result = await runJob(
+      createJob({
+        assertions: [
+          {
+            id: 'assertion.artifact.0',
+            kind: 'artifact.exists',
+            path: 'created.txt',
+          },
+          {
+            id: 'assertion.verify.0',
+            kind: 'verify.command',
+            command:
+              'node -e "require(\'node:fs\').writeFileSync(\'created.txt\', \'created\')"',
+            exitCode: 0,
+          },
+        ],
+      }),
+      {scratchRoot, harnesses: [new RecordingHarness()]},
+    );
+
+    expect(result.status).toBe('assertion_failed');
+    expect(result.assertionResults).toMatchObject([
+      {assertionId: 'assertion.artifact.0', passed: false},
+      {assertionId: 'assertion.verify.0', passed: true},
+    ]);
+  });
+
   it('passes the job model to the harness', async () => {
     const scratchRoot = createScratchRoot();
     const harness = new RecordingHarness();

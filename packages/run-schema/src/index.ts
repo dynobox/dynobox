@@ -105,6 +105,10 @@ export const runUploadAssertionDefinitionV1Schema = z
     endpointId: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
     status: z.number().int().optional(),
     skill: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
+    command: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
+    exitCode: z.number().int().optional(),
+    stdout: assertionMatcherSchema.optional(),
+    stderr: assertionMatcherSchema.optional(),
     path: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
     text: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
     steps: z

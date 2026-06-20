@@ -30,6 +30,8 @@ import {
   type ToolNotCalledAssertion,
   transcript,
   type TranscriptContainsAssertion,
+  verify,
+  type VerifyCommandAssertion,
 } from './index.js';
 import {IR_VERSION, irSchema} from './ir.js';
 
@@ -57,6 +59,8 @@ describe('packages/sdk', () => {
     expect(typeof finalMessage.contains).toBe('function');
     expect(typeof sequence.inOrder).toBe('function');
     expect(typeof skill.referenced).toBe('function');
+    expect(typeof verify.command).toBe('function');
+    expect(typeof verify.succeeds).toBe('function');
   });
 
   it('provides dyno config path and shell quoting helpers', () => {
@@ -254,6 +258,12 @@ export default defineDyno({
     expectTypeOf(
       command.notCalled('git', {argsInOrder: ['push', 'origin']}),
     ).toEqualTypeOf<CommandNotCalledAssertion>();
+    expectTypeOf(
+      verify.command('dynobox validate out.dyno.ts', {exitCode: 0}),
+    ).toEqualTypeOf<VerifyCommandAssertion>();
+    expectTypeOf(
+      verify.succeeds('dynobox validate out.dyno.ts'),
+    ).toEqualTypeOf<VerifyCommandAssertion>();
   });
 
   it('types non-tool assertion helpers', () => {
@@ -487,6 +497,71 @@ export default defineDyno({
     expect(irSchema.parse(ir)).toEqual(ir);
   });
 
+  it('compiles verify command assertions to canonical IR', () => {
+    const config = defineDyno({
+      scenarios: [
+        {
+          name: 'verifies output',
+          prompt: 'Create a dyno.',
+          assertions: [
+            verify.succeeds('dynobox validate out.dyno.ts'),
+            verify.command('tsc --noEmit out.ts', {
+              exitCode: 0,
+              stdout: {includes: 'valid'},
+              stderr: {matches: '0 errors'},
+            }),
+          ],
+        },
+      ],
+    });
+
+    const ir = compile(config);
+
+    expect(ir.scenarios[0]!.assertions).toEqual([
+      {
+        id: 'assertion.verifies-output.0',
+        kind: 'verify.command',
+        command: 'dynobox validate out.dyno.ts',
+        exitCode: 0,
+      },
+      {
+        id: 'assertion.verifies-output.1',
+        kind: 'verify.command',
+        command: 'tsc --noEmit out.ts',
+        exitCode: 0,
+        stdout: {includes: 'valid'},
+        stderr: {matches: '0 errors'},
+      },
+    ]);
+    expect(irSchema.parse(ir)).toEqual(ir);
+  });
+
+  it('rejects IR verify command assertions without an explicit check', () => {
+    expect(() =>
+      irSchema.parse({
+        version: IR_VERSION,
+        scenarios: [
+          {
+            id: 'scenario.verifies-output',
+            name: 'verifies output',
+            prompt: 'Create a dyno.',
+            harnesses: [{id: 'claude-code'}],
+            setup: [],
+            fixtures: [],
+            endpoints: [],
+            assertions: [
+              {
+                id: 'assertion.verifies-output.0',
+                kind: 'verify.command',
+                command: 'false',
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/Verify command assertions must specify/);
+  });
+
   it('compiles additional assertion helpers to canonical IR', () => {
     const config = defineDyno({
       scenarios: [
@@ -597,6 +672,12 @@ export default defineDyno({
               path: 'package.json',
               text: 'vitest',
             },
+            {
+              type: 'verify.command',
+              command: 'node --version',
+              exitCode: 0,
+              stdout: {startsWith: 'v'},
+            },
           ],
         },
       ],
@@ -615,6 +696,13 @@ export default defineDyno({
         {
           id: 'assertion.yaml-shaped.1',
           kind: 'artifact.contains',
+        },
+        {
+          id: 'assertion.yaml-shaped.2',
+          kind: 'verify.command',
+          command: 'node --version',
+          exitCode: 0,
+          stdout: {startsWith: 'v'},
         },
       ],
     });

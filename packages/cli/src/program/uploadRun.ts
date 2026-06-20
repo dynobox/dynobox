@@ -344,6 +344,19 @@ function assertionDefinition(
   if (assertion.kind === 'skill.referenced') {
     return {...base, skill: assertion.skill};
   }
+  if (assertion.kind === 'verify.command') {
+    return {
+      ...base,
+      command: truncateDetail(assertion.command),
+      ...(assertion.exitCode === undefined ? {} : {exitCode: assertion.exitCode}),
+      ...(assertion.stdout === undefined
+        ? {}
+        : {stdout: shellMatcherUploadValue(assertion.stdout)}),
+      ...(assertion.stderr === undefined
+        ? {}
+        : {stderr: shellMatcherUploadValue(assertion.stderr)}),
+    };
+  }
   if (assertion.kind === 'artifact.exists') {
     return {...base, path: truncateDetail(assertion.path)};
   }
@@ -444,6 +457,9 @@ function evidenceMatches(evidence: unknown): string[] {
     if (isObservedCommand(value)) {
       return [truncateDetail([value.executable, ...value.argv].join(' '))];
     }
+    if (isVerifyCommandResult(value)) {
+      return [truncateDetail(formatVerifyCommandResult(value))];
+    }
     return [];
   });
 }
@@ -485,6 +501,13 @@ function observedAssertionSummary(
       return `matched ${evidence.length} of ${assertion.steps.length} ordered steps`;
     }
   }
+
+  if (assertion.kind === 'verify.command') {
+    const evidence = assertionResultEvidence(result, assertion.id);
+    if (isVerifyCommandResult(evidence)) {
+      return formatVerifyCommandResult(evidence);
+    }
+  }
   return fallback;
 }
 
@@ -507,6 +530,18 @@ function matcherDefinition(assertion: {
     };
   }
   return {matcher: {matches: truncateDetail(assertion.matcher.matches)}};
+}
+
+function shellMatcherUploadValue(
+  matcher: Extract<IrAssertion, {kind: 'tool.called'}>['matcher'],
+) {
+  if (matcher === undefined) return undefined;
+  if ('equals' in matcher) return {equals: truncateDetail(matcher.equals)};
+  if ('includes' in matcher) return {includes: truncateDetail(matcher.includes)};
+  if ('startsWith' in matcher) {
+    return {startsWith: truncateDetail(matcher.startsWith)};
+  }
+  return {matches: truncateDetail(matcher.matches)};
 }
 
 function pathMatcherDefinition(assertion: {
@@ -660,9 +695,34 @@ function isHttpEvent(value: unknown): value is HttpEvent {
   );
 }
 
+function isVerifyCommandResult(value: unknown): value is {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+} {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'exitCode' in value &&
+    typeof value.exitCode === 'number' &&
+    'stdout' in value &&
+    typeof value.stdout === 'string' &&
+    'stderr' in value &&
+    typeof value.stderr === 'string'
+  );
+}
+
 function formatHttpEvent(event: HttpEvent): string {
   const status = event.status === undefined ? '' : ` -> ${event.status}`;
   return `${event.method} ${event.url}${status}`;
+}
+
+function formatVerifyCommandResult(result: {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}): string {
+  return `exit ${result.exitCode}, stdout ${result.stdout}, stderr ${result.stderr}`;
 }
 
 function truncateDetail(value: string): string {

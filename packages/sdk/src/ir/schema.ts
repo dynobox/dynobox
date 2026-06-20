@@ -40,6 +40,8 @@ const shellToolMatcherSchema = z.custom<ShellToolMatcher>(isShellToolMatcher, {
     'Shell tool matcher must specify exactly one string field: equals, includes, startsWith, or matches.',
 });
 
+const textMatcherSchema = shellToolMatcherSchema;
+
 const toolPathMatcherSchema = z.object({
   path: z.string().min(1),
 });
@@ -91,6 +93,16 @@ const irCommandNotCalledAssertionSchema = z.object({
   matcher: commandMatcherSchema.optional(),
 });
 
+const irVerifyCommandAssertionSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1).optional(),
+  kind: z.literal('verify.command'),
+  command: z.string().min(1),
+  exitCode: z.number().int().optional(),
+  stdout: textMatcherSchema.optional(),
+  stderr: textMatcherSchema.optional(),
+});
+
 const irSequenceToolCalledStepSchema = z.object({
   kind: z.literal('tool.called'),
   toolKind: z.enum(TOOL_KINDS),
@@ -123,6 +135,7 @@ export const irAssertionSchema = z
     irToolNotCalledAssertionSchema,
     irCommandCalledAssertionSchema,
     irCommandNotCalledAssertionSchema,
+    irVerifyCommandAssertionSchema,
     z.object({
       id: z.string().min(1),
       label: z.string().min(1).optional(),
@@ -215,6 +228,19 @@ export const irAssertionSchema = z
         path: ['pathMatcher'],
         message:
           'Tool assertions may specify matcher or pathMatcher, not both.',
+      });
+    }
+
+    if (
+      assertion.kind === 'verify.command' &&
+      assertion.exitCode === undefined &&
+      assertion.stdout === undefined &&
+      assertion.stderr === undefined
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'Verify command assertions must specify exitCode, stdout, or stderr.',
       });
     }
 
