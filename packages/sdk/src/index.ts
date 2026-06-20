@@ -33,11 +33,14 @@ export type {
   ShellCommandMatcher,
   ShellToolMatcher,
   SkillReferencedAssertion,
+  TextMatcher,
   ToolCalledAssertion,
   ToolKind,
   ToolNotCalledAssertion,
   ToolPathMatcher,
   TranscriptContainsAssertion,
+  VerifyCommandAssertion,
+  VerifyCommandOptions,
 } from './types/brands.js';
 export type {DynoboxConfig, ScenarioInput} from './types/config.js';
 export type {EndpointSpec} from './types/endpointSpec.js';
@@ -49,3 +52,4 @@ export {
   type PermissionMode,
 } from './types/harness.js';
 export {HTTP_METHODS, type HttpMethod} from './types/httpMethod.js';
+export {verify} from './verify/index.js';

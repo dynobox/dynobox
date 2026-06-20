@@ -50,6 +50,10 @@ export function describeAssertion(assertion: IrAssertion): string {
       : `command.notCalled(${assertion.executable}, ${describeCommandMatcher(assertion.matcher)})`;
   }
 
+  if (assertion.kind === 'verify.command') {
+    return `verify.command(${assertion.command})`;
+  }
+
   if (assertion.kind === 'sequence.inOrder') {
     return `sequence.inOrder(${assertion.steps.length} steps)`;
   }
@@ -110,6 +114,20 @@ export function describeExpectation(assertion: IrAssertion): string {
 
   if (assertion.kind === 'skill.referenced') {
     return `skill "${assertion.skill}" instruction file reference`;
+  }
+
+  if (assertion.kind === 'verify.command') {
+    const checks: string[] = [];
+    if (assertion.exitCode !== undefined) {
+      checks.push(`exit code ${assertion.exitCode}`);
+    }
+    if (assertion.stdout !== undefined) {
+      checks.push(`stdout ${describeShellMatcher(assertion.stdout)}`);
+    }
+    if (assertion.stderr !== undefined) {
+      checks.push(`stderr ${describeShellMatcher(assertion.stderr)}`);
+    }
+    return `verification command "${assertion.command}" with ${checks.join(', ')}`;
   }
 
   if (assertion.kind === 'artifact.exists') {

@@ -272,6 +272,88 @@ describe('buildRunUploadPayload', () => {
     expect(assertion.evidence).not.toHaveProperty('matches');
   });
 
+  it('preserves empty verify output matchers in upload payloads', () => {
+    const job = {
+      id: 'scenario.verify.claude-code.iteration.0',
+      scenario: {
+        id: 'scenario.verify',
+        name: 'verify workflow',
+        prompt: 'check stderr',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        endpoints: [],
+        assertions: [
+          {
+            id: 'assertion.verify.empty-stderr',
+            kind: 'verify.command',
+            command: 'pnpm test',
+            exitCode: 0,
+            stdout: {equals: ''},
+            stderr: {equals: ''},
+          },
+        ],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const result = {
+      jobId: job.id,
+      scenarioId: job.scenario.id,
+      harness: 'claude-code',
+      iteration: 0,
+      status: 'passed',
+      passed: true,
+      setupResult: {success: true, logs: []},
+      httpEvents: [],
+      artifacts: [],
+      assertionResults: [
+        {
+          assertionId: 'assertion.verify.empty-stderr',
+          kind: 'verify.command',
+          passed: true,
+          message: 'Verify command passed.',
+          evidence: {
+            command: 'pnpm test',
+            exitCode: 0,
+            stdout: '',
+            stderr: '',
+          },
+        },
+      ],
+      diagnostics: [],
+      warnings: [],
+      harnessResult: {
+        finalMessage: '',
+        success: true,
+        toolEvents: [],
+        transcript: '',
+      },
+      timing: {setupMs: 0, harnessMs: 10, assertionsMs: 1, totalMs: 11},
+    } as unknown as LocalRunnerResult;
+
+    const payload = buildRunUploadPayload({
+      dynos: [
+        {
+          dynoPath: '.agents/skills/verify/verify.dyno.ts',
+          name: null,
+          target: 'verify',
+          jobs: [job],
+        },
+      ],
+      results: [result],
+      inputPath: '.agents/skills/verify',
+      gitHash: null,
+    });
+    const assertion =
+      RunUploadV1.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+
+    expect(assertion.definition).toMatchObject({
+      stdout: {equals: ''},
+      stderr: {equals: ''},
+    });
+  });
+
   it('preserves runner diagnostics, capped and truncated, for failing runs', () => {
     const job = {
       id: 'scenario.deploy.claude-code.iteration.0',

@@ -20,6 +20,7 @@ import type {
   LocalRunnerResult,
   ToolEvent,
 } from '@dynobox/runner-local';
+import type {TextMatcher} from '@dynobox/sdk';
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {assertionByIdForJobs} from '../jobs.js';
@@ -29,6 +30,10 @@ import {
   describeToolEvent,
   isObservedCommand,
 } from '../render/describe.js';
+import {
+  formatVerifyCommandResult,
+  isVerifyCommandResult,
+} from '../util/verifyCommandResult.js';
 import {readPackageVersion} from '../util/version.js';
 import {type AuthEnvironment, resolveAuthToken} from './auth.js';
 import {resolveApiUrl} from './identityApi.js';
@@ -344,6 +349,21 @@ function assertionDefinition(
   if (assertion.kind === 'skill.referenced') {
     return {...base, skill: assertion.skill};
   }
+  if (assertion.kind === 'verify.command') {
+    return {
+      ...base,
+      command: truncateDetail(assertion.command),
+      ...(assertion.exitCode === undefined
+        ? {}
+        : {exitCode: assertion.exitCode}),
+      ...(assertion.stdout === undefined
+        ? {}
+        : {stdout: textMatcherUploadValue(assertion.stdout)}),
+      ...(assertion.stderr === undefined
+        ? {}
+        : {stderr: textMatcherUploadValue(assertion.stderr)}),
+    };
+  }
   if (assertion.kind === 'artifact.exists') {
     return {...base, path: truncateDetail(assertion.path)};
   }
@@ -444,6 +464,9 @@ function evidenceMatches(evidence: unknown): string[] {
     if (isObservedCommand(value)) {
       return [truncateDetail([value.executable, ...value.argv].join(' '))];
     }
+    if (isVerifyCommandResult(value)) {
+      return [truncateDetail(formatVerifyCommandResult(value))];
+    }
     return [];
   });
 }
@@ -485,6 +508,13 @@ function observedAssertionSummary(
       return `matched ${evidence.length} of ${assertion.steps.length} ordered steps`;
     }
   }
+
+  if (assertion.kind === 'verify.command') {
+    const evidence = assertionResultEvidence(result, assertion.id);
+    if (isVerifyCommandResult(evidence)) {
+      return formatVerifyCommandResult(evidence);
+    }
+  }
   return fallback;
 }
 
@@ -507,6 +537,16 @@ function matcherDefinition(assertion: {
     };
   }
   return {matcher: {matches: truncateDetail(assertion.matcher.matches)}};
+}
+
+function textMatcherUploadValue(matcher: TextMatcher) {
+  if ('equals' in matcher) return {equals: truncateDetail(matcher.equals)};
+  if ('includes' in matcher)
+    return {includes: truncateDetail(matcher.includes)};
+  if ('startsWith' in matcher) {
+    return {startsWith: truncateDetail(matcher.startsWith)};
+  }
+  return {matches: truncateDetail(matcher.matches)};
 }
 
 function pathMatcherDefinition(assertion: {

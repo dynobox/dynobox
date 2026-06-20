@@ -181,6 +181,10 @@ function buildIrAssertion(
       : {...base, matcher: serializeCommandMatcher(assertion.command)};
   }
 
+  if (assertion.type === 'verify.command') {
+    return buildIrVerifyCommandAssertion(id, metadata, assertion);
+  }
+
   if (assertion.type === 'artifact.exists') {
     return {id, ...metadata, kind: 'artifact.exists', path: assertion.path};
   }
@@ -305,6 +309,23 @@ function serializeCommandMatcher(
     serialized.originalMatches = serializeRegExp(matcher.originalMatches);
   }
   return serialized;
+}
+
+function buildIrVerifyCommandAssertion(
+  id: string,
+  metadata: {label?: string},
+  assertion: Extract<z.infer<typeof assertionSchema>, {type: 'verify.command'}>,
+): IrAssertion {
+  const ir: IrAssertion = {
+    id,
+    ...metadata,
+    kind: 'verify.command',
+    command: assertion.command,
+  };
+  if (assertion.exitCode !== undefined) ir.exitCode = assertion.exitCode;
+  if (assertion.stdout !== undefined) ir.stdout = assertion.stdout;
+  if (assertion.stderr !== undefined) ir.stderr = assertion.stderr;
+  return ir;
 }
 
 function serializeRegExp(regex: RegExp): {source: string; flags: string} {

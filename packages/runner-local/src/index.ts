@@ -2,7 +2,7 @@ import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import {evaluateAssertions} from '@dynobox/evaluators';
+import {type AssertionResult, evaluateAssertions} from '@dynobox/evaluators';
 
 import {
   errorMessage,
@@ -30,6 +30,7 @@ import type {
 } from './runTypes.js';
 import type {SetupResult} from './setup.js';
 import {runScenarioFixtures, runScenarioSetup} from './setup.js';
+import {runVerifyCommands} from './verify.js';
 
 export type {
   Harness,
@@ -74,6 +75,7 @@ export {
   runScenarioSetup,
   runSetup,
 } from './setup.js';
+export {runVerifyCommands} from './verify.js';
 export type {HttpEvent} from '@dynobox/evaluators';
 
 /**
@@ -321,13 +323,46 @@ export async function runJob(
     assertionCount: job.scenario.assertions.length,
   });
   const assertionsStartedAt = Date.now();
-  const assertionResults = evaluateAssertions({
-    assertions: job.scenario.assertions,
+  const nonVerifyAssertions = job.scenario.assertions.filter(
+    (assertion) => assertion.kind !== 'verify.command',
+  );
+  const verifyAssertions = job.scenario.assertions.filter(
+    (assertion) => assertion.kind === 'verify.command',
+  );
+  const nonVerifyAssertionResults = evaluateAssertions({
+    assertions: nonVerifyAssertions,
     toolEvents: harnessResult.toolEvents,
     httpEvents,
     workDir,
     transcript: harnessResult.transcript,
     finalMessage: harnessResult.finalMessage,
+  });
+  const verifyOptions: Parameters<typeof runVerifyCommands>[0] = {
+    scenario: job.scenario,
+    workDir,
+  };
+  if (options.env !== undefined) verifyOptions.env = options.env;
+  const verifyCommandResults = await runVerifyCommands(verifyOptions);
+  const verifyAssertionResults = evaluateAssertions({
+    assertions: verifyAssertions,
+    toolEvents: harnessResult.toolEvents,
+    verifyCommandResults,
+  });
+  const resultsByAssertionId = new Map<string, AssertionResult[]>();
+  for (const result of [
+    ...nonVerifyAssertionResults,
+    ...verifyAssertionResults,
+  ]) {
+    const results = resultsByAssertionId.get(result.assertionId) ?? [];
+    results.push(result);
+    resultsByAssertionId.set(result.assertionId, results);
+  }
+  const assertionResults = job.scenario.assertions.map((assertion) => {
+    const result = resultsByAssertionId.get(assertion.id)?.shift();
+    if (result === undefined) {
+      throw new Error(`Missing assertion result for ${assertion.id}.`);
+    }
+    return result;
   });
   const assertionsMs = Date.now() - assertionsStartedAt;
   emitProgress(options, {

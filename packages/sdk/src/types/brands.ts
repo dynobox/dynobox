@@ -68,6 +68,16 @@ export type CommandMatcher = {
   readonly originalMatches?: RegExp;
 };
 
+/** Matcher for text captured from post-harness verification commands. */
+export type TextMatcher = ShellCommandMatcher;
+
+/** Options for a post-harness verification command assertion. */
+export type VerifyCommandOptions = {
+  readonly exitCode?: number;
+  readonly stdout?: TextMatcher;
+  readonly stderr?: TextMatcher;
+};
+
 const shellCommandMatcherKeys = new Set<string>(SHELL_COMMAND_MATCHER_KEYS);
 
 /** Runtime guard used by Zod schemas and evaluator code for shell matchers. */
@@ -190,6 +200,18 @@ export type CommandNotCalledAssertion = {
   readonly command?: CommandMatcher;
 };
 
+/** Assertion that a post-harness verification command should satisfy checks. */
+export type VerifyCommandAssertion = {
+  readonly [ASSERTION_BRAND]: true;
+  readonly id?: string;
+  readonly label?: string;
+  readonly type: 'verify.command';
+  readonly command: string;
+  readonly exitCode?: number;
+  readonly stdout?: TextMatcher;
+  readonly stderr?: TextMatcher;
+};
+
 /** Assertion that a work-directory artifact exists. */
 export type ArtifactExistsAssertion = {
   readonly [ASSERTION_BRAND]: true;
@@ -251,6 +273,7 @@ export type Assertion<K extends string = string> =
   | NotCalledAssertion<K>
   | CommandCalledAssertion
   | CommandNotCalledAssertion
+  | VerifyCommandAssertion
   | ToolCalledAssertion
   | ToolNotCalledAssertion
   | ArtifactExistsAssertion

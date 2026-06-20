@@ -16,6 +16,8 @@ import type {
   ToolNotCalledAssertion,
   ToolPathMatcher,
   TranscriptContainsAssertion,
+  VerifyCommandAssertion,
+  VerifyCommandOptions,
 } from '../types/brands.js';
 import {ASSERTION_BRAND, ENDPOINT_BRAND} from '../types/brands.js';
 import type {EndpointSpec} from '../types/endpointSpec.js';
@@ -118,6 +120,19 @@ export function createCommandNotCalledAssertion(
     executable,
   };
   return matcher === undefined ? base : {...base, command: matcher};
+}
+
+/** Create a post-harness verification command assertion. */
+export function createVerifyCommandAssertion(
+  command: string,
+  opts: VerifyCommandOptions = {},
+): VerifyCommandAssertion {
+  return {
+    [ASSERTION_BRAND]: true as const,
+    type: 'verify.command' as const,
+    command,
+    ...opts,
+  };
 }
 
 /** Create an assertion that a path exists in the scenario work directory. */

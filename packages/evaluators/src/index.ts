@@ -18,6 +18,7 @@ import {
   evaluateToolNotCalledAssertion,
 } from './toolAssertions.js';
 import type {AssertionResult, EvaluationInput} from './types.js';
+import {evaluateVerifyCommandAssertion} from './verifyAssertions.js';
 
 export type {ObservedCommand} from './commandAssertions.js';
 export {extractObservedCommands} from './commandAssertions.js';
@@ -32,6 +33,7 @@ export type {
   EvaluationInput,
   HttpEvent,
   ToolEvent,
+  VerifyCommandResult,
 } from './types.js';
 
 /** Evaluate a scenario's compiled IR assertions against observed harness output. */
@@ -59,6 +61,13 @@ function evaluateAssertion(
 
   if (assertion.kind === 'command.notCalled') {
     return evaluateCommandNotCalledAssertion(assertion, input.toolEvents);
+  }
+
+  if (assertion.kind === 'verify.command') {
+    return evaluateVerifyCommandAssertion(
+      assertion,
+      input.verifyCommandResults,
+    );
   }
 
   if (assertion.kind === 'sequence.inOrder') {

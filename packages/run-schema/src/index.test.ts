@@ -120,6 +120,31 @@ describe('RunUploadV1', () => {
     ).toBe(false);
   });
 
+  it('accepts empty verify output matcher strings only', () => {
+    const payload = validPayload();
+    payload.dynos[0]!.jobs[0]!.assertions[0]!.definition = {
+      kind: 'verify.command',
+      command: 'pnpm test',
+      stdout: {equals: ''},
+      stderr: {equals: ''},
+    };
+
+    const parsed = RunUploadV1.parse(payload);
+
+    expect(parsed.dynos[0]!.jobs[0]!.assertions[0]!.definition).toMatchObject({
+      stdout: {equals: ''},
+      stderr: {equals: ''},
+    });
+
+    payload.dynos[0]!.jobs[0]!.assertions[0]!.definition = {
+      kind: 'tool.called',
+      toolKind: 'shell',
+      matcher: {includes: ''},
+    };
+
+    expect(() => RunUploadV1.parse(payload)).toThrow();
+  });
+
   it('rejects unknown fields at every payload level', () => {
     const payload = validPayload();
     const dyno = validDyno();
