@@ -6,8 +6,8 @@
  * stable helper surface.
  */
 
-export {artifact} from './artifact/index.js';
 export {anyOf} from './any-of/index.js';
+export {artifact} from './artifact/index.js';
 export {defineDyno} from './authoring/defineDyno.js';
 export {defineScenario} from './authoring/defineScenario.js';
 export {command} from './command/index.js';

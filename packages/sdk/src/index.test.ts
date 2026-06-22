@@ -711,6 +711,44 @@ export default defineDyno({
     ).toThrow();
   });
 
+  it('rejects id and label on anyOf branches', () => {
+    expect(() =>
+      compile({
+        scenarios: [
+          {
+            name: 'labeled branch',
+            prompt: 'Read a file.',
+            assertions: [
+              {
+                type: 'anyOf',
+                steps: [
+                  {type: 'artifact.exists', path: 'a.txt', label: 'first'},
+                ],
+              },
+            ],
+          },
+        ],
+      } as unknown as Parameters<typeof compile>[0]),
+    ).toThrow();
+
+    expect(() =>
+      compile({
+        scenarios: [
+          {
+            name: 'identified branch',
+            prompt: 'Read a file.',
+            assertions: [
+              {
+                type: 'anyOf',
+                steps: [{type: 'artifact.exists', path: 'a.txt', id: 'branch.0'}],
+              },
+            ],
+          },
+        ],
+      } as unknown as Parameters<typeof compile>[0]),
+    ).toThrow();
+  });
+
   it('compiles verify command assertions to canonical IR', () => {
     const config = defineDyno({
       scenarios: [

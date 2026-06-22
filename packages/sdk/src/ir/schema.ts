@@ -153,10 +153,10 @@ const irFinalMessageContainsAssertionNodeSchema = z.object({
   text: z.string(),
 });
 
-const irSequenceInOrderAssertionNodeSchema = z.object({
-  kind: z.literal('sequence.inOrder'),
-  steps: z.array(irSequenceStepSchema).min(1),
-});
+// const irSequenceInOrderAssertionNodeSchema = z.object({
+//   kind: z.literal('sequence.inOrder'),
+//   steps: z.array(irSequenceStepSchema).min(1),
+// });
 
 const irSkillReferencedAssertionNodeSchema = z.object({
   kind: z.literal('skill.referenced'),

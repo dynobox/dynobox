@@ -361,6 +361,47 @@ describe('runJob', () => {
     expect(result.harnessResult?.toolEvents).toEqual([shellEvent]);
   });
 
+  it('passes anyOf when a branch matches observed tool events', async () => {
+    const scratchRoot = createScratchRoot();
+    const shellEvent: ShellToolEvent = {
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {command: 'cat package.json'},
+      command: 'cat package.json',
+    };
+    const harness = new FakeHarness(undefined, {toolEvents: [shellEvent]});
+
+    const result = await runJob(
+      createJob({
+        assertions: [
+          {
+            id: 'assertion.flexible-read.0',
+            kind: 'anyOf',
+            steps: [
+              {
+                kind: 'tool.called',
+                toolKind: 'read_file',
+                pathMatcher: {path: 'package.json'},
+              },
+              {
+                kind: 'command.called',
+                executable: 'cat',
+                matcher: {args: ['package.json']},
+              },
+            ],
+          },
+        ],
+      }),
+      {scratchRoot, harnesses: [harness]},
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.assertionResults[0]).toMatchObject({
+      passed: true,
+      evidence: {kind: 'anyOf', branchIndex: 2},
+    });
+  });
+
   it('evaluates artifact assertions against the job work directory', async () => {
     const scratchRoot = createScratchRoot();
 

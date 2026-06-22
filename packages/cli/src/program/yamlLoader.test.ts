@@ -94,10 +94,6 @@ describe('loadYamlDyno', () => {
       id: 'assertion.inspect-package.reads-package',
       label: 'reads package.json',
     });
-    expect(scenario.assertions[3]).toMatchObject({
-      kind: 'artifact.exists',
-      path: 'package.json',
-    });
     expect(scenario.assertions[2]).toMatchObject({
       kind: 'anyOf',
       steps: [
@@ -112,6 +108,10 @@ describe('loadYamlDyno', () => {
           matcher: {args: ['package.json']},
         },
       ],
+    });
+    expect(scenario.assertions[3]).toMatchObject({
+      kind: 'artifact.exists',
+      path: 'package.json',
     });
     expect(scenario.assertions[4]).toMatchObject({
       kind: 'verify.command',

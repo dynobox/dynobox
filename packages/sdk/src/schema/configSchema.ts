@@ -330,8 +330,35 @@ function validateAnyOfAssertion(
   fileToolKinds: Set<FileToolKind>,
 ): void {
   assertion.steps.forEach((step, index) => {
+    rejectBranchMetadata(step, ctx, [...path, index]);
     validateToolAssertion(step, ctx, [...path, index], fileToolKinds);
   });
+}
+
+// `id`/`label` are accepted by the shared branch schemas but discarded when
+// compiling a branch to IR, so they cannot affect IR, evidence, or UI. Reject
+// them rather than silently dropping them; labeling belongs on the anyOf itself.
+function rejectBranchMetadata(
+  step: {id?: string | undefined; label?: string | undefined},
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+): void {
+  if (step.id !== undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      path: [...path, 'id'],
+      message:
+        'anyOf branches may not define an id; ids are only supported on top-level assertions.',
+    });
+  }
+  if (step.label !== undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      path: [...path, 'label'],
+      message:
+        'anyOf branches may not define a label; labels are only supported on top-level assertions.',
+    });
+  }
 }
 
 function validateSequenceStep(

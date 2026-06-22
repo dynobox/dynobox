@@ -1,5 +1,5 @@
 import {DynoboxConfigError} from '../errors.js';
-import {configSchema, type AuthoredAssertion} from '../schema/configSchema.js';
+import {type AuthoredAssertion, configSchema} from '../schema/configSchema.js';
 import type {Endpoint} from '../types/brands.js';
 import type {DynoboxConfig} from '../types/config.js';
 import type {HarnessRunConfig} from '../types/harness.js';
