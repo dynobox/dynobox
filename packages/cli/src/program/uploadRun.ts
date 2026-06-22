@@ -30,7 +30,11 @@ import {
   describeToolEvent,
   isObservedCommand,
 } from '../render/describe.js';
-import {assertionBranchWithId} from '../util/assertionBranch.js';
+import {
+  anyOfBranchResults,
+  anyOfMatchedBranch,
+  assertionBranchWithId,
+} from '../util/assertionBranch.js';
 import {
   formatVerifyCommandResult,
   isVerifyCommandResult,
@@ -458,16 +462,17 @@ function anyOfChildren(
   assertion: Extract<IrAssertion, {kind: 'anyOf'}>,
   evidence: unknown,
 ): RunUploadAssertionDisplayChildV1[] {
-  const matchedBranch = anyOfMatchedBranch(evidence);
+  const branchResults = anyOfBranchResults(evidence);
   return assertion.steps.map((step, index) => {
     const branch = stepWithId(step);
+    const result = branchResults?.[index];
     return {
       index: index + 1,
       kind: branch.kind,
       title: truncateDetail(describeAssertion(branch)),
       expectation: truncateDetail(describeExpectation(branch)),
-      observed: null,
-      passed: matchedBranch === undefined ? null : matchedBranch === index + 1,
+      observed: truncateNullableDetail(result?.message ?? null),
+      passed: result?.passed ?? null,
     };
   });
 }
@@ -558,8 +563,9 @@ function observedAssertionSummary(
     const evidence = assertionResultEvidence(result, assertion.id);
     const matchedBranch = anyOfMatchedBranch(evidence);
     if (matchedBranch !== undefined) return `matched branch #${matchedBranch}`;
-    if (isAnyOfFailureEvidence(evidence)) {
-      return `0 of ${evidence.branches.length} branches matched`;
+    const branchResults = anyOfBranchResults(evidence);
+    if (branchResults !== undefined) {
+      return `0 of ${branchResults.length} branches matched`;
     }
   }
 
@@ -576,28 +582,6 @@ function stepWithId(
   assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
 ): IrAssertion {
   return assertionBranchWithId(assertion);
-}
-
-function anyOfMatchedBranch(evidence: unknown): number | undefined {
-  if (typeof evidence !== 'object' || evidence === null) return undefined;
-  if (!('kind' in evidence) || evidence.kind !== 'anyOf') return undefined;
-  if (!('branchIndex' in evidence)) return undefined;
-  return typeof evidence.branchIndex === 'number'
-    ? evidence.branchIndex
-    : undefined;
-}
-
-function isAnyOfFailureEvidence(
-  evidence: unknown,
-): evidence is {kind: 'anyOf'; branches: unknown[]} {
-  return (
-    typeof evidence === 'object' &&
-    evidence !== null &&
-    'kind' in evidence &&
-    evidence.kind === 'anyOf' &&
-    'branches' in evidence &&
-    Array.isArray(evidence.branches)
-  );
 }
 
 function matcherDefinition(assertion: {

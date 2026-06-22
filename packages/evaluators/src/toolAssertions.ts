@@ -21,7 +21,6 @@ type CommandCalledStep = Omit<
   Extract<IrAssertion, {kind: 'command.called'}>,
   'id'
 >;
-export type SequenceEvidence = ToolEvent | ObservedCommand;
 type SequenceStep = ToolCalledStep | CommandCalledStep;
 type ToolNotCalledStep = Omit<
   Extract<IrAssertion, {kind: 'tool.notCalled'}>,
@@ -32,11 +31,6 @@ type SequenceCursor = {
   eventIndex: number;
   shellOffset: number;
   commandOffset: number;
-};
-
-type SequenceStepMatch = {
-  evidence: SequenceEvidence;
-  nextCursor: SequenceCursor;
 };
 
 export function evaluateToolCalledAssertion(
@@ -110,28 +104,41 @@ export function evaluateSequenceInOrder(
   toolEvents: readonly ToolEvent[],
 ): AssertionResult {
   const observedCommands = extractObservedCommands(toolEvents);
-  const cursor: SequenceCursor = {
+  const matchedEvents: (ToolEvent | ObservedCommand)[] = [];
+  let cursor: SequenceCursor = {
     eventIndex: 0,
     shellOffset: 0,
     commandOffset: 0,
   };
-  const match = matchSequenceFrom(
-    assertion.steps,
-    0,
-    toolEvents,
-    observedCommands,
-    cursor,
-    [],
-  );
 
-  if (match.error !== undefined || match.evidence === undefined) {
-    return {
-      assertionId: assertion.id,
-      kind: assertion.kind,
-      passed: false,
-      message: match.error ?? 'Expected ordered tool steps to match.',
-      evidence: match.evidence,
-    };
+  for (const [stepIndex, step] of assertion.steps.entries()) {
+    const match = findMatchingSequenceStep(
+      step,
+      toolEvents,
+      observedCommands,
+      cursor,
+    );
+    if (match.error !== undefined) {
+      return {
+        assertionId: assertion.id,
+        kind: assertion.kind,
+        passed: false,
+        message: match.error,
+      };
+    }
+
+    if (match.event === undefined || match.nextCursor === undefined) {
+      return {
+        assertionId: assertion.id,
+        kind: assertion.kind,
+        passed: false,
+        message: `Expected ordered step #${stepIndex + 1} (${describeSequenceStep(step)}) to match an observed tool event, but none was observed after the previous step.`,
+        evidence: matchedEvents,
+      };
+    }
+
+    matchedEvents.push(match.event);
+    cursor = match.nextCursor;
   }
 
   return {
@@ -139,65 +146,21 @@ export function evaluateSequenceInOrder(
     kind: assertion.kind,
     passed: true,
     message: `Observed ${assertion.steps.length} ordered tool steps.`,
-    evidence: match.evidence,
+    evidence: matchedEvents,
   };
 }
 
-function matchSequenceFrom(
-  steps: readonly SequenceStep[],
-  stepIndex: number,
-  toolEvents: readonly ToolEvent[],
-  observedCommands: readonly ObservedCommand[],
-  cursor: SequenceCursor,
-  evidence: readonly SequenceEvidence[],
-): {evidence?: SequenceEvidence[]; error?: string} {
-  if (stepIndex >= steps.length) return {evidence: [...evidence]};
-
-  const step = steps[stepIndex]!;
-  const candidates = findMatchingSequenceStepCandidates(
-    step,
-    toolEvents,
-    observedCommands,
-    cursor,
-  );
-  if (candidates.error !== undefined) {
-    return {error: candidates.error, evidence: [...evidence]};
-  }
-  if (candidates.matches.length === 0) {
-    return {
-      error: `Expected ordered step #${stepIndex + 1} (${describeSequenceStep(step)}) to match an observed tool event, but none was observed after the previous step.`,
-      evidence: [...evidence],
-    };
-  }
-
-  let failedMatch: {evidence?: SequenceEvidence[]; error?: string} | undefined;
-  for (const candidate of candidates.matches) {
-    const next = matchSequenceFrom(
-      steps,
-      stepIndex + 1,
-      toolEvents,
-      observedCommands,
-      candidate.nextCursor,
-      [...evidence, candidate.evidence],
-    );
-    if (next.error === undefined && next.evidence !== undefined) return next;
-    failedMatch = next;
-  }
-
-  return failedMatch ?? {evidence: [...evidence]};
-}
-
-function findMatchingSequenceStepCandidates(
+function findMatchingSequenceStep(
   step: SequenceStep,
   toolEvents: readonly ToolEvent[],
   observedCommands: readonly ObservedCommand[],
   cursor: SequenceCursor,
 ): {
-  matches: SequenceStepMatch[];
+  event?: ToolEvent | ObservedCommand;
+  nextCursor?: SequenceCursor;
   error?: string;
 } {
   if (step.kind === 'command.called') {
-    const matches: SequenceStepMatch[] = [];
     for (const command of observedCommands) {
       if (command.eventIndex < cursor.eventIndex) continue;
       if (
@@ -208,24 +171,23 @@ function findMatchingSequenceStepCandidates(
         continue;
       }
       if (!commandMatchesAssertion(command, step)) continue;
-      matches.push({
-        evidence: command,
+      return {
+        event: command,
         nextCursor: {
           eventIndex: command.eventIndex,
           shellOffset: command.end,
           commandOffset: command.segmentIndex + 1,
         },
-      });
+      };
     }
-    return {matches};
+    return {};
   }
 
   if (step.matcher !== undefined) {
     const invalidRegex = validateRegexMatcher(step.matcher);
-    if (invalidRegex !== undefined) return {matches: [], error: invalidRegex};
+    if (invalidRegex !== undefined) return {error: invalidRegex};
   }
 
-  const matches: SequenceStepMatch[] = [];
   for (let index = cursor.eventIndex; index < toolEvents.length; index += 1) {
     const event = toolEvents[index]!;
     if (event.kind !== step.toolKind) continue;
@@ -245,11 +207,10 @@ function findMatchingSequenceStepCandidates(
       ) {
         continue;
       }
-      matches.push({
-        evidence: event,
+      return {
+        event,
         nextCursor: {eventIndex: index + 1, shellOffset: 0, commandOffset: 0},
-      });
-      continue;
+      };
     }
 
     if (event.kind !== 'shell' || typeof event.command !== 'string') continue;
@@ -261,21 +222,21 @@ function findMatchingSequenceStepCandidates(
       startAt,
     );
     if (!match.passed) {
-      if (match.error !== undefined) return {matches: [], error: match.error};
+      if (match.error !== undefined) return {error: match.error};
       continue;
     }
 
-    matches.push({
-      evidence: event,
+    return {
+      event,
       nextCursor: {
         eventIndex: index,
         shellOffset: match.end,
         commandOffset: index === cursor.eventIndex ? cursor.commandOffset : 0,
       },
-    });
+    };
   }
 
-  return {matches};
+  return {};
 }
 
 function findMatchingToolEvent(
@@ -359,8 +320,9 @@ function describeToolStep(step: ToolCalledStep): string {
 }
 
 function describeSequenceStep(step: SequenceStep): string {
-  if (step.kind === 'command.called') return describeCommandStep(step);
-  return describeToolStep(step);
+  return step.kind === 'command.called'
+    ? describeCommandStep(step)
+    : describeToolStep(step);
 }
 
 function toolEventMatchesPath(event: ToolEvent, expectedPath: string): boolean {

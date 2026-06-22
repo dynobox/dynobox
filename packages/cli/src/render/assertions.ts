@@ -23,7 +23,11 @@ import {
   type RenderContext,
   symbol,
 } from '../terminal/index.js';
-import {assertionBranchWithId} from '../util/assertionBranch.js';
+import {
+  anyOfBranchResults,
+  anyOfMatchedBranch,
+  assertionBranchWithId,
+} from '../util/assertionBranch.js';
 import {
   formatVerifyCommandResult,
   isVerifyCommandResult,
@@ -184,9 +188,9 @@ function describeObservedFailure(
     const evidence = assertionResultEvidence(result, assertion.id);
     const matchedBranch = anyOfMatchedBranch(evidence);
     if (matchedBranch !== undefined) return `matched branch #${matchedBranch}`;
-    const failedBranches = anyOfFailedBranchCount(evidence);
-    if (failedBranches !== undefined) {
-      return `0/${failedBranches} branches matched`;
+    const branchResults = anyOfBranchResults(evidence);
+    if (branchResults !== undefined) {
+      return `0/${branchResults.length} branches matched`;
     }
   }
 
@@ -519,24 +523,6 @@ function sequenceStepMentionsCommand(
   step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
 ): boolean {
   return step.kind === 'command.called';
-}
-
-function anyOfMatchedBranch(evidence: unknown): number | undefined {
-  if (typeof evidence !== 'object' || evidence === null) return undefined;
-  if (!('kind' in evidence) || evidence.kind !== 'anyOf') return undefined;
-  if (!('branchIndex' in evidence)) return undefined;
-  return typeof evidence.branchIndex === 'number'
-    ? evidence.branchIndex
-    : undefined;
-}
-
-function anyOfFailedBranchCount(evidence: unknown): number | undefined {
-  if (typeof evidence !== 'object' || evidence === null) return undefined;
-  if (!('kind' in evidence) || evidence.kind !== 'anyOf') return undefined;
-  if (!('branches' in evidence) || !Array.isArray(evidence.branches)) {
-    return undefined;
-  }
-  return evidence.branches.length;
 }
 
 function observedShellCommands(toolEvents: readonly ToolEvent[]): string[] {

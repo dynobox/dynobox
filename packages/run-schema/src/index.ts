@@ -103,18 +103,7 @@ const commandMatcherSchema = z
   })
   .strict();
 
-const runUploadAssertionDefinitionStepV1Schema = z
-  .object({
-    kind: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionKindLength),
-    toolKind: optionalNullableString(RUN_UPLOAD_LIMITS.assertionKindLength),
-    executable: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
-    matcher: assertionMatcherSchema.optional(),
-    commandMatcher: commandMatcherSchema.optional(),
-    pathMatcher: z.object({path: assertionDetailString}).strict().optional(),
-  })
-  .strict();
-
-export const runUploadAssertionDefinitionV1Schema = z
+const runUploadAssertionDefinitionNodeV1Schema = z
   .object({
     kind: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionKindLength),
     toolKind: optionalNullableString(RUN_UPLOAD_LIMITS.assertionKindLength),
@@ -131,12 +120,18 @@ export const runUploadAssertionDefinitionV1Schema = z
     stderr: verifyAssertionMatcherSchema.optional(),
     path: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
     text: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
-    steps: z
-      .array(runUploadAssertionDefinitionStepV1Schema)
-      .max(RUN_UPLOAD_LIMITS.assertionChildren)
-      .optional(),
   })
   .strict();
+
+export const runUploadAssertionDefinitionV1Schema =
+  runUploadAssertionDefinitionNodeV1Schema
+    .extend({
+      steps: z
+        .array(runUploadAssertionDefinitionNodeV1Schema)
+        .max(RUN_UPLOAD_LIMITS.assertionChildren)
+        .optional(),
+    })
+    .strict();
 
 export const runUploadAssertionDisplayChildV1Schema = z
   .object({

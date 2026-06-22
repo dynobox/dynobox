@@ -511,12 +511,19 @@ export default defineDyno({
 
   it('compiles anyOf assertions to flat canonical IR', () => {
     const config = defineDyno({
+      endpoints: {
+        package: http.endpoint({
+          method: 'GET',
+          url: 'https://registry.npmjs.org/dynobox',
+        }),
+      },
       scenarios: [
         {
           name: 'flexible file read',
           prompt: 'Read package.json.',
           assertions: [
             anyOf([
+              http.called('package'),
               tool.called('read_file', {path: 'package.json'}),
               command.called('cat', {args: ['package.json']}),
             ]),
@@ -532,6 +539,10 @@ export default defineDyno({
         id: 'assertion.flexible-file-read.0',
         kind: 'anyOf',
         steps: [
+          {
+            kind: 'http.called',
+            endpointId: 'endpoint.flexible-file-read.package',
+          },
           {
             kind: 'tool.called',
             toolKind: 'read_file',
@@ -1086,6 +1097,45 @@ export default defineDyno({
     const paths = new Set(result.error.issues.map((issue) => issue.path[0]));
     expect(paths.has('version')).toBe(true);
     expect(paths.has('scenarios')).toBe(true);
+  });
+
+  it('reports each invalid anyOf branch field once', () => {
+    const result = irSchema.safeParse({
+      version: IR_VERSION,
+      scenarios: [
+        {
+          id: 'scenario.invalid-anyof',
+          name: 'invalid anyOf',
+          prompt: 'p',
+          harnesses: [{id: 'claude-code'}],
+          setup: [],
+          fixtures: [],
+          endpoints: [],
+          assertions: [
+            {
+              id: 'assertion.invalid-anyof.0',
+              kind: 'anyOf',
+              steps: [
+                {
+                  kind: 'tool.called',
+                  toolKind: 'read_file',
+                  matcher: {includes: 'package.json'},
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('Expected invalid IR to fail');
+    expect(
+      result.error.issues.filter(
+        (issue) =>
+          issue.path.join('.') === 'scenarios.0.assertions.0.steps.0.matcher',
+      ),
+    ).toHaveLength(1);
   });
 
   it('compiles a sample npm package research config to canonical IR', () => {

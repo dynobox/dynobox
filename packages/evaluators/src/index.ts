@@ -127,6 +127,8 @@ function evaluateAnyOf(
 ): AssertionResult {
   const branchResults = assertion.steps.map((step, index) =>
     evaluateAssertion(
+      // `anyOf` branch nodes omit IDs; their schema restricts them to regular
+      // assertion kinds, so a synthetic ID is sufficient for evaluation.
       {
         id: `${assertion.id}.branch.${index + 1}`,
         ...(step as Record<string, unknown>),
@@ -146,7 +148,7 @@ function evaluateAnyOf(
       evidence: {
         kind: 'anyOf',
         branchIndex: matchedIndex + 1,
-        result: matched,
+        branches: branchResults,
       },
     };
   }

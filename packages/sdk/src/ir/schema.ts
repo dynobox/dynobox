@@ -313,10 +313,6 @@ export const irAssertionSchema = z
         validateIrSequenceStep(step, ctx, ['steps', index], fileToolKinds);
       });
     }
-
-    if (assertion.kind === 'anyOf') {
-      validateIrAnyOfAssertion(assertion, ctx, ['steps']);
-    }
   });
 
 function validateIrAssertionNode(
@@ -332,32 +328,6 @@ function validateIrAssertionNode(
   ]);
 
   validateIrToolNode(assertion, ctx, path, fileToolKinds);
-}
-
-function validateIrAnyOfAssertion(
-  assertion: unknown,
-  ctx: z.RefinementCtx,
-  path: (string | number)[],
-): void {
-  if (
-    typeof assertion !== 'object' ||
-    assertion === null ||
-    !('steps' in assertion) ||
-    !Array.isArray(assertion.steps)
-  ) {
-    return;
-  }
-
-  const fileToolKinds = new Set<FileToolKind>([
-    'read_file',
-    'write_file',
-    'edit_file',
-    'search_files',
-  ]);
-
-  assertion.steps.forEach((step, index) => {
-    validateIrToolNode(step, ctx, [...path, index], fileToolKinds);
-  });
 }
 
 function validateIrSequenceStep(

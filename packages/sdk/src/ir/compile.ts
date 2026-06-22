@@ -163,6 +163,8 @@ function buildIrAssertion(
   const id = `assertion.${scenarioSlug}.${assertionIdSuffix}`;
   const metadata =
     assertion.label === undefined ? {} : {label: assertion.label};
+  // `buildIrAssertionNode` returns the assertion body; adding the generated
+  // ID and optional metadata restores the complete discriminated union.
   return {
     id,
     ...metadata,
@@ -289,6 +291,8 @@ function buildIrAnyOfBranch(
   endpointIdByKey: Map<string, string>,
   assertion: AuthoredAnyOfBranch,
 ): IrAssertionNode {
+  // Authoring validation excludes nested sequence, anyOf, and verify nodes,
+  // leaving exactly the node variants accepted by the IR schema.
   return buildIrAssertionNode(
     scenarioName,
     index,

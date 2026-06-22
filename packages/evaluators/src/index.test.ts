@@ -848,7 +848,11 @@ describe('evaluateAssertions', () => {
     expect(result).toMatchObject({
       passed: true,
       message: expect.stringContaining('Matched anyOf branch #2'),
-      evidence: {kind: 'anyOf', branchIndex: 2},
+      evidence: {
+        kind: 'anyOf',
+        branchIndex: 2,
+        branches: [{passed: false}, {passed: true}],
+      },
     });
   });
 
