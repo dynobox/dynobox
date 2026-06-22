@@ -21,21 +21,8 @@ type CommandCalledStep = Omit<
   Extract<IrAssertion, {kind: 'command.called'}>,
   'id'
 >;
-export type AnyOfSequenceEvidence = {
-  kind: 'anyOf';
-  branchIndex: number;
-  evidence: SequenceEvidence[];
-  message: string;
-};
-export type SequenceEvidence =
-  | ToolEvent
-  | ObservedCommand
-  | AnyOfSequenceEvidence;
-type AnyOfSequenceStep = {
-  kind: 'anyOf';
-  steps: readonly SequenceStep[];
-};
-type SequenceStep = ToolCalledStep | CommandCalledStep | AnyOfSequenceStep;
+export type SequenceEvidence = ToolEvent | ObservedCommand;
+type SequenceStep = ToolCalledStep | CommandCalledStep;
 type ToolNotCalledStep = Omit<
   Extract<IrAssertion, {kind: 'tool.notCalled'}>,
   'id'
@@ -209,45 +196,6 @@ function findMatchingSequenceStepCandidates(
   matches: SequenceStepMatch[];
   error?: string;
 } {
-  if (step.kind === 'anyOf') {
-    const matches: SequenceStepMatch[] = [];
-    const branchErrors: string[] = [];
-    for (const [branchIndex, branch] of step.steps.entries()) {
-      const branchMatches = findMatchingSequenceStepCandidates(
-        branch,
-        toolEvents,
-        observedCommands,
-        cursor,
-      );
-      if (branchMatches.error !== undefined) {
-        branchErrors.push(`branch #${branchIndex + 1}: ${branchMatches.error}`);
-        continue;
-      }
-      if (branchMatches.matches.length === 0) {
-        branchErrors.push(
-          `branch #${branchIndex + 1}: ${describeSequenceStep(branch)} did not match`,
-        );
-        continue;
-      }
-      matches.push(
-        ...branchMatches.matches.map((match) => ({
-          evidence: {
-            kind: 'anyOf' as const,
-            branchIndex: branchIndex + 1,
-            evidence: [match.evidence],
-            message: `Matched anyOf branch #${branchIndex + 1}.`,
-          },
-          nextCursor: match.nextCursor,
-        })),
-      );
-    }
-    if (matches.length > 0) return {matches};
-    return {
-      matches: [],
-      error: `Expected anyOf sequence step to match one branch, but none matched. ${branchErrors.join(' ')}`,
-    };
-  }
-
   if (step.kind === 'command.called') {
     const matches: SequenceStepMatch[] = [];
     for (const command of observedCommands) {
@@ -412,7 +360,6 @@ function describeToolStep(step: ToolCalledStep): string {
 
 function describeSequenceStep(step: SequenceStep): string {
   if (step.kind === 'command.called') return describeCommandStep(step);
-  if (step.kind === 'anyOf') return `anyOf(${step.steps.length} branches)`;
   return describeToolStep(step);
 }
 

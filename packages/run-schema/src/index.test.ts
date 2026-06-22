@@ -269,6 +269,22 @@ describe('RunUploadV1', () => {
     ).toThrow();
   });
 
+  it('rejects nested assertion definition steps', () => {
+    const payload = validPayload();
+
+    payload.dynos[0]!.jobs[0]!.assertions[0]!.definition = {
+      kind: 'anyOf',
+      steps: [
+        {
+          kind: 'anyOf',
+          steps: [{kind: 'tool.called', toolKind: 'shell'}],
+        } as never,
+      ],
+    };
+
+    expect(() => RunUploadV1.parse(payload)).toThrow();
+  });
+
   it('requires display fields for runs, dynos, jobs, and assertions', () => {
     const payload = validPayload();
     const dyno = validDyno();

@@ -116,18 +116,10 @@ const irSequenceCommandCalledStepSchema = z.object({
   matcher: commandMatcherSchema.optional(),
 });
 
-const irSequenceStepSchema: z.ZodTypeAny = z.lazy(() =>
-  z.discriminatedUnion('kind', [
-    irSequenceToolCalledStepSchema,
-    irSequenceCommandCalledStepSchema,
-    irAnyOfSequenceStepSchema,
-  ]),
-);
-
-const irAnyOfSequenceStepSchema = z.object({
-  kind: z.literal('anyOf'),
-  steps: z.array(irSequenceStepSchema).min(1),
-});
+const irSequenceStepSchema = z.discriminatedUnion('kind', [
+  irSequenceToolCalledStepSchema,
+  irSequenceCommandCalledStepSchema,
+]);
 
 const irHttpCalledAssertionNodeSchema = z.object({
   kind: z.literal('http.called'),
@@ -171,33 +163,23 @@ const irSkillReferencedAssertionNodeSchema = z.object({
   skill: z.string().min(1),
 });
 
-const irAnyOfAssertionNodeSchema = z.object({
-  kind: z.literal('anyOf'),
-  steps: z.array(z.lazy(() => irAssertionNodeSchema)).min(1),
-});
-
-const irAssertionNodeSchema: z.ZodTypeAny = z.lazy(() =>
-  z
-    .discriminatedUnion('kind', [
-      irHttpCalledAssertionNodeSchema,
-      irHttpNotCalledAssertionNodeSchema,
-      irToolCalledAssertionSchema.omit({id: true, label: true}),
-      irToolNotCalledAssertionSchema.omit({id: true, label: true}),
-      irCommandCalledAssertionSchema.omit({id: true, label: true}),
-      irCommandNotCalledAssertionSchema.omit({id: true, label: true}),
-      irVerifyCommandAssertionSchema.omit({id: true, label: true}),
-      irArtifactExistsAssertionNodeSchema,
-      irArtifactContainsAssertionNodeSchema,
-      irTranscriptContainsAssertionNodeSchema,
-      irFinalMessageContainsAssertionNodeSchema,
-      irSequenceInOrderAssertionNodeSchema,
-      irAnyOfAssertionNodeSchema,
-      irSkillReferencedAssertionNodeSchema,
-    ])
-    .superRefine((assertion, ctx) => {
-      validateIrAssertionNode(assertion, ctx, []);
-    }),
-);
+const irAssertionNodeSchema = z
+  .discriminatedUnion('kind', [
+    irHttpCalledAssertionNodeSchema,
+    irHttpNotCalledAssertionNodeSchema,
+    irToolCalledAssertionSchema.omit({id: true, label: true}),
+    irToolNotCalledAssertionSchema.omit({id: true, label: true}),
+    irCommandCalledAssertionSchema.omit({id: true, label: true}),
+    irCommandNotCalledAssertionSchema.omit({id: true, label: true}),
+    irArtifactExistsAssertionNodeSchema,
+    irArtifactContainsAssertionNodeSchema,
+    irTranscriptContainsAssertionNodeSchema,
+    irFinalMessageContainsAssertionNodeSchema,
+    irSkillReferencedAssertionNodeSchema,
+  ])
+  .superRefine((assertion, ctx) => {
+    validateIrAssertionNode(assertion, ctx, []);
+  });
 
 export const irAssertionSchema = z
   .discriminatedUnion('kind', [
@@ -349,33 +331,6 @@ function validateIrAssertionNode(
     'search_files',
   ]);
 
-  if (
-    typeof assertion !== 'object' ||
-    assertion === null ||
-    !('kind' in assertion)
-  ) {
-    return;
-  }
-
-  if (assertion.kind === 'sequence.inOrder' && 'steps' in assertion) {
-    const steps = assertion.steps;
-    if (!Array.isArray(steps)) return;
-    steps.forEach((step, index) => {
-      validateIrSequenceStep(
-        step,
-        ctx,
-        [...path, 'steps', index],
-        fileToolKinds,
-      );
-    });
-    return;
-  }
-
-  if (assertion.kind === 'anyOf') {
-    validateIrAnyOfAssertion(assertion, ctx, path);
-    return;
-  }
-
   validateIrToolNode(assertion, ctx, path, fileToolKinds);
 }
 
@@ -393,22 +348,15 @@ function validateIrAnyOfAssertion(
     return;
   }
 
+  const fileToolKinds = new Set<FileToolKind>([
+    'read_file',
+    'write_file',
+    'edit_file',
+    'search_files',
+  ]);
+
   assertion.steps.forEach((step, index) => {
-    if (typeof step !== 'object' || step === null || !('kind' in step)) return;
-
-    if (step.kind === 'verify.command') {
-      ctx.addIssue({
-        code: 'custom',
-        path: [...path, index],
-        message:
-          'verify.command assertions cannot be nested inside anyOf because verification commands may mutate the work directory.',
-      });
-      return;
-    }
-
-    if (step.kind === 'anyOf') {
-      validateIrAnyOfAssertion(step, ctx, [...path, index, 'steps']);
-    }
+    validateIrToolNode(step, ctx, [...path, index], fileToolKinds);
   });
 }
 
@@ -418,20 +366,6 @@ function validateIrSequenceStep(
   path: (string | number)[],
   fileToolKinds: Set<FileToolKind>,
 ): void {
-  if (typeof step !== 'object' || step === null || !('kind' in step)) return;
-
-  if (step.kind === 'anyOf' && 'steps' in step && Array.isArray(step.steps)) {
-    step.steps.forEach((branch, index) => {
-      validateIrSequenceStep(
-        branch,
-        ctx,
-        [...path, 'steps', index],
-        fileToolKinds,
-      );
-    });
-    return;
-  }
-
   validateIrToolNode(step, ctx, path, fileToolKinds);
 }
 

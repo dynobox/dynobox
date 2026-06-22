@@ -1,7 +1,6 @@
 import type {
   AnyOfAssertion,
   AnyOfBranchAssertion,
-  AnyOfSequenceStepAssertion,
   ArtifactContainsAssertion,
   ArtifactExistsAssertion,
   CalledAssertion,
@@ -197,9 +196,6 @@ export function createSequenceInOrderAssertion(
 }
 
 /** Create a union assertion that passes when any branch passes. */
-export function createAnyOfAssertion(
-  steps: readonly SequenceStepAssertion[],
-): AnyOfSequenceStepAssertion;
 export function createAnyOfAssertion(
   steps: readonly AnyOfBranchAssertion[],
 ): AnyOfAssertion;

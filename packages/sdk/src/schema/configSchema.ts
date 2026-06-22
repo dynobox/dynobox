@@ -131,20 +131,10 @@ const commandCalledAssertionSchema = commandCalledStepSchema
   .merge(assertionBaseSchema)
   .strict();
 
-const sequenceStepSchema: z.ZodTypeAny = z.lazy(() =>
-  z.discriminatedUnion('type', [
-    toolCalledStepSchema,
-    commandCalledStepSchema,
-    anyOfSequenceStepSchema,
-  ]),
-);
-
-const anyOfSequenceStepSchema = z
-  .object({
-    type: z.literal('anyOf'),
-    steps: z.array(sequenceStepSchema).min(1),
-  })
-  .strict();
+const sequenceStepSchema = z.discriminatedUnion('type', [
+  toolCalledStepSchema,
+  commandCalledStepSchema,
+]);
 
 const commandNotCalledAssertionSchema = z
   .object({
@@ -227,14 +217,6 @@ const sequenceInOrderAssertionSchema = z
   .merge(assertionBaseSchema)
   .strict();
 
-const anyOfAssertionSchema: z.ZodType<any> = z
-  .object({
-    type: z.literal('anyOf'),
-    steps: z.array(z.lazy((): z.ZodTypeAny => assertionSchema)).min(1),
-  })
-  .merge(assertionBaseSchema)
-  .strict();
-
 const skillReferencedAssertionSchema = z
   .object({
     type: z.literal('skill.referenced'),
@@ -243,8 +225,30 @@ const skillReferencedAssertionSchema = z
   .merge(assertionBaseSchema)
   .strict();
 
-export const assertionSchema: z.ZodType<any> = z
-  .union([
+const anyOfBranchAssertionSchema = z.discriminatedUnion('type', [
+  calledAssertionSchema,
+  notCalledAssertionSchema,
+  commandCalledAssertionSchema,
+  commandNotCalledAssertionSchema,
+  toolCalledAssertionSchema,
+  toolNotCalledAssertionSchema,
+  artifactExistsAssertionSchema,
+  artifactContainsAssertionSchema,
+  transcriptContainsAssertionSchema,
+  finalMessageContainsAssertionSchema,
+  skillReferencedAssertionSchema,
+]);
+
+const anyOfAssertionSchema = z
+  .object({
+    type: z.literal('anyOf'),
+    steps: z.array(anyOfBranchAssertionSchema).min(1),
+  })
+  .merge(assertionBaseSchema)
+  .strict();
+
+export const assertionSchema = z
+  .discriminatedUnion('type', [
     calledAssertionSchema,
     notCalledAssertionSchema,
     commandCalledAssertionSchema,
@@ -261,7 +265,6 @@ export const assertionSchema: z.ZodType<any> = z
     skillReferencedAssertionSchema,
   ])
   .superRefine((value, ctx) => {
-    const assertion = value as any;
     const fileToolKinds = new Set<FileToolKind>([
       'read_file',
       'write_file',
@@ -270,10 +273,9 @@ export const assertionSchema: z.ZodType<any> = z
     ]);
 
     if (
-      (assertion.type === 'tool.called' ||
-        assertion.type === 'tool.notCalled') &&
-      assertion.command !== undefined &&
-      assertion.tool !== 'shell'
+      (value.type === 'tool.called' || value.type === 'tool.notCalled') &&
+      value.command !== undefined &&
+      value.tool !== 'shell'
     ) {
       ctx.addIssue({
         code: 'custom',
@@ -284,10 +286,9 @@ export const assertionSchema: z.ZodType<any> = z
     }
 
     if (
-      (assertion.type === 'tool.called' ||
-        assertion.type === 'tool.notCalled') &&
-      assertion.path !== undefined &&
-      !fileToolKinds.has(assertion.tool as FileToolKind)
+      (value.type === 'tool.called' || value.type === 'tool.notCalled') &&
+      value.path !== undefined &&
+      !fileToolKinds.has(value.tool as FileToolKind)
     ) {
       ctx.addIssue({
         code: 'custom',
@@ -298,10 +299,9 @@ export const assertionSchema: z.ZodType<any> = z
     }
 
     if (
-      (assertion.type === 'tool.called' ||
-        assertion.type === 'tool.notCalled') &&
-      assertion.command !== undefined &&
-      assertion.path !== undefined
+      (value.type === 'tool.called' || value.type === 'tool.notCalled') &&
+      value.command !== undefined &&
+      value.path !== undefined
     ) {
       ctx.addIssue({
         code: 'custom',
@@ -310,47 +310,27 @@ export const assertionSchema: z.ZodType<any> = z
       });
     }
 
-    if (assertion.type === 'sequence.inOrder') {
-      assertion.steps.forEach((step: unknown, index: number) => {
+    if (value.type === 'sequence.inOrder') {
+      value.steps.forEach((step, index) => {
         validateSequenceStep(step, ctx, ['steps', index], fileToolKinds);
       });
     }
 
-    if (assertion.type === 'anyOf') {
-      validateAnyOfAssertion(assertion, ctx, ['steps']);
+    if (value.type === 'anyOf') {
+      validateAnyOfAssertion(value, ctx, ['steps'], fileToolKinds);
     }
   });
 
+export type AuthoredAssertion = z.infer<typeof assertionSchema>;
+
 function validateAnyOfAssertion(
-  assertion: unknown,
+  assertion: Extract<AuthoredAssertion, {type: 'anyOf'}>,
   ctx: z.RefinementCtx,
   path: (string | number)[],
+  fileToolKinds: Set<FileToolKind>,
 ): void {
-  if (
-    typeof assertion !== 'object' ||
-    assertion === null ||
-    !('steps' in assertion) ||
-    !Array.isArray(assertion.steps)
-  ) {
-    return;
-  }
-
   assertion.steps.forEach((step, index) => {
-    if (typeof step !== 'object' || step === null || !('type' in step)) return;
-
-    if (step.type === 'verify.command') {
-      ctx.addIssue({
-        code: 'custom',
-        path: [...path, index],
-        message:
-          'verify.command assertions cannot be nested inside anyOf because verification commands may mutate the work directory.',
-      });
-      return;
-    }
-
-    if (step.type === 'anyOf') {
-      validateAnyOfAssertion(step, ctx, [...path, index, 'steps']);
-    }
+    validateToolAssertion(step, ctx, [...path, index], fileToolKinds);
   });
 }
 
@@ -360,29 +340,31 @@ function validateSequenceStep(
   path: (string | number)[],
   fileToolKinds: Set<FileToolKind>,
 ): void {
-  if (typeof step !== 'object' || step === null || !('type' in step)) return;
+  validateToolAssertion(step, ctx, path, fileToolKinds);
+}
 
-  if (step.type === 'anyOf' && 'steps' in step && Array.isArray(step.steps)) {
-    step.steps.forEach((branch, index) => {
-      validateSequenceStep(
-        branch,
-        ctx,
-        [...path, 'steps', index],
-        fileToolKinds,
-      );
-    });
+function validateToolAssertion(
+  assertion: unknown,
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+  fileToolKinds: Set<FileToolKind>,
+): void {
+  if (
+    typeof assertion !== 'object' ||
+    assertion === null ||
+    !('type' in assertion) ||
+    (assertion.type !== 'tool.called' && assertion.type !== 'tool.notCalled')
+  ) {
     return;
   }
 
-  if (step.type !== 'tool.called') return;
-
-  const toolStep = step as {
+  const toolAssertion = assertion as unknown as {
     command?: unknown;
     path?: unknown;
-    tool?: unknown;
+    tool: FileToolKind | string;
   };
 
-  if (toolStep.command !== undefined && toolStep.tool !== 'shell') {
+  if (toolAssertion.command !== undefined && toolAssertion.tool !== 'shell') {
     ctx.addIssue({
       code: 'custom',
       path: [...path, 'command'],
@@ -391,8 +373,8 @@ function validateSequenceStep(
   }
 
   if (
-    toolStep.path !== undefined &&
-    !fileToolKinds.has(toolStep.tool as FileToolKind)
+    toolAssertion.path !== undefined &&
+    !fileToolKinds.has(toolAssertion.tool as FileToolKind)
   ) {
     ctx.addIssue({
       code: 'custom',
@@ -402,7 +384,7 @@ function validateSequenceStep(
     });
   }
 
-  if (toolStep.command !== undefined && toolStep.path !== undefined) {
+  if (toolAssertion.command !== undefined && toolAssertion.path !== undefined) {
     ctx.addIssue({
       code: 'custom',
       path: [...path, 'path'],

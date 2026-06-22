@@ -1,5 +1,5 @@
 import {DynoboxConfigError} from '../errors.js';
-import {assertionSchema, configSchema} from '../schema/configSchema.js';
+import {configSchema, type AuthoredAssertion} from '../schema/configSchema.js';
 import type {Endpoint} from '../types/brands.js';
 import type {DynoboxConfig} from '../types/config.js';
 import type {HarnessRunConfig} from '../types/harness.js';
@@ -8,14 +8,32 @@ import {
   type Ir,
   IR_VERSION,
   type IrAssertion,
+  type IrAssertionNode,
   type IrEndpoint,
   type IrHarnessConfig,
   type IrScenario,
+  type IrSequenceStep,
 } from './types.js';
 
 const SCENARIO_PREFIX = 'scenario.';
 
-type AuthoredAssertion = any;
+type IrAssertionBody = IrAssertion extends infer Assertion
+  ? Assertion extends IrAssertion
+    ? Omit<Assertion, 'id' | 'label'>
+    : never
+  : never;
+type AuthoredSequenceStep = Extract<
+  AuthoredAssertion,
+  {type: 'sequence.inOrder'}
+>['steps'][number];
+type AuthoredAnyOfBranch = Extract<
+  AuthoredAssertion,
+  {type: 'anyOf'}
+>['steps'][number];
+type IrVerifyCommandBody = Omit<
+  Extract<IrAssertion, {kind: 'verify.command'}>,
+  'id' | 'label'
+>;
 
 /**
  * Validates an author config and emits the canonical IR. Throws
@@ -157,9 +175,9 @@ function buildIrAssertionNode(
   index: number,
   endpointIdByKey: Map<string, string>,
   assertion: AuthoredAssertion,
-): Record<string, unknown> {
+): IrAssertionBody {
   if (assertion.type === 'tool.called') {
-    return buildIrToolCalledStep(assertion) as Record<string, unknown>;
+    return buildIrToolCalledStep(assertion);
   }
 
   if (assertion.type === 'tool.notCalled') {
@@ -177,7 +195,7 @@ function buildIrAssertionNode(
   }
 
   if (assertion.type === 'command.called') {
-    return buildIrCommandCalledStep(assertion) as Record<string, unknown>;
+    return buildIrCommandCalledStep(assertion);
   }
 
   if (assertion.type === 'command.notCalled') {
@@ -220,15 +238,15 @@ function buildIrAssertionNode(
   if (assertion.type === 'sequence.inOrder') {
     return {
       kind: 'sequence.inOrder',
-      steps: assertion.steps.map((step: unknown) => buildIrSequenceStep(step)),
+      steps: assertion.steps.map((step) => buildIrSequenceStep(step)),
     };
   }
 
   if (assertion.type === 'anyOf') {
     return {
       kind: 'anyOf',
-      steps: assertion.steps.map((step: AuthoredAssertion) =>
-        buildIrAssertionNode(scenarioName, index, endpointIdByKey, step),
+      steps: assertion.steps.map((step) =>
+        buildIrAnyOfBranch(scenarioName, index, endpointIdByKey, step),
       ),
     };
   }
@@ -258,33 +276,29 @@ function buildIrAssertionNode(
   return {kind: 'http.notCalled', endpointId};
 }
 
-function buildIrSequenceStep(assertion: unknown): Record<string, unknown> {
-  if (
-    typeof assertion !== 'object' ||
-    assertion === null ||
-    !('type' in assertion)
-  ) {
-    throw new DynoboxConfigError('Invalid sequence step.');
-  }
+function buildIrSequenceStep(assertion: AuthoredSequenceStep): IrSequenceStep {
   if (assertion.type === 'tool.called') {
-    return buildIrToolCalledStep(assertion as never) as Record<string, unknown>;
+    return buildIrToolCalledStep(assertion);
   }
-  if (assertion.type === 'command.called') {
-    return buildIrCommandCalledStep(assertion as never) as Record<
-      string,
-      unknown
-    >;
-  }
-  return {
-    kind: 'anyOf',
-    steps: (assertion as unknown as {steps: unknown[]}).steps.map(
-      buildIrSequenceStep,
-    ),
-  };
+  return buildIrCommandCalledStep(assertion);
+}
+
+function buildIrAnyOfBranch(
+  scenarioName: string,
+  index: number,
+  endpointIdByKey: Map<string, string>,
+  assertion: AuthoredAnyOfBranch,
+): IrAssertionNode {
+  return buildIrAssertionNode(
+    scenarioName,
+    index,
+    endpointIdByKey,
+    assertion,
+  ) as IrAssertionNode;
 }
 
 function buildIrToolCalledStep(
-  assertion: AuthoredAssertion,
+  assertion: Extract<AuthoredAssertion, {type: 'tool.called'}>,
 ): Omit<Extract<IrAssertion, {kind: 'tool.called'}>, 'id'> {
   const base = {
     kind: 'tool.called' as const,
@@ -306,7 +320,7 @@ function buildIrToolCalledStep(
 }
 
 function buildIrCommandCalledStep(
-  assertion: AuthoredAssertion,
+  assertion: Extract<AuthoredAssertion, {type: 'command.called'}>,
 ): Omit<Extract<IrAssertion, {kind: 'command.called'}>, 'id'> {
   const base = {
     kind: 'command.called' as const,
@@ -318,7 +332,10 @@ function buildIrCommandCalledStep(
 }
 
 function serializeCommandMatcher(
-  matcher: AuthoredAssertion['command'],
+  matcher: Extract<
+    AuthoredAssertion,
+    {type: 'command.called' | 'command.notCalled'}
+  >['command'],
 ): NonNullable<Extract<IrAssertion, {kind: 'command.called'}>['matcher']> {
   const serialized: NonNullable<
     Extract<IrAssertion, {kind: 'command.called'}>['matcher']
@@ -340,12 +357,12 @@ function serializeCommandMatcher(
 }
 
 function buildIrVerifyCommandAssertion(
-  assertion: AuthoredAssertion,
-): Record<string, unknown> {
+  assertion: Extract<AuthoredAssertion, {type: 'verify.command'}>,
+): IrVerifyCommandBody {
   const ir = {
     kind: 'verify.command',
     command: assertion.command,
-  } as Record<string, unknown>;
+  } as IrVerifyCommandBody;
   if (assertion.exitCode !== undefined) ir.exitCode = assertion.exitCode;
   if (assertion.stdout !== undefined) ir.stdout = assertion.stdout;
   if (assertion.stderr !== undefined) ir.stderr = assertion.stderr;

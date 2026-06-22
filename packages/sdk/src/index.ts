@@ -20,7 +20,6 @@ export {tool} from './tool/index.js';
 export {transcript} from './transcript/index.js';
 export type {
   AnyOfAssertion,
-  AnyOfSequenceStepAssertion,
   ArtifactContainsAssertion,
   ArtifactExistsAssertion,
   Assertion,

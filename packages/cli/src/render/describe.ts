@@ -8,6 +8,7 @@ import type {ShellToolMatcher} from '@dynobox/sdk';
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {truncate} from '../terminal/index.js';
+import {assertionBranchWithId} from '../util/assertionBranch.js';
 
 const SHELL_PREVIEW_MAX = 42;
 
@@ -202,9 +203,6 @@ function describeToolStepExpectation(
       ? `${step.executable} command`
       : `${step.executable} command with ${describeCommandMatcher(step.matcher)}`;
   }
-  if (step.kind === 'anyOf') {
-    return step.steps.map(describeToolStepExpectation).join(' or ');
-  }
   if (step.pathMatcher !== undefined) {
     return `${step.toolKind} tool call for path "${step.pathMatcher.path}"`;
   }
@@ -215,10 +213,7 @@ function describeToolStepExpectation(
 function describeAssertionNodeExpectation(
   assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
 ): string {
-  return describeExpectation({
-    id: 'assertion.branch',
-    ...(assertion as Record<string, unknown>),
-  } as IrAssertion);
+  return describeExpectation(assertionBranchWithId(assertion));
 }
 
 function describeShellMatcherExpectation(matcher: ShellToolMatcher): string {

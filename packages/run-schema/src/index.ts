@@ -103,7 +103,7 @@ const commandMatcherSchema = z
   })
   .strict();
 
-const runUploadAssertionDefinitionStepV1Schema: z.ZodType<any> = z
+const runUploadAssertionDefinitionStepV1Schema = z
   .object({
     kind: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionKindLength),
     toolKind: optionalNullableString(RUN_UPLOAD_LIMITS.assertionKindLength),
@@ -111,12 +111,6 @@ const runUploadAssertionDefinitionStepV1Schema: z.ZodType<any> = z
     matcher: assertionMatcherSchema.optional(),
     commandMatcher: commandMatcherSchema.optional(),
     pathMatcher: z.object({path: assertionDetailString}).strict().optional(),
-    steps: z
-      .array(
-        z.lazy((): z.ZodType<any> => runUploadAssertionDefinitionStepV1Schema),
-      )
-      .max(RUN_UPLOAD_LIMITS.assertionChildren)
-      .optional(),
   })
   .strict();
 

@@ -17,18 +17,14 @@ export type IrHarnessConfig = z.infer<typeof irHarnessConfigSchema>;
 type BaseIrAssertion = z.infer<typeof irAssertionSchema>;
 export type IrSequenceStep =
   | Omit<Extract<BaseIrAssertion, {kind: 'tool.called'}>, 'id' | 'label'>
-  | Omit<Extract<BaseIrAssertion, {kind: 'command.called'}>, 'id' | 'label'>
-  | {kind: 'anyOf'; steps: IrSequenceStep[]};
-export type IrAssertionNode =
-  | Omit<
-      Exclude<
-        BaseIrAssertion,
-        {kind: 'sequence.inOrder'} | {kind: 'anyOf'} | {kind: 'verify.command'}
-      >,
-      'id' | 'label'
-    >
-  | {kind: 'sequence.inOrder'; steps: IrSequenceStep[]}
-  | {kind: 'anyOf'; steps: IrAssertionNode[]};
+  | Omit<Extract<BaseIrAssertion, {kind: 'command.called'}>, 'id' | 'label'>;
+export type IrAssertionNode = Omit<
+  Exclude<
+    BaseIrAssertion,
+    {kind: 'sequence.inOrder'} | {kind: 'anyOf'} | {kind: 'verify.command'}
+  >,
+  'id' | 'label'
+>;
 export type IrAnyOfAssertion = {
   id: string;
   label?: string;

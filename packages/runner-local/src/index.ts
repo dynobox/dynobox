@@ -347,11 +347,7 @@ export async function runJob(
   const verifyAssertionResults = evaluateAssertions({
     assertions: postVerifyAssertions,
     toolEvents: harnessResult.toolEvents,
-    httpEvents,
     verifyCommandResults,
-    workDir,
-    transcript: harnessResult.transcript,
-    finalMessage: harnessResult.finalMessage,
   });
   const resultsByAssertionId = new Map<string, AssertionResult[]>();
   for (const result of [
@@ -397,6 +393,8 @@ export async function runJob(
 }
 
 function assertionRequiresVerify(assertion: IrAssertion): boolean {
+  // Nested verify.command is rejected by the SDK schema; only top-level
+  // assertions need to be split into the post-harness verification pass.
   return assertion.kind === 'verify.command';
 }
 

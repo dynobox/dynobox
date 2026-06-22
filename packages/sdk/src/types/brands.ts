@@ -261,17 +261,7 @@ export type SequenceInOrderAssertion = {
 /** Assertion branch that can participate in ordered event matching. */
 export type SequenceStepAssertion =
   | ToolCalledAssertion
-  | CommandCalledAssertion
-  | AnyOfSequenceStepAssertion;
-
-/** Union assertion whose branches are limited to ordered event-matching steps. */
-export type AnyOfSequenceStepAssertion = {
-  readonly [ASSERTION_BRAND]: true;
-  readonly id?: string;
-  readonly label?: string;
-  readonly type: 'anyOf';
-  readonly steps: readonly SequenceStepAssertion[];
-};
+  | CommandCalledAssertion;
 
 /** Assertion branch that can safely be evaluated as part of an `anyOf`. */
 export type AnyOfBranchAssertion<K extends string = string> =
@@ -285,8 +275,6 @@ export type AnyOfBranchAssertion<K extends string = string> =
   | ArtifactContainsAssertion
   | TranscriptContainsAssertion
   | FinalMessageContainsAssertion
-  | SequenceInOrderAssertion
-  | AnyOfAssertion<K>
   | SkillReferencedAssertion;
 
 /** Assertion that passes when any branch assertion passes. */
@@ -310,4 +298,6 @@ export type SkillReferencedAssertion = {
 /** Union of all author-facing assertion objects accepted by config scenarios. */
 export type Assertion<K extends string = string> =
   | VerifyCommandAssertion
+  | SequenceInOrderAssertion
+  | AnyOfAssertion<K>
   | AnyOfBranchAssertion<K>;

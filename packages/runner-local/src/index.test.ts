@@ -269,39 +269,6 @@ describe('runJob', () => {
     });
   });
 
-  it('does not run verify.command assertions nested under anyOf branches', async () => {
-    const scratchRoot = createScratchRoot();
-
-    const result = await runJob(
-      createJob({
-        assertions: [
-          {
-            id: 'assertion.any.0',
-            kind: 'anyOf',
-            steps: [
-              {kind: 'artifact.exists', path: 'created.txt'},
-              {
-                kind: 'verify.command',
-                command:
-                  "node -e \"require('node:fs').writeFileSync('created.txt', 'created')\"",
-                exitCode: 0,
-              },
-            ],
-          },
-        ],
-      }),
-      {scratchRoot, harnesses: [new RecordingHarness()]},
-    );
-
-    expect(result.status).toBe('assertion_failed');
-    expect(existsSync(join(result.workDir, 'created.txt'))).toBe(false);
-    expect(result.assertionResults[0]).toMatchObject({
-      assertionId: 'assertion.any.0',
-      kind: 'anyOf',
-      passed: false,
-    });
-  });
-
   it('evaluates artifact assertions before running verify.command assertions', async () => {
     const scratchRoot = createScratchRoot();
 

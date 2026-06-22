@@ -30,6 +30,7 @@ import {
   describeToolEvent,
   isObservedCommand,
 } from '../render/describe.js';
+import {assertionBranchWithId} from '../util/assertionBranch.js';
 import {
   formatVerifyCommandResult,
   isVerifyCommandResult,
@@ -379,21 +380,12 @@ function assertionDefinition(
 function assertionNodeDefinition(
   assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
 ): RunUploadAssertionDefinitionV1 {
-  return assertionDefinition({
-    id: 'assertion.branch',
-    ...(assertion as Record<string, unknown>),
-  } as IrAssertion);
+  return assertionDefinition(assertionBranchWithId(assertion));
 }
 
 function sequenceStepDefinition(
   step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
 ): NonNullable<RunUploadAssertionDefinitionV1['steps']>[number] {
-  if (step.kind === 'anyOf') {
-    return {
-      kind: step.kind,
-      steps: step.steps.map(sequenceStepDefinition),
-    };
-  }
   return step.kind === 'tool.called'
     ? {
         kind: step.kind,
@@ -583,10 +575,7 @@ function observedAssertionSummary(
 function stepWithId(
   assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
 ): IrAssertion {
-  return {
-    id: 'assertion.branch',
-    ...(assertion as Record<string, unknown>),
-  } as IrAssertion;
+  return assertionBranchWithId(assertion);
 }
 
 function anyOfMatchedBranch(evidence: unknown): number | undefined {
@@ -695,7 +684,6 @@ function commandMatcherDefinition(assertion: {
 function describeToolStep(
   step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
 ): string {
-  if (step.kind === 'anyOf') return `anyOf(${step.steps.length} branches)`;
   if (step.kind === 'command.called') {
     if (step.matcher === undefined) return `command.called(${step.executable})`;
     return `command.called(${step.executable}, ${describeCommandMatcher(step.matcher)})`;
@@ -710,9 +698,6 @@ function describeToolStep(
 function describeToolStepExpectation(
   step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
 ): string {
-  if (step.kind === 'anyOf') {
-    return step.steps.map(describeToolStepExpectation).join(' or ');
-  }
   if (step.kind === 'command.called') {
     if (step.matcher === undefined) return `${step.executable} command`;
     return `${step.executable} command with ${describeCommandMatcher(step.matcher)}`;

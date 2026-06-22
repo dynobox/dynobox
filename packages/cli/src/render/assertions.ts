@@ -23,6 +23,7 @@ import {
   type RenderContext,
   symbol,
 } from '../terminal/index.js';
+import {assertionBranchWithId} from '../util/assertionBranch.js';
 import {
   formatVerifyCommandResult,
   isVerifyCommandResult,
@@ -35,15 +36,7 @@ import {
   type ObservedCommandEvidence,
 } from './describe.js';
 
-type AnyOfSequenceEvidence = {
-  kind: 'anyOf';
-  branchIndex: number;
-  evidence: SequenceEvidence[];
-};
-type SequenceEvidence =
-  | ToolEvent
-  | ObservedCommandEvidence
-  | AnyOfSequenceEvidence;
+type SequenceEvidence = ToolEvent | ObservedCommandEvidence;
 
 /**
  * Render the per-assertion checklist for a job. Failed assertions also show
@@ -386,27 +379,7 @@ function isHttpEvent(value: unknown): value is HttpEvent {
 }
 
 function isSequenceEvidence(value: unknown): value is SequenceEvidence {
-  return (
-    isToolEvent(value) ||
-    isObservedCommand(value) ||
-    isAnyOfSequenceEvidence(value)
-  );
-}
-
-function isAnyOfSequenceEvidence(
-  value: unknown,
-): value is AnyOfSequenceEvidence {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'kind' in value &&
-    value.kind === 'anyOf' &&
-    'branchIndex' in value &&
-    typeof value.branchIndex === 'number' &&
-    'evidence' in value &&
-    Array.isArray(value.evidence) &&
-    value.evidence.every(isSequenceEvidence)
-  );
+  return isToolEvent(value) || isObservedCommand(value);
 }
 
 function formatToolEvent(event: ToolEvent): string {
@@ -426,12 +399,6 @@ function formatObservedCommand(command: {
 }
 
 function formatSequenceEvidence(evidence: SequenceEvidence): string {
-  if (isAnyOfSequenceEvidence(evidence)) {
-    const last = evidence.evidence.at(-1);
-    const suffix =
-      last === undefined ? '' : ` via ${formatSequenceEvidence(last)}`;
-    return `anyOf branch #${evidence.branchIndex}${suffix}`;
-  }
   return isToolEvent(evidence)
     ? formatToolEvent(evidence)
     : `command ${formatObservedCommand(evidence)}`;
@@ -533,33 +500,24 @@ function assertionMentionsCommand(assertion: IrAssertion): boolean {
 function assertionNodeMentionsShell(
   assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
 ): boolean {
-  return assertionMentionsShell({
-    id: 'assertion.branch',
-    ...(assertion as Record<string, unknown>),
-  } as IrAssertion);
+  return assertionMentionsShell(assertionBranchWithId(assertion));
 }
 
 function assertionNodeMentionsCommand(
   assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
 ): boolean {
-  return assertionMentionsCommand({
-    id: 'assertion.branch',
-    ...(assertion as Record<string, unknown>),
-  } as IrAssertion);
+  return assertionMentionsCommand(assertionBranchWithId(assertion));
 }
 
 function sequenceStepMentionsShell(
   step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
 ): boolean {
-  if (step.kind === 'anyOf') return step.steps.some(sequenceStepMentionsShell);
   return step.kind === 'tool.called' && step.toolKind === 'shell';
 }
 
 function sequenceStepMentionsCommand(
   step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
 ): boolean {
-  if (step.kind === 'anyOf')
-    return step.steps.some(sequenceStepMentionsCommand);
   return step.kind === 'command.called';
 }
 
