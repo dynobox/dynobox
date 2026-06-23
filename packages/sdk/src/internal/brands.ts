@@ -198,9 +198,6 @@ export function createSequenceInOrderAssertion(
 /** Create a union assertion that passes when any branch passes. */
 export function createAnyOfAssertion(
   steps: readonly AnyOfBranchAssertion[],
-): AnyOfAssertion;
-export function createAnyOfAssertion(
-  steps: readonly AnyOfBranchAssertion[],
 ): AnyOfAssertion {
   return {
     [ASSERTION_BRAND]: true as const,

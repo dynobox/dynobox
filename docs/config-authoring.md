@@ -306,6 +306,12 @@ are not supported; label the `anyOf` assertion itself instead.
 Every branch is evaluated on each run, even after one branch already passes.
 When multiple branches pass, the lowest-index branch is reported as the match.
 
+`*.notCalled` branches (`tool.notCalled`, `command.notCalled`, `http.notCalled`)
+can make an `anyOf` pass vacuously when the forbidden action never occurred.
+Prefer positive matchers (`tool.called`, `command.called`, `http.called`, and so
+on) unless you deliberately want "either path A succeeded or path B was never
+taken."
+
 ### Skills
 
 Use `skill.referenced` to assert that observed harness events referenced a

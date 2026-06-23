@@ -887,6 +887,38 @@ describe('evaluateAssertions', () => {
     });
   });
 
+  it('passes anyOf when an artifact.exists branch matches', () => {
+    const workDir = createWorkDir();
+    writeFileSync(join(workDir, 'report.json'), '{}');
+
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'anyOf',
+        steps: [
+          {
+            kind: 'tool.called',
+            toolKind: 'read_file',
+            pathMatcher: {path: 'report.json'},
+          },
+          {kind: 'artifact.exists', path: 'report.json'},
+        ],
+      },
+      [],
+      {workDir},
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: expect.stringContaining('Matched anyOf branch #2'),
+      evidence: {
+        kind: 'anyOf',
+        branchIndex: 2,
+        branches: [{passed: false}, {passed: true}],
+      },
+    });
+  });
+
   it('fails anyOf with each branch failure message', () => {
     const result = evaluateOne(
       {
