@@ -46,3 +46,13 @@ export type IrScenario = Omit<BaseIrScenario, 'assertions'> & {
 export type Ir = Omit<z.infer<typeof irSchema>, 'scenarios'> & {
   scenarios: IrScenario[];
 };
+
+/** Attach an ID to a branch-level assertion node for evaluation or display. */
+export function irAssertionFromNode(
+  id: string,
+  node: IrAssertionNode,
+): IrAssertion {
+  // Spreading a discriminated union does not preserve TS narrowing; the input
+  // type already excludes composite assertion kinds allowed only at top level.
+  return {id, ...node} as IrAssertion;
+}

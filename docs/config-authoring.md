@@ -288,6 +288,24 @@ compound command when the command text appears in order. Normalized command
 steps are ordered by their position within the compound command, including
 segments nested inside shell wrappers.
 
+### Union Assertions (`anyOf`)
+
+Use `anyOf` when any one of several assertion paths is acceptable.
+
+```ts
+anyOf([
+  tool.called('read_file', {path: 'package.json'}),
+  command.called('cat', {args: ['package.json']}),
+]);
+```
+
+Branches may use any regular assertion kind except nested `anyOf`,
+`sequence.inOrder`, or `verify.command`. Branch-level `id` and `label` fields
+are not supported; label the `anyOf` assertion itself instead.
+
+Every branch is evaluated on each run, even after one branch already passes.
+When multiple branches pass, the lowest-index branch is reported as the match.
+
 ### Skills
 
 Use `skill.referenced` to assert that observed harness events referenced a

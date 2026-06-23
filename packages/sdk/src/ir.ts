@@ -12,6 +12,8 @@ export {
   type Ir,
   IR_VERSION,
   type IrAssertion,
+  type IrAssertionNode,
+  irAssertionFromNode,
   type IrEndpoint,
   type IrHarnessConfig,
   type IrScenario,

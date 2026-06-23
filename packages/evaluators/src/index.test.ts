@@ -856,6 +856,37 @@ describe('evaluateAssertions', () => {
     });
   });
 
+  it('reports the first matching branch when multiple anyOf branches pass', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'anyOf',
+        steps: [
+          {kind: 'tool.called', toolKind: 'shell'},
+          {kind: 'command.called', executable: 'pwd'},
+        ],
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'pwd'},
+          command: 'pwd',
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: expect.stringContaining('Matched anyOf branch #1'),
+      evidence: {
+        kind: 'anyOf',
+        branchIndex: 1,
+        branches: [{passed: true}, {passed: true}],
+      },
+    });
+  });
+
   it('fails anyOf with each branch failure message', () => {
     const result = evaluateOne(
       {

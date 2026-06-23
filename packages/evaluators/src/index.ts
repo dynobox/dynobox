@@ -1,4 +1,4 @@
-import type {IrAssertion} from '@dynobox/sdk/ir';
+import {irAssertionFromNode, type IrAssertion} from '@dynobox/sdk/ir';
 
 import {
   evaluateArtifactContains,
@@ -121,18 +121,18 @@ function evaluateAssertion(
   return unsupportedAssertionResult(assertion);
 }
 
+/**
+ * Evaluate every `anyOf` branch, then report the lowest-index passing branch.
+ * Branches are always fully evaluated; evaluation does not short-circuit after
+ * the first match.
+ */
 function evaluateAnyOf(
   assertion: Extract<IrAssertion, {kind: 'anyOf'}>,
   input: EvaluationInput,
 ): AssertionResult {
   const branchResults = assertion.steps.map((step, index) =>
     evaluateAssertion(
-      // `anyOf` branch nodes omit IDs; their schema restricts them to regular
-      // assertion kinds, so a synthetic ID is sufficient for evaluation.
-      {
-        id: `${assertion.id}.branch.${index + 1}`,
-        ...(step as Record<string, unknown>),
-      } as IrAssertion,
+      irAssertionFromNode(`${assertion.id}.branch.${index + 1}`, step),
       input,
     ),
   );

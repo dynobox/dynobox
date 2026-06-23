@@ -190,7 +190,7 @@ function describeObservedFailure(
     if (matchedBranch !== undefined) return `matched branch #${matchedBranch}`;
     const branchResults = anyOfBranchResults(evidence);
     if (branchResults !== undefined) {
-      return `0/${branchResults.length} branches matched`;
+      return formatAnyOfFailure(branchResults);
     }
   }
 
@@ -260,6 +260,16 @@ function formatCount(count: number, singular: string): string {
 
 function formatCommandCalledFailure(observedCount: number): string {
   return `0/${observedCount} observed command segments matched`;
+}
+
+function formatAnyOfFailure(
+  branchResults: readonly {message: string}[],
+): string {
+  const summaries = branchResults.map((branch, index) => {
+    const detail = formatTextExcerpt(branch.message, 72);
+    return `#${index + 1} ${detail}`;
+  });
+  return `0/${branchResults.length} branches matched (${summaries.join('; ')})`;
 }
 
 function formatTextExcerpt(text: string, maxLength = 160): string {
