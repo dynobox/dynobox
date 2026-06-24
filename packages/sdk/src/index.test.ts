@@ -287,7 +287,10 @@ export default defineDyno({
     ).toEqualTypeOf<SequenceInOrderAssertion>();
     expectTypeOf(
       anyOf([tool.called('shell'), command.called('git')]),
-    ).toMatchTypeOf<AnyOfAssertion>();
+    ).toEqualTypeOf<AnyOfAssertion>();
+    expectTypeOf(
+      anyOf([http.called('getUser'), tool.called('shell')]),
+    ).toEqualTypeOf<AnyOfAssertion<'getUser'>>();
     // @ts-expect-error sequence.inOrder cannot be evaluated inside anyOf.
     anyOf([sequence.inOrder([tool.called('shell')])]);
     // @ts-expect-error anyOf cannot be evaluated inside sequence.inOrder.
@@ -1565,6 +1568,33 @@ export default defineDyno({
           name: 's',
           prompt: 'p',
           assertions: [http.called('getUser')],
+        },
+      ],
+    });
+
+    defineDyno({
+      endpoints: {
+        getUser: http.endpoint({method: 'GET', url: 'https://a/'}),
+      },
+      scenarios: [
+        {
+          name: 's',
+          prompt: 'p',
+          assertions: [anyOf([http.called('getUser'), tool.called('shell')])],
+        },
+      ],
+    });
+
+    defineDyno({
+      endpoints: {
+        getUser: http.endpoint({method: 'GET', url: 'https://a/'}),
+      },
+      scenarios: [
+        {
+          name: 's',
+          prompt: 'p',
+          // @ts-expect-error 'getuser' is not in the declared endpoint key set 'getUser'
+          assertions: [anyOf([http.called('getuser'), tool.called('shell')])],
         },
       ],
     });
