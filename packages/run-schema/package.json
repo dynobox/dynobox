@@ -1,6 +1,6 @@
 {
   "name": "@dynobox/run-schema",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Shared Dynobox run upload schema and types",
   "license": "Apache-2.0",
   "type": "module",

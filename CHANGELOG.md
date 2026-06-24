@@ -23,6 +23,12 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ---
 
+## @dynobox/run-schema@0.0.10 — 2026-06-24
+
+### `@dynobox/run-schema`
+
+- Added full assertion branch definitions for `anyOf` upload metadata.
+
 ## @dynobox/run-schema@0.0.9 — 2026-06-20
 
 ### `@dynobox/run-schema`
