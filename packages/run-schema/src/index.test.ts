@@ -145,6 +145,21 @@ describe('RunUploadV1', () => {
     expect(() => RunUploadV1.parse(payload)).toThrow();
   });
 
+  it('accepts full anyOf branch definitions', () => {
+    const payload = validPayload();
+    payload.dynos[0]!.jobs[0]!.assertions[0]!.definition = {
+      kind: 'anyOf',
+      steps: [
+        {kind: 'artifact.exists', path: 'report.json'},
+        {kind: 'http.called', endpointId: 'upload', status: 201},
+        {kind: 'transcript.contains', text: 'uploaded'},
+        {kind: 'skill.referenced', skill: 'release'},
+      ],
+    };
+
+    expect(RunUploadV1.safeParse(payload).success).toBe(true);
+  });
+
   it('rejects unknown fields at every payload level', () => {
     const payload = validPayload();
     const dyno = validDyno();
@@ -267,6 +282,22 @@ describe('RunUploadV1', () => {
         ],
       }),
     ).toThrow();
+  });
+
+  it('rejects nested assertion definition steps', () => {
+    const payload = validPayload();
+
+    payload.dynos[0]!.jobs[0]!.assertions[0]!.definition = {
+      kind: 'anyOf',
+      steps: [
+        {
+          kind: 'anyOf',
+          steps: [{kind: 'tool.called', toolKind: 'shell'}],
+        } as never,
+      ],
+    };
+
+    expect(() => RunUploadV1.parse(payload)).toThrow();
   });
 
   it('requires display fields for runs, dynos, jobs, and assertions', () => {

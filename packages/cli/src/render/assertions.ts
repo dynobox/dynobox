@@ -24,6 +24,11 @@ import {
   symbol,
 } from '../terminal/index.js';
 import {
+  anyOfBranchResults,
+  anyOfMatchedBranch,
+  assertionBranchWithId,
+} from '../util/assertionBranch.js';
+import {
   formatVerifyCommandResult,
   isVerifyCommandResult,
 } from '../util/verifyCommandResult.js';
@@ -179,6 +184,16 @@ function describeObservedFailure(
     return `matched ${matched.length} of ${assertion.steps.length} ordered steps${suffix}`;
   }
 
+  if (assertion.kind === 'anyOf') {
+    const evidence = assertionResultEvidence(result, assertion.id);
+    const matchedBranch = anyOfMatchedBranch(evidence);
+    if (matchedBranch !== undefined) return `matched branch #${matchedBranch}`;
+    const branchResults = anyOfBranchResults(evidence);
+    if (branchResults !== undefined) {
+      return formatAnyOfFailure(branchResults);
+    }
+  }
+
   if (assertion.kind === 'skill.referenced') {
     return `no matching SKILL.md reference observed`;
   }
@@ -245,6 +260,16 @@ function formatCount(count: number, singular: string): string {
 
 function formatCommandCalledFailure(observedCount: number): string {
   return `0/${observedCount} observed command segments matched`;
+}
+
+function formatAnyOfFailure(
+  branchResults: readonly {message: string}[],
+): string {
+  const summaries = branchResults.map((branch, index) => {
+    const detail = formatTextExcerpt(branch.message, 72);
+    return `#${index + 1} ${detail}`;
+  });
+  return `0/${branchResults.length} branches matched (${summaries.join('; ')})`;
 }
 
 function formatTextExcerpt(text: string, maxLength = 160): string {
@@ -464,10 +489,10 @@ function assertionMentionsShell(assertion: IrAssertion | undefined): boolean {
     return true;
   }
   return (
-    assertion.kind === 'sequence.inOrder' &&
-    assertion.steps.some(
-      (step) => step.kind === 'tool.called' && step.toolKind === 'shell',
-    )
+    (assertion.kind === 'sequence.inOrder' &&
+      assertion.steps.some(sequenceStepMentionsShell)) ||
+    (assertion.kind === 'anyOf' &&
+      assertion.steps.some(assertionNodeMentionsShell))
   );
 }
 
@@ -479,9 +504,35 @@ function assertionMentionsCommand(assertion: IrAssertion): boolean {
     return true;
   }
   return (
-    assertion.kind === 'sequence.inOrder' &&
-    assertion.steps.some((step) => step.kind === 'command.called')
+    (assertion.kind === 'sequence.inOrder' &&
+      assertion.steps.some(sequenceStepMentionsCommand)) ||
+    (assertion.kind === 'anyOf' &&
+      assertion.steps.some(assertionNodeMentionsCommand))
   );
+}
+
+function assertionNodeMentionsShell(
+  assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
+): boolean {
+  return assertionMentionsShell(assertionBranchWithId(assertion));
+}
+
+function assertionNodeMentionsCommand(
+  assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
+): boolean {
+  return assertionMentionsCommand(assertionBranchWithId(assertion));
+}
+
+function sequenceStepMentionsShell(
+  step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
+): boolean {
+  return step.kind === 'tool.called' && step.toolKind === 'shell';
+}
+
+function sequenceStepMentionsCommand(
+  step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
+): boolean {
+  return step.kind === 'command.called';
 }
 
 function observedShellCommands(toolEvents: readonly ToolEvent[]): string[] {

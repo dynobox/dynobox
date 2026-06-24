@@ -6,6 +6,7 @@
  * stable helper surface.
  */
 
+export {anyOf} from './any-of/index.js';
 export {artifact} from './artifact/index.js';
 export {defineDyno} from './authoring/defineDyno.js';
 export {defineScenario} from './authoring/defineScenario.js';
@@ -18,6 +19,7 @@ export {skill} from './skill/index.js';
 export {tool} from './tool/index.js';
 export {transcript} from './transcript/index.js';
 export type {
+  AnyOfAssertion,
   ArtifactContainsAssertion,
   ArtifactExistsAssertion,
   Assertion,
@@ -30,6 +32,7 @@ export type {
   FinalMessageContainsAssertion,
   NotCalledAssertion,
   SequenceInOrderAssertion,
+  SequenceStepAssertion,
   ShellCommandMatcher,
   ShellToolMatcher,
   SkillReferencedAssertion,

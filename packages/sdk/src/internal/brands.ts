@@ -1,4 +1,6 @@
 import type {
+  AnyOfAssertion,
+  AnyOfBranchAssertion,
   ArtifactContainsAssertion,
   ArtifactExistsAssertion,
   CalledAssertion,
@@ -9,6 +11,7 @@ import type {
   FinalMessageContainsAssertion,
   NotCalledAssertion,
   SequenceInOrderAssertion,
+  SequenceStepAssertion,
   ShellCommandMatcher,
   SkillReferencedAssertion,
   ToolCalledAssertion,
@@ -183,11 +186,22 @@ export function createFinalMessageContainsAssertion(
 
 /** Create an ordered sequence assertion from positive tool-call steps. */
 export function createSequenceInOrderAssertion(
-  steps: readonly (ToolCalledAssertion | CommandCalledAssertion)[],
+  steps: readonly SequenceStepAssertion[],
 ): SequenceInOrderAssertion {
   return {
     [ASSERTION_BRAND]: true as const,
     type: 'sequence.inOrder' as const,
+    steps,
+  };
+}
+
+/** Create a union assertion that passes when any branch passes. */
+export function createAnyOfAssertion<K extends string>(
+  steps: readonly AnyOfBranchAssertion<K>[],
+): AnyOfAssertion<K> {
+  return {
+    [ASSERTION_BRAND]: true as const,
+    type: 'anyOf' as const,
     steps,
   };
 }

@@ -181,6 +181,116 @@ describe('buildRunUploadPayload', () => {
     });
   });
 
+  it('includes anyOf branch definitions and results in the upload payload', () => {
+    const job = {
+      id: 'scenario.flexible.claude-code.iteration.0',
+      scenario: {
+        id: 'scenario.flexible',
+        name: 'flexible workflow',
+        prompt: 'p',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        endpoints: [],
+        assertions: [
+          {
+            id: 'assertion.flexible.anyof',
+            kind: 'anyOf',
+            steps: [
+              {kind: 'artifact.exists', path: 'report.json'},
+              {kind: 'http.called', endpointId: 'endpoint.upload'},
+              {kind: 'transcript.contains', text: 'uploaded'},
+              {kind: 'skill.referenced', skill: 'release'},
+            ],
+          },
+        ],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const result = {
+      jobId: job.id,
+      scenarioId: job.scenario.id,
+      harness: 'claude-code',
+      iteration: 0,
+      status: 'passed',
+      passed: true,
+      setupResult: {success: true, logs: []},
+      httpEvents: [],
+      artifacts: [],
+      assertionResults: [
+        {
+          assertionId: 'assertion.flexible.anyof',
+          kind: 'anyOf',
+          passed: true,
+          message: 'Matched anyOf branch #2: Observed HTTP request.',
+          evidence: {
+            kind: 'anyOf',
+            branchIndex: 2,
+            branches: [
+              {
+                assertionId: 'assertion.flexible.anyof.branch.1',
+                kind: 'artifact.exists',
+                passed: false,
+                message: 'Artifact "report.json" was not found.',
+              },
+              {
+                assertionId: 'assertion.flexible.anyof.branch.2',
+                kind: 'http.called',
+                passed: true,
+                message: 'Observed HTTP request.',
+              },
+              {
+                assertionId: 'assertion.flexible.anyof.branch.3',
+                kind: 'transcript.contains',
+                passed: false,
+                message: 'Transcript did not include "uploaded".',
+              },
+              {
+                assertionId: 'assertion.flexible.anyof.branch.4',
+                kind: 'skill.referenced',
+                passed: true,
+                message: 'Observed skill reference.',
+              },
+            ],
+          },
+        },
+      ],
+      diagnostics: [],
+      warnings: [],
+      timing: {setupMs: 0, harnessMs: 10, assertionsMs: 1, totalMs: 11},
+    } as unknown as LocalRunnerResult;
+
+    const payload = buildRunUploadPayload({
+      dynos: [
+        {
+          dynoPath: 'flexible.dyno.ts',
+          name: null,
+          target: 'flexible',
+          jobs: [job],
+        },
+      ],
+      results: [result],
+      inputPath: 'flexible.dyno.ts',
+      gitHash: null,
+    });
+    const assertion =
+      RunUploadV1.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+
+    expect(assertion.definition?.steps?.map((step) => step.kind)).toEqual([
+      'artifact.exists',
+      'http.called',
+      'transcript.contains',
+      'skill.referenced',
+    ]);
+    expect(assertion.display?.children).toMatchObject([
+      {passed: false, observed: 'Artifact "report.json" was not found.'},
+      {passed: true, observed: 'Observed HTTP request.'},
+      {passed: false, observed: 'Transcript did not include "uploaded".'},
+      {passed: true, observed: 'Observed skill reference.'},
+    ]);
+  });
+
   it('does not count failed command.called observed evidence as matches', () => {
     const job = {
       id: 'scenario.command.claude-code.iteration.0',

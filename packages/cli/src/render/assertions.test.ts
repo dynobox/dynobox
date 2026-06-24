@@ -405,6 +405,90 @@ describe('renderAssertionDetails', () => {
     expect(output).toContain('2. "git add README.md"');
   });
 
+  it('shows compact branch summaries for failed anyOf assertions', () => {
+    const job = {
+      id: 'job.1',
+      scenario: {
+        id: 'scenario.anyof',
+        name: 'anyOf',
+        prompt: 'p',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        endpoints: [],
+        assertions: [
+          {
+            id: 'assertion.anyof.read',
+            kind: 'anyOf',
+            steps: [
+              {
+                kind: 'tool.called',
+                toolKind: 'read_file',
+                pathMatcher: {path: 'package.json'},
+              },
+              {
+                kind: 'command.called',
+                executable: 'cat',
+                matcher: {args: ['package.json']},
+              },
+            ],
+          },
+        ],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const result = {
+      assertionResults: [
+        {
+          assertionId: 'assertion.anyof.read',
+          kind: 'anyOf',
+          passed: false,
+          message:
+            'Expected anyOf to match at least one branch, but all 2 branches failed.\nBranch #1: Expected tool "read_file" with path "package.json" to be called, but observed none.\nBranch #2: Expected command:\n  cat with args ["package.json"]\nObserved commands:\n  1. pwd\nNo observed cat command included arg "package.json".',
+          evidence: {
+            kind: 'anyOf',
+            branches: [
+              {
+                passed: false,
+                message:
+                  'Expected tool "read_file" with path "package.json" to be called, but observed none.',
+              },
+              {
+                passed: false,
+                message:
+                  'Expected command:\n  cat with args ["package.json"]\nObserved commands:\n  1. pwd\nNo observed cat command included arg "package.json".',
+              },
+            ],
+          },
+        },
+      ],
+      harnessResult: {
+        toolEvents: [
+          {
+            kind: 'shell',
+            rawName: 'Bash',
+            input: {command: 'pwd'},
+            command: 'pwd',
+          },
+        ],
+      },
+    } as unknown as LocalRunnerResult;
+
+    const output = renderAssertionDetails(
+      result,
+      assertionByIdForJobs([job]),
+      createRenderContext({usePlainSymbols: true}, {}),
+    );
+
+    expect(output).toContain('observed  0/2 branches matched');
+    expect(output).toContain('#1');
+    expect(output).toContain('read_file');
+    expect(output).toContain('#2');
+    expect(output).toContain('cat');
+    expect(output).not.toContain('observed  Expected anyOf to match');
+  });
+
   it('shows command evidence for failed sequence.inOrder assertions', () => {
     const job = {
       id: 'job.1',

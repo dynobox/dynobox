@@ -1,4 +1,4 @@
-import type {IrAssertion} from '@dynobox/sdk/ir';
+import {irAssertionFromNode, type IrAssertion} from '@dynobox/sdk/ir';
 
 import {
   evaluateArtifactContains,
@@ -74,6 +74,10 @@ function evaluateAssertion(
     return evaluateSequenceInOrder(assertion, input.toolEvents);
   }
 
+  if (assertion.kind === 'anyOf') {
+    return evaluateAnyOf(assertion, input);
+  }
+
   if (assertion.kind === 'skill.referenced') {
     return evaluateSkillReferenced(assertion, input.toolEvents);
   }
@@ -115,4 +119,53 @@ function evaluateAssertion(
   }
 
   return unsupportedAssertionResult(assertion);
+}
+
+/**
+ * Evaluate every `anyOf` branch, then report the lowest-index passing branch.
+ * Branches are always fully evaluated; evaluation does not short-circuit after
+ * the first match.
+ */
+function evaluateAnyOf(
+  assertion: Extract<IrAssertion, {kind: 'anyOf'}>,
+  input: EvaluationInput,
+): AssertionResult {
+  const branchResults = assertion.steps.map((step, index) =>
+    evaluateAssertion(
+      irAssertionFromNode(`${assertion.id}.branch.${index + 1}`, step),
+      input,
+    ),
+  );
+  const matchedIndex = branchResults.findIndex((result) => result.passed);
+
+  if (matchedIndex !== -1) {
+    const matched = branchResults[matchedIndex]!;
+    return {
+      assertionId: assertion.id,
+      kind: assertion.kind,
+      passed: true,
+      message: `Matched anyOf branch #${matchedIndex + 1}: ${matched.message}`,
+      evidence: {
+        kind: 'anyOf',
+        branchIndex: matchedIndex + 1,
+        branches: branchResults,
+      },
+    };
+  }
+
+  return {
+    assertionId: assertion.id,
+    kind: assertion.kind,
+    passed: false,
+    message: [
+      `Expected anyOf to match at least one branch, but all ${branchResults.length} branches failed.`,
+      ...branchResults.map(
+        (result, index) => `Branch #${index + 1}: ${result.message}`,
+      ),
+    ].join('\n'),
+    evidence: {
+      kind: 'anyOf',
+      branches: branchResults,
+    },
+  };
 }

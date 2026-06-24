@@ -7,6 +7,8 @@ import {describe, expect, expectTypeOf, it} from 'vitest';
 
 import {compile, DynoboxConfigError, resolveConfigModule} from './compiler.js';
 import {
+  anyOf,
+  type AnyOfAssertion,
   artifact,
   type ArtifactContainsAssertion,
   type ArtifactExistsAssertion,
@@ -58,6 +60,7 @@ describe('packages/sdk', () => {
     expect(typeof transcript.contains).toBe('function');
     expect(typeof finalMessage.contains).toBe('function');
     expect(typeof sequence.inOrder).toBe('function');
+    expect(typeof anyOf).toBe('function');
     expect(typeof skill.referenced).toBe('function');
     expect(typeof verify.command).toBe('function');
     expect(typeof verify.succeeds).toBe('function');
@@ -283,6 +286,18 @@ export default defineDyno({
       sequence.inOrder([tool.called('shell')]),
     ).toEqualTypeOf<SequenceInOrderAssertion>();
     expectTypeOf(
+      anyOf([tool.called('shell'), command.called('git')]),
+    ).toEqualTypeOf<AnyOfAssertion>();
+    expectTypeOf(
+      anyOf([http.called('getUser'), tool.called('shell')]),
+    ).toEqualTypeOf<AnyOfAssertion<'getUser'>>();
+    // @ts-expect-error sequence.inOrder cannot be evaluated inside anyOf.
+    anyOf([sequence.inOrder([tool.called('shell')])]);
+    // @ts-expect-error anyOf cannot be evaluated inside sequence.inOrder.
+    sequence.inOrder([anyOf([tool.called('shell')])]);
+    // @ts-expect-error verify.command cannot be evaluated inside anyOf.
+    anyOf([verify.succeeds('dynobox validate out.dyno.ts')]);
+    expectTypeOf(
       skill.referenced('commit'),
     ).toEqualTypeOf<SkillReferencedAssertion>();
   });
@@ -495,6 +510,246 @@ export default defineDyno({
       },
     ]);
     expect(irSchema.parse(ir)).toEqual(ir);
+  });
+
+  it('compiles anyOf assertions to flat canonical IR', () => {
+    const config = defineDyno({
+      endpoints: {
+        package: http.endpoint({
+          method: 'GET',
+          url: 'https://registry.npmjs.org/dynobox',
+        }),
+      },
+      scenarios: [
+        {
+          name: 'flexible file read',
+          prompt: 'Read package.json.',
+          assertions: [
+            anyOf([
+              http.called('package'),
+              tool.called('read_file', {path: 'package.json'}),
+              command.called('cat', {args: ['package.json']}),
+            ]),
+          ],
+        },
+      ],
+    });
+
+    const ir = compile(config);
+
+    expect(ir.scenarios[0]!.assertions).toEqual([
+      {
+        id: 'assertion.flexible-file-read.0',
+        kind: 'anyOf',
+        steps: [
+          {
+            kind: 'http.called',
+            endpointId: 'endpoint.flexible-file-read.package',
+          },
+          {
+            kind: 'tool.called',
+            toolKind: 'read_file',
+            pathMatcher: {path: 'package.json'},
+          },
+          {
+            kind: 'command.called',
+            executable: 'cat',
+            matcher: {args: ['package.json']},
+          },
+        ],
+      },
+    ]);
+    expect(irSchema.parse(ir)).toEqual(ir);
+  });
+
+  it('rejects unsupported assertions inside anyOf and sequence.inOrder', () => {
+    expect(() =>
+      compile({
+        scenarios: [
+          {
+            name: 'unsafe verification branch',
+            prompt: 'Create a file.',
+            assertions: [
+              {
+                type: 'anyOf',
+                steps: [
+                  {type: 'artifact.exists', path: 'created.txt'},
+                  {
+                    type: 'verify.command',
+                    command: 'touch created.txt',
+                    exitCode: 0,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      } as unknown as Parameters<typeof compile>[0]),
+    ).toThrow();
+
+    expect(() =>
+      compile({
+        scenarios: [
+          {
+            name: 'unsupported sequence branch',
+            prompt: 'Create a file.',
+            assertions: [
+              {
+                type: 'anyOf',
+                steps: [
+                  {
+                    type: 'sequence.inOrder',
+                    steps: [{type: 'tool.called', tool: 'shell'}],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      } as unknown as Parameters<typeof compile>[0]),
+    ).toThrow();
+
+    expect(() =>
+      compile({
+        scenarios: [
+          {
+            name: 'unsupported nested anyOf branch',
+            prompt: 'Create a file.',
+            assertions: [
+              {
+                type: 'anyOf',
+                steps: [
+                  {
+                    type: 'anyOf',
+                    steps: [{type: 'tool.called', tool: 'shell'}],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      } as unknown as Parameters<typeof compile>[0]),
+    ).toThrow();
+
+    expect(() =>
+      compile({
+        scenarios: [
+          {
+            name: 'unsupported anyOf sequence step',
+            prompt: 'Create a file.',
+            assertions: [
+              {
+                type: 'sequence.inOrder',
+                steps: [
+                  {
+                    type: 'anyOf',
+                    steps: [{type: 'tool.called', tool: 'shell'}],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      } as unknown as Parameters<typeof compile>[0]),
+    ).toThrow();
+
+    expect(() =>
+      irSchema.parse({
+        version: IR_VERSION,
+        scenarios: [
+          {
+            id: 'scenario.unsafe-verification-branch',
+            name: 'unsafe verification branch',
+            prompt: 'Create a file.',
+            harnesses: [{id: 'claude-code'}],
+            setup: [],
+            fixtures: [],
+            endpoints: [],
+            assertions: [
+              {
+                id: 'assertion.unsafe-verification-branch.0',
+                kind: 'anyOf',
+                steps: [
+                  {kind: 'artifact.exists', path: 'created.txt'},
+                  {
+                    kind: 'verify.command',
+                    command: 'touch created.txt',
+                    exitCode: 0,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      irSchema.parse({
+        version: IR_VERSION,
+        scenarios: [
+          {
+            id: 'scenario.unsupported-anyof-sequence-step',
+            name: 'unsupported anyOf sequence step',
+            prompt: 'Create a file.',
+            harnesses: [{id: 'claude-code'}],
+            setup: [],
+            fixtures: [],
+            endpoints: [],
+            assertions: [
+              {
+                id: 'assertion.unsupported-anyof-sequence-step.0',
+                kind: 'sequence.inOrder',
+                steps: [
+                  {
+                    kind: 'anyOf',
+                    steps: [{kind: 'tool.called', toolKind: 'shell'}],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  it('rejects id and label on anyOf branches', () => {
+    expect(() =>
+      compile({
+        scenarios: [
+          {
+            name: 'labeled branch',
+            prompt: 'Read a file.',
+            assertions: [
+              {
+                type: 'anyOf',
+                steps: [
+                  {type: 'artifact.exists', path: 'a.txt', label: 'first'},
+                ],
+              },
+            ],
+          },
+        ],
+      } as unknown as Parameters<typeof compile>[0]),
+    ).toThrow();
+
+    expect(() =>
+      compile({
+        scenarios: [
+          {
+            name: 'identified branch',
+            prompt: 'Read a file.',
+            assertions: [
+              {
+                type: 'anyOf',
+                steps: [{type: 'artifact.exists', path: 'a.txt', id: 'branch.0'}],
+              },
+            ],
+          },
+        ],
+      } as unknown as Parameters<typeof compile>[0]),
+    ).toThrow();
   });
 
   it('compiles verify command assertions to canonical IR', () => {
@@ -883,6 +1138,45 @@ export default defineDyno({
     const paths = new Set(result.error.issues.map((issue) => issue.path[0]));
     expect(paths.has('version')).toBe(true);
     expect(paths.has('scenarios')).toBe(true);
+  });
+
+  it('reports each invalid anyOf branch field once', () => {
+    const result = irSchema.safeParse({
+      version: IR_VERSION,
+      scenarios: [
+        {
+          id: 'scenario.invalid-anyof',
+          name: 'invalid anyOf',
+          prompt: 'p',
+          harnesses: [{id: 'claude-code'}],
+          setup: [],
+          fixtures: [],
+          endpoints: [],
+          assertions: [
+            {
+              id: 'assertion.invalid-anyof.0',
+              kind: 'anyOf',
+              steps: [
+                {
+                  kind: 'tool.called',
+                  toolKind: 'read_file',
+                  matcher: {includes: 'package.json'},
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('Expected invalid IR to fail');
+    expect(
+      result.error.issues.filter(
+        (issue) =>
+          issue.path.join('.') === 'scenarios.0.assertions.0.steps.0.matcher',
+      ),
+    ).toHaveLength(1);
   });
 
   it('compiles a sample npm package research config to canonical IR', () => {
@@ -1274,6 +1568,33 @@ export default defineDyno({
           name: 's',
           prompt: 'p',
           assertions: [http.called('getUser')],
+        },
+      ],
+    });
+
+    defineDyno({
+      endpoints: {
+        getUser: http.endpoint({method: 'GET', url: 'https://a/'}),
+      },
+      scenarios: [
+        {
+          name: 's',
+          prompt: 'p',
+          assertions: [anyOf([http.called('getUser'), tool.called('shell')])],
+        },
+      ],
+    });
+
+    defineDyno({
+      endpoints: {
+        getUser: http.endpoint({method: 'GET', url: 'https://a/'}),
+      },
+      scenarios: [
+        {
+          name: 's',
+          prompt: 'p',
+          // @ts-expect-error 'getuser' is not in the declared endpoint key set 'getUser'
+          assertions: [anyOf([http.called('getuser'), tool.called('shell')])],
         },
       ],
     });

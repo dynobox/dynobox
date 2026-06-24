@@ -817,6 +817,138 @@ describe('evaluateAssertions', () => {
     });
   });
 
+  it('passes anyOf with the first matching branch and reports it', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'anyOf',
+        steps: [
+          {
+            kind: 'tool.called',
+            toolKind: 'read_file',
+            pathMatcher: {path: 'package.json'},
+          },
+          {
+            kind: 'command.called',
+            executable: 'cat',
+            matcher: {args: ['package.json']},
+          },
+        ],
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'cat package.json'},
+          command: 'cat package.json',
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: expect.stringContaining('Matched anyOf branch #2'),
+      evidence: {
+        kind: 'anyOf',
+        branchIndex: 2,
+        branches: [{passed: false}, {passed: true}],
+      },
+    });
+  });
+
+  it('reports the first matching branch when multiple anyOf branches pass', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'anyOf',
+        steps: [
+          {kind: 'tool.called', toolKind: 'shell'},
+          {kind: 'command.called', executable: 'pwd'},
+        ],
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'pwd'},
+          command: 'pwd',
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: expect.stringContaining('Matched anyOf branch #1'),
+      evidence: {
+        kind: 'anyOf',
+        branchIndex: 1,
+        branches: [{passed: true}, {passed: true}],
+      },
+    });
+  });
+
+  it('passes anyOf when an artifact.exists branch matches', () => {
+    const workDir = createWorkDir();
+    writeFileSync(join(workDir, 'report.json'), '{}');
+
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'anyOf',
+        steps: [
+          {
+            kind: 'tool.called',
+            toolKind: 'read_file',
+            pathMatcher: {path: 'report.json'},
+          },
+          {kind: 'artifact.exists', path: 'report.json'},
+        ],
+      },
+      [],
+      {workDir},
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: expect.stringContaining('Matched anyOf branch #2'),
+      evidence: {
+        kind: 'anyOf',
+        branchIndex: 2,
+        branches: [{passed: false}, {passed: true}],
+      },
+    });
+  });
+
+  it('fails anyOf with each branch failure message', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        kind: 'anyOf',
+        steps: [
+          {kind: 'tool.called', toolKind: 'read_file'},
+          {
+            kind: 'command.called',
+            executable: 'cat',
+            matcher: {args: ['a.txt']},
+          },
+        ],
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'pwd'},
+          command: 'pwd',
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({passed: false});
+    expect(result.message).toContain('all 2 branches failed');
+    expect(result.message).toContain('Branch #1:');
+    expect(result.message).toContain('Branch #2:');
+  });
+
   it('passes sequence.inOrder with ordered steps in one shell command', () => {
     const event: ToolEvent = {
       kind: 'shell',

@@ -131,6 +131,11 @@ const commandCalledAssertionSchema = commandCalledStepSchema
   .merge(assertionBaseSchema)
   .strict();
 
+const sequenceStepSchema = z.discriminatedUnion('type', [
+  toolCalledStepSchema,
+  commandCalledStepSchema,
+]);
+
 const commandNotCalledAssertionSchema = z
   .object({
     type: z.literal('command.notCalled'),
@@ -207,14 +212,7 @@ const finalMessageContainsAssertionSchema = z
 const sequenceInOrderAssertionSchema = z
   .object({
     type: z.literal('sequence.inOrder'),
-    steps: z
-      .array(
-        z.discriminatedUnion('type', [
-          toolCalledStepSchema,
-          commandCalledStepSchema,
-        ]),
-      )
-      .min(1),
+    steps: z.array(sequenceStepSchema).min(1),
   })
   .merge(assertionBaseSchema)
   .strict();
@@ -223,6 +221,28 @@ const skillReferencedAssertionSchema = z
   .object({
     type: z.literal('skill.referenced'),
     skill: z.string().min(1),
+  })
+  .merge(assertionBaseSchema)
+  .strict();
+
+const anyOfBranchAssertionSchema = z.discriminatedUnion('type', [
+  calledAssertionSchema,
+  notCalledAssertionSchema,
+  commandCalledAssertionSchema,
+  commandNotCalledAssertionSchema,
+  toolCalledAssertionSchema,
+  toolNotCalledAssertionSchema,
+  artifactExistsAssertionSchema,
+  artifactContainsAssertionSchema,
+  transcriptContainsAssertionSchema,
+  finalMessageContainsAssertionSchema,
+  skillReferencedAssertionSchema,
+]);
+
+const anyOfAssertionSchema = z
+  .object({
+    type: z.literal('anyOf'),
+    steps: z.array(anyOfBranchAssertionSchema).min(1),
   })
   .merge(assertionBaseSchema)
   .strict();
@@ -241,9 +261,10 @@ export const assertionSchema = z
     transcriptContainsAssertionSchema,
     finalMessageContainsAssertionSchema,
     sequenceInOrderAssertionSchema,
+    anyOfAssertionSchema,
     skillReferencedAssertionSchema,
   ])
-  .superRefine((assertion, ctx) => {
+  .superRefine((value, ctx) => {
     const fileToolKinds = new Set<FileToolKind>([
       'read_file',
       'write_file',
@@ -252,10 +273,9 @@ export const assertionSchema = z
     ]);
 
     if (
-      (assertion.type === 'tool.called' ||
-        assertion.type === 'tool.notCalled') &&
-      assertion.command !== undefined &&
-      assertion.tool !== 'shell'
+      (value.type === 'tool.called' || value.type === 'tool.notCalled') &&
+      value.command !== undefined &&
+      value.tool !== 'shell'
     ) {
       ctx.addIssue({
         code: 'custom',
@@ -266,10 +286,9 @@ export const assertionSchema = z
     }
 
     if (
-      (assertion.type === 'tool.called' ||
-        assertion.type === 'tool.notCalled') &&
-      assertion.path !== undefined &&
-      !fileToolKinds.has(assertion.tool as FileToolKind)
+      (value.type === 'tool.called' || value.type === 'tool.notCalled') &&
+      value.path !== undefined &&
+      !fileToolKinds.has(value.tool as FileToolKind)
     ) {
       ctx.addIssue({
         code: 'custom',
@@ -280,10 +299,9 @@ export const assertionSchema = z
     }
 
     if (
-      (assertion.type === 'tool.called' ||
-        assertion.type === 'tool.notCalled') &&
-      assertion.command !== undefined &&
-      assertion.path !== undefined
+      (value.type === 'tool.called' || value.type === 'tool.notCalled') &&
+      value.command !== undefined &&
+      value.path !== undefined
     ) {
       ctx.addIssue({
         code: 'custom',
@@ -292,41 +310,115 @@ export const assertionSchema = z
       });
     }
 
-    if (assertion.type === 'sequence.inOrder') {
-      assertion.steps.forEach((step, index) => {
-        if (step.type !== 'tool.called') return;
-
-        if (step.command !== undefined && step.tool !== 'shell') {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['steps', index, 'command'],
-            message:
-              'Command matchers are only supported for shell tool assertions.',
-          });
-        }
-
-        if (
-          step.path !== undefined &&
-          !fileToolKinds.has(step.tool as FileToolKind)
-        ) {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['steps', index, 'path'],
-            message:
-              'Path matchers are only supported for file-oriented tool assertions.',
-          });
-        }
-
-        if (step.command !== undefined && step.path !== undefined) {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['steps', index, 'path'],
-            message: 'Tool assertions may specify command or path, not both.',
-          });
-        }
+    if (value.type === 'sequence.inOrder') {
+      value.steps.forEach((step, index) => {
+        validateSequenceStep(step, ctx, ['steps', index], fileToolKinds);
       });
     }
+
+    if (value.type === 'anyOf') {
+      validateAnyOfAssertion(value, ctx, ['steps'], fileToolKinds);
+    }
   });
+
+export type AuthoredAssertion = z.infer<typeof assertionSchema>;
+
+function validateAnyOfAssertion(
+  assertion: Extract<AuthoredAssertion, {type: 'anyOf'}>,
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+  fileToolKinds: Set<FileToolKind>,
+): void {
+  assertion.steps.forEach((step, index) => {
+    rejectBranchMetadata(step, ctx, [...path, index]);
+    validateToolAssertion(step, ctx, [...path, index], fileToolKinds);
+  });
+}
+
+// `id`/`label` are accepted by the shared branch schemas but discarded when
+// compiling a branch to IR, so they cannot affect IR, evidence, or UI. Reject
+// them rather than silently dropping them; labeling belongs on the anyOf itself.
+function rejectBranchMetadata(
+  step: {id?: string | undefined; label?: string | undefined},
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+): void {
+  if (step.id !== undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      path: [...path, 'id'],
+      message:
+        'anyOf branches may not define an id; ids are only supported on top-level assertions.',
+    });
+  }
+  if (step.label !== undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      path: [...path, 'label'],
+      message:
+        'anyOf branches may not define a label; labels are only supported on top-level assertions.',
+    });
+  }
+}
+
+function validateSequenceStep(
+  step: unknown,
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+  fileToolKinds: Set<FileToolKind>,
+): void {
+  validateToolAssertion(step, ctx, path, fileToolKinds);
+}
+
+function validateToolAssertion(
+  assertion: unknown,
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+  fileToolKinds: Set<FileToolKind>,
+): void {
+  if (
+    typeof assertion !== 'object' ||
+    assertion === null ||
+    !('type' in assertion) ||
+    (assertion.type !== 'tool.called' && assertion.type !== 'tool.notCalled')
+  ) {
+    return;
+  }
+
+  const toolAssertion = assertion as unknown as {
+    command?: unknown;
+    path?: unknown;
+    tool: FileToolKind | string;
+  };
+
+  if (toolAssertion.command !== undefined && toolAssertion.tool !== 'shell') {
+    ctx.addIssue({
+      code: 'custom',
+      path: [...path, 'command'],
+      message: 'Command matchers are only supported for shell tool assertions.',
+    });
+  }
+
+  if (
+    toolAssertion.path !== undefined &&
+    !fileToolKinds.has(toolAssertion.tool as FileToolKind)
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: [...path, 'path'],
+      message:
+        'Path matchers are only supported for file-oriented tool assertions.',
+    });
+  }
+
+  if (toolAssertion.command !== undefined && toolAssertion.path !== undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      path: [...path, 'path'],
+      message: 'Tool assertions may specify command or path, not both.',
+    });
+  }
+}
 
 export const scenarioSchema = z.object({
   id: authoredIdSchema.optional(),

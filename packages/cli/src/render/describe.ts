@@ -8,6 +8,7 @@ import type {ShellToolMatcher} from '@dynobox/sdk';
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {truncate} from '../terminal/index.js';
+import {assertionBranchWithId} from '../util/assertionBranch.js';
 
 const SHELL_PREVIEW_MAX = 42;
 
@@ -58,6 +59,10 @@ export function describeAssertion(assertion: IrAssertion): string {
     return `sequence.inOrder(${assertion.steps.length} steps)`;
   }
 
+  if (assertion.kind === 'anyOf') {
+    return `anyOf(${assertion.steps.length} branches)`;
+  }
+
   if (assertion.kind === 'skill.referenced') {
     return `skill.referenced(${assertion.skill})`;
   }
@@ -104,6 +109,10 @@ export function describeExpectation(assertion: IrAssertion): string {
 
   if (assertion.kind === 'sequence.inOrder') {
     return assertion.steps.map(describeToolStepExpectation).join(' before ');
+  }
+
+  if (assertion.kind === 'anyOf') {
+    return assertion.steps.map(describeAssertionNodeExpectation).join(' or ');
   }
 
   if (assertion.kind === 'command.notCalled') {
@@ -199,6 +208,12 @@ function describeToolStepExpectation(
   }
   if (step.matcher === undefined) return `${step.toolKind} tool call`;
   return describeShellMatcherExpectation(step.matcher);
+}
+
+function describeAssertionNodeExpectation(
+  assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
+): string {
+  return describeExpectation(assertionBranchWithId(assertion));
 }
 
 function describeShellMatcherExpectation(matcher: ShellToolMatcher): string {

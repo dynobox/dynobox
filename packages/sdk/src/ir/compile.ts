@@ -1,7 +1,5 @@
-import type {z} from 'zod';
-
 import {DynoboxConfigError} from '../errors.js';
-import {assertionSchema, configSchema} from '../schema/configSchema.js';
+import {type AuthoredAssertion, configSchema} from '../schema/configSchema.js';
 import type {Endpoint} from '../types/brands.js';
 import type {DynoboxConfig} from '../types/config.js';
 import type {HarnessRunConfig} from '../types/harness.js';
@@ -10,12 +8,32 @@ import {
   type Ir,
   IR_VERSION,
   type IrAssertion,
+  type IrAssertionNode,
   type IrEndpoint,
   type IrHarnessConfig,
   type IrScenario,
+  type IrSequenceStep,
 } from './types.js';
 
 const SCENARIO_PREFIX = 'scenario.';
+
+type IrAssertionBody = IrAssertion extends infer Assertion
+  ? Assertion extends IrAssertion
+    ? Omit<Assertion, 'id' | 'label'>
+    : never
+  : never;
+type AuthoredSequenceStep = Extract<
+  AuthoredAssertion,
+  {type: 'sequence.inOrder'}
+>['steps'][number];
+type AuthoredAnyOfBranch = Extract<
+  AuthoredAssertion,
+  {type: 'anyOf'}
+>['steps'][number];
+type IrVerifyCommandBody = Omit<
+  Extract<IrAssertion, {kind: 'verify.command'}>,
+  'id' | 'label'
+>;
 
 /**
  * Validates an author config and emits the canonical IR. Throws
@@ -140,20 +158,33 @@ function buildIrAssertion(
   assertionIdSuffix: string,
   index: number,
   endpointIdByKey: Map<string, string>,
-  assertion: z.infer<typeof assertionSchema>,
+  assertion: AuthoredAssertion,
 ): IrAssertion {
   const id = `assertion.${scenarioSlug}.${assertionIdSuffix}`;
   const metadata =
     assertion.label === undefined ? {} : {label: assertion.label};
+  // `buildIrAssertionNode` returns the assertion body; adding the generated
+  // ID and optional metadata restores the complete discriminated union.
+  return {
+    id,
+    ...metadata,
+    ...buildIrAssertionNode(scenarioName, index, endpointIdByKey, assertion),
+  } as IrAssertion;
+}
+
+function buildIrAssertionNode(
+  scenarioName: string,
+  index: number,
+  endpointIdByKey: Map<string, string>,
+  assertion: AuthoredAssertion,
+): IrAssertionBody {
   if (assertion.type === 'tool.called') {
-    return {id, ...metadata, ...buildIrToolCalledStep(assertion)};
+    return buildIrToolCalledStep(assertion);
   }
 
   if (assertion.type === 'tool.notCalled') {
-    const base: IrAssertion = {
-      id,
-      ...metadata,
-      kind: 'tool.notCalled',
+    const base = {
+      kind: 'tool.notCalled' as const,
       toolKind: assertion.tool,
     };
     if (assertion.command !== undefined) {
@@ -166,14 +197,12 @@ function buildIrAssertion(
   }
 
   if (assertion.type === 'command.called') {
-    return {id, ...metadata, ...buildIrCommandCalledStep(assertion)};
+    return buildIrCommandCalledStep(assertion);
   }
 
   if (assertion.type === 'command.notCalled') {
-    const base: IrAssertion = {
-      id,
-      ...metadata,
-      kind: 'command.notCalled',
+    const base = {
+      kind: 'command.notCalled' as const,
       executable: assertion.executable,
     };
     return assertion.command === undefined
@@ -182,17 +211,15 @@ function buildIrAssertion(
   }
 
   if (assertion.type === 'verify.command') {
-    return buildIrVerifyCommandAssertion(id, metadata, assertion);
+    return buildIrVerifyCommandAssertion(assertion);
   }
 
   if (assertion.type === 'artifact.exists') {
-    return {id, ...metadata, kind: 'artifact.exists', path: assertion.path};
+    return {kind: 'artifact.exists', path: assertion.path};
   }
 
   if (assertion.type === 'artifact.contains') {
     return {
-      id,
-      ...metadata,
       kind: 'artifact.contains',
       path: assertion.path,
       text: assertion.text,
@@ -200,13 +227,11 @@ function buildIrAssertion(
   }
 
   if (assertion.type === 'transcript.contains') {
-    return {id, ...metadata, kind: 'transcript.contains', text: assertion.text};
+    return {kind: 'transcript.contains', text: assertion.text};
   }
 
   if (assertion.type === 'finalMessage.contains') {
     return {
-      id,
-      ...metadata,
       kind: 'finalMessage.contains',
       text: assertion.text,
     };
@@ -214,19 +239,22 @@ function buildIrAssertion(
 
   if (assertion.type === 'sequence.inOrder') {
     return {
-      id,
-      ...metadata,
       kind: 'sequence.inOrder',
+      steps: assertion.steps.map((step) => buildIrSequenceStep(step)),
+    };
+  }
+
+  if (assertion.type === 'anyOf') {
+    return {
+      kind: 'anyOf',
       steps: assertion.steps.map((step) =>
-        step.type === 'tool.called'
-          ? buildIrToolCalledStep(step)
-          : buildIrCommandCalledStep(step),
+        buildIrAnyOfBranch(scenarioName, index, endpointIdByKey, step),
       ),
     };
   }
 
   if (assertion.type === 'skill.referenced') {
-    return {id, ...metadata, kind: 'skill.referenced', skill: assertion.skill};
+    return {kind: 'skill.referenced', skill: assertion.skill};
   }
 
   const endpointId = endpointIdByKey.get(assertion.endpoint);
@@ -238,10 +266,8 @@ function buildIrAssertion(
   }
 
   if (assertion.type === 'http.called') {
-    const base: IrAssertion = {
-      id,
-      ...metadata,
-      kind: 'http.called',
+    const base = {
+      kind: 'http.called' as const,
       endpointId,
     };
     if (assertion.status !== undefined) {
@@ -249,11 +275,34 @@ function buildIrAssertion(
     }
     return base;
   }
-  return {id, ...metadata, kind: 'http.notCalled', endpointId};
+  return {kind: 'http.notCalled', endpointId};
+}
+
+function buildIrSequenceStep(assertion: AuthoredSequenceStep): IrSequenceStep {
+  if (assertion.type === 'tool.called') {
+    return buildIrToolCalledStep(assertion);
+  }
+  return buildIrCommandCalledStep(assertion);
+}
+
+function buildIrAnyOfBranch(
+  scenarioName: string,
+  index: number,
+  endpointIdByKey: Map<string, string>,
+  assertion: AuthoredAnyOfBranch,
+): IrAssertionNode {
+  // Authoring validation excludes nested sequence, anyOf, and verify nodes,
+  // leaving exactly the node variants accepted by the IR schema.
+  return buildIrAssertionNode(
+    scenarioName,
+    index,
+    endpointIdByKey,
+    assertion,
+  ) as IrAssertionNode;
 }
 
 function buildIrToolCalledStep(
-  assertion: Extract<z.infer<typeof assertionSchema>, {type: 'tool.called'}>,
+  assertion: Extract<AuthoredAssertion, {type: 'tool.called'}>,
 ): Omit<Extract<IrAssertion, {kind: 'tool.called'}>, 'id'> {
   const base = {
     kind: 'tool.called' as const,
@@ -275,7 +324,7 @@ function buildIrToolCalledStep(
 }
 
 function buildIrCommandCalledStep(
-  assertion: Extract<z.infer<typeof assertionSchema>, {type: 'command.called'}>,
+  assertion: Extract<AuthoredAssertion, {type: 'command.called'}>,
 ): Omit<Extract<IrAssertion, {kind: 'command.called'}>, 'id'> {
   const base = {
     kind: 'command.called' as const,
@@ -288,7 +337,7 @@ function buildIrCommandCalledStep(
 
 function serializeCommandMatcher(
   matcher: Extract<
-    z.infer<typeof assertionSchema>,
+    AuthoredAssertion,
     {type: 'command.called' | 'command.notCalled'}
   >['command'],
 ): NonNullable<Extract<IrAssertion, {kind: 'command.called'}>['matcher']> {
@@ -312,16 +361,12 @@ function serializeCommandMatcher(
 }
 
 function buildIrVerifyCommandAssertion(
-  id: string,
-  metadata: {label?: string},
-  assertion: Extract<z.infer<typeof assertionSchema>, {type: 'verify.command'}>,
-): IrAssertion {
-  const ir: IrAssertion = {
-    id,
-    ...metadata,
+  assertion: Extract<AuthoredAssertion, {type: 'verify.command'}>,
+): IrVerifyCommandBody {
+  const ir = {
     kind: 'verify.command',
     command: assertion.command,
-  };
+  } as IrVerifyCommandBody;
   if (assertion.exitCode !== undefined) ir.exitCode = assertion.exitCode;
   if (assertion.stdout !== undefined) ir.stdout = assertion.stdout;
   if (assertion.stderr !== undefined) ir.stderr = assertion.stderr;

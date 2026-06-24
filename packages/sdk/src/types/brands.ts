@@ -255,7 +255,35 @@ export type SequenceInOrderAssertion = {
   readonly id?: string;
   readonly label?: string;
   readonly type: 'sequence.inOrder';
-  readonly steps: readonly (ToolCalledAssertion | CommandCalledAssertion)[];
+  readonly steps: readonly SequenceStepAssertion[];
+};
+
+/** Assertion branch that can participate in ordered event matching. */
+export type SequenceStepAssertion =
+  | ToolCalledAssertion
+  | CommandCalledAssertion;
+
+/** Assertion branch that can safely be evaluated as part of an `anyOf`. */
+export type AnyOfBranchAssertion<K extends string = string> =
+  | CalledAssertion<K>
+  | NotCalledAssertion<K>
+  | CommandCalledAssertion
+  | CommandNotCalledAssertion
+  | ToolCalledAssertion
+  | ToolNotCalledAssertion
+  | ArtifactExistsAssertion
+  | ArtifactContainsAssertion
+  | TranscriptContainsAssertion
+  | FinalMessageContainsAssertion
+  | SkillReferencedAssertion;
+
+/** Assertion that passes when any branch assertion passes. */
+export type AnyOfAssertion<K extends string = string> = {
+  readonly [ASSERTION_BRAND]: true;
+  readonly id?: string;
+  readonly label?: string;
+  readonly type: 'anyOf';
+  readonly steps: readonly AnyOfBranchAssertion<K>[];
 };
 
 /** Assertion that observed harness events referenced a named skill instruction file. */
@@ -269,16 +297,7 @@ export type SkillReferencedAssertion = {
 
 /** Union of all author-facing assertion objects accepted by config scenarios. */
 export type Assertion<K extends string = string> =
-  | CalledAssertion<K>
-  | NotCalledAssertion<K>
-  | CommandCalledAssertion
-  | CommandNotCalledAssertion
   | VerifyCommandAssertion
-  | ToolCalledAssertion
-  | ToolNotCalledAssertion
-  | ArtifactExistsAssertion
-  | ArtifactContainsAssertion
-  | TranscriptContainsAssertion
-  | FinalMessageContainsAssertion
   | SequenceInOrderAssertion
-  | SkillReferencedAssertion;
+  | AnyOfAssertion<K>
+  | AnyOfBranchAssertion<K>;
