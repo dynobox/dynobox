@@ -20,6 +20,9 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   `skill.referenced(...)` for observed `SKILL.md` file references.
 - Changed failed `command.called(...)` assertions to show a compact match-count
   summary by default and parsed command segments in verbose output.
+- Changed `dynobox run --save-run` to verify authentication before local
+  execution, retry transient verification failures, and fail fast for invalid
+  tokens before running scenarios.
 
 ---
 

@@ -307,7 +307,9 @@ describe('dynobox run — upload', () => {
     );
 
     expect(result.exitCode).toBe(configErrorExitCode);
-    expect(result.stderr).toContain('--save-run requires a valid Dynobox token');
+    expect(result.stderr).toContain(
+      '--save-run requires a valid Dynobox token',
+    );
     expect(result.stderr).toContain('dynobox login');
     expect(result.stderr).toContain('DYNOBOX_TOKEN');
     expect(runSpy).not.toHaveBeenCalled();
@@ -316,6 +318,74 @@ describe('dynobox run — upload', () => {
       'http://localhost:8787/auth/identity',
       expect.objectContaining({method: 'GET'}),
     );
+    expect(result.stdout).toBe('');
+  });
+
+  it('retries transient --save-run auth failures before running', async () => {
+    let authAttempts = 0;
+    const fetchMock = stubFetch(async (url) => {
+      if (String(url).endsWith('/auth/identity')) {
+        authAttempts += 1;
+        return authAttempts < 3
+          ? Response.json({}, {status: 503})
+          : Response.json({identity: {email: 'user@example.com'}});
+      }
+
+      return Response.json({id: 'run-1'});
+    });
+    const harness = createPassingHarness();
+    const runSpy = vi.spyOn(harness, 'run');
+
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--save-run'],
+      {
+        env: {
+          DYNOBOX_API_URL: 'http://localhost:8787',
+          DYNOBOX_TOKEN: 'token',
+        },
+        harnesses: [harness],
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      'http://localhost:8787/auth/identity',
+      'http://localhost:8787/auth/identity',
+      'http://localhost:8787/auth/identity',
+      'http://localhost:8787/runs',
+    ]);
+  });
+
+  it('errors before running when transient --save-run auth failures persist', async () => {
+    const fetchMock = stubFetch(async () => Response.json({}, {status: 503}));
+    const harness = createPassingHarness();
+    const runSpy = vi.spyOn(harness, 'run');
+
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--save-run'],
+      {
+        env: {
+          DYNOBOX_API_URL: 'http://localhost:8787',
+          DYNOBOX_TOKEN: 'token',
+        },
+        harnesses: [harness],
+      },
+    );
+
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(result.stderr).toContain(
+      'Could not verify Dynobox authentication after 3 attempts',
+    );
+    expect(result.stderr).toContain('Try --save-run again later');
+    expect(runSpy).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      'http://localhost:8787/auth/identity',
+      'http://localhost:8787/auth/identity',
+      'http://localhost:8787/auth/identity',
+    ]);
     expect(result.stdout).toBe('');
   });
 

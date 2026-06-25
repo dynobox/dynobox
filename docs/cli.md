@@ -352,9 +352,11 @@ action, but they do not change job status, assertion results, or exit codes.
 `--save-run` uploads a compact summary of the run to the Dynobox dashboard after
 execution. It requires a token: sign in with `dynobox login` or set `DYNOBOX_TOKEN`.
 If no token is available, the command errors before running any scenarios rather
-than wasting the run. When a token is present, upload is best-effort: a failed
-upload prints a warning and never changes job status, assertion results, or the
-exit code.
+than wasting the run. When a token is present, the CLI verifies it before local
+execution and retries transient verification failures before asking you to try
+`--save-run` again later. After verification succeeds, upload is best-effort: a
+failed upload prints a warning and never changes job status, assertion results,
+or the exit code.
 
 The uploaded summary includes scenario and assertion details and, for failing jobs,
 **diagnostics (command and harness error output), the URLs of requested HTTP
