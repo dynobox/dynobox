@@ -62,6 +62,11 @@ import {shouldRenderLive} from './environment.js';
 import type {ExecuteCliOptions, OutputWriter} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
 import {
+  fetchAuthenticatedIdentity,
+  type IdentityResult,
+  resolveApiUrl,
+} from './identityApi.js';
+import {
   buildRunJobOptions,
   validateHarnessOverrides,
   validateIterations,
@@ -71,6 +76,9 @@ import {
   validateScenarioFilters,
 } from './options.js';
 import {uploadRun} from './uploadRun.js';
+
+const AUTH_PREFLIGHT_ATTEMPTS = 3;
+const AUTH_PREFLIGHT_RETRY_BASE_DELAY_MS = 100;
 
 export type RunCommandFlags = {
   harness?: string[];
@@ -136,26 +144,10 @@ export async function runCommandAction(
   );
   const scenarioPatterns = validateScenarioFilters(commandFlags.scenario);
 
-  // Fail fast: when --save-run is requested but no token is available, error
-  // before running any scenarios instead of running the whole suite and only
-  // warning at the end that the run could not be saved.
+  // Fail fast when --save-run cannot authenticate before doing any expensive
+  // local scenario work that would only fail during upload.
   if (commandFlags.saveRun === true) {
-    const token = resolveAuthToken(
-      options.env === undefined ? {} : {env: options.env},
-    );
-    if (token === null) {
-      writeStderr(
-        renderRunConfigErrorMessage(
-          inputLabel,
-          '--save-run requires a Dynobox token. Run `dynobox login` or set DYNOBOX_TOKEN.',
-        ),
-      );
-      throw new CommanderError(
-        configErrorExitCode,
-        'dynobox.auth',
-        '--save-run requires a token',
-      );
-    }
+    await validateSaveRunAuth({inputLabel, env: options.env, writeStderr});
   }
 
   const {files, configPath: appliedConfigPath} = await discoverOrFail(
@@ -278,6 +270,90 @@ export async function runCommandAction(
   }
 
   return runFailed;
+}
+
+async function validateSaveRunAuth(input: {
+  inputLabel: string;
+  env: ExecuteCliOptions['env'];
+  writeStderr: OutputWriter;
+}): Promise<void> {
+  const token = resolveAuthToken(
+    input.env === undefined ? {} : {env: input.env},
+  );
+  if (token === null) {
+    input.writeStderr(
+      renderRunConfigErrorMessage(
+        input.inputLabel,
+        '--save-run requires a Dynobox token. Run `dynobox login` or set DYNOBOX_TOKEN.',
+      ),
+    );
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.auth',
+      '--save-run requires a token',
+    );
+  }
+
+  let lastResult: IdentityResult | null = null;
+  for (let attempt = 0; attempt < AUTH_PREFLIGHT_ATTEMPTS; attempt += 1) {
+    const result = await fetchAuthenticatedIdentity({
+      apiUrl: resolveApiUrl(input.env),
+      token,
+    });
+    if (result.status === 'authenticated') return;
+
+    if (result.status === 'expired') {
+      failSaveRunAuth(
+        input,
+        '--save-run token expired; run `dynobox login` again to re-authenticate.',
+        '--save-run token expired',
+      );
+    }
+
+    if (result.status === 'unauthorized') {
+      failSaveRunAuth(
+        input,
+        '--save-run requires a valid Dynobox token. Run `dynobox login` or set a valid DYNOBOX_TOKEN.',
+        '--save-run requires valid auth',
+      );
+    }
+
+    lastResult = result;
+    if (attempt < AUTH_PREFLIGHT_ATTEMPTS - 1) {
+      await delayAuthPreflightRetry(attempt);
+    }
+  }
+
+  failSaveRunAuth(
+    input,
+    `Could not verify Dynobox authentication after ${AUTH_PREFLIGHT_ATTEMPTS} attempts. Try --save-run again later.`,
+    describeSaveRunVerificationFailure(lastResult),
+  );
+}
+
+function delayAuthPreflightRetry(attempt: number): Promise<void> {
+  const delayMs = AUTH_PREFLIGHT_RETRY_BASE_DELAY_MS * 2 ** attempt;
+  return new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+}
+
+function failSaveRunAuth(
+  input: {inputLabel: string; writeStderr: OutputWriter},
+  message: string,
+  errorMessage: string,
+): never {
+  input.writeStderr(renderRunConfigErrorMessage(input.inputLabel, message));
+  throw new CommanderError(configErrorExitCode, 'dynobox.auth', errorMessage);
+}
+
+function describeSaveRunVerificationFailure(
+  result: IdentityResult | null,
+): string {
+  if (result?.status === 'api_error') {
+    return `--save-run auth verification failed with HTTP ${result.httpStatus}`;
+  }
+  return '--save-run auth verification failed';
 }
 
 /** The dyno file path as authored/discovered, relative to the working dir. */
