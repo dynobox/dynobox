@@ -61,6 +61,7 @@ import {
 import {shouldRenderLive} from './environment.js';
 import type {ExecuteCliOptions, OutputWriter} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
+import {fetchAuthenticatedIdentity, resolveApiUrl} from './identityApi.js';
 import {
   buildRunJobOptions,
   validateHarnessOverrides,
@@ -136,9 +137,8 @@ export async function runCommandAction(
   );
   const scenarioPatterns = validateScenarioFilters(commandFlags.scenario);
 
-  // Fail fast: when --save-run is requested but no token is available, error
-  // before running any scenarios instead of running the whole suite and only
-  // warning at the end that the run could not be saved.
+  // Fail fast when --save-run cannot authenticate before doing any expensive
+  // local scenario work that would only fail during upload.
   if (commandFlags.saveRun === true) {
     const token = resolveAuthToken(
       options.env === undefined ? {} : {env: options.env},
@@ -154,6 +154,24 @@ export async function runCommandAction(
         configErrorExitCode,
         'dynobox.auth',
         '--save-run requires a token',
+      );
+    }
+
+    const authResult = await fetchAuthenticatedIdentity({
+      apiUrl: resolveApiUrl(options.env),
+      token,
+    });
+    if (authResult.status !== 'authenticated') {
+      writeStderr(
+        renderRunConfigErrorMessage(
+          inputLabel,
+          '--save-run requires a valid Dynobox token. Run `dynobox login` or set a valid DYNOBOX_TOKEN.',
+        ),
+      );
+      throw new CommanderError(
+        configErrorExitCode,
+        'dynobox.auth',
+        '--save-run requires valid auth',
       );
     }
   }

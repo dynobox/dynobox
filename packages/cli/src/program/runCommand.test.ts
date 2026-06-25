@@ -189,9 +189,16 @@ describe('dynobox run — upload', () => {
   });
 
   it('uploads compact JSON-reporter runs to stderr without changing stdout', async () => {
-    const fetchMock = stubFetch(async () =>
-      Response.json({id: 'run-1', url: 'https://dash.dynobox.xyz/runs/run-1'}),
-    );
+    const fetchMock = stubFetch(async (url) => {
+      if (String(url).endsWith('/auth/identity')) {
+        return Response.json({identity: {email: 'user@example.com'}});
+      }
+
+      return Response.json({
+        id: 'run-1',
+        url: 'https://dash.dynobox.xyz/runs/run-1',
+      });
+    });
 
     const result = await executeCli(
       ['run', fixtures.validConfigPath, '--reporter', 'json', '--save-run'],
@@ -207,7 +214,7 @@ describe('dynobox run — upload', () => {
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line) as Record<string, unknown>);
-    const [, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [, request] = fetchMock.mock.calls[1] as [string, RequestInit];
     const payload = JSON.parse(String(request.body)) as Record<string, unknown>;
 
     expect(result.exitCode).toBe(0);
@@ -215,7 +222,16 @@ describe('dynobox run — upload', () => {
     expect(result.stderr).toBe(
       'Saved run: https://dash.dynobox.xyz/runs/run-1\n',
     );
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:8787/auth/identity',
+      expect.objectContaining({
+        headers: {authorization: 'Bearer token'},
+        method: 'GET',
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
       'http://localhost:8787/runs',
       expect.objectContaining({
         headers: {
@@ -274,8 +290,41 @@ describe('dynobox run — upload', () => {
     expect(result.stdout).toBe('');
   });
 
+  it('errors before running when --save-run auth is invalid', async () => {
+    const fetchMock = stubFetch(async () => Response.json({}, {status: 401}));
+    const harness = createPassingHarness();
+    const runSpy = vi.spyOn(harness, 'run');
+
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--save-run'],
+      {
+        env: {
+          DYNOBOX_API_URL: 'http://localhost:8787',
+          DYNOBOX_TOKEN: 'invalid-token',
+        },
+        harnesses: [harness],
+      },
+    );
+
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(result.stderr).toContain('--save-run requires a valid Dynobox token');
+    expect(result.stderr).toContain('dynobox login');
+    expect(result.stderr).toContain('DYNOBOX_TOKEN');
+    expect(runSpy).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8787/auth/identity',
+      expect.objectContaining({method: 'GET'}),
+    );
+    expect(result.stdout).toBe('');
+  });
+
   it('keeps run failure exit code when upload fails', async () => {
-    stubFetch(async () => {
+    stubFetch(async (url) => {
+      if (String(url).endsWith('/auth/identity')) {
+        return Response.json({identity: {email: 'user@example.com'}});
+      }
+
       throw new Error('network down');
     });
 
