@@ -321,6 +321,39 @@ describe('dynobox run — upload', () => {
     expect(result.stdout).toBe('');
   });
 
+  it('errors before running when --save-run token is expired', async () => {
+    const fetchMock = stubFetch(async () =>
+      Response.json(
+        {error: {code: 'token_expired', message: 'Token expired.'}},
+        {status: 401},
+      ),
+    );
+    const harness = createPassingHarness();
+    const runSpy = vi.spyOn(harness, 'run');
+
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--save-run'],
+      {
+        env: {
+          DYNOBOX_API_URL: 'http://localhost:8787',
+          DYNOBOX_TOKEN: 'expired-token',
+        },
+        harnesses: [harness],
+      },
+    );
+
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(result.stderr).toContain('token expired');
+    expect(result.stderr).toContain('dynobox login');
+    expect(runSpy).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8787/auth/identity',
+      expect.objectContaining({method: 'GET'}),
+    );
+    expect(result.stdout).toBe('');
+  });
+
   it('retries transient --save-run auth failures before running', async () => {
     let authAttempts = 0;
     const fetchMock = stubFetch(async (url) => {

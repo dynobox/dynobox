@@ -78,6 +78,7 @@ import {
 import {uploadRun} from './uploadRun.js';
 
 const AUTH_PREFLIGHT_ATTEMPTS = 3;
+const AUTH_PREFLIGHT_RETRY_BASE_DELAY_MS = 100;
 
 export type RunCommandFlags = {
   harness?: string[];
@@ -301,7 +302,15 @@ async function validateSaveRunAuth(input: {
     });
     if (result.status === 'authenticated') return;
 
-    if (result.status === 'expired' || result.status === 'unauthorized') {
+    if (result.status === 'expired') {
+      failSaveRunAuth(
+        input,
+        '--save-run token expired; run `dynobox login` again to re-authenticate.',
+        '--save-run token expired',
+      );
+    }
+
+    if (result.status === 'unauthorized') {
       failSaveRunAuth(
         input,
         '--save-run requires a valid Dynobox token. Run `dynobox login` or set a valid DYNOBOX_TOKEN.',
@@ -310,6 +319,9 @@ async function validateSaveRunAuth(input: {
     }
 
     lastResult = result;
+    if (attempt < AUTH_PREFLIGHT_ATTEMPTS - 1) {
+      await delayAuthPreflightRetry(attempt);
+    }
   }
 
   failSaveRunAuth(
@@ -317,6 +329,13 @@ async function validateSaveRunAuth(input: {
     `Could not verify Dynobox authentication after ${AUTH_PREFLIGHT_ATTEMPTS} attempts. Try --save-run again later.`,
     describeSaveRunVerificationFailure(lastResult),
   );
+}
+
+function delayAuthPreflightRetry(attempt: number): Promise<void> {
+  const delayMs = AUTH_PREFLIGHT_RETRY_BASE_DELAY_MS * 2 ** attempt;
+  return new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
 }
 
 function failSaveRunAuth(
