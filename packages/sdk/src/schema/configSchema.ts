@@ -2,11 +2,15 @@ import {z} from 'zod';
 
 import {
   type Endpoint,
-  type FileToolKind,
   isShellCommandMatcher,
   type ShellCommandMatcher,
   TOOL_KINDS,
 } from '../types/brands.js';
+import {
+  AUTHORING_TOOL_MATCHER_MESSAGES,
+  isToolAssertionKind,
+  validateToolAssertionNode,
+} from './toolMatcherValidation.js';
 import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/httpMethod.js';
 
@@ -265,73 +269,40 @@ export const assertionSchema = z
     skillReferencedAssertionSchema,
   ])
   .superRefine((value, ctx) => {
-    const fileToolKinds = new Set<FileToolKind>([
-      'read_file',
-      'write_file',
-      'edit_file',
-      'search_files',
-    ]);
-
-    if (
-      (value.type === 'tool.called' || value.type === 'tool.notCalled') &&
-      value.command !== undefined &&
-      value.tool !== 'shell'
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['command'],
-        message:
-          'Command matchers are only supported for shell tool assertions.',
-      });
-    }
-
-    if (
-      (value.type === 'tool.called' || value.type === 'tool.notCalled') &&
-      value.path !== undefined &&
-      !fileToolKinds.has(value.tool as FileToolKind)
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['path'],
-        message:
-          'Path matchers are only supported for file-oriented tool assertions.',
-      });
-    }
-
-    if (
-      (value.type === 'tool.called' || value.type === 'tool.notCalled') &&
-      value.command !== undefined &&
-      value.path !== undefined
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['path'],
-        message: 'Tool assertions may specify command or path, not both.',
-      });
+    if (isToolAssertionKind(value.type)) {
+      validateToolAssertionNode(value, ctx, [], authoringToolMatcherOptions);
     }
 
     if (value.type === 'sequence.inOrder') {
       value.steps.forEach((step, index) => {
-        validateSequenceStep(step, ctx, ['steps', index], fileToolKinds);
+        validateSequenceStep(step, ctx, ['steps', index]);
       });
     }
 
     if (value.type === 'anyOf') {
-      validateAnyOfAssertion(value, ctx, ['steps'], fileToolKinds);
+      validateAnyOfAssertion(value, ctx, ['steps']);
     }
   });
 
 export type AuthoredAssertion = z.infer<typeof assertionSchema>;
 
+const authoringToolMatcherOptions = {
+  kindField: 'type' as const,
+  toolKindField: 'tool',
+  shellMatcherField: 'command',
+  pathMatcherField: 'path',
+  fieldPaths: {shellMatcher: 'command', pathMatcher: 'path'},
+  messages: AUTHORING_TOOL_MATCHER_MESSAGES,
+};
+
 function validateAnyOfAssertion(
   assertion: Extract<AuthoredAssertion, {type: 'anyOf'}>,
   ctx: z.RefinementCtx,
   path: (string | number)[],
-  fileToolKinds: Set<FileToolKind>,
 ): void {
   assertion.steps.forEach((step, index) => {
     rejectBranchMetadata(step, ctx, [...path, index]);
-    validateToolAssertion(step, ctx, [...path, index], fileToolKinds);
+    validateToolAssertion(step, ctx, [...path, index]);
   });
 }
 
@@ -365,59 +336,16 @@ function validateSequenceStep(
   step: unknown,
   ctx: z.RefinementCtx,
   path: (string | number)[],
-  fileToolKinds: Set<FileToolKind>,
 ): void {
-  validateToolAssertion(step, ctx, path, fileToolKinds);
+  validateToolAssertion(step, ctx, path);
 }
 
 function validateToolAssertion(
   assertion: unknown,
   ctx: z.RefinementCtx,
   path: (string | number)[],
-  fileToolKinds: Set<FileToolKind>,
 ): void {
-  if (
-    typeof assertion !== 'object' ||
-    assertion === null ||
-    !('type' in assertion) ||
-    (assertion.type !== 'tool.called' && assertion.type !== 'tool.notCalled')
-  ) {
-    return;
-  }
-
-  const toolAssertion = assertion as unknown as {
-    command?: unknown;
-    path?: unknown;
-    tool: FileToolKind | string;
-  };
-
-  if (toolAssertion.command !== undefined && toolAssertion.tool !== 'shell') {
-    ctx.addIssue({
-      code: 'custom',
-      path: [...path, 'command'],
-      message: 'Command matchers are only supported for shell tool assertions.',
-    });
-  }
-
-  if (
-    toolAssertion.path !== undefined &&
-    !fileToolKinds.has(toolAssertion.tool as FileToolKind)
-  ) {
-    ctx.addIssue({
-      code: 'custom',
-      path: [...path, 'path'],
-      message:
-        'Path matchers are only supported for file-oriented tool assertions.',
-    });
-  }
-
-  if (toolAssertion.command !== undefined && toolAssertion.path !== undefined) {
-    ctx.addIssue({
-      code: 'custom',
-      path: [...path, 'path'],
-      message: 'Tool assertions may specify command or path, not both.',
-    });
-  }
+  validateToolAssertionNode(assertion, ctx, path, authoringToolMatcherOptions);
 }
 
 export const scenarioSchema = z.object({

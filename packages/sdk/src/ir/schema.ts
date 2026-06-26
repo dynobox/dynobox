@@ -1,11 +1,15 @@
 import {z} from 'zod';
 
 import {
-  type FileToolKind,
   isShellToolMatcher,
   type ShellToolMatcher,
   TOOL_KINDS,
 } from '../types/brands.js';
+import {
+  IR_TOOL_MATCHER_MESSAGES,
+  isToolAssertionKind,
+  validateToolAssertionNode,
+} from '../schema/toolMatcherValidation.js';
 import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/httpMethod.js';
 
@@ -241,53 +245,8 @@ export const irAssertionSchema = z
     }),
   ])
   .superRefine((assertion, ctx) => {
-    const fileToolKinds = new Set<FileToolKind>([
-      'read_file',
-      'write_file',
-      'edit_file',
-      'search_files',
-    ]);
-
-    if (
-      (assertion.kind === 'tool.called' ||
-        assertion.kind === 'tool.notCalled') &&
-      assertion.matcher !== undefined &&
-      assertion.toolKind !== 'shell'
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['matcher'],
-        message:
-          'Tool assertion matchers are only supported for shell tool assertions.',
-      });
-    }
-
-    if (
-      (assertion.kind === 'tool.called' ||
-        assertion.kind === 'tool.notCalled') &&
-      assertion.pathMatcher !== undefined &&
-      !fileToolKinds.has(assertion.toolKind as FileToolKind)
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['pathMatcher'],
-        message:
-          'Tool assertion path matchers are only supported for file-oriented tool assertions.',
-      });
-    }
-
-    if (
-      (assertion.kind === 'tool.called' ||
-        assertion.kind === 'tool.notCalled') &&
-      assertion.matcher !== undefined &&
-      assertion.pathMatcher !== undefined
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['pathMatcher'],
-        message:
-          'Tool assertions may specify matcher or pathMatcher, not both.',
-      });
+    if (isToolAssertionKind(assertion.kind)) {
+      validateToolAssertionNode(assertion, ctx, [], irToolMatcherOptions);
     }
 
     if (
@@ -305,92 +264,42 @@ export const irAssertionSchema = z
 
     if (assertion.kind === 'sequence.inOrder') {
       assertion.steps.forEach((step, index) => {
-        validateIrSequenceStep(step, ctx, ['steps', index], fileToolKinds);
+        validateIrSequenceStep(step, ctx, ['steps', index]);
       });
     }
   });
+
+const irToolMatcherOptions = {
+  kindField: 'kind' as const,
+  toolKindField: 'toolKind',
+  shellMatcherField: 'matcher',
+  pathMatcherField: 'pathMatcher',
+  fieldPaths: {shellMatcher: 'matcher', pathMatcher: 'pathMatcher'},
+  messages: IR_TOOL_MATCHER_MESSAGES,
+};
 
 function validateIrAssertionNode(
   assertion: unknown,
   ctx: z.RefinementCtx,
   path: (string | number)[],
 ): void {
-  const fileToolKinds = new Set<FileToolKind>([
-    'read_file',
-    'write_file',
-    'edit_file',
-    'search_files',
-  ]);
-
-  validateIrToolNode(assertion, ctx, path, fileToolKinds);
+  validateIrToolNode(assertion, ctx, path);
 }
 
 function validateIrSequenceStep(
   step: unknown,
   ctx: z.RefinementCtx,
   path: (string | number)[],
-  fileToolKinds: Set<FileToolKind>,
 ): void {
-  validateIrToolNode(step, ctx, path, fileToolKinds);
+  validateIrToolNode(step, ctx, path);
 }
 
 function validateIrToolNode(
   assertion: unknown,
   ctx: z.RefinementCtx,
   path: (string | number)[],
-  fileToolKinds: Set<FileToolKind>,
 ): void {
-  if (
-    typeof assertion !== 'object' ||
-    assertion === null ||
-    !('kind' in assertion)
-  ) {
-    return;
-  }
-  if (assertion.kind !== 'tool.called' && assertion.kind !== 'tool.notCalled') {
-    return;
-  }
-
-  const toolAssertion = assertion as {
-    matcher?: unknown;
-    pathMatcher?: unknown;
-    toolKind?: unknown;
-  };
-
-  if (
-    toolAssertion.matcher !== undefined &&
-    toolAssertion.toolKind !== 'shell'
-  ) {
-    ctx.addIssue({
-      code: 'custom',
-      path: [...path, 'matcher'],
-      message:
-        'Tool assertion matchers are only supported for shell tool assertions.',
-    });
-  }
-
-  if (
-    toolAssertion.pathMatcher !== undefined &&
-    !fileToolKinds.has(toolAssertion.toolKind as FileToolKind)
-  ) {
-    ctx.addIssue({
-      code: 'custom',
-      path: [...path, 'pathMatcher'],
-      message:
-        'Tool assertion path matchers are only supported for file-oriented tool assertions.',
-    });
-  }
-
-  if (
-    toolAssertion.matcher !== undefined &&
-    toolAssertion.pathMatcher !== undefined
-  ) {
-    ctx.addIssue({
-      code: 'custom',
-      path: [...path, 'pathMatcher'],
-      message: 'Tool assertions may specify matcher or pathMatcher, not both.',
-    });
-  }
+  validateToolAssertionNode(assertion, ctx, path, irToolMatcherOptions);
 }
 
 export const irScenarioSchema = z.object({
