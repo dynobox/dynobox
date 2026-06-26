@@ -34,7 +34,6 @@ export type {
   SequenceInOrderAssertion,
   SequenceStepAssertion,
   ShellCommandMatcher,
-  ShellToolMatcher,
   SkillReferencedAssertion,
   TextMatcher,
   ToolCalledAssertion,
@@ -55,4 +54,6 @@ export {
   type PermissionMode,
 } from './types/harness.js';
 export {HTTP_METHODS, type HttpMethod} from './types/httpMethod.js';
+/** @deprecated Use `ShellCommandMatcher`. */
+export type {ShellCommandMatcher as ShellToolMatcher} from './types/brands.js';
 export {verify} from './verify/index.js';

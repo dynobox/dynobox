@@ -1,8 +1,8 @@
 import {z} from 'zod';
 
 import {
-  isShellToolMatcher,
-  type ShellToolMatcher,
+  isShellCommandMatcher,
+  type ShellCommandMatcher,
   TOOL_KINDS,
 } from '../types/brands.js';
 import {
@@ -39,12 +39,15 @@ export const irHarnessConfigSchema = z.object({
   permissionMode: z.enum(PERMISSION_MODES).optional(),
 });
 
-const shellToolMatcherSchema = z.custom<ShellToolMatcher>(isShellToolMatcher, {
-  message:
-    'Shell tool matcher must specify exactly one string field: equals, includes, startsWith, or matches.',
-});
+const shellCommandMatcherSchema = z.custom<ShellCommandMatcher>(
+  isShellCommandMatcher,
+  {
+    message:
+      'Shell command matcher must specify exactly one string field: equals, includes, startsWith, or matches.',
+  },
+);
 
-const textMatcherSchema = shellToolMatcherSchema;
+const textMatcherSchema = shellCommandMatcherSchema;
 
 const toolPathMatcherSchema = z.object({
   path: z.string().min(1),
@@ -68,7 +71,7 @@ const irToolCalledAssertionSchema = z.object({
   label: z.string().min(1).optional(),
   kind: z.literal('tool.called'),
   toolKind: z.enum(TOOL_KINDS),
-  matcher: shellToolMatcherSchema.optional(),
+  matcher: shellCommandMatcherSchema.optional(),
   pathMatcher: toolPathMatcherSchema.optional(),
 });
 
@@ -77,7 +80,7 @@ const irToolNotCalledAssertionSchema = z.object({
   label: z.string().min(1).optional(),
   kind: z.literal('tool.notCalled'),
   toolKind: z.enum(TOOL_KINDS),
-  matcher: shellToolMatcherSchema.optional(),
+  matcher: shellCommandMatcherSchema.optional(),
   pathMatcher: toolPathMatcherSchema.optional(),
 });
 
@@ -110,7 +113,7 @@ const irVerifyCommandAssertionSchema = z.object({
 const irSequenceToolCalledStepSchema = z.object({
   kind: z.literal('tool.called'),
   toolKind: z.enum(TOOL_KINDS),
-  matcher: shellToolMatcherSchema.optional(),
+  matcher: shellCommandMatcherSchema.optional(),
   pathMatcher: toolPathMatcherSchema.optional(),
 });
 

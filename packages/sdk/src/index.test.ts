@@ -25,6 +25,8 @@ import {
   type PermissionMode,
   sequence,
   type SequenceInOrderAssertion,
+  type ShellCommandMatcher,
+  type ShellToolMatcher,
   skill,
   type SkillReferencedAssertion,
   tool,
@@ -64,6 +66,10 @@ describe('packages/sdk', () => {
     expect(typeof skill.referenced).toBe('function');
     expect(typeof verify.command).toBe('function');
     expect(typeof verify.succeeds).toBe('function');
+  });
+
+  it('keeps ShellToolMatcher as a deprecated alias of ShellCommandMatcher', () => {
+    expectTypeOf<ShellToolMatcher>().toEqualTypeOf<ShellCommandMatcher>();
   });
 
   it('provides dyno config path and shell quoting helpers', () => {
