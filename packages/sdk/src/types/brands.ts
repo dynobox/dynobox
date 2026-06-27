@@ -77,7 +77,7 @@ export type VerifyCommandOptions = {
 
 const shellCommandMatcherKeys = new Set<string>(SHELL_COMMAND_MATCHER_KEYS);
 
-/** Runtime guard used by Zod schemas and evaluator code for shell matchers. */
+/** Runtime guard used by Zod schemas and evaluator code for shell command matchers. */
 export function isShellCommandMatcher(
   value: unknown,
 ): value is ShellCommandMatcher {

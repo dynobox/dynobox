@@ -65,7 +65,7 @@ export function createHttpNotCalledAssertion<K extends string>(
   };
 }
 
-/** Create a positive tool-use assertion, optionally scoped by shell matcher. */
+/** Create a positive tool-use assertion, optionally scoped by shell command matcher. */
 export function createToolCalledAssertion<K extends ToolKind>(
   tool: K,
   matcher?: ShellCommandMatcher | ToolPathMatcher,
@@ -82,7 +82,7 @@ export function createToolCalledAssertion<K extends ToolKind>(
       : {...base, command: matcher}) as unknown as ToolCalledAssertion<K>;
 }
 
-/** Create a negative tool-use assertion, optionally scoped by shell matcher. */
+/** Create a negative tool-use assertion, optionally scoped by shell command matcher. */
 export function createToolNotCalledAssertion<K extends ToolKind>(
   tool: K,
   matcher?: ShellCommandMatcher | ToolPathMatcher,

@@ -21,21 +21,18 @@ export type ToolMatcherValidationMessages = {
   notBoth: string;
 };
 
-export const AUTHORING_TOOL_MATCHER_MESSAGES: ToolMatcherValidationMessages = {
-  shellMatcherOnlyOnShell:
-    'Command matchers are only supported for shell tool assertions.',
-  pathMatcherOnlyOnFileTools:
-    'Path matchers are only supported for file-oriented tool assertions.',
-  notBoth: 'Tool assertions may specify command or path, not both.',
-};
+/** Zod error when a shell command matcher object has the wrong shape. */
+export const SHELL_COMMAND_MATCHER_SHAPE_MESSAGE =
+  'Shell command matcher must specify exactly one string field: equals, includes, startsWith, or matches.';
 
-export const IR_TOOL_MATCHER_MESSAGES: ToolMatcherValidationMessages = {
+/** Semantic validation errors for tool assertion shell/path matcher placement. */
+export const TOOL_MATCHER_MESSAGES: ToolMatcherValidationMessages = {
   shellMatcherOnlyOnShell:
-    'Tool assertion matchers are only supported for shell tool assertions.',
+    'Shell command matchers are only supported on shell tool assertions.',
   pathMatcherOnlyOnFileTools:
-    'Tool assertion path matchers are only supported for file-oriented tool assertions.',
+    'Path matchers are only supported on file-oriented tool assertions.',
   notBoth:
-    'Tool assertions may specify matcher or pathMatcher, not both.',
+    'Tool assertions may specify a shell command matcher or a path matcher, not both.',
 };
 
 const TOOL_ASSERTION_KINDS = ['tool.called', 'tool.notCalled'] as const;

@@ -6,13 +6,14 @@ import {
   type ShellCommandMatcher,
   TOOL_KINDS,
 } from '../types/brands.js';
-import {
-  AUTHORING_TOOL_MATCHER_MESSAGES,
-  isToolAssertionKind,
-  validateToolAssertionNode,
-} from './toolMatcherValidation.js';
 import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/httpMethod.js';
+import {
+  isToolAssertionKind,
+  SHELL_COMMAND_MATCHER_SHAPE_MESSAGE,
+  TOOL_MATCHER_MESSAGES,
+  validateToolAssertionNode,
+} from './toolMatcherValidation.js';
 
 const endpointKeySchema = z
   .string()
@@ -90,8 +91,7 @@ const notCalledAssertionSchema = z
 const shellCommandMatcherSchema = z.custom<ShellCommandMatcher>(
   isShellCommandMatcher,
   {
-    message:
-      'Shell command matcher must specify exactly one string field: equals, includes, startsWith, or matches.',
+    message: SHELL_COMMAND_MATCHER_SHAPE_MESSAGE,
   },
 );
 
@@ -251,6 +251,15 @@ const anyOfAssertionSchema = z
   .merge(assertionBaseSchema)
   .strict();
 
+const authoringToolMatcherOptions = {
+  kindField: 'type' as const,
+  toolKindField: 'tool',
+  shellMatcherField: 'command',
+  pathMatcherField: 'path',
+  fieldPaths: {shellMatcher: 'command', pathMatcher: 'path'},
+  messages: TOOL_MATCHER_MESSAGES,
+};
+
 export const assertionSchema = z
   .discriminatedUnion('type', [
     calledAssertionSchema,
@@ -285,15 +294,6 @@ export const assertionSchema = z
   });
 
 export type AuthoredAssertion = z.infer<typeof assertionSchema>;
-
-const authoringToolMatcherOptions = {
-  kindField: 'type' as const,
-  toolKindField: 'tool',
-  shellMatcherField: 'command',
-  pathMatcherField: 'path',
-  fieldPaths: {shellMatcher: 'command', pathMatcher: 'path'},
-  messages: AUTHORING_TOOL_MATCHER_MESSAGES,
-};
 
 function validateAnyOfAssertion(
   assertion: Extract<AuthoredAssertion, {type: 'anyOf'}>,

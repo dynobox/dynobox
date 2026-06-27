@@ -3,16 +3,13 @@ import {z} from 'zod';
 
 import {
   addToolMatcherIssues,
-  AUTHORING_TOOL_MATCHER_MESSAGES,
   FILE_TOOL_KINDS,
-  IR_TOOL_MATCHER_MESSAGES,
   isToolAssertionKind,
+  TOOL_MATCHER_MESSAGES,
   validateToolAssertionNode,
 } from './toolMatcherValidation.js';
 
-function collectIssues(
-  fn: (ctx: z.RefinementCtx) => void,
-): z.ZodIssue[] {
+function collectIssues(fn: (ctx: z.RefinementCtx) => void): z.ZodIssue[] {
   const issues: z.ZodIssue[] = [];
   const ctx = {
     addIssue: (issue: z.ZodIssue) => {
@@ -39,7 +36,7 @@ describe('toolMatcherValidation', () => {
     expect(isToolAssertionKind('http.called')).toBe(false);
   });
 
-  it('rejects shell matchers on non-shell tool assertions', () => {
+  it('rejects shell command matchers on non-shell tool assertions', () => {
     const issues = collectIssues((ctx) => {
       addToolMatcherIssues(
         ctx,
@@ -49,14 +46,14 @@ describe('toolMatcherValidation', () => {
           shellMatcher: {includes: 'src/index.ts'},
         },
         {shellMatcher: 'command', pathMatcher: 'path'},
-        AUTHORING_TOOL_MATCHER_MESSAGES,
+        TOOL_MATCHER_MESSAGES,
       );
     });
 
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatchObject({
       path: ['assertions', 0, 'command'],
-      message: AUTHORING_TOOL_MATCHER_MESSAGES.shellMatcherOnlyOnShell,
+      message: TOOL_MATCHER_MESSAGES.shellMatcherOnlyOnShell,
     });
   });
 
@@ -70,18 +67,18 @@ describe('toolMatcherValidation', () => {
           pathMatcher: {path: 'README.md'},
         },
         {shellMatcher: 'matcher', pathMatcher: 'pathMatcher'},
-        IR_TOOL_MATCHER_MESSAGES,
+        TOOL_MATCHER_MESSAGES,
       );
     });
 
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatchObject({
       path: ['pathMatcher'],
-      message: IR_TOOL_MATCHER_MESSAGES.pathMatcherOnlyOnFileTools,
+      message: TOOL_MATCHER_MESSAGES.pathMatcherOnlyOnFileTools,
     });
   });
 
-  it('rejects specifying both shell and path matchers', () => {
+  it('rejects specifying both a shell command matcher and a path matcher', () => {
     const issues = collectIssues((ctx) => {
       addToolMatcherIssues(
         ctx,
@@ -92,21 +89,21 @@ describe('toolMatcherValidation', () => {
           pathMatcher: {path: 'README.md'},
         },
         {shellMatcher: 'command', pathMatcher: 'path'},
-        AUTHORING_TOOL_MATCHER_MESSAGES,
+        TOOL_MATCHER_MESSAGES,
       );
     });
 
     expect(issues).toHaveLength(2);
     expect(issues.map((issue) => issue.message)).toEqual([
-      AUTHORING_TOOL_MATCHER_MESSAGES.pathMatcherOnlyOnFileTools,
-      AUTHORING_TOOL_MATCHER_MESSAGES.notBoth,
+      TOOL_MATCHER_MESSAGES.pathMatcherOnlyOnFileTools,
+      TOOL_MATCHER_MESSAGES.notBoth,
     ]);
     expect(issues[1]).toMatchObject({
       path: ['steps', 1, 'path'],
     });
   });
 
-  it('accepts valid shell and file tool matcher combinations', () => {
+  it('accepts valid shell command matcher and file path matcher combinations', () => {
     const shellIssues = collectIssues((ctx) => {
       addToolMatcherIssues(
         ctx,
@@ -116,7 +113,7 @@ describe('toolMatcherValidation', () => {
           shellMatcher: {includes: 'pnpm test'},
         },
         {shellMatcher: 'command', pathMatcher: 'path'},
-        AUTHORING_TOOL_MATCHER_MESSAGES,
+        TOOL_MATCHER_MESSAGES,
       );
     });
     const fileIssues = collectIssues((ctx) => {
@@ -128,7 +125,7 @@ describe('toolMatcherValidation', () => {
           pathMatcher: {path: 'package.json'},
         },
         {shellMatcher: 'matcher', pathMatcher: 'pathMatcher'},
-        IR_TOOL_MATCHER_MESSAGES,
+        TOOL_MATCHER_MESSAGES,
       );
     });
 
@@ -152,7 +149,7 @@ describe('toolMatcherValidation', () => {
           shellMatcherField: 'command',
           pathMatcherField: 'path',
           fieldPaths: {shellMatcher: 'command', pathMatcher: 'path'},
-          messages: AUTHORING_TOOL_MATCHER_MESSAGES,
+          messages: TOOL_MATCHER_MESSAGES,
         },
       );
     });
@@ -173,7 +170,7 @@ describe('toolMatcherValidation', () => {
           shellMatcherField: 'matcher',
           pathMatcherField: 'pathMatcher',
           fieldPaths: {shellMatcher: 'matcher', pathMatcher: 'pathMatcher'},
-          messages: IR_TOOL_MATCHER_MESSAGES,
+          messages: TOOL_MATCHER_MESSAGES,
         },
       );
     });

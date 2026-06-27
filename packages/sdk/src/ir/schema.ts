@@ -1,15 +1,16 @@
 import {z} from 'zod';
 
 import {
+  isToolAssertionKind,
+  SHELL_COMMAND_MATCHER_SHAPE_MESSAGE,
+  TOOL_MATCHER_MESSAGES,
+  validateToolAssertionNode,
+} from '../schema/toolMatcherValidation.js';
+import {
   isShellCommandMatcher,
   type ShellCommandMatcher,
   TOOL_KINDS,
 } from '../types/brands.js';
-import {
-  IR_TOOL_MATCHER_MESSAGES,
-  isToolAssertionKind,
-  validateToolAssertionNode,
-} from '../schema/toolMatcherValidation.js';
 import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/httpMethod.js';
 
@@ -42,8 +43,7 @@ export const irHarnessConfigSchema = z.object({
 const shellCommandMatcherSchema = z.custom<ShellCommandMatcher>(
   isShellCommandMatcher,
   {
-    message:
-      'Shell command matcher must specify exactly one string field: equals, includes, startsWith, or matches.',
+    message: SHELL_COMMAND_MATCHER_SHAPE_MESSAGE,
   },
 );
 
@@ -165,6 +165,39 @@ const irSkillReferencedAssertionNodeSchema = z.object({
   skill: z.string().min(1),
 });
 
+const irToolMatcherOptions = {
+  kindField: 'kind' as const,
+  toolKindField: 'toolKind',
+  shellMatcherField: 'matcher',
+  pathMatcherField: 'pathMatcher',
+  fieldPaths: {shellMatcher: 'matcher', pathMatcher: 'pathMatcher'},
+  messages: TOOL_MATCHER_MESSAGES,
+};
+
+function validateIrToolNode(
+  assertion: unknown,
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+): void {
+  validateToolAssertionNode(assertion, ctx, path, irToolMatcherOptions);
+}
+
+function validateIrAssertionNode(
+  assertion: unknown,
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+): void {
+  validateIrToolNode(assertion, ctx, path);
+}
+
+function validateIrSequenceStep(
+  step: unknown,
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+): void {
+  validateIrToolNode(step, ctx, path);
+}
+
 const irAssertionNodeSchema = z
   .discriminatedUnion('kind', [
     irHttpCalledAssertionNodeSchema,
@@ -271,39 +304,6 @@ export const irAssertionSchema = z
       });
     }
   });
-
-const irToolMatcherOptions = {
-  kindField: 'kind' as const,
-  toolKindField: 'toolKind',
-  shellMatcherField: 'matcher',
-  pathMatcherField: 'pathMatcher',
-  fieldPaths: {shellMatcher: 'matcher', pathMatcher: 'pathMatcher'},
-  messages: IR_TOOL_MATCHER_MESSAGES,
-};
-
-function validateIrAssertionNode(
-  assertion: unknown,
-  ctx: z.RefinementCtx,
-  path: (string | number)[],
-): void {
-  validateIrToolNode(assertion, ctx, path);
-}
-
-function validateIrSequenceStep(
-  step: unknown,
-  ctx: z.RefinementCtx,
-  path: (string | number)[],
-): void {
-  validateIrToolNode(step, ctx, path);
-}
-
-function validateIrToolNode(
-  assertion: unknown,
-  ctx: z.RefinementCtx,
-  path: (string | number)[],
-): void {
-  validateToolAssertionNode(assertion, ctx, path, irToolMatcherOptions);
-}
 
 export const irScenarioSchema = z.object({
   id: z.string().min(1),

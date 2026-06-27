@@ -44,7 +44,7 @@ export function shellCommandMatches(
 }
 
 /**
- * Locate a shell matcher within a command after an offset.
+ * Locate a shell command matcher within a command after an offset.
  *
  * Sequence assertions use this to allow multiple ordered steps to match one
  * compound shell command without repeatedly matching the same substring.
@@ -111,7 +111,7 @@ export function validateRegexMatcher(
   }
 }
 
-/** Describe a shell matcher for failure messages and CLI output. */
+/** Describe a shell command matcher for failure messages and CLI output. */
 export function describeShellMatcher(matcher: ShellCommandMatcher): string {
   if ('equals' in matcher && typeof matcher.equals === 'string') {
     return `equals "${matcher.equals}"`;
@@ -130,7 +130,7 @@ export function describeShellMatcher(matcher: ShellCommandMatcher): string {
 
 function invalidRegexMessage(pattern: string, error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
-  return `Invalid shell matcher regex "${pattern}": ${detail}`;
+  return `Invalid shell command matcher regex "${pattern}": ${detail}`;
 }
 
 function passedPosition(
