@@ -15,6 +15,7 @@ import {
   symbol,
 } from '../terminal/index.js';
 import {displayPath} from '../util/displayPath.js';
+import {reportConfigError} from '../util/reportConfigError.js';
 import {compileDynos, type CompileDynosResult} from './compileDynos.js';
 import {discoverDynos, DynoPathNotFoundError} from './discoverDynos.js';
 import type {ExecuteCliOptions, OutputWriter} from './execute.js';
@@ -150,13 +151,12 @@ function validateReporter(
   inputLabel: string,
   writeStderr: OutputWriter,
 ) {
-  try {
-    return validateReporterFormat(rawReporter);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    writeStderr(renderConfigErrorMessage('validate', inputLabel, message));
-    throw error;
-  }
+  return reportConfigError(
+    inputLabel,
+    writeStderr,
+    (label, message) => renderConfigErrorMessage('validate', label, message),
+    () => validateReporterFormat(rawReporter),
+  );
 }
 
 function discoveryErrorMessage(error: unknown): string {

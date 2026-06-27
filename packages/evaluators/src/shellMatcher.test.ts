@@ -50,7 +50,7 @@ describe('shellCommandMatches', () => {
     const result = shellCommandMatches(command, {matches: '('});
 
     expect(result.passed).toBe(false);
-    expect(result.error).toMatch(/^Invalid shell matcher regex "\("/);
+    expect(result.error).toMatch(/^Invalid shell command matcher regex "\("/);
   });
 });
 
@@ -105,7 +105,7 @@ describe('shellCommandMatchPosition', () => {
 
     expect(result.passed).toBe(false);
     if (result.passed) throw new Error('Expected invalid regex to fail');
-    expect(result.error).toMatch(/^Invalid shell matcher regex "\("/);
+    expect(result.error).toMatch(/^Invalid shell command matcher regex "\("/);
   });
 });
 
@@ -117,13 +117,13 @@ describe('validateRegexMatcher', () => {
 
   it('returns an error message for invalid regex matchers', () => {
     expect(validateRegexMatcher({matches: '('})).toMatch(
-      /^Invalid shell matcher regex "\("/,
+      /^Invalid shell command matcher regex "\("/,
     );
   });
 });
 
 describe('describeShellMatcher', () => {
-  it('describes supported shell matchers', () => {
+  it('describes supported shell command matchers', () => {
     expect(describeShellMatcher({equals: 'pnpm test'})).toBe(
       'equals "pnpm test"',
     );

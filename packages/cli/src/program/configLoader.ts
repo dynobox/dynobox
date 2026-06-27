@@ -42,17 +42,8 @@ export async function loadDyno(filePath: string): Promise<unknown> {
   if (YAML_EXTENSIONS.has(extname(absolute).toLowerCase())) {
     return loadYamlDyno(absolute);
   }
-  return loadConfigModule(absolute);
-}
-
-/**
- * Backwards-compatible alias. Prefer `loadDyno`. Retained because the
- * existing `runCommand` import points here; will be removed once the
- * call site has migrated.
- */
-export async function loadConfigModule(configPath: string): Promise<unknown> {
   registerDynoboxSdkResolver();
-  const configUrl = pathToFileURL(resolve(configPath)).href;
+  const configUrl = pathToFileURL(absolute).href;
   return tsImport(configUrl, import.meta.url);
 }
 

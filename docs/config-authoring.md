@@ -155,15 +155,15 @@ Supported tool kinds:
 - `task`
 - `unknown`
 
-Shell tool assertions can include exactly one command matcher:
+Shell tool assertions can include exactly one shell command matcher:
 
 - `{equals: 'pnpm test'}`
 - `{includes: 'package.json'}`
 - `{startsWith: 'pnpm'}`
 - `{matches: 'pnpm\\s+test'}`
 
-`matches` is a JavaScript regular expression string. Command matchers are only
-valid on `shell` tool assertions.
+`matches` is a JavaScript regular expression string. Shell command matchers are
+only valid on `shell` tool assertions.
 
 File-oriented tool assertions can include a path matcher:
 

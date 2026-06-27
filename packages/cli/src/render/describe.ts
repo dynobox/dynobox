@@ -4,7 +4,7 @@
  */
 
 import type {ShellToolEvent, ToolEvent} from '@dynobox/runner-local';
-import type {ShellToolMatcher} from '@dynobox/sdk';
+import type {ShellCommandMatcher} from '@dynobox/sdk';
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {truncate} from '../terminal/index.js';
@@ -216,7 +216,7 @@ function describeAssertionNodeExpectation(
   return describeExpectation(assertionBranchWithId(assertion));
 }
 
-function describeShellMatcherExpectation(matcher: ShellToolMatcher): string {
+function describeShellMatcherExpectation(matcher: ShellCommandMatcher): string {
   if ('equals' in matcher) {
     return `shell command equal to "${matcher.equals}"`;
   }
@@ -229,7 +229,7 @@ function describeShellMatcherExpectation(matcher: ShellToolMatcher): string {
   return `shell command matching /${matcher.matches}/`;
 }
 
-function describeShellMatcher(matcher: ShellToolMatcher): string {
+function describeShellMatcher(matcher: ShellCommandMatcher): string {
   if ('equals' in matcher) return `equals: ${matcher.equals}`;
   if ('includes' in matcher) return `includes: ${matcher.includes}`;
   if ('startsWith' in matcher) return `startsWith: ${matcher.startsWith}`;

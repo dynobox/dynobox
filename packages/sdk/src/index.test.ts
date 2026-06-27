@@ -743,7 +743,9 @@ export default defineDyno({
             assertions: [
               {
                 type: 'anyOf',
-                steps: [{type: 'artifact.exists', path: 'a.txt', id: 'branch.0'}],
+                steps: [
+                  {type: 'artifact.exists', path: 'a.txt', id: 'branch.0'},
+                ],
               },
             ],
           },
@@ -1047,7 +1049,7 @@ export default defineDyno({
     expect(() => compile(bad)).toThrow(/Shell command matcher/);
   });
 
-  it('rejects command matchers on non-shell tool assertions', () => {
+  it('rejects shell command matchers on non-shell tool assertions', () => {
     const bad = {
       scenarios: [
         {
@@ -1064,10 +1066,12 @@ export default defineDyno({
       ],
     } as unknown as Parameters<typeof compile>[0];
 
-    expect(() => compile(bad)).toThrow(/only supported/);
+    expect(() => compile(bad)).toThrow(
+      /Shell command matchers are only supported/,
+    );
   });
 
-  it('rejects command matchers on non-shell negative tool assertions', () => {
+  it('rejects shell command matchers on non-shell negative tool assertions', () => {
     const bad = {
       scenarios: [
         {
@@ -1084,7 +1088,9 @@ export default defineDyno({
       ],
     } as unknown as Parameters<typeof compile>[0];
 
-    expect(() => compile(bad)).toThrow(/only supported/);
+    expect(() => compile(bad)).toThrow(
+      /Shell command matchers are only supported/,
+    );
   });
 
   it('rejects path matchers on non-file tool assertions', () => {
@@ -1599,8 +1605,8 @@ export default defineDyno({
       ],
     });
 
-    // Tool assertions are endpoint-independent, but shell matchers only apply
-    // to the canonical shell tool kind.
+    // Tool assertions are endpoint-independent, but shell command matchers only
+    // apply to the canonical shell tool kind.
     defineDyno({
       scenarios: [
         {
@@ -1623,10 +1629,10 @@ export default defineDyno({
       ],
     });
 
-    // @ts-expect-error shell matchers are only valid for tool.called('shell', matcher)
+    // @ts-expect-error shell command matchers are only valid for tool.called('shell', matcher)
     tool.called('edit_file', {includes: 'src/index.ts'});
 
-    // @ts-expect-error shell matchers are only valid for tool.notCalled('shell', matcher)
+    // @ts-expect-error shell command matchers are only valid for tool.notCalled('shell', matcher)
     tool.notCalled('edit_file', {includes: 'src/index.ts'});
 
     // @ts-expect-error path matchers are only valid for file-oriented tools

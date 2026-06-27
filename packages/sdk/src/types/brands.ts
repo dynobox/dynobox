@@ -51,9 +51,6 @@ export type ShellCommandMatcher = {
   [K in ShellCommandMatcherKey]: SingleShellCommandMatcher<K>;
 }[ShellCommandMatcherKey];
 
-/** @deprecated Use `ShellCommandMatcher`. */
-export type ShellToolMatcher = ShellCommandMatcher;
-
 /** Matcher for tools that operate on filesystem paths. */
 export type ToolPathMatcher = {
   readonly path: string;
@@ -80,7 +77,7 @@ export type VerifyCommandOptions = {
 
 const shellCommandMatcherKeys = new Set<string>(SHELL_COMMAND_MATCHER_KEYS);
 
-/** Runtime guard used by Zod schemas and evaluator code for shell matchers. */
+/** Runtime guard used by Zod schemas and evaluator code for shell command matchers. */
 export function isShellCommandMatcher(
   value: unknown,
 ): value is ShellCommandMatcher {
@@ -96,9 +93,6 @@ export function isShellCommandMatcher(
   const [key, matcherValue] = entries[0]!;
   return shellCommandMatcherKeys.has(key) && typeof matcherValue === 'string';
 }
-
-/** @deprecated Use `isShellCommandMatcher`. */
-export const isShellToolMatcher = isShellCommandMatcher;
 
 /** Endpoint definition produced by `http.endpoint`. */
 export type Endpoint = EndpointSpec & {

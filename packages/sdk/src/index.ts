@@ -34,7 +34,6 @@ export type {
   SequenceInOrderAssertion,
   SequenceStepAssertion,
   ShellCommandMatcher,
-  ShellToolMatcher,
   SkillReferencedAssertion,
   TextMatcher,
   ToolCalledAssertion,

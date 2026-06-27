@@ -1,4 +1,4 @@
-import {irAssertionFromNode, type IrAssertion} from '@dynobox/sdk/ir';
+import {type IrAssertion, irAssertionFromNode} from '@dynobox/sdk/ir';
 
 export type IrAnyOfBranch = Extract<
   IrAssertion,

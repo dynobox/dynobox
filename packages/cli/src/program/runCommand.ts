@@ -44,6 +44,7 @@ import {
   renderRunSummary,
 } from '../render/index.js';
 import {createRenderContext, type RenderContext} from '../terminal/index.js';
+import {reportConfigError} from '../util/reportConfigError.js';
 import {
   type DebugLogPaths,
   hasDebugLogPaths,
@@ -537,23 +538,17 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
   return results;
 }
 
-/**
- * Run `validateHarnessOverrides`, but render the standard config-error
- * stderr block if it throws so users see what went wrong before the
- * non-zero exit code propagates.
- */
 function validateOverrides(
   rawHarnesses: readonly string[] | undefined,
   inputLabel: string,
   writeStderr: OutputWriter,
 ) {
-  try {
-    return validateHarnessOverrides(rawHarnesses);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    writeStderr(renderRunConfigErrorMessage(inputLabel, message));
-    throw error;
-  }
+  return reportConfigError(
+    inputLabel,
+    writeStderr,
+    renderRunConfigErrorMessage,
+    () => validateHarnessOverrides(rawHarnesses),
+  );
 }
 
 function validatePermissionMode(
@@ -561,13 +556,12 @@ function validatePermissionMode(
   inputLabel: string,
   writeStderr: OutputWriter,
 ) {
-  try {
-    return validatePermissionModeOverride(rawPermissionMode);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    writeStderr(renderRunConfigErrorMessage(inputLabel, message));
-    throw error;
-  }
+  return reportConfigError(
+    inputLabel,
+    writeStderr,
+    renderRunConfigErrorMessage,
+    () => validatePermissionModeOverride(rawPermissionMode),
+  );
 }
 
 function validateModels(
@@ -576,13 +570,12 @@ function validateModels(
   inputLabel: string,
   writeStderr: OutputWriter,
 ) {
-  try {
-    return validateModelOverrides(rawModels, harnesses);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    writeStderr(renderRunConfigErrorMessage(inputLabel, message));
-    throw error;
-  }
+  return reportConfigError(
+    inputLabel,
+    writeStderr,
+    renderRunConfigErrorMessage,
+    () => validateModelOverrides(rawModels, harnesses),
+  );
 }
 
 function validateReporter(
@@ -590,13 +583,12 @@ function validateReporter(
   inputLabel: string,
   writeStderr: OutputWriter,
 ) {
-  try {
-    return validateReporterFormat(rawReporter);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    writeStderr(renderRunConfigErrorMessage(inputLabel, message));
-    throw error;
-  }
+  return reportConfigError(
+    inputLabel,
+    writeStderr,
+    renderRunConfigErrorMessage,
+    () => validateReporterFormat(rawReporter),
+  );
 }
 
 function validateIterationCount(
@@ -604,13 +596,12 @@ function validateIterationCount(
   inputLabel: string,
   writeStderr: OutputWriter,
 ) {
-  try {
-    return validateIterations(rawIterations);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    writeStderr(renderRunConfigErrorMessage(inputLabel, message));
-    throw error;
-  }
+  return reportConfigError(
+    inputLabel,
+    writeStderr,
+    renderRunConfigErrorMessage,
+    () => validateIterations(rawIterations),
+  );
 }
 
 function buildJobOptions(

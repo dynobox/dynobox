@@ -1,4 +1,4 @@
-import type {ShellToolMatcher} from '@dynobox/sdk';
+import type {ShellCommandMatcher} from '@dynobox/sdk';
 
 export type ShellMatcherResult = {
   passed: boolean;
@@ -19,7 +19,7 @@ export type ShellMatcherPositionResult =
 /** Evaluate whether a shell command satisfies a matcher. */
 export function shellCommandMatches(
   command: string,
-  matcher: ShellToolMatcher,
+  matcher: ShellCommandMatcher,
 ): ShellMatcherResult {
   if ('equals' in matcher && typeof matcher.equals === 'string') {
     return {passed: command === matcher.equals};
@@ -44,14 +44,14 @@ export function shellCommandMatches(
 }
 
 /**
- * Locate a shell matcher within a command after an offset.
+ * Locate a shell command matcher within a command after an offset.
  *
  * Sequence assertions use this to allow multiple ordered steps to match one
  * compound shell command without repeatedly matching the same substring.
  */
 export function shellCommandMatchPosition(
   command: string,
-  matcher: ShellToolMatcher,
+  matcher: ShellCommandMatcher,
   startAt = 0,
 ): ShellMatcherPositionResult {
   const offset = Math.max(0, startAt);
@@ -97,7 +97,7 @@ export function shellCommandMatchPosition(
 
 /** Return a validation message for invalid regex matchers, otherwise undefined. */
 export function validateRegexMatcher(
-  matcher: ShellToolMatcher,
+  matcher: ShellCommandMatcher,
 ): string | undefined {
   if (!('matches' in matcher) || typeof matcher.matches !== 'string') {
     return undefined;
@@ -111,8 +111,8 @@ export function validateRegexMatcher(
   }
 }
 
-/** Describe a shell matcher for failure messages and CLI output. */
-export function describeShellMatcher(matcher: ShellToolMatcher): string {
+/** Describe a shell command matcher for failure messages and CLI output. */
+export function describeShellMatcher(matcher: ShellCommandMatcher): string {
   if ('equals' in matcher && typeof matcher.equals === 'string') {
     return `equals "${matcher.equals}"`;
   }
@@ -130,7 +130,7 @@ export function describeShellMatcher(matcher: ShellToolMatcher): string {
 
 function invalidRegexMessage(pattern: string, error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
-  return `Invalid shell matcher regex "${pattern}": ${detail}`;
+  return `Invalid shell command matcher regex "${pattern}": ${detail}`;
 }
 
 function passedPosition(
