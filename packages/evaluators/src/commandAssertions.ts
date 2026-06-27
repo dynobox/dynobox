@@ -1,6 +1,7 @@
 import type {IrAssertion} from '@dynobox/sdk/ir';
 import {parse as parseShellCommand, type ParseEntry} from 'shell-quote';
 
+import {passed} from './results.js';
 import type {AssertionResult, ToolEvent} from './types.js';
 
 export type ObservedCommand = {
@@ -37,13 +38,11 @@ export function evaluateCommandCalledAssertion(
   );
 
   if (match !== undefined) {
-    return {
-      assertionId: assertion.id,
-      kind: assertion.kind,
-      passed: true,
-      message: `Observed command ${describeExpectedCommand(assertion)}.`,
-      evidence: match,
-    };
+    return passed(
+      assertion,
+      `Observed command ${describeExpectedCommand(assertion)}.`,
+      match,
+    );
   }
 
   return {
@@ -74,12 +73,10 @@ export function evaluateCommandNotCalledAssertion(
     };
   }
 
-  return {
-    assertionId: assertion.id,
-    kind: assertion.kind,
-    passed: true,
-    message: `Observed no command ${describeExpectedCommand(assertion)}.`,
-  };
+  return passed(
+    assertion,
+    `Observed no command ${describeExpectedCommand(assertion)}.`,
+  );
 }
 
 export function extractObservedCommands(

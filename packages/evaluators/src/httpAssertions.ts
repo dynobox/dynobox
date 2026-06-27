@@ -1,6 +1,6 @@
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
-import {failed} from './results.js';
+import {failed, passed} from './results.js';
 import type {AssertionResult, HttpEvent} from './types.js';
 
 export function evaluateHttpCalled(
@@ -19,26 +19,22 @@ export function evaluateHttpCalled(
   }
 
   if (assertion.status === undefined) {
-    return {
-      assertionId: assertion.id,
-      kind: assertion.kind,
-      passed: true,
-      message: `Observed HTTP endpoint "${assertion.endpointId}".`,
-      evidence: matches[0],
-    };
+    return passed(
+      assertion,
+      `Observed HTTP endpoint "${assertion.endpointId}".`,
+      matches[0],
+    );
   }
 
   const statusMatch = matches.find(
     (event) => event.status === assertion.status,
   );
   if (statusMatch !== undefined) {
-    return {
-      assertionId: assertion.id,
-      kind: assertion.kind,
-      passed: true,
-      message: `Observed HTTP endpoint "${assertion.endpointId}" with status ${assertion.status}.`,
-      evidence: statusMatch,
-    };
+    return passed(
+      assertion,
+      `Observed HTTP endpoint "${assertion.endpointId}" with status ${assertion.status}.`,
+      statusMatch,
+    );
   }
 
   const observedStatuses = [
@@ -68,10 +64,8 @@ export function evaluateHttpNotCalled(
     };
   }
 
-  return {
-    assertionId: assertion.id,
-    kind: assertion.kind,
-    passed: true,
-    message: `Observed no calls to HTTP endpoint "${assertion.endpointId}".`,
-  };
+  return passed(
+    assertion,
+    `Observed no calls to HTTP endpoint "${assertion.endpointId}".`,
+  );
 }

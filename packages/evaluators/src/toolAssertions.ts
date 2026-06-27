@@ -7,6 +7,7 @@ import {
   type ObservedCommand,
 } from './commandAssertions.js';
 import {pathStringsFromToolInput} from './inspection.js';
+import {passed} from './results.js';
 import {
   describeShellMatcher,
   shellCommandMatches,
@@ -49,13 +50,7 @@ export function evaluateToolCalledAssertion(
   }
 
   if (match.event !== undefined) {
-    return {
-      assertionId: assertion.id,
-      kind: assertion.kind,
-      passed: true,
-      message: toolCalledPassMessage(assertion),
-      evidence: match.event,
-    };
+    return passed(assertion, toolCalledPassMessage(assertion), match.event);
   }
 
   return {
@@ -91,12 +86,7 @@ export function evaluateToolNotCalledAssertion(
     };
   }
 
-  return {
-    assertionId: assertion.id,
-    kind: assertion.kind,
-    passed: true,
-    message: toolNotCalledPassMessage(assertion),
-  };
+  return passed(assertion, toolNotCalledPassMessage(assertion));
 }
 
 export function evaluateSequenceInOrder(
@@ -141,13 +131,11 @@ export function evaluateSequenceInOrder(
     cursor = match.nextCursor;
   }
 
-  return {
-    assertionId: assertion.id,
-    kind: assertion.kind,
-    passed: true,
-    message: `Observed ${assertion.steps.length} ordered tool steps.`,
-    evidence: matchedEvents,
-  };
+  return passed(
+    assertion,
+    `Observed ${assertion.steps.length} ordered tool steps.`,
+    matchedEvents,
+  );
 }
 
 function findMatchingSequenceStep(

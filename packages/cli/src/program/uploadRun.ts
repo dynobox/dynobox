@@ -131,6 +131,11 @@ export function buildRunUploadPayload(input: {
   gitHash: string | null;
 }): RunUploadPayloadV1 {
   const allJobs = input.dynos.flatMap((dyno) => dyno.jobs);
+  if (input.results.length !== allJobs.length) {
+    throw new Error(
+      `Expected ${allJobs.length} runner results for upload, but received ${input.results.length}.`,
+    );
+  }
   const assertionById = assertionByIdForJobs(allJobs);
 
   let offset = 0;
@@ -167,8 +172,8 @@ function buildRunUploadDyno(
   results: readonly LocalRunnerResult[],
   assertionById: ReadonlyMap<string, IrAssertion>,
 ): RunUploadDynoV1 {
-  const jobs = results.map((result, index) => {
-    const job = dyno.jobs[index] ?? jobFromResult(result);
+  const jobs = dyno.jobs.map((job, index) => {
+    const result = results[index]!;
     return buildRunUploadJob(job, result, assertionById);
   });
   const failed = jobs.filter((job) => !job.passed).length;
@@ -784,36 +789,6 @@ function truncateNullableDetail(value: string | null): string | null {
 function durationMs(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.round(value));
-}
-
-function jobFromResult(result: LocalRunnerResult): LocalRunnerJob {
-  return {
-    id: result.jobId,
-    scenario: {
-      id: result.scenarioId,
-      name: result.scenarioId,
-      prompt: result.scenarioId,
-      harnesses: [
-        {
-          id: result.harness,
-          ...(result.model === undefined ? {} : {model: result.model}),
-          ...(result.permissionMode === undefined
-            ? {}
-            : {permissionMode: result.permissionMode}),
-        },
-      ],
-      setup: [],
-      fixtures: [],
-      endpoints: [],
-      assertions: [],
-    },
-    harness: result.harness,
-    ...(result.model === undefined ? {} : {model: result.model}),
-    ...(result.permissionMode === undefined
-      ? {}
-      : {permissionMode: result.permissionMode}),
-    iteration: result.iteration,
-  };
 }
 
 function readResponseUrl(body: unknown): string | null {

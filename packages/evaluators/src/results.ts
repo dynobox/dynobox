@@ -7,6 +7,11 @@ type AssertionLike = {
   kind?: unknown;
 };
 
+type AssertionResultSource = {
+  id: string;
+  kind: string;
+};
+
 export function failed(
   assertion: Pick<IrAssertion, 'id' | 'kind'>,
   message: string,
@@ -16,6 +21,20 @@ export function failed(
     kind: assertion.kind,
     passed: false,
     message,
+  };
+}
+
+export function passed(
+  assertion: AssertionResultSource,
+  message: string,
+  evidence?: unknown,
+): AssertionResult {
+  return {
+    assertionId: assertion.id,
+    kind: assertion.kind,
+    passed: true,
+    message,
+    ...(evidence === undefined ? {} : {evidence}),
   };
 }
 

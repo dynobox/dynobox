@@ -1,7 +1,7 @@
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {stringsFromUnknown} from './inspection.js';
-import {failed} from './results.js';
+import {failed, passed} from './results.js';
 import type {AssertionResult, ToolEvent} from './types.js';
 
 export function evaluateSkillReferenced(
@@ -13,13 +13,11 @@ export function evaluateSkillReferenced(
   );
 
   if (event !== undefined) {
-    return {
-      assertionId: assertion.id,
-      kind: assertion.kind,
-      passed: true,
-      message: `Observed skill "${assertion.skill}" instruction file reference.`,
-      evidence: event,
-    };
+    return passed(
+      assertion,
+      `Observed skill "${assertion.skill}" instruction file reference.`,
+      event,
+    );
   }
 
   return failed(
