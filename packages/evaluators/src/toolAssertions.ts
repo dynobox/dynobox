@@ -7,13 +7,13 @@ import {
   type ObservedCommand,
 } from './commandAssertions.js';
 import {pathStringsFromToolInput} from './inspection.js';
+import {passed} from './results.js';
 import {
   describeShellMatcher,
   shellCommandMatches,
   shellCommandMatchPosition,
   validateRegexMatcher,
 } from './shellMatcher.js';
-import {passed} from './results.js';
 import type {AssertionResult, ToolEvent} from './types.js';
 
 type ToolCalledAssertion = Extract<IrAssertion, {kind: 'tool.called'}>;
