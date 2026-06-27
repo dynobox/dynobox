@@ -1,3 +1,4 @@
+import {passed} from './results.js';
 import type {AssertionResult} from './types.js';
 
 export function evaluateTextContains(input: {
@@ -17,12 +18,10 @@ export function evaluateTextContains(input: {
   }
 
   if (input.actual.includes(input.expected)) {
-    return {
-      assertionId: input.assertionId,
-      kind: input.kind,
-      passed: true,
-      message: `Observed ${input.label} containing expected text.`,
-    };
+    return passed(
+      {id: input.assertionId, kind: input.kind},
+      `Observed ${input.label} containing expected text.`,
+    );
   }
 
   return {

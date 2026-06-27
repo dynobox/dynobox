@@ -1,5 +1,6 @@
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
+import {passed} from './results.js';
 import {describeShellMatcher, shellCommandMatches} from './shellMatcher.js';
 import type {AssertionResult, VerifyCommandResult} from './types.js';
 
@@ -66,13 +67,11 @@ export function evaluateVerifyCommandAssertion(
   }
 
   if (failures.length === 0) {
-    return {
-      assertionId: assertion.id,
-      kind: assertion.kind,
-      passed: true,
-      message: `Verification command "${assertion.command}" passed.`,
-      evidence: result,
-    };
+    return passed(
+      assertion,
+      `Verification command "${assertion.command}" passed.`,
+      result,
+    );
   }
 
   return {

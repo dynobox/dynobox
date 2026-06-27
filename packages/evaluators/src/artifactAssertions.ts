@@ -3,7 +3,7 @@ import {existsSync, readFileSync} from 'node:fs';
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {type ArtifactInspection, resolveArtifactPath} from './inspection.js';
-import {failed} from './results.js';
+import {failed, passed} from './results.js';
 import type {AssertionResult} from './types.js';
 
 export function evaluateArtifactExists(
@@ -19,13 +19,10 @@ export function evaluateArtifactExists(
   }
 
   if (existsSync(resolved.path)) {
-    return {
-      assertionId: assertion.id,
-      kind: assertion.kind,
-      passed: true,
-      message: `Artifact "${assertion.path}" exists.`,
-      evidence: {kind: 'exists', path: resolved.path},
-    };
+    return passed(assertion, `Artifact "${assertion.path}" exists.`, {
+      kind: 'exists',
+      path: resolved.path,
+    });
   }
 
   return failedWithEvidence(
@@ -50,13 +47,11 @@ export function evaluateArtifactContains(
   try {
     const contents = readFileSync(resolved.path, 'utf8');
     if (contents.includes(assertion.text)) {
-      return {
-        assertionId: assertion.id,
-        kind: assertion.kind,
-        passed: true,
-        message: `Artifact "${assertion.path}" contains expected text.`,
-        evidence: {kind: 'exists', path: resolved.path},
-      };
+      return passed(
+        assertion,
+        `Artifact "${assertion.path}" contains expected text.`,
+        {kind: 'exists', path: resolved.path},
+      );
     }
 
     return failedWithEvidence(

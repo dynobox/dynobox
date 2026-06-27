@@ -9,7 +9,7 @@ import {
   evaluateCommandNotCalledAssertion,
 } from './commandAssertions.js';
 import {evaluateHttpCalled, evaluateHttpNotCalled} from './httpAssertions.js';
-import {unsupportedAssertionResult} from './results.js';
+import {passed, unsupportedAssertionResult} from './results.js';
 import {evaluateSkillReferenced} from './skillAssertions.js';
 import {evaluateTextContains} from './textAssertions.js';
 import {
@@ -140,17 +140,15 @@ function evaluateAnyOf(
 
   if (matchedIndex !== -1) {
     const matched = branchResults[matchedIndex]!;
-    return {
-      assertionId: assertion.id,
-      kind: assertion.kind,
-      passed: true,
-      message: `Matched anyOf branch #${matchedIndex + 1}: ${matched.message}`,
-      evidence: {
+    return passed(
+      assertion,
+      `Matched anyOf branch #${matchedIndex + 1}: ${matched.message}`,
+      {
         kind: 'anyOf',
         branchIndex: matchedIndex + 1,
         branches: branchResults,
       },
-    };
+    );
   }
 
   return {
