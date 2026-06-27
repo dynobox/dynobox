@@ -211,7 +211,8 @@ optional `label` gives human-readable CLI output.
 
 ```yaml
 - type: tool.called
-  tool: shell
+  tool: read_file
+  path: package.json
 - type: tool.notCalled
   tool: edit_file
 ```
@@ -223,13 +224,14 @@ shell, read_file, write_file, edit_file, search_files, web_fetch, web_search,
 mcp, task, unknown
 ```
 
-For `shell`, add exactly one command matcher:
+Prefer `command.*` for normal CLI behavior assertions. For `shell`, raw command
+matchers are escape hatches for unsupported shell syntax:
 
 ```yaml
 - type: tool.called
   tool: shell
   command:
-    includes: package.json
+    matches: 'cat <<EOF'
 
 - type: tool.notCalled
   tool: shell
@@ -244,6 +246,27 @@ equals, includes, startsWith, matches
 ```
 
 `matches` is a JavaScript regex source string.
+
+### command.called and command.notCalled
+
+Use command assertions for observed shell commands after normalization.
+
+```yaml
+- type: command.called
+  executable: git
+  command:
+    args:
+      - commit
+
+- type: command.notCalled
+  executable: git
+  command:
+    args:
+      - push
+```
+
+Command assertions are generic CLI assertions, not Git/npm/Docker-specific
+semantics. Match the executable and arguments that prove the behavior.
 
 For file-oriented tools, use `path` to assert the file path instead of matching
 a shell command:
@@ -316,18 +339,20 @@ Use only when order is the behavior under test.
 ```yaml
 - type: sequence.inOrder
   steps:
-    - type: tool.called
-      tool: shell
+    - type: command.called
+      executable: git
       command:
-        includes: package.json
-    - type: tool.called
-      tool: shell
+        args:
+          - add
+    - type: command.called
+      executable: git
       command:
-        includes: pnpm test
+        args:
+          - commit
 ```
 
-For shell calls, a single compound command can satisfy ordered steps if the
-matchers appear in order within the command text.
+For shell commands, a single compound command can satisfy ordered steps if the
+normalized command segments appear in the expected order.
 
 ### http.called and http.notCalled
 
@@ -364,11 +389,12 @@ variables. Harness-native web tools with separate trust stores may bypass it.
 5. Add at least one assertion. A scenario with no assertions only proves that
    the harness exited.
 6. Prefer durable assertions:
-   - `artifact.exists` or `artifact.contains` for produced files
-   - `tool.called` for required interactions
-   - `tool.notCalled` for dangerous or wrong behavior
-   - `finalMessage.contains` for user-visible answers
-   - `skill.referenced` when testing observed skill file references
+    - `artifact.exists` or `artifact.contains` for produced files
+    - `command.called` for observed CLI behavior
+    - `tool.called` for meaningful non-shell tool interactions
+    - `tool.notCalled` for dangerous or wrong behavior
+    - `finalMessage.contains` for user-visible answers
+    - `skill.referenced` when testing observed skill file references
 7. Use `sequence.inOrder` sparingly. It is powerful, but easy to make too
    brittle across harnesses.
 
@@ -445,7 +471,9 @@ dynobox run dynobox/package-script-check.dyno.yaml --debug
 
 - Use `type`, `tool`, and `command`. Do not use old field names like `kind`,
   `toolKind`, or `matcher`.
-- Use `command` only with `tool: shell`.
+- Use `command.called` and `command.notCalled` for normalized observed CLI
+  behavior.
+- Use raw `command` matchers on `tool: shell` only as escape hatches.
 - Use `path` only with file-oriented tools: `read_file`, `write_file`,
   `edit_file`, or `search_files`.
 - Do not manually copy an adjacent JS/TS dyno `fixtures/` directory when using

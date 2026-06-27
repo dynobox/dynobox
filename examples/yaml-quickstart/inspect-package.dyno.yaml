@@ -4,8 +4,7 @@ harnesses:
 scenarios:
   - name: inspect package scripts (yaml)
     prompt: >-
-      Use a shell command that reads package.json and tell me whether a test
-      script exists.
+      Use cat package.json and tell me whether a test script exists.
     setup:
       - |
         cat > package.json <<'JSON'
@@ -17,14 +16,12 @@ scenarios:
         }
         JSON
     assertions:
-      - label: uses shell
-        type: tool.called
-        tool: shell
       - label: reads package.json
-        type: tool.called
-        tool: shell
+        type: command.called
+        executable: cat
         command:
-          includes: package.json
+          args:
+            - package.json
       - type: artifact.contains
         path: package.json
         text: vitest run

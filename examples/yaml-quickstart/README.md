@@ -25,12 +25,11 @@ mapping from the TypeScript helper API to YAML keys is in
 Examples used in this file:
 
 ```yaml
-- type: tool.called
-  tool: shell
-- type: tool.called
-  tool: shell
+- type: command.called
+  executable: cat
   command:
-    includes: package.json
+    args:
+      - package.json
 - type: artifact.contains
   path: package.json
   text: vitest run

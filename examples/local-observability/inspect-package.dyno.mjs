@@ -1,4 +1,4 @@
-import {defineDyno, tool} from '@dynobox/sdk';
+import {command, defineDyno, finalMessage} from '@dynobox/sdk';
 
 export default defineDyno({
   name: 'local-observability',
@@ -7,7 +7,7 @@ export default defineDyno({
     {
       name: 'inspect package scripts',
       prompt:
-        'Use a shell command that reads package.json and tell me whether a test script exists.',
+        'Use `cat package.json` and tell me whether a test script exists.',
       setup: [
         `cat > package.json <<'JSON'
 {
@@ -19,8 +19,8 @@ export default defineDyno({
 JSON`,
       ],
       assertions: [
-        tool.called('shell'),
-        tool.called('shell', {includes: 'package.json'}),
+        command.called('cat', {args: ['package.json']}),
+        finalMessage.contains('test'),
       ],
     },
   ],

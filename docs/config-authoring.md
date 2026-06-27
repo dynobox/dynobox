@@ -13,7 +13,7 @@ CommonJS config files (`.cjs` and `.cts`) are not supported because
 ## Minimal Config
 
 ```ts
-import {defineDyno, tool} from '@dynobox/sdk';
+import {command, defineDyno, finalMessage} from '@dynobox/sdk';
 
 export default defineDyno({
   name: 'local-observability',
@@ -27,10 +27,10 @@ export default defineDyno({
 JSON`,
       ],
       prompt:
-        'Use a shell command that reads package.json and tell me whether a test script exists.',
+        'Use `cat package.json` and tell me whether a test script exists.',
       assertions: [
-        tool.called('shell'),
-        tool.called('shell', {includes: 'package.json'}),
+        command.called('cat', {args: ['package.json']}),
+        finalMessage.contains('test'),
       ],
     },
   ],
@@ -126,20 +126,40 @@ permission modes with `--permission-mode`.
 
 ## Assertions
 
-Assertions are evaluated against observed harness behavior after each scenario
-runs.
+Most assertions are evaluated against observed harness behavior after each
+scenario runs. Verification assertions run after the harness and execute their
+own checks against the completed work directory.
+
+Use the assertion namespace that matches the behavior you care about:
+
+- `tool.*` — the agent used, or avoided, a harness tool such as `shell`,
+  `read_file`, or `edit_file`.
+- `command.*` — the agent ran, or avoided, a normalized shell command such as
+  `git commit`, `pnpm test`, or `cat package.json`.
+- `http.*` — a declared endpoint request was, or was not, observed through
+  local HTTP capture.
+- `artifact.*` — files in the scenario work directory have the expected final
+  state.
+- `transcript.*` and `finalMessage.*` — the harness transcript or final response
+  includes expected text.
+- `skill.referenced(...)` — observed events referenced a skill instruction file.
+- `verify.*` — Dynobox runs a post-harness check, such as validating a file the
+  agent produced.
+
+Prefer the most semantic assertion available. For example, use
+`command.called('git', {args: ['commit']})` to assert observed CLI behavior,
+then use `artifact.contains(...)` or `verify.command(...)` to check the final
+result.
 
 ### Tool Calls
 
 Use `tool.called` and `tool.notCalled` to assert tool usage.
 
 ```ts
-tool.called('shell');
-tool.notCalled('web_fetch');
-tool.called('shell', {includes: 'package.json'});
-tool.notCalled('shell', {matches: 'rm\\s+-rf'});
 tool.called('read_file', {path: 'package.json'});
 tool.notCalled('edit_file', {path: 'src/index.ts'});
+tool.notCalled('web_fetch');
+tool.notCalled('shell', {matches: 'rm\\s+-rf'});
 ```
 
 Supported tool kinds:
@@ -155,7 +175,7 @@ Supported tool kinds:
 - `task`
 - `unknown`
 
-Shell tool assertions can include exactly one shell command matcher:
+Shell tool assertions can include exactly one raw shell command matcher:
 
 - `{equals: 'pnpm test'}`
 - `{includes: 'package.json'}`
@@ -164,6 +184,11 @@ Shell tool assertions can include exactly one shell command matcher:
 
 `matches` is a JavaScript regular expression string. Shell command matchers are
 only valid on `shell` tool assertions.
+
+Prefer `command.*` for normal CLI behavior assertions. Raw shell string matchers
+remain available as escape hatches when command normalization does not support a
+shell form you need to check, such as a complex heredoc, substitution, or
+wrapper-specific command line.
 
 File-oriented tool assertions can include a path matcher:
 
@@ -183,8 +208,9 @@ matcher, not both.
 > **Experimental.** Command assertions are new; their matching behavior and
 > matcher options may change in a future release.
 
-`command.called` and `command.notCalled` assert on individual shell commands
-_after_ normalization, instead of regex-matching the raw command string.
+`command.called` and `command.notCalled` assert on individual shell commands the
+agent ran _during the harness_, after normalization, instead of regex-matching
+the raw command string.
 
 How it works: dynobox parses each observed shell command into normalized
 `(executable, argv)` segments using best-effort shell parsing — it does **not**
@@ -196,11 +222,16 @@ oddities](#limitations-and-oddities) below.
 
 ```ts
 command.called('git', {args: ['status']});
+command.called('git', {args: ['commit']});
 command.notCalled('git', {args: ['push']});
 command.called('pnpm', {argsInOrder: ['run', 'build']});
 command.called('node', {argsMatching: [/--max-old-space-size=\d+/]});
 command.called('git', {originalIncludes: '--no-verify'});
 ```
+
+`command.*` is generic observed CLI behavior, not a Git/npm/Docker-specific API.
+Use the executable name and argument matchers for any command Dynobox can
+normalize.
 
 Match the first argument against the command's normalized `executable`. The
 optional matcher accepts any combination of the following fields; when several
@@ -268,13 +299,13 @@ Use `sequence.inOrder` when order matters.
 
 ```ts
 sequence.inOrder([
-  tool.called('shell', {includes: 'package.json'}),
-  tool.called('shell', {includes: 'pnpm test'}),
+  command.called('git', {args: ['status']}),
+  command.called('git', {args: ['diff']}),
 ]);
 ```
 
-Steps may be `tool.called('shell', …)` matchers, `command.called(…)` matchers,
-or a mix of both:
+Steps may be `tool.called(…)` matchers, `command.called(…)` matchers, or a mix
+of both:
 
 ```ts
 sequence.inOrder([
@@ -325,6 +356,9 @@ This passes when observed tool events reference
 `.agents/skills/<name>/SKILL.md` or `.claude/skills/<name>/SKILL.md`, including
 reads, searches, or shell commands that access the file.
 
+The name is intentionally narrow: Dynobox observes file references, not whether
+a harness semantically activated or followed the skill instructions.
+
 ### Artifacts
 
 Artifact assertions read files inside the scenario work directory.
@@ -349,6 +383,30 @@ finalMessage.contains('test script');
 
 Final-message extraction depends on the harness output format. If a harness
 does not provide a final message, the assertion fails with a clear message.
+
+### Verification Commands
+
+Use `verify.command` when Dynobox should run a command after the harness exits to
+validate the completed work directory.
+
+```ts
+verify.succeeds('dynobox validate out.dyno.ts');
+verify.command('dynobox validate out.dyno.ts', {exitCode: 0});
+verify.command('dynobox validate out.dyno.ts', {
+  exitCode: 0,
+  stdout: {includes: 'valid'},
+});
+```
+
+Verification commands are test-runner checks, not observed agent behavior. They
+are useful for validating generated files, running a linter, or building an
+artifact the agent created. They should not replace `tool.*`, `command.*`, or
+`http.*` assertions when you need to prove what the agent actually did during
+the harness run.
+
+`verify.command` requires at least one expected `exitCode`, `stdout`, or
+`stderr` matcher. Output matchers use the same text matcher shape as shell
+command strings: `equals`, `includes`, `startsWith`, or `matches`.
 
 ## HTTP Assertions
 
@@ -487,12 +545,12 @@ Use `defineScenario` when you want to author or export a scenario
 independently, then include it in a dyno.
 
 ```ts
-import {defineDyno, defineScenario, tool} from '@dynobox/sdk';
+import {command, defineDyno, defineScenario} from '@dynobox/sdk';
 
 const checksPackageJson = defineScenario({
   name: 'checks package json',
-  prompt: 'Read package.json and summarize the scripts.',
-  assertions: [tool.called('shell', {includes: 'package.json'})],
+  prompt: 'Use `cat package.json` and summarize the scripts.',
+  assertions: [command.called('cat', {args: ['package.json']})],
 });
 
 export default defineDyno({
@@ -513,7 +571,7 @@ harnesses:
 scenarios:
   - name: detects test script
     prompt: >-
-      Inspect package.json and tell me whether this project has a test script.
+      Use cat package.json and tell me whether this project has a test script.
     setup:
       - |
         cat > package.json <<'JSON'
@@ -521,10 +579,11 @@ scenarios:
         JSON
     assertions:
       - label: reads package.json
-        type: tool.called
-        tool: shell
+        type: command.called
+        executable: cat
         command:
-          includes: package.json
+          args:
+            - package.json
       - type: tool.notCalled
         tool: edit_file
       - type: artifact.contains
@@ -545,18 +604,19 @@ JSON output.
 
 | TypeScript helper                                      | Authoring object                                                      |
 | ------------------------------------------------------ | --------------------------------------------------------------------- |
-| `tool.called('shell')`                                 | `{type: tool.called, tool: shell}`                                    |
 | `tool.called('shell', {includes: 'x'})`                | `{type: tool.called, tool: shell, command: {includes: x}}`            |
 | `tool.called('read_file', {path: 'README.md'})`        | `{type: tool.called, tool: read_file, path: README.md}`               |
 | `tool.notCalled('edit_file')`                          | `{type: tool.notCalled, tool: edit_file}`                             |
 | `command.called('git', {args: ['status']})`            | `{type: command.called, executable: git, command: {args: [status]}}`  |
 | `command.notCalled('git', {args: ['push']})`           | `{type: command.notCalled, executable: git, command: {args: [push]}}` |
+| `verify.command('dynobox validate out.dyno.ts', {exitCode: 0})` | `{type: verify.command, command: dynobox validate out.dyno.ts, exitCode: 0}` |
 | `artifact.exists('README.md')`                         | `{type: artifact.exists, path: README.md}`                            |
 | `artifact.contains('pkg.json', 'foo')`                 | `{type: artifact.contains, path: pkg.json, text: foo}`                |
 | `transcript.contains('done')`                          | `{type: transcript.contains, text: done}`                             |
 | `finalMessage.contains('ok')`                          | `{type: finalMessage.contains, text: ok}`                             |
 | `skill.referenced('commit')`                           | `{type: skill.referenced, skill: commit}`                             |
-| `sequence.inOrder([tool.called('shell', {...}), ...])` | `{type: sequence.inOrder, steps: [{type: tool.called, ...}, ...]}`    |
+| `anyOf([tool.called('read_file', {...}), ...])`         | `{type: anyOf, steps: [{type: tool.called, ...}, ...]}`               |
+| `sequence.inOrder([command.called('git', {...}), ...])` | `{type: sequence.inOrder, steps: [{type: command.called, ...}, ...]}` |
 | `http.called('npmPrettier', {status: 200})`            | `{type: http.called, endpoint: npmPrettier, status: 200}`             |
 | `http.notCalled('leftPad')`                            | `{type: http.notCalled, endpoint: leftPad}`                           |
 
