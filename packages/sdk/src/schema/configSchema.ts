@@ -256,7 +256,6 @@ const authoringToolMatcherOptions = {
   toolKindField: 'tool',
   shellMatcherField: 'command',
   pathMatcherField: 'path',
-  fieldPaths: {shellMatcher: 'command', pathMatcher: 'path'},
   messages: TOOL_MATCHER_MESSAGES,
 };
 

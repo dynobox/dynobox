@@ -170,7 +170,6 @@ const irToolMatcherOptions = {
   toolKindField: 'toolKind',
   shellMatcherField: 'matcher',
   pathMatcherField: 'pathMatcher',
-  fieldPaths: {shellMatcher: 'matcher', pathMatcher: 'pathMatcher'},
   messages: TOOL_MATCHER_MESSAGES,
 };
 

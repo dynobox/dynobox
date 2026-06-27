@@ -10,11 +10,6 @@ export const FILE_TOOL_KINDS = new Set<FileToolKind>([
   'search_files',
 ]);
 
-export type ToolMatcherFieldPaths = {
-  shellMatcher: string;
-  pathMatcher: string;
-};
-
 export type ToolMatcherValidationMessages = {
   shellMatcherOnlyOnShell: string;
   pathMatcherOnlyOnFileTools: string;
@@ -49,15 +44,19 @@ export function addToolMatcherIssues(
     shellMatcher?: unknown;
     pathMatcher?: unknown;
   },
-  fieldPaths: ToolMatcherFieldPaths,
+  fieldNames: {
+    shellMatcherField: string;
+    pathMatcherField: string;
+  },
   messages: ToolMatcherValidationMessages,
 ): void {
   const {toolKind, shellMatcher, pathMatcher} = fields;
+  const {shellMatcherField, pathMatcherField} = fieldNames;
 
   if (shellMatcher !== undefined && toolKind !== 'shell') {
     ctx.addIssue({
       code: 'custom',
-      path: [...path, fieldPaths.shellMatcher],
+      path: [...path, shellMatcherField],
       message: messages.shellMatcherOnlyOnShell,
     });
   }
@@ -68,7 +67,7 @@ export function addToolMatcherIssues(
   ) {
     ctx.addIssue({
       code: 'custom',
-      path: [...path, fieldPaths.pathMatcher],
+      path: [...path, pathMatcherField],
       message: messages.pathMatcherOnlyOnFileTools,
     });
   }
@@ -76,7 +75,7 @@ export function addToolMatcherIssues(
   if (shellMatcher !== undefined && pathMatcher !== undefined) {
     ctx.addIssue({
       code: 'custom',
-      path: [...path, fieldPaths.pathMatcher],
+      path: [...path, pathMatcherField],
       message: messages.notBoth,
     });
   }
@@ -91,7 +90,6 @@ export function validateToolAssertionNode(
     toolKindField: string;
     shellMatcherField: string;
     pathMatcherField: string;
-    fieldPaths: ToolMatcherFieldPaths;
     messages: ToolMatcherValidationMessages;
   },
 ): void {
@@ -113,7 +111,10 @@ export function validateToolAssertionNode(
       shellMatcher: record[options.shellMatcherField],
       pathMatcher: record[options.pathMatcherField],
     },
-    options.fieldPaths,
+    {
+      shellMatcherField: options.shellMatcherField,
+      pathMatcherField: options.pathMatcherField,
+    },
     options.messages,
   );
 }

@@ -45,7 +45,7 @@ describe('toolMatcherValidation', () => {
           toolKind: 'edit_file',
           shellMatcher: {includes: 'src/index.ts'},
         },
-        {shellMatcher: 'command', pathMatcher: 'path'},
+        {shellMatcherField: 'command', pathMatcherField: 'path'},
         TOOL_MATCHER_MESSAGES,
       );
     });
@@ -66,7 +66,7 @@ describe('toolMatcherValidation', () => {
           toolKind: 'web_search',
           pathMatcher: {path: 'README.md'},
         },
-        {shellMatcher: 'matcher', pathMatcher: 'pathMatcher'},
+        {shellMatcherField: 'matcher', pathMatcherField: 'pathMatcher'},
         TOOL_MATCHER_MESSAGES,
       );
     });
@@ -88,7 +88,7 @@ describe('toolMatcherValidation', () => {
           shellMatcher: {includes: 'pnpm test'},
           pathMatcher: {path: 'README.md'},
         },
-        {shellMatcher: 'command', pathMatcher: 'path'},
+        {shellMatcherField: 'command', pathMatcherField: 'path'},
         TOOL_MATCHER_MESSAGES,
       );
     });
@@ -112,7 +112,7 @@ describe('toolMatcherValidation', () => {
           toolKind: 'shell',
           shellMatcher: {includes: 'pnpm test'},
         },
-        {shellMatcher: 'command', pathMatcher: 'path'},
+        {shellMatcherField: 'command', pathMatcherField: 'path'},
         TOOL_MATCHER_MESSAGES,
       );
     });
@@ -124,7 +124,7 @@ describe('toolMatcherValidation', () => {
           toolKind: 'read_file',
           pathMatcher: {path: 'package.json'},
         },
-        {shellMatcher: 'matcher', pathMatcher: 'pathMatcher'},
+        {shellMatcherField: 'matcher', pathMatcherField: 'pathMatcher'},
         TOOL_MATCHER_MESSAGES,
       );
     });
@@ -148,7 +148,6 @@ describe('toolMatcherValidation', () => {
           toolKindField: 'tool',
           shellMatcherField: 'command',
           pathMatcherField: 'path',
-          fieldPaths: {shellMatcher: 'command', pathMatcher: 'path'},
           messages: TOOL_MATCHER_MESSAGES,
         },
       );
@@ -169,7 +168,6 @@ describe('toolMatcherValidation', () => {
           toolKindField: 'toolKind',
           shellMatcherField: 'matcher',
           pathMatcherField: 'pathMatcher',
-          fieldPaths: {shellMatcher: 'matcher', pathMatcher: 'pathMatcher'},
           messages: TOOL_MATCHER_MESSAGES,
         },
       );
