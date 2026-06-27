@@ -15,11 +15,11 @@
  * authored config paths remain valid during the transition.
  */
 
-import {stat} from 'node:fs/promises';
 import {dirname, isAbsolute, relative, resolve, sep} from 'node:path';
 
 import {glob} from 'tinyglobby';
 
+import {resolveInputPath, statOrUndefined} from '../util/fsx.js';
 import {loadDynoConfig} from './dynoConfig.js';
 
 /**
@@ -140,10 +140,6 @@ export async function discoverDynos(
   };
 }
 
-function resolveInputPath(inputPath: string, cwd: string): string {
-  return isAbsolute(inputPath) ? inputPath : resolve(cwd, inputPath);
-}
-
 async function discoverMatches(
   searchRoot: string,
   ignore: readonly string[],
@@ -205,17 +201,4 @@ function isEqualOrDescendant(parent: string, child: string): boolean {
 
 function toIgnoredDirectoryGlob(path: string): string {
   return path.replace(/\\/g, '/').replace(/[!*+?()[\]{}@]/g, '\\$&');
-}
-
-async function statOrUndefined(path: string) {
-  try {
-    return await stat(path);
-  } catch (error) {
-    if (isNodeError(error) && error.code === 'ENOENT') return undefined;
-    throw error;
-  }
-}
-
-function isNodeError(value: unknown): value is NodeJS.ErrnoException {
-  return value instanceof Error && 'code' in value;
 }

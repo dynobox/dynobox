@@ -1,5 +1,7 @@
-import {readFile, stat} from 'node:fs/promises';
+import {readFile} from 'node:fs/promises';
 import {isAbsolute, join, resolve, win32} from 'node:path';
+
+import {isNodeError, resolveInputPath, statOrUndefined} from '../util/fsx.js';
 
 export const DYNO_CONFIG_BASENAME = 'dyno.config.json';
 
@@ -138,23 +140,6 @@ function parseIgnoredDirectory(
   return directory;
 }
 
-function resolveInputPath(inputPath: string, cwd: string): string {
-  return isAbsolute(inputPath) ? inputPath : resolve(cwd, inputPath);
-}
-
-async function statOrUndefined(path: string) {
-  try {
-    return await stat(path);
-  } catch (error) {
-    if (isNodeError(error) && error.code === 'ENOENT') return undefined;
-    throw error;
-  }
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
-}
-
-function isNodeError(value: unknown): value is NodeJS.ErrnoException {
-  return value instanceof Error && 'code' in value;
 }
