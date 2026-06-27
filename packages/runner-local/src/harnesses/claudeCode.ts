@@ -1,5 +1,4 @@
 import type {PermissionMode} from '@dynobox/sdk';
-import {execa} from 'execa';
 
 import {
   createToolEvent,
@@ -9,6 +8,7 @@ import {
   parseJsonObjectLine,
   textFromContent,
 } from './parsing.js';
+import {runStreamingHarness} from './runStreamingHarness.js';
 import type {
   Harness,
   HarnessInput,
@@ -45,49 +45,17 @@ export class ClaudeCodeHarness implements Harness {
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
-    const options = {
-      cwd: input.workDir,
-      env: {...process.env, ...input.env},
-      reject: false,
-      ...(input.timeoutMs === undefined ? {} : {timeout: input.timeoutMs}),
-    };
-
-    const subprocess = execa(
-      this.executable,
-      buildClaudeCodeArgs(
+    return runStreamingHarness({
+      executable: this.executable,
+      args: buildClaudeCodeArgs(
         input.prompt,
         this.extraArgs,
         input.model,
         input.permissionMode,
       ),
-      options,
-    );
-    const stdoutChunks: string[] = [];
-    const stderrChunks: string[] = [];
-    const streamParser = new ClaudeCodeToolEventStream((toolEvent) => {
-      input.onToolEvent?.(toolEvent);
+      input,
+      parseLine: parseClaudeCodeStreamJsonLine,
     });
-
-    subprocess.stdout?.on('data', (chunk: Buffer | string) => {
-      const text = chunk.toString();
-      stdoutChunks.push(text);
-      streamParser.write(text);
-    });
-    subprocess.stderr?.on('data', (chunk: Buffer | string) => {
-      stderrChunks.push(chunk.toString());
-    });
-
-    const result = await subprocess;
-    streamParser.flush();
-    const stdout = result.stdout ?? '';
-    const stderr = result.stderr ?? '';
-
-    return {
-      exitCode: result.exitCode ?? 1,
-      stdout: stdout.length === 0 ? stdoutChunks.join('') : stdout,
-      stderr: stderr.length === 0 ? stderrChunks.join('') : stderr,
-      durationMs: result.durationMs,
-    };
   }
 
   extractResult(raw: HarnessRunOutput): HarnessResult {
@@ -172,52 +140,6 @@ export function parseClaudeCodeStreamJsonLine(
     ...(resultMessage === undefined ? {} : {resultMessage}),
     ...(assistantMessage === undefined ? {} : {assistantMessage}),
   };
-}
-
-class ClaudeCodeToolEventStream {
-  private buffer = '';
-  private lineNumber = 0;
-
-  constructor(private readonly onToolEvent: (event: ToolEvent) => void) {}
-
-  write(chunk: string): void {
-    this.buffer += chunk;
-
-    while (true) {
-      const newlineIndex = this.buffer.search(/\r?\n/);
-      if (newlineIndex === -1) return;
-
-      const line = this.buffer.slice(0, newlineIndex);
-      const newlineLength =
-        this.buffer[newlineIndex] === '\r' &&
-        this.buffer[newlineIndex + 1] === '\n'
-          ? 2
-          : 1;
-      this.buffer = this.buffer.slice(newlineIndex + newlineLength);
-      this.parseLine(line);
-    }
-  }
-
-  flush(): void {
-    if (this.buffer.trim().length === 0) return;
-    this.parseLine(this.buffer);
-    this.buffer = '';
-  }
-
-  private parseLine(rawLine: string): void {
-    const line = rawLine.trim();
-    if (line.length === 0) return;
-
-    this.lineNumber += 1;
-    try {
-      const parsed = parseClaudeCodeStreamJsonLine(line, this.lineNumber);
-      for (const toolEvent of parsed.toolEvents) {
-        this.onToolEvent(toolEvent);
-      }
-    } catch {
-      // Final extraction reports malformed stdout with a precise line number.
-    }
-  }
 }
 
 function parseToolEvents(event: JsonObject): ToolEvent[] {

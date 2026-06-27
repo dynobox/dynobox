@@ -1,5 +1,4 @@
 import type {PermissionMode} from '@dynobox/sdk';
-import {execa} from 'execa';
 import {realpathSync} from 'fs';
 
 import {
@@ -10,6 +9,7 @@ import {
   parseJsonObjectLine,
   textFromContent,
 } from './parsing.js';
+import {runStreamingHarness} from './runStreamingHarness.js';
 import type {
   Harness,
   HarnessInput,
@@ -45,50 +45,20 @@ export class CodexHarness implements Harness {
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
-    const options = {
-      cwd: realpathSync(input.workDir),
-      env: {...process.env, ...input.env},
-      reject: false,
-      stdin: 'ignore' as const,
-      ...(input.timeoutMs === undefined ? {} : {timeout: input.timeoutMs}),
-    };
-
-    const subprocess = execa(
-      this.executable,
-      buildCodexArgs(
+    return runStreamingHarness({
+      executable: this.executable,
+      args: buildCodexArgs(
         input.prompt,
         this.extraArgs,
         input.model,
         input.permissionMode,
       ),
-      options,
-    );
-    const stdoutChunks: string[] = [];
-    const stderrChunks: string[] = [];
-    const streamParser = new CodexToolEventStream((toolEvent) => {
-      input.onToolEvent?.(toolEvent);
+      input,
+      cwd: realpathSync(input.workDir),
+      stdin: 'ignore',
+      parseLine: parseCodexJsonLine,
+      shouldEmit: createCodexToolEventDeduper(),
     });
-
-    subprocess.stdout?.on('data', (chunk: Buffer | string) => {
-      const text = chunk.toString();
-      stdoutChunks.push(text);
-      streamParser.write(text);
-    });
-    subprocess.stderr?.on('data', (chunk: Buffer | string) => {
-      stderrChunks.push(chunk.toString());
-    });
-
-    const result = await subprocess;
-    streamParser.flush();
-    const stdout = result.stdout ?? '';
-    const stderr = result.stderr ?? '';
-
-    return {
-      exitCode: result.exitCode ?? 1,
-      stdout: stdout.length === 0 ? stdoutChunks.join('') : stdout,
-      stderr: stderr.length === 0 ? stderrChunks.join('') : stderr,
-      durationMs: result.durationMs,
-    };
   }
 
   extractResult(raw: HarnessRunOutput): HarnessResult {
@@ -159,75 +129,31 @@ export function parseCodexJsonLine(
   };
 }
 
-class CodexToolEventStream {
-  private buffer = '';
-  private lineNumber = 0;
-  private seenItemIds = new Set<string>();
+function createCodexToolEventDeduper(): (
+  event: ToolEvent,
+  line: string,
+) => boolean {
+  const seenItemIds = new Set<string>();
 
-  constructor(private readonly onToolEvent: (event: ToolEvent) => void) {}
+  return (_event, line) => {
+    const itemId = extractItemId(line);
+    if (itemId === undefined) return true;
+    if (seenItemIds.has(itemId)) return false;
+    seenItemIds.add(itemId);
+    return true;
+  };
+}
 
-  write(chunk: string): void {
-    this.buffer += chunk;
-
-    while (true) {
-      const newlineIndex = this.buffer.search(/\r?\n/);
-      if (newlineIndex === -1) return;
-
-      const line = this.buffer.slice(0, newlineIndex);
-      const newlineLength =
-        this.buffer[newlineIndex] === '\r' &&
-        this.buffer[newlineIndex + 1] === '\n'
-          ? 2
-          : 1;
-      this.buffer = this.buffer.slice(newlineIndex + newlineLength);
-      this.parseLine(line);
+function extractItemId(line: string): string | undefined {
+  try {
+    const parsed = JSON.parse(line);
+    if (isRecord(parsed) && isRecord(parsed.item)) {
+      return typeof parsed.item.id === 'string' ? parsed.item.id : undefined;
     }
-  }
-
-  flush(): void {
-    if (this.buffer.trim().length === 0) return;
-    this.parseLine(this.buffer);
-    this.buffer = '';
-  }
-
-  private parseLine(rawLine: string): void {
-    const line = rawLine.trim();
-    if (line.length === 0) return;
-
-    this.lineNumber += 1;
-    try {
-      const parsed = parseCodexJsonLine(line, this.lineNumber);
-      const itemId = this.extractItemId(line);
-      for (const toolEvent of parsed.toolEvents) {
-        if (!this.shouldEmit(toolEvent, itemId)) continue;
-        this.onToolEvent(toolEvent);
-      }
-    } catch {
-      // Ignore parse errors during streaming - final extraction will report malformed lines with precise line number.
-    }
-  }
-
-  private extractItemId(line: string): string | undefined {
-    try {
-      const parsed = JSON.parse(line);
-      if (isRecord(parsed) && isRecord(parsed.item)) {
-        return typeof parsed.item.id === 'string' ? parsed.item.id : undefined;
-      }
-    } catch {
-      // Ignore parse errors - return undefined gracefully.
-    }
+  } catch {
     return undefined;
   }
-
-  private shouldEmit(
-    toolEvent: ToolEvent,
-    itemId: string | undefined,
-  ): boolean {
-    if (typeof itemId !== 'string') return true;
-    if (this.seenItemIds.has(itemId)) return false;
-    this.seenItemIds.add(itemId);
-    return true;
-  }
+  return undefined;
 }
 
 function parseToolEvents(event: JsonObject): ToolEvent[] {

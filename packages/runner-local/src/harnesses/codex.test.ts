@@ -141,6 +141,37 @@ JSONL
       },
     ]);
   });
+
+  it('deduplicates streamed tool events with the same item id', async () => {
+    const scratchRoot = createScratchRoot();
+    const executable = join(scratchRoot, 'fake-codex');
+    writeFileSync(
+      executable,
+      `#!/bin/sh
+cat <<'JSONL'
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"pnpm test","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"pnpm test","exit_code":0,"status":"completed"}}
+JSONL
+`,
+      {mode: 0o755},
+    );
+    const harness = new CodexHarness({executable});
+    const toolEvents: ToolEvent[] = [];
+
+    await harness.run({
+      prompt: 'Run tests.',
+      workDir: scratchRoot,
+      env: {},
+      onToolEvent: (toolEvent) => toolEvents.push(toolEvent),
+    });
+
+    expect(toolEvents).toHaveLength(1);
+    expect(toolEvents[0]).toMatchObject({
+      kind: 'shell',
+      rawName: 'command_execution',
+      command: 'pnpm test',
+    });
+  });
 });
 
 describe('parseCodexJson', () => {
