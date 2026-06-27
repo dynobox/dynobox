@@ -1,3 +1,5 @@
+import type {HarnessId} from '@dynobox/sdk';
+
 import type {
   Harness,
   HarnessInput,
@@ -12,16 +14,16 @@ import type {
  * spawn a real agent process.
  */
 export class FakeHarness implements Harness {
-  // This is a tempoorary hard coded id value
-  readonly id = 'claude-code' as const;
+  readonly id: HarnessId;
 
   private readonly response: HarnessRunOutput;
   private readonly toolEvents: ToolEvent[];
 
   constructor(
     response?: Partial<HarnessRunOutput>,
-    options?: {toolEvents?: ToolEvent[]},
+    options?: {id?: HarnessId; toolEvents?: ToolEvent[]},
   ) {
+    this.id = options?.id ?? 'claude-code';
     this.response = {
       exitCode: 0,
       stdout: 'fake output',

@@ -54,6 +54,13 @@ describe('Harness contract (FakeHarness)', () => {
     expect(HARNESS_IDS).toContain(harness.id);
   });
 
+  it('uses a configured harness id', () => {
+    const harness = new FakeHarness(undefined, {id: 'codex'});
+
+    expect(harness.id).toBe('codex');
+    expect(HARNESS_IDS).toContain(harness.id);
+  });
+
   it('run returns a valid HarnessRunOutput', async () => {
     const harness = new FakeHarness();
     const output = await harness.run(input);
