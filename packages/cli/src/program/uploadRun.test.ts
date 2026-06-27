@@ -76,6 +76,40 @@ describe('buildRunUploadPayload', () => {
     expect(payload.dynos[0]?.jobs[0]?.durationMs).toBe(2);
   });
 
+  it('throws when upload jobs and results are misaligned', () => {
+    const job = {
+      id: 'scenario.misaligned.claude-code.iteration.0',
+      scenario: {
+        id: 'scenario.misaligned',
+        name: 'misaligned',
+        prompt: 'p',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        endpoints: [],
+        assertions: [],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+
+    expect(() =>
+      buildRunUploadPayload({
+        dynos: [
+          {
+            dynoPath: 'misaligned.dyno.ts',
+            name: null,
+            target: 'misaligned',
+            jobs: [job],
+          },
+        ],
+        results: [],
+        inputPath: 'misaligned.dyno.ts',
+        gitHash: null,
+      }),
+    ).toThrow('Expected 1 runner results for upload, but received 0.');
+  });
+
   it('includes nested sequence assertion display details', () => {
     const job = {
       id: 'scenario.commit.claude-code.iteration.0',
