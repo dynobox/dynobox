@@ -173,10 +173,7 @@ function buildRunUploadDyno(
   assertionById: ReadonlyMap<string, IrAssertion>,
 ): RunUploadDynoV1 {
   const jobs = dyno.jobs.map((job, index) => {
-    const result = results[index];
-    if (result === undefined) {
-      throw new Error(`Missing runner result for job "${job.id}".`);
-    }
+    const result = results[index]!;
     return buildRunUploadJob(job, result, assertionById);
   });
   const failed = jobs.filter((job) => !job.passed).length;
