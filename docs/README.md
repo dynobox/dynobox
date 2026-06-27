@@ -52,14 +52,17 @@ assertions evaluate what happened.
 
 You can assert:
 
-- Tool calls, including expected and prohibited shell commands or path-aware
-  file tool calls.
+- Tool calls, including path-aware file tool calls and raw shell escape hatches.
+- Normalized observed shell commands with `command.called(...)` and
+  `command.notCalled(...)`.
 - Skill instruction file references with `skill.referenced(...)`.
-- Ordered tool-call sequences.
+- Ordered behavior sequences and valid alternatives with `sequence.inOrder(...)`
+  and `anyOf(...)`.
 - Files present inside the scenario work directory.
 - Harness transcript and final-message text.
 - HTTP requests made by local child-process tools that honor proxy environment
   variables.
+- Post-harness verification commands with `verify.command(...)`.
 
 Use `dynobox run --iterations <count>` to repeat every selected
 scenario/harness pair and render sparkline pass-rate matrix cells such as

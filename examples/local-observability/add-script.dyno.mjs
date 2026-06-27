@@ -1,4 +1,4 @@
-import {artifact, defineDyno, finalMessage, tool} from '@dynobox/sdk';
+import {artifact, command, defineDyno, finalMessage} from '@dynobox/sdk';
 
 /**
  * Sibling of `inspect-package.dyno.mjs`. Together they demonstrate that
@@ -17,7 +17,7 @@ export default defineDyno({
     {
       name: 'adds a lint script',
       prompt:
-        'Edit package.json to add a "lint" script that runs `echo lint ok`. Use a shell command to write the file.',
+        'Edit package.json to add a "lint" script that runs `echo lint ok`. Use a `node -e` shell command to write the file.',
       setup: [
         `cat > package.json <<'JSON'
 {
@@ -29,7 +29,7 @@ export default defineDyno({
 JSON`,
       ],
       assertions: [
-        tool.called('shell'),
+        command.called('node', {args: ['-e']}),
         artifact.contains('package.json', 'lint'),
         artifact.contains('package.json', 'echo lint ok'),
         finalMessage.contains('lint'),

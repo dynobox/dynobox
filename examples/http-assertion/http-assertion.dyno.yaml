@@ -15,6 +15,11 @@ scenarios:
       Use curl to request https://httpbin.org/status/204, then report the
       status code.
     assertions:
+      - type: command.called
+        executable: curl
+        command:
+          args:
+            - https://httpbin.org/status/204
       - type: http.called
         endpoint: getHttpBinStatus
         status: 204
@@ -23,6 +28,11 @@ scenarios:
       Use curl to request https://httpbin.org/status/204. Do not request
       /anything.
     assertions:
+      - type: command.called
+        executable: curl
+        command:
+          args:
+            - https://httpbin.org/status/204
       - type: http.called
         endpoint: getHttpBinStatus
         status: 204

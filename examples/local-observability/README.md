@@ -5,9 +5,8 @@ files. Running it shows two things at once:
 
 1. `dynobox run <directory>` discovers and runs every `*.dyno.mjs` file
    in the directory tree.
-2. `tool.called`, `artifact.contains`, and `finalMessage.contains`
-   assertions evaluate observed harness behavior in a scratch work
-   directory.
+2. `command.called`, `artifact.contains`, and `finalMessage.contains`
+   assertions evaluate observed behavior and final work-directory state.
 
 ## Run
 
@@ -33,22 +32,24 @@ Prerequisites:
 ## Files
 
 - `inspect-package.dyno.mjs` — asks Claude Code to inspect `package.json`
-  with a shell command, then asserts that a `shell` tool was called and
-  that the command mentioned `package.json`.
+  with `cat package.json`, then asserts that exact command was observed and
+  the final answer mentioned the test script.
 - `add-script.dyno.mjs` — asks Claude Code to add a `lint` script to
-  `package.json`, then asserts the artifact contains the new entry and
-  the final response mentions `lint`.
+  `package.json` with `node -e`, then asserts that command was observed, the
+  artifact contains the new entry, and the final response mentions `lint`.
 
 Each file is a self-contained dyno: it declares its own `setup`, prompt,
 and assertions. Discovery treats files independently.
 
 ## Assertion Semantics
 
-`tool.called('shell')` observes shell tool calls reported by the
-harness — it does not trace arbitrary OS processes.
+`command.called(executable, matcher)` observes normalized shell command
+segments reported by the harness. It is more useful than asserting that the
+generic shell tool was called because it names the command behavior the agent
+actually performed.
 
-`tool.called('shell', {includes: 'package.json'})` passes when a
-captured shell command string contains `package.json`.
+`command.called('cat', {args: ['package.json']})` passes when the agent ran a
+normalized `cat` command whose args included `package.json`.
 
 `artifact.contains(path, text)` reads the file from the scratch work
 directory after the harness finishes and looks for `text`.

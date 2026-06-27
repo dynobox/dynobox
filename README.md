@@ -57,7 +57,7 @@ available on `PATH`.
 
 ```ts
 // my-skill.dyno.mjs
-import {artifact, defineDyno, finalMessage, tool} from '@dynobox/sdk';
+import {artifact, command, defineDyno, finalMessage, tool} from '@dynobox/sdk';
 
 export default defineDyno({
   name: 'package-script-skill',
@@ -74,9 +74,9 @@ export default defineDyno({
 JSON`,
       ],
       prompt:
-        'Inspect package.json and tell me whether this project has a test script.',
+        'Use `cat package.json` and tell me whether this project has a test script.',
       assertions: [
-        tool.called('shell', {includes: 'package.json'}),
+        command.called('cat', {args: ['package.json']}),
         tool.notCalled('edit_file'),
         artifact.contains('package.json', 'vitest run'),
         finalMessage.contains('test'),
@@ -97,7 +97,7 @@ harnesses:
 scenarios:
   - name: detects test script
     prompt: >-
-      Inspect package.json and tell me whether this project has a test script.
+      Use cat package.json and tell me whether this project has a test script.
     setup:
       - |
         cat > package.json <<'JSON'
@@ -105,9 +105,9 @@ scenarios:
         JSON
     assertions:
       - label: reads package.json
-        type: tool.called
-        tool: shell
-        command: {includes: package.json}
+        type: command.called
+        executable: cat
+        command: {args: [package.json]}
       - type: tool.notCalled
         tool: edit_file
       - type: artifact.contains
@@ -160,12 +160,18 @@ reference.
 - Match file-oriented tool calls by path, such as
   `tool.called('read_file', {path: 'package.json'})`.
 - Assert skill instruction file references with `skill.referenced(...)`.
-- Match shell commands with `equals`, `includes`, `startsWith`, or `matches`.
+- Assert normalized shell commands with `command.called(...)` and
+  `command.notCalled(...)`; raw shell string matchers remain available as
+  escape hatches.
+- Assert HTTP requests to declared endpoints with `http.called(...)` and
+  `http.notCalled(...)`.
+- Express valid alternative behavior paths with `anyOf(...)`.
 - Assert ordered tool-call sequences with `sequence.inOrder(...)`.
 - Assert work-directory artifacts with `artifact.exists(...)` and
   `artifact.contains(...)`.
 - Assert harness transcript and final response text with
   `transcript.contains(...)` and `finalMessage.contains(...)`.
+- Run post-harness checks with `verify.command(...)` for generated artifacts.
 - Stream live progress and tool events in interactive terminals.
 - Use default, `--quiet`, `--verbose`, and `--debug` output modes, including
   debug log paths for transcripts, raw chat JSONL, and normalized tool events.

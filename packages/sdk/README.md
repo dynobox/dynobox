@@ -19,11 +19,14 @@ Authoring helpers for user config files:
 - `http.called()`
 - `http.notCalled()`
 - `tool.called()`, `tool.notCalled()`
+- `command.called()`, `command.notCalled()`
+- `anyOf()`
 - `skill.referenced()`
 - `artifact.exists()`, `artifact.contains()`
 - `transcript.contains()`
 - `finalMessage.contains()`
 - `sequence.inOrder()`
+- `verify.succeeds()`, `verify.command()`
 - `dyno` helpers
 
 `defineDyno(...)` also applies authoring defaults for JavaScript and

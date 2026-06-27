@@ -1,4 +1,4 @@
-import {artifact, defineDyno, dyno, sequence, tool} from '@dynobox/sdk';
+import {artifact, command, defineDyno, dyno, sequence} from '@dynobox/sdk';
 
 const here = dyno.here(import.meta.url);
 
@@ -19,8 +19,8 @@ export default defineDyno({
       assertions: [
         artifact.exists('.codex/default.rules'),
         sequence.inOrder([
-          tool.called('shell', {includes: 'git add'}),
-          tool.called('shell', {includes: 'git commit'}),
+          command.called('git', {args: ['add']}),
+          command.called('git', {args: ['commit']}),
         ]),
       ],
     },

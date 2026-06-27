@@ -91,12 +91,12 @@ the CLI decides how many times to execute each selected scenario/harness pair.
 
 ## Author A Minimal Dyno
 
-The example below asks the harness to inspect `package.json` and checks that it
-used a shell command, did not edit files, and mentioned the test script in the
-final answer.
+The example below asks the harness to inspect `package.json` with `cat`, checks
+that the command was observed, verifies no files were edited, and confirms the
+final answer mentioned the test script.
 
 ```ts
-import {artifact, defineDyno, finalMessage, tool} from '@dynobox/sdk';
+import {artifact, command, defineDyno, finalMessage, tool} from '@dynobox/sdk';
 
 export default defineDyno({
   name: 'package-script-check',
@@ -113,9 +113,9 @@ export default defineDyno({
 JSON`,
       ],
       prompt:
-        'Inspect package.json and tell me whether this project has a test script.',
+        'Use `cat package.json` and tell me whether this project has a test script.',
       assertions: [
-        tool.called('shell', {includes: 'package.json'}),
+        command.called('cat', {args: ['package.json']}),
         tool.notCalled('edit_file'),
         artifact.contains('package.json', 'vitest run'),
         finalMessage.contains('test'),
@@ -134,7 +134,7 @@ harnesses:
 scenarios:
   - name: detects test script
     prompt: >-
-      Inspect package.json and tell me whether this project has a test script.
+      Use cat package.json and tell me whether this project has a test script.
     setup:
       - |
         cat > package.json <<'JSON'
@@ -145,10 +145,11 @@ scenarios:
         JSON
     assertions:
       - label: reads package.json
-        type: tool.called
-        tool: shell
+        type: command.called
+        executable: cat
         command:
-          includes: package.json
+          args:
+            - package.json
       - type: tool.notCalled
         tool: edit_file
       - type: artifact.contains
