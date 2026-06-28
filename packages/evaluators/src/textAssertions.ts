@@ -3,7 +3,7 @@ import type {AssertionResult} from './types.js';
 
 export function evaluateTextContains(input: {
   assertionId: string;
-  kind: string;
+  type: string;
   label: string;
   actual: string | undefined;
   expected: string;
@@ -11,7 +11,7 @@ export function evaluateTextContains(input: {
   if (input.actual === undefined) {
     return {
       assertionId: input.assertionId,
-      kind: input.kind,
+      type: input.type,
       passed: false,
       message: `Expected ${input.label} to contain "${input.expected}", but ${input.label} text is unavailable.`,
     };
@@ -19,14 +19,14 @@ export function evaluateTextContains(input: {
 
   if (input.actual.includes(input.expected)) {
     return passed(
-      {id: input.assertionId, kind: input.kind},
+      {id: input.assertionId, type: input.type},
       `Observed ${input.label} containing expected text.`,
     );
   }
 
   return {
     assertionId: input.assertionId,
-    kind: input.kind,
+    type: input.type,
     passed: false,
     message: `Expected ${input.label} to contain "${input.expected}".`,
   };

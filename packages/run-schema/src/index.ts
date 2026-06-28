@@ -1,6 +1,6 @@
 import {z} from 'zod';
 
-export const RUN_UPLOAD_SCHEMA_VERSION = 1 as const;
+export const RUN_UPLOAD_SCHEMA_VERSION = 2 as const;
 
 export const RUN_UPLOAD_STATUS = ['passed', 'failed'] as const;
 export const RUN_UPLOAD_JOB_STATUS = [
@@ -23,7 +23,7 @@ export const RUN_UPLOAD_LIMITS = {
   modelLength: 128,
   assertionIdLength: 512,
   assertionLabelLength: 512,
-  assertionKindLength: 64,
+  assertionTypeLength: 64,
   assertionMessageLength: 2_000,
   diagnosticsPerJob: 20,
   diagnosticLength: 2_000,
@@ -103,18 +103,21 @@ const commandMatcherSchema = z
   })
   .strict();
 
-const runUploadAssertionDefinitionNodeV1Schema = z
+const assertionCommandDetailSchema = z.union([
+  assertionMatcherSchema,
+  commandMatcherSchema,
+  assertionDetailString,
+]);
+
+const runUploadAssertionDefinitionNodeV2Schema = z
   .object({
-    kind: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionKindLength),
-    toolKind: optionalNullableString(RUN_UPLOAD_LIMITS.assertionKindLength),
+    type: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionTypeLength),
+    tool: optionalNullableString(RUN_UPLOAD_LIMITS.assertionTypeLength),
     executable: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
-    matcher: assertionMatcherSchema.optional(),
-    commandMatcher: commandMatcherSchema.optional(),
-    pathMatcher: z.object({path: assertionDetailString}).strict().optional(),
+    command: assertionCommandDetailSchema.optional(),
     endpointId: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
     status: z.number().int().optional(),
     skill: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
-    command: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
     exitCode: z.number().int().optional(),
     stdout: verifyAssertionMatcherSchema.optional(),
     stderr: verifyAssertionMatcherSchema.optional(),
@@ -123,20 +126,20 @@ const runUploadAssertionDefinitionNodeV1Schema = z
   })
   .strict();
 
-export const runUploadAssertionDefinitionV1Schema =
-  runUploadAssertionDefinitionNodeV1Schema
+export const runUploadAssertionDefinitionV2Schema =
+  runUploadAssertionDefinitionNodeV2Schema
     .extend({
       steps: z
-        .array(runUploadAssertionDefinitionNodeV1Schema)
+        .array(runUploadAssertionDefinitionNodeV2Schema)
         .max(RUN_UPLOAD_LIMITS.assertionChildren)
         .optional(),
     })
     .strict();
 
-export const runUploadAssertionDisplayChildV1Schema = z
+export const runUploadAssertionDisplayChildV2Schema = z
   .object({
     index: z.number().int().positive(),
-    kind: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionKindLength),
+    type: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionTypeLength),
     title: assertionDetailString,
     expectation: assertionDetailString,
     observed: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
@@ -144,23 +147,23 @@ export const runUploadAssertionDisplayChildV1Schema = z
   })
   .strict();
 
-export const runUploadAssertionDisplayV1Schema = z
+export const runUploadAssertionDisplayV2Schema = z
   .object({
     title: assertionDetailString,
     expectation: assertionDetailString,
     observed: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
     children: z
-      .array(runUploadAssertionDisplayChildV1Schema)
+      .array(runUploadAssertionDisplayChildV2Schema)
       .max(RUN_UPLOAD_LIMITS.assertionChildren),
   })
   .strict();
 
-export const runUploadAssertionEvidenceV1Schema = z
+export const runUploadAssertionEvidenceV2Schema = z
   .object({
     observedCount: countSchema.optional(),
     matchedCount: countSchema.optional(),
     observedKinds: z
-      .array(z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionKindLength))
+      .array(z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionTypeLength))
       .max(RUN_UPLOAD_LIMITS.evidenceItems)
       .optional(),
     matches: z
@@ -170,7 +173,7 @@ export const runUploadAssertionEvidenceV1Schema = z
   })
   .strict();
 
-export const runUploadTotalsV1Schema = z
+export const runUploadTotalsV2Schema = z
   .object({
     jobs: countSchema,
     passed: countSchema,
@@ -180,20 +183,20 @@ export const runUploadTotalsV1Schema = z
   })
   .strict();
 
-export const runUploadAssertionV1Schema = z
+export const runUploadAssertionV2Schema = z
   .object({
     assertionId: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionIdLength),
     label: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionLabelLength),
-    kind: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionKindLength),
+    type: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionTypeLength),
     passed: z.boolean(),
     message: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionMessageLength),
-    definition: runUploadAssertionDefinitionV1Schema.optional(),
-    display: runUploadAssertionDisplayV1Schema.optional(),
-    evidence: runUploadAssertionEvidenceV1Schema.optional(),
+    definition: runUploadAssertionDefinitionV2Schema.optional(),
+    display: runUploadAssertionDisplayV2Schema.optional(),
+    evidence: runUploadAssertionEvidenceV2Schema.optional(),
   })
   .strict();
 
-export const runUploadJobV1Schema = z
+export const runUploadJobV2Schema = z
   .object({
     jobId: z.string().min(1).max(RUN_UPLOAD_LIMITS.scenarioIdLength),
     scenario: z
@@ -213,7 +216,7 @@ export const runUploadJobV1Schema = z
     passed: z.boolean(),
     durationMs: durationMsSchema,
     assertions: z
-      .array(runUploadAssertionV1Schema)
+      .array(runUploadAssertionV2Schema)
       .max(RUN_UPLOAD_LIMITS.assertionsPerJob),
     diagnostics: z
       .array(z.string().min(1).max(RUN_UPLOAD_LIMITS.diagnosticLength))
@@ -228,18 +231,18 @@ export const runUploadJobV1Schema = z
  * One authored `.dyno` test spec inside a run, grouped under the target it
  * tests. Jobs nest here so per-dyno totals stay self-describing.
  */
-export const runUploadDynoV1Schema = z
+export const runUploadDynoV2Schema = z
   .object({
     dynoPath: z.string().min(1).max(RUN_UPLOAD_LIMITS.dynoPathLength),
     name: optionalNullableString(RUN_UPLOAD_LIMITS.dynoNameLength),
     target: z.string().min(1).max(RUN_UPLOAD_LIMITS.targetLength),
     status: z.enum(RUN_UPLOAD_STATUS),
-    totals: runUploadTotalsV1Schema,
-    jobs: z.array(runUploadJobV1Schema).max(RUN_UPLOAD_LIMITS.jobsPerDyno),
+    totals: runUploadTotalsV2Schema,
+    jobs: z.array(runUploadJobV2Schema).max(RUN_UPLOAD_LIMITS.jobsPerDyno),
   })
   .strict();
 
-export const RunUploadV1 = z
+export const RunUploadV2 = z
   .object({
     schemaVersion: z.literal(RUN_UPLOAD_SCHEMA_VERSION),
     createdAt: z.iso.datetime(),
@@ -248,8 +251,8 @@ export const RunUploadV1 = z
     /** The path the CLI was pointed at (`dynobox run <inputPath>`). */
     inputPath: optionalNullableString(RUN_UPLOAD_LIMITS.inputPathLength),
     status: z.enum(RUN_UPLOAD_STATUS),
-    totals: runUploadTotalsV1Schema,
-    dynos: z.array(runUploadDynoV1Schema).max(RUN_UPLOAD_LIMITS.dynos),
+    totals: runUploadTotalsV2Schema,
+    dynos: z.array(runUploadDynoV2Schema).max(RUN_UPLOAD_LIMITS.dynos),
   })
   .strict();
 
@@ -261,25 +264,25 @@ export const RunSharingUpdate = z
 
 export type RunUploadStatus = (typeof RUN_UPLOAD_STATUS)[number];
 export type RunUploadJobStatus = (typeof RUN_UPLOAD_JOB_STATUS)[number];
-export type RunUploadTotalsV1 = z.infer<typeof runUploadTotalsV1Schema>;
-export type RunUploadAssertionDefinitionV1 = z.infer<
-  typeof runUploadAssertionDefinitionV1Schema
+export type RunUploadTotalsV2 = z.infer<typeof runUploadTotalsV2Schema>;
+export type RunUploadAssertionDefinitionV2 = z.infer<
+  typeof runUploadAssertionDefinitionV2Schema
 >;
-export type RunUploadAssertionDisplayChildV1 = z.infer<
-  typeof runUploadAssertionDisplayChildV1Schema
+export type RunUploadAssertionDisplayChildV2 = z.infer<
+  typeof runUploadAssertionDisplayChildV2Schema
 >;
-export type RunUploadAssertionDisplayV1 = z.infer<
-  typeof runUploadAssertionDisplayV1Schema
+export type RunUploadAssertionDisplayV2 = z.infer<
+  typeof runUploadAssertionDisplayV2Schema
 >;
-export type RunUploadAssertionEvidenceV1 = z.infer<
-  typeof runUploadAssertionEvidenceV1Schema
+export type RunUploadAssertionEvidenceV2 = z.infer<
+  typeof runUploadAssertionEvidenceV2Schema
 >;
-export type RunUploadAssertionV1 = z.infer<typeof runUploadAssertionV1Schema>;
-export type RunUploadJobV1 = z.infer<typeof runUploadJobV1Schema>;
-export type RunUploadDynoV1 = z.infer<typeof runUploadDynoV1Schema>;
-export type RunUploadV1 = z.infer<typeof RunUploadV1>;
+export type RunUploadAssertionV2 = z.infer<typeof runUploadAssertionV2Schema>;
+export type RunUploadJobV2 = z.infer<typeof runUploadJobV2Schema>;
+export type RunUploadDynoV2 = z.infer<typeof runUploadDynoV2Schema>;
+export type RunUploadV2 = z.infer<typeof RunUploadV2>;
 
-export type RunUploadCreateInputV1 = z.input<typeof RunUploadV1>;
+export type RunUploadCreateInputV2 = z.input<typeof RunUploadV2>;
 
 export type RunSharingUpdate = z.infer<typeof RunSharingUpdate>;
 
@@ -310,12 +313,12 @@ export type RunAssertionDetail = {
   id: string;
   assertionId: string;
   label: string;
-  kind: string;
+  type: string;
   passed: boolean;
   message: string | null;
-  definition: RunUploadAssertionDefinitionV1 | null;
-  display: RunUploadAssertionDisplayV1 | null;
-  evidence: RunUploadAssertionEvidenceV1 | null;
+  definition: RunUploadAssertionDefinitionV2 | null;
+  display: RunUploadAssertionDisplayV2 | null;
+  evidence: RunUploadAssertionEvidenceV2 | null;
 };
 
 /** The dyno a stored job belongs to. */
@@ -352,7 +355,7 @@ export type RunJobDetail = {
 
 export type RunDetail = RunSummary & {
   isOwner: boolean;
-  summary: RunUploadTotalsV1;
+  summary: RunUploadTotalsV2;
   jobs: RunJobDetail[];
 };
 

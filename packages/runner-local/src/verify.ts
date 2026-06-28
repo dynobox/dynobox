@@ -39,7 +39,7 @@ export async function runVerifyCommands(
 
 type RunnableVerifyCommandAssertion = {
   id: string;
-  kind: 'verify.command';
+  type: 'verify.command';
   command: string;
 };
 
@@ -48,6 +48,6 @@ function verifyCommandAssertions(
 ): RunnableVerifyCommandAssertion[] {
   return assertions.filter(
     (assertion): assertion is RunnableVerifyCommandAssertion =>
-      assertion.kind === 'verify.command',
+      assertion.type === 'verify.command',
   );
 }

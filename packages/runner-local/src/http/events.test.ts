@@ -32,7 +32,7 @@ const scenario: IrScenario = {
   assertions: [
     {
       id: 'assertion.http.0',
-      kind: 'http.called',
+      type: 'http.called',
       endpointId: 'endpoint.http.getUser',
       status: 200,
     },
@@ -46,7 +46,7 @@ describe('HTTP event helpers', () => {
       scenarioNeedsHttpCapture({
         ...scenario,
         assertions: [
-          {id: 'assertion.http.0', kind: 'tool.called', toolKind: 'shell'},
+          {id: 'assertion.http.0', type: 'tool.called', tool: 'shell'},
         ],
       }),
     ).toBe(false);

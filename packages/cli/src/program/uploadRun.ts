@@ -8,15 +8,15 @@ import {
 import {
   RUN_UPLOAD_LIMITS,
   RUN_UPLOAD_SCHEMA_VERSION,
-  type RunUploadAssertionDefinitionV1,
-  type RunUploadAssertionDisplayChildV1,
-  type RunUploadAssertionDisplayV1,
-  type RunUploadAssertionEvidenceV1,
-  type RunUploadAssertionV1,
-  type RunUploadDynoV1,
-  type RunUploadJobV1,
-  type RunUploadV1 as RunUploadPayloadV1,
-  RunUploadV1,
+  type RunUploadAssertionDefinitionV2,
+  type RunUploadAssertionDisplayChildV2,
+  type RunUploadAssertionDisplayV2,
+  type RunUploadAssertionEvidenceV2,
+  type RunUploadAssertionV2,
+  type RunUploadDynoV2,
+  type RunUploadJobV2,
+  type RunUploadV2 as RunUploadPayloadV2,
+  RunUploadV2,
 } from '@dynobox/run-schema';
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 import type {TextMatcher} from '@dynobox/sdk';
@@ -94,7 +94,7 @@ export async function uploadRun(input: UploadRunInput): Promise<void> {
     inputPath: input.inputPath,
     gitHash: await collectGitHash(),
   });
-  const payloadResult = RunUploadV1.safeParse(payload);
+  const payloadResult = RunUploadV2.safeParse(payload);
   if (!payloadResult.success) {
     input.writeStderr(
       `warning: could not save run; generated payload failed validation (${payloadResult.error.issues[0]?.path.join('.') || 'payload'}).\n`,
@@ -134,7 +134,7 @@ export function buildRunUploadPayload(input: {
   runFailed?: boolean;
   inputPath: string;
   gitHash: string | null;
-}): RunUploadPayloadV1 {
+}): RunUploadPayloadV2 {
   const allJobs = input.dynos.flatMap((dyno) => dyno.jobs);
   if (input.results.length !== allJobs.length) {
     throw new Error(
@@ -176,7 +176,7 @@ function buildRunUploadDyno(
   dyno: UploadRunDynoInput,
   results: readonly LocalRunnerResult[],
   assertionById: ReadonlyMap<string, IrAssertion>,
-): RunUploadDynoV1 {
+): RunUploadDynoV2 {
   const jobs = dyno.jobs.map((job, index) => {
     const result = results[index]!;
     return buildRunUploadJob(job, result, assertionById);
@@ -220,7 +220,7 @@ function buildRunUploadJob(
   job: LocalRunnerJob,
   result: LocalRunnerResult,
   assertionById: ReadonlyMap<string, IrAssertion>,
-): RunUploadJobV1 {
+): RunUploadJobV2 {
   return {
     jobId: truncate(result.jobId, RUN_UPLOAD_LIMITS.scenarioIdLength),
     scenario: {
@@ -242,7 +242,7 @@ function buildRunUploadJob(
       const source = assertionById.get(assertion.assertionId);
       return compactAssertion({
         assertionId: assertion.assertionId,
-        kind: assertion.kind,
+        type: assertion.type,
         message: assertion.message,
         passed: assertion.passed,
         result,
@@ -266,22 +266,22 @@ function buildRunUploadJob(
 
 function compactAssertion(input: {
   assertionId: string;
-  kind: string;
+  type: string;
   message: string;
   passed: boolean;
   result: LocalRunnerResult;
   source: IrAssertion | undefined;
-}): RunUploadAssertionV1 {
+}): RunUploadAssertionV2 {
   return {
     assertionId: truncate(
       input.assertionId,
       RUN_UPLOAD_LIMITS.assertionIdLength,
     ),
     label: truncate(
-      assertionLabel(input.source, input.kind),
+      assertionLabel(input.source, input.type),
       RUN_UPLOAD_LIMITS.assertionLabelLength,
     ),
-    kind: truncate(input.kind, RUN_UPLOAD_LIMITS.assertionKindLength),
+    type: truncate(input.type, RUN_UPLOAD_LIMITS.assertionTypeLength),
     passed: input.passed,
     message: truncate(input.message, RUN_UPLOAD_LIMITS.assertionMessageLength),
     ...(input.source === undefined
@@ -301,9 +301,9 @@ function compactAssertion(input: {
 
 function assertionLabel(
   assertion: IrAssertion | undefined,
-  fallbackKind: string,
+  fallbackType: string,
 ): string {
-  if (assertion === undefined) return fallbackKind;
+  if (assertion === undefined) return fallbackType;
   const description = describeAssertion(assertion);
   return assertion.label === undefined
     ? description
@@ -312,19 +312,19 @@ function assertionLabel(
 
 function assertionDefinition(
   assertion: IrAssertion,
-): RunUploadAssertionDefinitionV1 {
-  const base = {kind: assertion.kind};
-  if (assertion.kind === 'tool.called' || assertion.kind === 'tool.notCalled') {
+): RunUploadAssertionDefinitionV2 {
+  const base = {type: assertion.type};
+  if (assertion.type === 'tool.called' || assertion.type === 'tool.notCalled') {
     return {
       ...base,
-      toolKind: assertion.toolKind,
+      tool: assertion.tool,
       ...matcherDefinition(assertion),
-      ...pathMatcherDefinition(assertion),
+      ...pathDefinition(assertion),
     };
   }
   if (
-    assertion.kind === 'command.called' ||
-    assertion.kind === 'command.notCalled'
+    assertion.type === 'command.called' ||
+    assertion.type === 'command.notCalled'
   ) {
     return {
       ...base,
@@ -332,32 +332,32 @@ function assertionDefinition(
       ...commandMatcherDefinition(assertion),
     };
   }
-  if (assertion.kind === 'sequence.inOrder') {
+  if (assertion.type === 'sequence.inOrder') {
     return {
       ...base,
       steps: assertion.steps.map(sequenceStepDefinition),
     };
   }
-  if (assertion.kind === 'anyOf') {
+  if (assertion.type === 'anyOf') {
     return {
       ...base,
       steps: assertion.steps.map(assertionNodeDefinition),
     };
   }
-  if (assertion.kind === 'http.called') {
+  if (assertion.type === 'http.called') {
     return {
       ...base,
       endpointId: assertion.endpointId,
       ...(assertion.status === undefined ? {} : {status: assertion.status}),
     };
   }
-  if (assertion.kind === 'http.notCalled') {
+  if (assertion.type === 'http.notCalled') {
     return {...base, endpointId: assertion.endpointId};
   }
-  if (assertion.kind === 'skill.referenced') {
+  if (assertion.type === 'skill.referenced') {
     return {...base, skill: assertion.skill};
   }
-  if (assertion.kind === 'verify.command') {
+  if (assertion.type === 'verify.command') {
     return {
       ...base,
       command: truncateDetail(assertion.command),
@@ -372,10 +372,10 @@ function assertionDefinition(
         : {stderr: textMatcherUploadValue(assertion.stderr)}),
     };
   }
-  if (assertion.kind === 'artifact.exists') {
+  if (assertion.type === 'artifact.exists') {
     return {...base, path: truncateDetail(assertion.path)};
   }
-  if (assertion.kind === 'artifact.contains') {
+  if (assertion.type === 'artifact.contains') {
     return {
       ...base,
       path: truncateDetail(assertion.path),
@@ -383,8 +383,8 @@ function assertionDefinition(
     };
   }
   if (
-    assertion.kind === 'transcript.contains' ||
-    assertion.kind === 'finalMessage.contains'
+    assertion.type === 'transcript.contains' ||
+    assertion.type === 'finalMessage.contains'
   ) {
     return {...base, text: truncateDetail(assertion.text)};
   }
@@ -392,23 +392,23 @@ function assertionDefinition(
 }
 
 function assertionNodeDefinition(
-  assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
-): RunUploadAssertionDefinitionV1 {
+  assertion: Extract<IrAssertion, {type: 'anyOf'}>['steps'][number],
+): RunUploadAssertionDefinitionV2 {
   return assertionDefinition(assertionBranchWithId(assertion));
 }
 
 function sequenceStepDefinition(
-  step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
-): NonNullable<RunUploadAssertionDefinitionV1['steps']>[number] {
-  return step.kind === 'tool.called'
+  step: Extract<IrAssertion, {type: 'sequence.inOrder'}>['steps'][number],
+): NonNullable<RunUploadAssertionDefinitionV2['steps']>[number] {
+  return step.type === 'tool.called'
     ? {
-        kind: step.kind,
-        toolKind: step.toolKind,
+        type: step.type,
+        tool: step.tool,
         ...matcherDefinition(step),
-        ...pathMatcherDefinition(step),
+        ...pathDefinition(step),
       }
     : {
-        kind: step.kind,
+        type: step.type,
         executable: step.executable,
         ...commandMatcherDefinition(step),
       };
@@ -418,13 +418,13 @@ function assertionDisplay(
   assertion: IrAssertion,
   result: LocalRunnerResult,
   fallbackObserved: string,
-): RunUploadAssertionDisplayV1 {
+): RunUploadAssertionDisplayV2 {
   const evidence = assertionResultEvidence(
     result.assertionResults,
     assertion.id,
   );
   return {
-    title: truncateDetail(assertionLabel(assertion, assertion.kind)),
+    title: truncateDetail(assertionLabel(assertion, assertion.type)),
     expectation: truncateDetail(describeExpectation(assertion)),
     observed: truncateNullableDetail(
       observedAssertionSummary(assertion, result, fallbackObserved),
@@ -436,20 +436,20 @@ function assertionDisplay(
 function assertionChildren(
   assertion: IrAssertion,
   evidence: unknown,
-): RunUploadAssertionDisplayChildV1[] {
-  if (assertion.kind === 'sequence.inOrder') {
+): RunUploadAssertionDisplayChildV2[] {
+  if (assertion.type === 'sequence.inOrder') {
     return sequenceChildren(assertion, evidence);
   }
-  if (assertion.kind === 'anyOf') {
+  if (assertion.type === 'anyOf') {
     return anyOfChildren(assertion, evidence);
   }
   return [];
 }
 
 function sequenceChildren(
-  assertion: Extract<IrAssertion, {kind: 'sequence.inOrder'}>,
+  assertion: Extract<IrAssertion, {type: 'sequence.inOrder'}>,
   evidence: unknown,
-): RunUploadAssertionDisplayChildV1[] {
+): RunUploadAssertionDisplayChildV2[] {
   const matchedCount = Array.isArray(evidence) ? evidence.length : undefined;
   return assertion.steps.map((step, index) => {
     const passed =
@@ -462,7 +462,7 @@ function sequenceChildren(
             : null;
     return {
       index: index + 1,
-      kind: step.kind,
+      type: step.type,
       title: truncateDetail(describeToolStep(step)),
       expectation: truncateDetail(describeToolStepExpectation(step)),
       observed: null,
@@ -472,16 +472,16 @@ function sequenceChildren(
 }
 
 function anyOfChildren(
-  assertion: Extract<IrAssertion, {kind: 'anyOf'}>,
+  assertion: Extract<IrAssertion, {type: 'anyOf'}>,
   evidence: unknown,
-): RunUploadAssertionDisplayChildV1[] {
+): RunUploadAssertionDisplayChildV2[] {
   const branchResults = anyOfBranchResults(evidence);
   return assertion.steps.map((step, index) => {
     const branch = stepWithId(step);
     const result = branchResults?.[index];
     return {
       index: index + 1,
-      kind: branch.kind,
+      type: branch.type,
       title: truncateDetail(describeAssertion(branch)),
       expectation: truncateDetail(describeExpectation(branch)),
       observed: truncateNullableDetail(result?.message ?? null),
@@ -495,13 +495,13 @@ function assertionEvidence(
   assertionId: string,
   assertion: IrAssertion | undefined,
   passed: boolean,
-): RunUploadAssertionEvidenceV1 {
+): RunUploadAssertionEvidenceV2 {
   const evidence = assertionResultEvidence(
     result.assertionResults,
     assertionId,
   );
   const matches =
-    assertion?.kind === 'command.called' && !passed
+    assertion?.type === 'command.called' && !passed
       ? []
       : evidenceMatches(evidence);
   return {
@@ -536,7 +536,7 @@ function observedKinds(result: LocalRunnerResult): string[] {
     ]),
   ]
     .slice(0, RUN_UPLOAD_LIMITS.evidenceItems)
-    .map((kind) => truncate(kind, RUN_UPLOAD_LIMITS.assertionKindLength));
+    .map((kind) => truncate(kind, RUN_UPLOAD_LIMITS.assertionTypeLength));
 }
 
 function observedAssertionSummary(
@@ -544,7 +544,7 @@ function observedAssertionSummary(
   result: LocalRunnerResult,
   fallback: string,
 ): string {
-  if (assertion.kind === 'command.called') {
+  if (assertion.type === 'command.called') {
     const evidence = assertionResultEvidence(
       result.assertionResults,
       assertion.id,
@@ -562,7 +562,7 @@ function observedAssertionSummary(
     }
   }
 
-  if (assertion.kind === 'sequence.inOrder') {
+  if (assertion.type === 'sequence.inOrder') {
     const evidence = assertionResultEvidence(
       result.assertionResults,
       assertion.id,
@@ -572,7 +572,7 @@ function observedAssertionSummary(
     }
   }
 
-  if (assertion.kind === 'anyOf') {
+  if (assertion.type === 'anyOf') {
     const evidence = assertionResultEvidence(
       result.assertionResults,
       assertion.id,
@@ -585,7 +585,7 @@ function observedAssertionSummary(
     }
   }
 
-  if (assertion.kind === 'verify.command') {
+  if (assertion.type === 'verify.command') {
     const evidence = assertionResultEvidence(
       result.assertionResults,
       assertion.id,
@@ -598,30 +598,30 @@ function observedAssertionSummary(
 }
 
 function stepWithId(
-  assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
+  assertion: Extract<IrAssertion, {type: 'anyOf'}>['steps'][number],
 ): IrAssertion {
   return assertionBranchWithId(assertion);
 }
 
 function matcherDefinition(assertion: {
-  matcher?: Extract<
+  command?: Extract<
     IrAssertion,
-    {kind: 'tool.called'} | {kind: 'tool.notCalled'}
-  >['matcher'];
+    {type: 'tool.called'} | {type: 'tool.notCalled'}
+  >['command'];
 }) {
-  if (assertion.matcher === undefined) return {};
-  if ('equals' in assertion.matcher) {
-    return {matcher: {equals: truncateDetail(assertion.matcher.equals)}};
+  if (assertion.command === undefined) return {};
+  if ('equals' in assertion.command) {
+    return {command: {equals: truncateDetail(assertion.command.equals)}};
   }
-  if ('includes' in assertion.matcher) {
-    return {matcher: {includes: truncateDetail(assertion.matcher.includes)}};
+  if ('includes' in assertion.command) {
+    return {command: {includes: truncateDetail(assertion.command.includes)}};
   }
-  if ('startsWith' in assertion.matcher) {
+  if ('startsWith' in assertion.command) {
     return {
-      matcher: {startsWith: truncateDetail(assertion.matcher.startsWith)},
+      command: {startsWith: truncateDetail(assertion.command.startsWith)},
     };
   }
-  return {matcher: {matches: truncateDetail(assertion.matcher.matches)}};
+  return {command: {matches: truncateDetail(assertion.command.matches)}};
 }
 
 function textMatcherUploadValue(matcher: TextMatcher) {
@@ -634,50 +634,48 @@ function textMatcherUploadValue(matcher: TextMatcher) {
   return {matches: truncateDetail(matcher.matches)};
 }
 
-function pathMatcherDefinition(assertion: {
-  pathMatcher?: {path: string} | undefined;
-}) {
-  return assertion.pathMatcher === undefined
+function pathDefinition(assertion: {path?: string | undefined}) {
+  return assertion.path === undefined
     ? {}
-    : {pathMatcher: {path: truncateDetail(assertion.pathMatcher.path)}};
+    : {path: truncateDetail(assertion.path)};
 }
 
 function commandMatcherDefinition(assertion: {
-  matcher?: Extract<
+  command?: Extract<
     IrAssertion,
-    {kind: 'command.called'} | {kind: 'command.notCalled'}
-  >['matcher'];
+    {type: 'command.called'} | {type: 'command.notCalled'}
+  >['command'];
 }) {
-  if (assertion.matcher === undefined) return {};
+  if (assertion.command === undefined) return {};
   return {
-    commandMatcher: {
-      ...(assertion.matcher.args === undefined
+    command: {
+      ...(assertion.command.args === undefined
         ? {}
-        : {args: assertion.matcher.args.map(truncateDetail)}),
-      ...(assertion.matcher.argsInOrder === undefined
+        : {args: assertion.command.args.map(truncateDetail)}),
+      ...(assertion.command.argsInOrder === undefined
         ? {}
-        : {argsInOrder: assertion.matcher.argsInOrder.map(truncateDetail)}),
-      ...(assertion.matcher.argsMatching === undefined
+        : {argsInOrder: assertion.command.argsInOrder.map(truncateDetail)}),
+      ...(assertion.command.argsMatching === undefined
         ? {}
         : {
-            argsMatching: assertion.matcher.argsMatching.map((pattern) => ({
+            argsMatching: assertion.command.argsMatching.map((pattern) => ({
               source: truncateDetail(pattern.source),
               flags: pattern.flags,
             })),
           }),
-      ...(assertion.matcher.originalIncludes === undefined
+      ...(assertion.command.originalIncludes === undefined
         ? {}
         : {
             originalIncludes: truncateDetail(
-              assertion.matcher.originalIncludes,
+              assertion.command.originalIncludes,
             ),
           }),
-      ...(assertion.matcher.originalMatches === undefined
+      ...(assertion.command.originalMatches === undefined
         ? {}
         : {
             originalMatches: {
-              source: truncateDetail(assertion.matcher.originalMatches.source),
-              flags: assertion.matcher.originalMatches.flags,
+              source: truncateDetail(assertion.command.originalMatches.source),
+              flags: assertion.command.originalMatches.flags,
             },
           }),
     },
@@ -685,42 +683,42 @@ function commandMatcherDefinition(assertion: {
 }
 
 function describeToolStep(
-  step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
+  step: Extract<IrAssertion, {type: 'sequence.inOrder'}>['steps'][number],
 ): string {
-  if (step.kind === 'command.called') {
-    if (step.matcher === undefined) return `command.called(${step.executable})`;
-    return `command.called(${step.executable}, ${describeCommandMatcher(step.matcher)})`;
+  if (step.type === 'command.called') {
+    if (step.command === undefined) return `command.called(${step.executable})`;
+    return `command.called(${step.executable}, ${describeCommandMatcher(step.command)})`;
   }
-  if (step.pathMatcher !== undefined) {
-    return `tool.called(${step.toolKind}, path: ${step.pathMatcher.path})`;
+  if (step.path !== undefined) {
+    return `tool.called(${step.tool}, path: ${step.path})`;
   }
-  if (step.matcher === undefined) return `tool.called(${step.toolKind})`;
-  return `tool.called(${step.toolKind}, ${describeMatcher(step.matcher)})`;
+  if (step.command === undefined) return `tool.called(${step.tool})`;
+  return `tool.called(${step.tool}, ${describeMatcher(step.command)})`;
 }
 
 function describeToolStepExpectation(
-  step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
+  step: Extract<IrAssertion, {type: 'sequence.inOrder'}>['steps'][number],
 ): string {
-  if (step.kind === 'command.called') {
-    if (step.matcher === undefined) return `${step.executable} command`;
-    return `${step.executable} command with ${describeCommandMatcher(step.matcher)}`;
+  if (step.type === 'command.called') {
+    if (step.command === undefined) return `${step.executable} command`;
+    return `${step.executable} command with ${describeCommandMatcher(step.command)}`;
   }
-  if (step.pathMatcher !== undefined) {
-    return `${step.toolKind} tool call for path "${step.pathMatcher.path}"`;
+  if (step.path !== undefined) {
+    return `${step.tool} tool call for path "${step.path}"`;
   }
-  if (step.matcher === undefined) return `${step.toolKind} tool call`;
-  return describeMatcherExpectation(step.matcher);
+  if (step.command === undefined) return `${step.tool} tool call`;
+  return describeMatcherExpectation(step.command);
 }
 
 function describeMatcher(
-  matcher: Extract<IrAssertion, {kind: 'tool.called'}>['matcher'],
+  matcher: Extract<IrAssertion, {type: 'tool.called'}>['command'],
 ): string {
   if (matcher === undefined) return '';
   return describeShellCommandMatcher(matcher, {style: 'compact'});
 }
 
 function describeMatcherExpectation(
-  matcher: Extract<IrAssertion, {kind: 'tool.called'}>['matcher'],
+  matcher: Extract<IrAssertion, {type: 'tool.called'}>['command'],
 ): string {
   if (matcher === undefined) return '';
   return describeShellCommandMatcher(matcher, {style: 'expectation'});
@@ -728,7 +726,7 @@ function describeMatcherExpectation(
 
 function describeCommandMatcher(
   matcher: NonNullable<
-    Extract<IrAssertion, {kind: 'command.called'}>['matcher']
+    Extract<IrAssertion, {type: 'command.called'}>['command']
   >,
 ): string {
   return describeCommandMatcherText(matcher, {style: 'compact'});

@@ -46,7 +46,7 @@ export function renderQuietRun(
       )) {
         const assertion = assertionById.get(assertionResult.assertionId);
         lines.push(
-          `        ${assertion === undefined ? assertionResult.kind : describeAssertion(assertion)}\n`,
+          `        ${assertion === undefined ? assertionResult.type : describeAssertion(assertion)}\n`,
         );
       }
     }

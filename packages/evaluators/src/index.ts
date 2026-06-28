@@ -54,71 +54,71 @@ function evaluateAssertion(
   assertion: IrAssertion,
   input: EvaluationInput,
 ): AssertionResult {
-  if (assertion.kind === 'tool.called') {
+  if (assertion.type === 'tool.called') {
     return evaluateToolCalledAssertion(assertion, input.toolEvents);
   }
 
-  if (assertion.kind === 'tool.notCalled') {
+  if (assertion.type === 'tool.notCalled') {
     return evaluateToolNotCalledAssertion(assertion, input.toolEvents);
   }
 
-  if (assertion.kind === 'command.called') {
+  if (assertion.type === 'command.called') {
     return evaluateCommandCalledAssertion(assertion, input.toolEvents);
   }
 
-  if (assertion.kind === 'command.notCalled') {
+  if (assertion.type === 'command.notCalled') {
     return evaluateCommandNotCalledAssertion(assertion, input.toolEvents);
   }
 
-  if (assertion.kind === 'verify.command') {
+  if (assertion.type === 'verify.command') {
     return evaluateVerifyCommandAssertion(
       assertion,
       input.verifyCommandResults,
     );
   }
 
-  if (assertion.kind === 'sequence.inOrder') {
+  if (assertion.type === 'sequence.inOrder') {
     return evaluateSequenceInOrder(assertion, input.toolEvents);
   }
 
-  if (assertion.kind === 'anyOf') {
+  if (assertion.type === 'anyOf') {
     return evaluateAnyOf(assertion, input);
   }
 
-  if (assertion.kind === 'skill.referenced') {
+  if (assertion.type === 'skill.referenced') {
     return evaluateSkillReferenced(assertion, input.toolEvents);
   }
 
-  if (assertion.kind === 'http.called') {
+  if (assertion.type === 'http.called') {
     return evaluateHttpCalled(assertion, input.httpEvents ?? []);
   }
 
-  if (assertion.kind === 'http.notCalled') {
+  if (assertion.type === 'http.notCalled') {
     return evaluateHttpNotCalled(assertion, input.httpEvents ?? []);
   }
 
-  if (assertion.kind === 'artifact.exists') {
+  if (assertion.type === 'artifact.exists') {
     return evaluateArtifactExists(assertion, input.workDir);
   }
 
-  if (assertion.kind === 'artifact.contains') {
+  if (assertion.type === 'artifact.contains') {
     return evaluateArtifactContains(assertion, input.workDir);
   }
 
-  if (assertion.kind === 'transcript.contains') {
+  if (assertion.type === 'transcript.contains') {
     return evaluateTextContains({
       assertionId: assertion.id,
-      kind: assertion.kind,
+      type: assertion.type,
       label: 'transcript',
       actual: input.transcript,
       expected: assertion.text,
     });
   }
 
-  if (assertion.kind === 'finalMessage.contains') {
+  if (assertion.type === 'finalMessage.contains') {
     return evaluateTextContains({
       assertionId: assertion.id,
-      kind: assertion.kind,
+      type: assertion.type,
       label: 'final message',
       actual: input.finalMessage,
       expected: assertion.text,
@@ -134,7 +134,7 @@ function evaluateAssertion(
  * the first match.
  */
 function evaluateAnyOf(
-  assertion: Extract<IrAssertion, {kind: 'anyOf'}>,
+  assertion: Extract<IrAssertion, {type: 'anyOf'}>,
   input: EvaluationInput,
 ): AssertionResult {
   const branchResults = assertion.steps.map((step, index) =>
@@ -160,7 +160,7 @@ function evaluateAnyOf(
 
   return {
     assertionId: assertion.id,
-    kind: assertion.kind,
+    type: assertion.type,
     passed: false,
     message: [
       `Expected anyOf to match at least one branch, but all ${branchResults.length} branches failed.`,

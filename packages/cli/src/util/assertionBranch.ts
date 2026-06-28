@@ -2,7 +2,7 @@ import {type IrAssertion, irAssertionFromNode} from '@dynobox/sdk/ir';
 
 export type IrAnyOfBranch = Extract<
   IrAssertion,
-  {kind: 'anyOf'}
+  {type: 'anyOf'}
 >['steps'][number];
 
 const ASSERTION_BRANCH_ID = 'assertion.branch';

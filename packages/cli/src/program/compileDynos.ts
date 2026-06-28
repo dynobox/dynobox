@@ -121,7 +121,7 @@ function prefixEndpoint(endpoint: IrEndpoint, prefix: string): IrEndpoint {
 
 function prefixAssertion(assertion: IrAssertion, prefix: string): IrAssertion {
   const prefixed = {...assertion, id: `${prefix}::${assertion.id}`};
-  if (prefixed.kind === 'http.called' || prefixed.kind === 'http.notCalled') {
+  if (prefixed.type === 'http.called' || prefixed.type === 'http.notCalled') {
     return {...prefixed, endpointId: `${prefix}::${prefixed.endpointId}`};
   }
   return prefixed;

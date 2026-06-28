@@ -31,7 +31,7 @@ type AuthoredAnyOfBranch = Extract<
   {type: 'anyOf'}
 >['steps'][number];
 type IrVerifyCommandBody = Omit<
-  Extract<IrAssertion, {kind: 'verify.command'}>,
+  Extract<IrAssertion, {type: 'verify.command'}>,
   'id' | 'label'
 >;
 
@@ -146,9 +146,6 @@ function buildIrEndpoint(
     method: endpoint.method,
     url: endpoint.url,
   };
-  if (endpoint.headers !== undefined) ir.headers = endpoint.headers;
-  if (endpoint.body !== undefined) ir.body = endpoint.body;
-  if (endpoint.response !== undefined) ir.response = endpoint.response;
   return ir;
 }
 
@@ -184,14 +181,14 @@ function buildIrAssertionNode(
 
   if (assertion.type === 'tool.notCalled') {
     const base = {
-      kind: 'tool.notCalled' as const,
-      toolKind: assertion.tool,
+      type: 'tool.notCalled' as const,
+      tool: assertion.tool,
     };
     if (assertion.command !== undefined) {
-      return {...base, matcher: assertion.command};
+      return {...base, command: assertion.command};
     }
     if (assertion.path !== undefined) {
-      return {...base, pathMatcher: {path: assertion.path}};
+      return {...base, path: assertion.path};
     }
     return base;
   }
@@ -202,12 +199,12 @@ function buildIrAssertionNode(
 
   if (assertion.type === 'command.notCalled') {
     const base = {
-      kind: 'command.notCalled' as const,
+      type: 'command.notCalled' as const,
       executable: assertion.executable,
     };
     return assertion.command === undefined
       ? base
-      : {...base, matcher: serializeCommandMatcher(assertion.command)};
+      : {...base, command: serializeCommandMatcher(assertion.command)};
   }
 
   if (assertion.type === 'verify.command') {
@@ -215,38 +212,38 @@ function buildIrAssertionNode(
   }
 
   if (assertion.type === 'artifact.exists') {
-    return {kind: 'artifact.exists', path: assertion.path};
+    return {type: 'artifact.exists', path: assertion.path};
   }
 
   if (assertion.type === 'artifact.contains') {
     return {
-      kind: 'artifact.contains',
+      type: 'artifact.contains',
       path: assertion.path,
       text: assertion.text,
     };
   }
 
   if (assertion.type === 'transcript.contains') {
-    return {kind: 'transcript.contains', text: assertion.text};
+    return {type: 'transcript.contains', text: assertion.text};
   }
 
   if (assertion.type === 'finalMessage.contains') {
     return {
-      kind: 'finalMessage.contains',
+      type: 'finalMessage.contains',
       text: assertion.text,
     };
   }
 
   if (assertion.type === 'sequence.inOrder') {
     return {
-      kind: 'sequence.inOrder',
+      type: 'sequence.inOrder',
       steps: assertion.steps.map((step) => buildIrSequenceStep(step)),
     };
   }
 
   if (assertion.type === 'anyOf') {
     return {
-      kind: 'anyOf',
+      type: 'anyOf',
       steps: assertion.steps.map((step) =>
         buildIrAnyOfBranch(scenarioName, index, endpointIdByKey, step),
       ),
@@ -254,7 +251,7 @@ function buildIrAssertionNode(
   }
 
   if (assertion.type === 'skill.referenced') {
-    return {kind: 'skill.referenced', skill: assertion.skill};
+    return {type: 'skill.referenced', skill: assertion.skill};
   }
 
   const endpointId = endpointIdByKey.get(assertion.endpoint);
@@ -267,7 +264,7 @@ function buildIrAssertionNode(
 
   if (assertion.type === 'http.called') {
     const base = {
-      kind: 'http.called' as const,
+      type: 'http.called' as const,
       endpointId,
     };
     if (assertion.status !== undefined) {
@@ -275,7 +272,7 @@ function buildIrAssertionNode(
     }
     return base;
   }
-  return {kind: 'http.notCalled', endpointId};
+  return {type: 'http.notCalled', endpointId};
 }
 
 function buildIrSequenceStep(assertion: AuthoredSequenceStep): IrSequenceStep {
@@ -303,36 +300,36 @@ function buildIrAnyOfBranch(
 
 function buildIrToolCalledStep(
   assertion: Extract<AuthoredAssertion, {type: 'tool.called'}>,
-): Omit<Extract<IrAssertion, {kind: 'tool.called'}>, 'id'> {
+): Omit<Extract<IrAssertion, {type: 'tool.called'}>, 'id'> {
   const base = {
-    kind: 'tool.called' as const,
-    toolKind: assertion.tool,
+    type: 'tool.called' as const,
+    tool: assertion.tool,
   };
   if (assertion.command !== undefined) {
-    return {...base, matcher: assertion.command} as Omit<
-      Extract<IrAssertion, {kind: 'tool.called'}>,
+    return {...base, command: assertion.command} as Omit<
+      Extract<IrAssertion, {type: 'tool.called'}>,
       'id'
     >;
   }
   if (assertion.path !== undefined) {
-    return {...base, pathMatcher: {path: assertion.path}} as Omit<
-      Extract<IrAssertion, {kind: 'tool.called'}>,
+    return {...base, path: assertion.path} as Omit<
+      Extract<IrAssertion, {type: 'tool.called'}>,
       'id'
     >;
   }
-  return base as Omit<Extract<IrAssertion, {kind: 'tool.called'}>, 'id'>;
+  return base as Omit<Extract<IrAssertion, {type: 'tool.called'}>, 'id'>;
 }
 
 function buildIrCommandCalledStep(
   assertion: Extract<AuthoredAssertion, {type: 'command.called'}>,
-): Omit<Extract<IrAssertion, {kind: 'command.called'}>, 'id'> {
+): Omit<Extract<IrAssertion, {type: 'command.called'}>, 'id'> {
   const base = {
-    kind: 'command.called' as const,
+    type: 'command.called' as const,
     executable: assertion.executable,
   };
   return assertion.command === undefined
     ? base
-    : {...base, matcher: serializeCommandMatcher(assertion.command)};
+    : {...base, command: serializeCommandMatcher(assertion.command)};
 }
 
 function serializeCommandMatcher(
@@ -340,9 +337,9 @@ function serializeCommandMatcher(
     AuthoredAssertion,
     {type: 'command.called' | 'command.notCalled'}
   >['command'],
-): NonNullable<Extract<IrAssertion, {kind: 'command.called'}>['matcher']> {
+): NonNullable<Extract<IrAssertion, {type: 'command.called'}>['command']> {
   const serialized: NonNullable<
-    Extract<IrAssertion, {kind: 'command.called'}>['matcher']
+    Extract<IrAssertion, {type: 'command.called'}>['command']
   > = {};
   if (matcher?.args !== undefined) serialized.args = [...matcher.args];
   if (matcher?.argsInOrder !== undefined) {
@@ -364,7 +361,7 @@ function buildIrVerifyCommandAssertion(
   assertion: Extract<AuthoredAssertion, {type: 'verify.command'}>,
 ): IrVerifyCommandBody {
   const ir = {
-    kind: 'verify.command',
+    type: 'verify.command',
     command: assertion.command,
   } as IrVerifyCommandBody;
   if (assertion.exitCode !== undefined) ir.exitCode = assertion.exitCode;

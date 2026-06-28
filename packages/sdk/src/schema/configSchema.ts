@@ -50,17 +50,8 @@ export const endpointSchema: z.ZodType<Endpoint> = z
   .object({
     method: z.enum(HTTP_METHODS),
     url: z.url(),
-    headers: z.record(z.string(), z.string()).optional(),
-    body: z.unknown().optional(),
-    response: z
-      .object({
-        status: z.number().int().optional(),
-        headers: z.record(z.string(), z.string()).optional(),
-        body: z.unknown().optional(),
-      })
-      .optional(),
   })
-  .loose() as unknown as z.ZodType<Endpoint>;
+  .strict() as unknown as z.ZodType<Endpoint>;
 
 const harnessRunConfigSchema = z.union([
   z.enum(HARNESS_IDS),

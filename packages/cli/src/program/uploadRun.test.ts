@@ -1,4 +1,4 @@
-import {RunUploadV1} from '@dynobox/run-schema';
+import {RunUploadV2} from '@dynobox/run-schema';
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 import {describe, expect, it} from 'vitest';
 
@@ -20,8 +20,8 @@ describe('buildRunUploadPayload', () => {
           {
             id: 'assertion.labels.reads-package',
             label: 'reads package.json',
-            kind: 'tool.called',
-            toolKind: 'shell',
+            type: 'tool.called',
+            tool: 'shell',
           },
         ],
       },
@@ -41,7 +41,7 @@ describe('buildRunUploadPayload', () => {
       assertionResults: [
         {
           assertionId: 'assertion.labels.reads-package',
-          kind: 'tool.called',
+          type: 'tool.called',
           passed: true,
           message: 'Observed tool "shell".',
         },
@@ -70,7 +70,7 @@ describe('buildRunUploadPayload', () => {
       gitHash: null,
     });
 
-    expect(RunUploadV1.safeParse(payload).success).toBe(true);
+    expect(RunUploadV2.safeParse(payload).success).toBe(true);
     expect(payload.totals.durationMs).toBe(2);
     expect(payload.dynos[0]?.target).toBe('commit');
     expect(payload.dynos[0]?.jobs[0]?.durationMs).toBe(2);
@@ -124,22 +124,22 @@ describe('buildRunUploadPayload', () => {
         assertions: [
           {
             id: 'assertion.commit.sequence',
-            kind: 'sequence.inOrder',
+            type: 'sequence.inOrder',
             steps: [
               {
-                kind: 'tool.called',
-                toolKind: 'shell',
-                matcher: {includes: 'git status'},
+                type: 'tool.called',
+                tool: 'shell',
+                command: {includes: 'git status'},
               },
               {
-                kind: 'tool.called',
-                toolKind: 'shell',
-                matcher: {includes: 'git diff'},
+                type: 'tool.called',
+                tool: 'shell',
+                command: {includes: 'git diff'},
               },
               {
-                kind: 'tool.called',
-                toolKind: 'shell',
-                matcher: {includes: 'git commit'},
+                type: 'tool.called',
+                tool: 'shell',
+                command: {includes: 'git commit'},
               },
             ],
           },
@@ -161,7 +161,7 @@ describe('buildRunUploadPayload', () => {
       assertionResults: [
         {
           assertionId: 'assertion.commit.sequence',
-          kind: 'sequence.inOrder',
+          type: 'sequence.inOrder',
           passed: false,
           message:
             'Expected ordered step #3 (tool.called(shell, includes: git commit)) to match an observed tool event, but none was observed after the previous step.',
@@ -198,7 +198,7 @@ describe('buildRunUploadPayload', () => {
       inputPath: '.agents/skills/commit',
       gitHash: null,
     });
-    const parsed = RunUploadV1.parse(payload);
+    const parsed = RunUploadV2.parse(payload);
     const assertion = parsed.dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.definition?.steps).toHaveLength(3);
@@ -229,12 +229,12 @@ describe('buildRunUploadPayload', () => {
         assertions: [
           {
             id: 'assertion.flexible.anyof',
-            kind: 'anyOf',
+            type: 'anyOf',
             steps: [
-              {kind: 'artifact.exists', path: 'report.json'},
-              {kind: 'http.called', endpointId: 'endpoint.upload'},
-              {kind: 'transcript.contains', text: 'uploaded'},
-              {kind: 'skill.referenced', skill: 'release'},
+              {type: 'artifact.exists', path: 'report.json'},
+              {type: 'http.called', endpointId: 'endpoint.upload'},
+              {type: 'transcript.contains', text: 'uploaded'},
+              {type: 'skill.referenced', skill: 'release'},
             ],
           },
         ],
@@ -255,7 +255,7 @@ describe('buildRunUploadPayload', () => {
       assertionResults: [
         {
           assertionId: 'assertion.flexible.anyof',
-          kind: 'anyOf',
+          type: 'anyOf',
           passed: true,
           message: 'Matched anyOf branch #2: Observed HTTP request.',
           evidence: {
@@ -264,25 +264,25 @@ describe('buildRunUploadPayload', () => {
             branches: [
               {
                 assertionId: 'assertion.flexible.anyof.branch.1',
-                kind: 'artifact.exists',
+                type: 'artifact.exists',
                 passed: false,
                 message: 'Artifact "report.json" was not found.',
               },
               {
                 assertionId: 'assertion.flexible.anyof.branch.2',
-                kind: 'http.called',
+                type: 'http.called',
                 passed: true,
                 message: 'Observed HTTP request.',
               },
               {
                 assertionId: 'assertion.flexible.anyof.branch.3',
-                kind: 'transcript.contains',
+                type: 'transcript.contains',
                 passed: false,
                 message: 'Transcript did not include "uploaded".',
               },
               {
                 assertionId: 'assertion.flexible.anyof.branch.4',
-                kind: 'skill.referenced',
+                type: 'skill.referenced',
                 passed: true,
                 message: 'Observed skill reference.',
               },
@@ -309,9 +309,9 @@ describe('buildRunUploadPayload', () => {
       gitHash: null,
     });
     const assertion =
-      RunUploadV1.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV2.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
-    expect(assertion.definition?.steps?.map((step) => step.kind)).toEqual([
+    expect(assertion.definition?.steps?.map((step) => step.type)).toEqual([
       'artifact.exists',
       'http.called',
       'transcript.contains',
@@ -339,9 +339,9 @@ describe('buildRunUploadPayload', () => {
         assertions: [
           {
             id: 'assertion.command.called',
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'git',
-            matcher: {args: ['commit']},
+            command: {args: ['commit']},
           },
         ],
       },
@@ -361,7 +361,7 @@ describe('buildRunUploadPayload', () => {
       assertionResults: [
         {
           assertionId: 'assertion.command.called',
-          kind: 'command.called',
+          type: 'command.called',
           passed: false,
           message:
             'Expected command:\n  git with args ["commit"]\nObserved commands:\n  1. git status\n  2. git add README.md\nNo observed git command included arg "commit".',
@@ -403,7 +403,7 @@ describe('buildRunUploadPayload', () => {
       gitHash: null,
     });
     const assertion =
-      RunUploadV1.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV2.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.display?.observed).toBe(
       '1. git status 2. git add README.md',
@@ -430,7 +430,7 @@ describe('buildRunUploadPayload', () => {
         assertions: [
           {
             id: 'assertion.verify.empty-stderr',
-            kind: 'verify.command',
+            type: 'verify.command',
             command: 'pnpm test',
             exitCode: 0,
             stdout: {equals: ''},
@@ -454,7 +454,7 @@ describe('buildRunUploadPayload', () => {
       assertionResults: [
         {
           assertionId: 'assertion.verify.empty-stderr',
-          kind: 'verify.command',
+          type: 'verify.command',
           passed: true,
           message: 'Verify command passed.',
           evidence: {
@@ -490,7 +490,7 @@ describe('buildRunUploadPayload', () => {
       gitHash: null,
     });
     const assertion =
-      RunUploadV1.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV2.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.definition).toMatchObject({
       stdout: {equals: ''},
@@ -551,7 +551,7 @@ describe('buildRunUploadPayload', () => {
       gitHash: null,
     });
 
-    expect(RunUploadV1.safeParse(payload).success).toBe(true);
+    expect(RunUploadV2.safeParse(payload).success).toBe(true);
     const diagnostics = payload.dynos[0]!.jobs[0]!.diagnostics;
     expect(diagnostics[0]).toBe(
       'setup command `pnpm install` exited with code 1',

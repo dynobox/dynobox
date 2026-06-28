@@ -4,21 +4,21 @@ import type {AssertionResult} from './types.js';
 
 type AssertionLike = {
   id?: unknown;
-  kind?: unknown;
+  type?: unknown;
 };
 
 type AssertionResultSource = {
   id: string;
-  kind: string;
+  type: string;
 };
 
 export function failed(
-  assertion: Pick<IrAssertion, 'id' | 'kind'>,
+  assertion: Pick<IrAssertion, 'id' | 'type'>,
   message: string,
 ): AssertionResult {
   return {
     assertionId: assertion.id,
-    kind: assertion.kind,
+    type: assertion.type,
     passed: false,
     message,
   };
@@ -31,7 +31,7 @@ export function passed(
 ): AssertionResult {
   return {
     assertionId: assertion.id,
-    kind: assertion.kind,
+    type: assertion.type,
     passed: true,
     message,
     ...(evidence === undefined ? {} : {evidence}),
@@ -43,12 +43,12 @@ export function unsupportedAssertionResult(
 ): AssertionResult {
   const assertionId =
     typeof assertion.id === 'string' ? assertion.id : 'unknown';
-  const kind = typeof assertion.kind === 'string' ? assertion.kind : 'unknown';
+  const type = typeof assertion.type === 'string' ? assertion.type : 'unknown';
 
   return {
     assertionId,
-    kind,
+    type,
     passed: false,
-    message: `Assertion kind "${kind}" is not supported by this evaluator.`,
+    message: `Assertion type "${type}" is not supported by this evaluator.`,
   };
 }

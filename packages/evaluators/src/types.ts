@@ -37,7 +37,7 @@ export type EvaluationInput = {
 /** Result for one compiled assertion. */
 export type AssertionResult = {
   assertionId: string;
-  kind: string;
+  type: string;
   passed: boolean;
   message: string;
   evidence?: unknown;

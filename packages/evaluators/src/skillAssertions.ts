@@ -5,7 +5,7 @@ import {failed, passed} from './results.js';
 import type {AssertionResult, ToolEvent} from './types.js';
 
 export function evaluateSkillReferenced(
-  assertion: Extract<IrAssertion, {kind: 'skill.referenced'}>,
+  assertion: Extract<IrAssertion, {type: 'skill.referenced'}>,
   toolEvents: readonly ToolEvent[],
 ): AssertionResult {
   const event = toolEvents.find((toolEvent) =>

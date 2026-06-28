@@ -8,7 +8,7 @@ import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 import {buildRunMatrix} from '../jobs.js';
 import type {DebugLogPaths} from '../util/transcript.js';
 
-const REPORT_SCHEMA = 'dynobox.report.v1';
+const REPORT_SCHEMA = 'dynobox.report.v2';
 
 export type RenderJsonRunOutputInput = {
   jobs: readonly LocalRunnerJob[];
@@ -81,7 +81,7 @@ function jobRecord(
       return {
         assertionId: assertion.assertionId,
         ...(label === undefined ? {} : {label}),
-        kind: assertion.kind,
+        type: assertion.type,
         passed: assertion.passed,
         message: assertion.message,
       };

@@ -1,7 +1,9 @@
 import {describe, expect, it} from 'vitest';
 
-import {ToolEventLineStream} from './runStreamingHarness.js';
-import type {ToolEventLineStreamOptions} from './runStreamingHarness.js';
+import {
+  ToolEventLineStream,
+  type ToolEventLineStreamOptions,
+} from './runStreamingHarness.js';
 import type {ToolEvent} from './types.js';
 
 function createStream(

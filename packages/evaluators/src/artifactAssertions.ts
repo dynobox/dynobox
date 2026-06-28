@@ -7,7 +7,7 @@ import {failed, passed} from './results.js';
 import type {AssertionResult} from './types.js';
 
 export function evaluateArtifactExists(
-  assertion: Extract<IrAssertion, {kind: 'artifact.exists'}>,
+  assertion: Extract<IrAssertion, {type: 'artifact.exists'}>,
   workDir: string | undefined,
 ): AssertionResult {
   const resolved = resolveArtifactPath(assertion.path, workDir);
@@ -33,7 +33,7 @@ export function evaluateArtifactExists(
 }
 
 export function evaluateArtifactContains(
-  assertion: Extract<IrAssertion, {kind: 'artifact.contains'}>,
+  assertion: Extract<IrAssertion, {type: 'artifact.contains'}>,
   workDir: string | undefined,
 ): AssertionResult {
   const resolved = resolveArtifactPath(assertion.path, workDir);
@@ -72,7 +72,7 @@ export function evaluateArtifactContains(
 }
 
 function failedWithEvidence(
-  assertion: Pick<IrAssertion, 'id' | 'kind'>,
+  assertion: Pick<IrAssertion, 'id' | 'type'>,
   message: string,
   evidence: ArtifactInspection,
 ): AssertionResult {

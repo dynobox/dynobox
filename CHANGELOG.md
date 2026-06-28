@@ -12,12 +12,27 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 - **Breaking:** Renamed `skill.invoked(...)` assertions to
   `skill.referenced(...)`, including the authored config type and compiled IR
-  kind.
+  type.
+- **Breaking:** Bumped compiled IR to `0.3` and aligned assertion fields with
+  authoring: `kind` is now `type`, `toolKind` is now `tool`, shell and command
+  matchers use `command`, and path matchers use top-level `path`.
+- **Breaking:** Removed unused `headers`, `body`, and `response` endpoint spec
+  fields. Endpoint specs now contain only `method` and `url`.
+
+### `@dynobox/run-schema`
+
+- **Breaking:** Replaced run upload schema v1 with schema v2. Upload assertion
+  records, definitions, and display children now use `type` instead of `kind`,
+  `tool` instead of `toolKind`, unified `command` details, and top-level `path`.
 
 ### `dynobox` (CLI)
 
 - **Breaking:** Updated skill assertion evaluation and rendering to use
   `skill.referenced(...)` for observed `SKILL.md` file references.
+- **Breaking:** Changed `dynobox run --save-run` uploads to emit run upload
+  schema v2.
+- **Breaking:** Bumped `dynobox run --reporter json` output to
+  `dynobox.report.v2` and changed assertion records from `kind` to `type`.
 - Changed failed `command.called(...)` assertions to show a compact match-count
   summary by default and parsed command segments in verbose output.
 - Changed `dynobox run --save-run` to verify authentication before local

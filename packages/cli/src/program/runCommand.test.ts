@@ -242,7 +242,7 @@ describe('dynobox run — upload', () => {
       }),
     );
     expect(payload).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       inputPath: fixtures.validConfigPath,
       status: 'passed',
       totals: {jobs: 1, passed: 1, failed: 0, warnings: 0},
@@ -584,7 +584,7 @@ describe('dynobox run — output modes', () => {
     expect(result.stderr).toBe('');
     expect(records).toHaveLength(2);
     expect(records[0]).toMatchObject({
-      schema: 'dynobox.report.v1',
+      schema: 'dynobox.report.v2',
       type: 'job',
       scenario: {name: 'uses shell'},
       harness: {id: 'claude-code'},
@@ -596,7 +596,7 @@ describe('dynobox run — output modes', () => {
     });
     expect(records[0]).toHaveProperty('assertions');
     expect(records[1]).toMatchObject({
-      schema: 'dynobox.report.v1',
+      schema: 'dynobox.report.v2',
       type: 'summary',
       status: 'passed',
       totals: {jobs: 1, passed: 1, failed: 0, configErrors: 0, warnings: 0},

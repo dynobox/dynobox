@@ -240,7 +240,7 @@ describe('runJob', () => {
         assertions: [
           {
             id: 'assertion.verify.0',
-            kind: 'verify.command',
+            type: 'verify.command',
             command,
             exitCode: 0,
             stdout: {equals: 'available'},
@@ -258,7 +258,7 @@ describe('runJob', () => {
     expect(result.harnessResult?.toolEvents).toEqual([]);
     expect(result.assertionResults[0]).toMatchObject({
       assertionId: 'assertion.verify.0',
-      kind: 'verify.command',
+      type: 'verify.command',
       passed: true,
       evidence: {
         command,
@@ -277,12 +277,12 @@ describe('runJob', () => {
         assertions: [
           {
             id: 'assertion.artifact.0',
-            kind: 'artifact.exists',
+            type: 'artifact.exists',
             path: 'created.txt',
           },
           {
             id: 'assertion.verify.0',
-            kind: 'verify.command',
+            type: 'verify.command',
             command:
               "node -e \"require('node:fs').writeFileSync('created.txt', 'created')\"",
             exitCode: 0,
@@ -342,9 +342,9 @@ describe('runJob', () => {
         assertions: [
           {
             id: 'assertion.uses-shell.0',
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'pnpm test'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'pnpm test'},
           },
         ],
       }),
@@ -376,17 +376,17 @@ describe('runJob', () => {
         assertions: [
           {
             id: 'assertion.flexible-read.0',
-            kind: 'anyOf',
+            type: 'anyOf',
             steps: [
               {
-                kind: 'tool.called',
-                toolKind: 'read_file',
-                pathMatcher: {path: 'package.json'},
+                type: 'tool.called',
+                tool: 'read_file',
+                path: 'package.json',
               },
               {
-                kind: 'command.called',
+                type: 'command.called',
                 executable: 'cat',
-                matcher: {args: ['package.json']},
+                command: {args: ['package.json']},
               },
             ],
           },
@@ -413,7 +413,7 @@ describe('runJob', () => {
         assertions: [
           {
             id: 'assertion.uses-shell.0',
-            kind: 'artifact.contains',
+            type: 'artifact.contains',
             path: 'CHANGELOG.md',
             text: 'dynobox@0.0.4',
           },
@@ -434,12 +434,12 @@ describe('runJob', () => {
         assertions: [
           {
             id: 'assertion.uses-shell.0',
-            kind: 'transcript.contains',
+            type: 'transcript.contains',
             text: 'EOTP',
           },
           {
             id: 'assertion.uses-shell.1',
-            kind: 'finalMessage.contains',
+            type: 'finalMessage.contains',
             text: 'working tree is dirty',
           },
         ],
@@ -480,17 +480,17 @@ describe('runJob', () => {
         assertions: [
           {
             id: 'assertion.uses-shell.0',
-            kind: 'sequence.inOrder',
+            type: 'sequence.inOrder',
             steps: [
               {
-                kind: 'tool.called',
-                toolKind: 'shell',
-                matcher: {includes: 'git status'},
+                type: 'tool.called',
+                tool: 'shell',
+                command: {includes: 'git status'},
               },
               {
-                kind: 'tool.called',
-                toolKind: 'shell',
-                matcher: {includes: 'git commit'},
+                type: 'tool.called',
+                tool: 'shell',
+                command: {includes: 'git commit'},
               },
             ],
           },
@@ -519,8 +519,8 @@ describe('runJob', () => {
         assertions: [
           {
             id: 'assertion.uses-shell.0',
-            kind: 'tool.called',
-            toolKind: 'shell',
+            type: 'tool.called',
+            tool: 'shell',
           },
         ],
       }),
@@ -564,8 +564,8 @@ describe('runJob', () => {
         assertions: [
           {
             id: 'assertion.uses-shell.0',
-            kind: 'tool.called',
-            toolKind: 'shell',
+            type: 'tool.called',
+            tool: 'shell',
           },
         ],
       }),
@@ -608,8 +608,8 @@ describe('runJob', () => {
         assertions: [
           {
             id: 'assertion.uses-shell.0',
-            kind: 'tool.called',
-            toolKind: 'shell',
+            type: 'tool.called',
+            tool: 'shell',
           },
         ],
       }),
@@ -695,7 +695,7 @@ describe('runJob', () => {
         assertions: [
           {
             id: 'assertion.uses-shell.0',
-            kind: 'http.called',
+            type: 'http.called',
             endpointId: 'endpoint.uses-shell.getUser',
           },
         ],
@@ -706,7 +706,7 @@ describe('runJob', () => {
     expect(result.status).toBe('assertion_failed');
     expect(result.diagnostics).toEqual([]);
     expect(result.assertionResults[0]).toMatchObject({
-      kind: 'http.called',
+      type: 'http.called',
       passed: false,
       message:
         'Expected HTTP endpoint "endpoint.uses-shell.getUser" to be called, but observed none.',
@@ -738,13 +738,13 @@ describe('runJob', () => {
           assertions: [
             {
               id: 'assertion.uses-http.0',
-              kind: 'http.called',
+              type: 'http.called',
               endpointId: 'endpoint.uses-http.getUser',
               status: 204,
             },
             {
               id: 'assertion.uses-http.1',
-              kind: 'http.notCalled',
+              type: 'http.notCalled',
               endpointId: 'endpoint.uses-http.deleteUser',
             },
           ],

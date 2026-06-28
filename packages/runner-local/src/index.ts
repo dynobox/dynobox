@@ -395,7 +395,7 @@ export async function runJob(
 function assertionRequiresVerify(assertion: IrAssertion): boolean {
   // Nested verify.command is rejected by the SDK schema; only top-level
   // assertions need to be split into the post-harness verification pass.
-  return assertion.kind === 'verify.command';
+  return assertion.type === 'verify.command';
 }
 
 async function createWorkDir(scratchRoot: string | undefined): Promise<string> {
