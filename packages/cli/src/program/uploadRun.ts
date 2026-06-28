@@ -18,12 +18,7 @@ import {
   type RunUploadV1 as RunUploadPayloadV1,
   RunUploadV1,
 } from '@dynobox/run-schema';
-import type {
-  HttpEvent,
-  LocalRunnerJob,
-  LocalRunnerResult,
-  ToolEvent,
-} from '@dynobox/runner-local';
+import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 import type {TextMatcher} from '@dynobox/sdk';
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
@@ -39,6 +34,12 @@ import {
   anyOfMatchedBranch,
   assertionBranchWithId,
 } from '../util/assertionBranch.js';
+import {
+  assertionResultEvidence,
+  formatHttpEvent,
+  isHttpEvent,
+  isToolEvent,
+} from '../util/evidence.js';
 import {
   formatVerifyCommandResult,
   isVerifyCommandResult,
@@ -418,7 +419,10 @@ function assertionDisplay(
   result: LocalRunnerResult,
   fallbackObserved: string,
 ): RunUploadAssertionDisplayV1 {
-  const evidence = assertionResultEvidence(result, assertion.id);
+  const evidence = assertionResultEvidence(
+    result.assertionResults,
+    assertion.id,
+  );
   return {
     title: truncateDetail(assertionLabel(assertion, assertion.kind)),
     expectation: truncateDetail(describeExpectation(assertion)),
@@ -492,7 +496,7 @@ function assertionEvidence(
   assertion: IrAssertion | undefined,
   passed: boolean,
 ): RunUploadAssertionEvidenceV1 {
-  const evidence = assertionResultEvidence(result, assertionId);
+  const evidence = assertionResultEvidence(result.assertionResults, assertionId);
   const matches =
     assertion?.kind === 'command.called' && !passed
       ? []
@@ -504,15 +508,6 @@ function assertionEvidence(
     observedKinds: observedKinds(result),
     ...(matches.length === 0 ? {} : {matches}),
   };
-}
-
-function assertionResultEvidence(
-  result: LocalRunnerResult,
-  assertionId: string,
-): unknown {
-  return result.assertionResults.find(
-    (candidate) => candidate.assertionId === assertionId,
-  )?.evidence;
 }
 
 function evidenceMatches(evidence: unknown): string[] {
@@ -547,7 +542,10 @@ function observedAssertionSummary(
   fallback: string,
 ): string {
   if (assertion.kind === 'command.called') {
-    const evidence = assertionResultEvidence(result, assertion.id);
+    const evidence = assertionResultEvidence(
+      result.assertionResults,
+      assertion.id,
+    );
     if (Array.isArray(evidence) && evidence.every(isObservedCommand)) {
       return evidence.length === 0
         ? 'no commands observed'
@@ -562,14 +560,20 @@ function observedAssertionSummary(
   }
 
   if (assertion.kind === 'sequence.inOrder') {
-    const evidence = assertionResultEvidence(result, assertion.id);
+    const evidence = assertionResultEvidence(
+      result.assertionResults,
+      assertion.id,
+    );
     if (Array.isArray(evidence)) {
       return `matched ${evidence.length} of ${assertion.steps.length} ordered steps`;
     }
   }
 
   if (assertion.kind === 'anyOf') {
-    const evidence = assertionResultEvidence(result, assertion.id);
+    const evidence = assertionResultEvidence(
+      result.assertionResults,
+      assertion.id,
+    );
     const matchedBranch = anyOfMatchedBranch(evidence);
     if (matchedBranch !== undefined) return `matched branch #${matchedBranch}`;
     const branchResults = anyOfBranchResults(evidence);
@@ -579,7 +583,10 @@ function observedAssertionSummary(
   }
 
   if (assertion.kind === 'verify.command') {
-    const evidence = assertionResultEvidence(result, assertion.id);
+    const evidence = assertionResultEvidence(
+      result.assertionResults,
+      assertion.id,
+    );
     if (isVerifyCommandResult(evidence)) {
       return formatVerifyCommandResult(evidence);
     }
@@ -722,33 +729,6 @@ function describeCommandMatcher(
   >,
 ): string {
   return describeCommandMatcherText(matcher, {style: 'compact'});
-}
-
-function isToolEvent(value: unknown): value is ToolEvent {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'kind' in value &&
-    typeof value.kind === 'string' &&
-    'rawName' in value &&
-    typeof value.rawName === 'string'
-  );
-}
-
-function isHttpEvent(value: unknown): value is HttpEvent {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'method' in value &&
-    typeof value.method === 'string' &&
-    'url' in value &&
-    typeof value.url === 'string'
-  );
-}
-
-function formatHttpEvent(event: HttpEvent): string {
-  const status = event.status === undefined ? '' : ` -> ${event.status}`;
-  return `${event.method} ${event.url}${status}`;
 }
 
 function truncateDetail(value: string): string {
