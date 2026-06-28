@@ -19,12 +19,6 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - **Breaking:** Removed unused `headers`, `body`, and `response` endpoint spec
   fields. Endpoint specs now contain only `method` and `url`.
 
-### `@dynobox/run-schema`
-
-- **Breaking:** Replaced run upload schema v1 with schema v2. Upload assertion
-  records, definitions, and display children now use `type` instead of `kind`,
-  `tool` instead of `toolKind`, unified `command` details, and top-level `path`.
-
 ### `dynobox` (CLI)
 
 - **Breaking:** Updated skill assertion evaluation and rendering to use
@@ -40,6 +34,14 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   tokens before running scenarios.
 
 ---
+
+## @dynobox/run-schema@0.1.0 — 2026-06-28
+
+### `@dynobox/run-schema`
+
+- **Breaking:** Replaced run upload schema v1 with schema v2. Upload assertion
+  records, definitions, and display children now use `type` instead of `kind`,
+  `tool` instead of `toolKind`, unified `command` details, and top-level `path`.
 
 ## @dynobox/run-schema@0.0.10 — 2026-06-24
 
