@@ -3,6 +3,10 @@
  * into one-line human-readable strings. No styling, no layout — just text.
  */
 
+import {
+  describeCommandMatcher as describeCommandMatcherText,
+  describeShellCommandMatcher,
+} from '@dynobox/evaluators';
 import type {ShellToolEvent, ToolEvent} from '@dynobox/runner-local';
 import type {ShellCommandMatcher} from '@dynobox/sdk';
 import type {IrAssertion} from '@dynobox/sdk/ir';
@@ -217,23 +221,11 @@ function describeAssertionNodeExpectation(
 }
 
 function describeShellMatcherExpectation(matcher: ShellCommandMatcher): string {
-  if ('equals' in matcher) {
-    return `shell command equal to "${matcher.equals}"`;
-  }
-  if ('includes' in matcher) {
-    return `shell command including "${matcher.includes}"`;
-  }
-  if ('startsWith' in matcher) {
-    return `shell command starting with "${matcher.startsWith}"`;
-  }
-  return `shell command matching /${matcher.matches}/`;
+  return describeShellCommandMatcher(matcher, {style: 'expectation'});
 }
 
 function describeShellMatcher(matcher: ShellCommandMatcher): string {
-  if ('equals' in matcher) return `equals: ${matcher.equals}`;
-  if ('includes' in matcher) return `includes: ${matcher.includes}`;
-  if ('startsWith' in matcher) return `startsWith: ${matcher.startsWith}`;
-  return `matches: ${matcher.matches}`;
+  return describeShellCommandMatcher(matcher, {style: 'compact'});
 }
 
 function describeCommandMatcher(
@@ -241,26 +233,7 @@ function describeCommandMatcher(
     Extract<IrAssertion, {kind: 'command.called'}>['matcher']
   >,
 ): string {
-  const parts: string[] = [];
-  if (matcher.args !== undefined)
-    parts.push(`args: ${JSON.stringify(matcher.args)}`);
-  if (matcher.argsInOrder !== undefined) {
-    parts.push(`argsInOrder: ${JSON.stringify(matcher.argsInOrder)}`);
-  }
-  if (matcher.argsMatching !== undefined) {
-    parts.push(
-      `argsMatching: ${matcher.argsMatching.map((pattern) => `/${pattern.source}/${pattern.flags}`).join(', ')}`,
-    );
-  }
-  if (matcher.originalIncludes !== undefined) {
-    parts.push(`originalIncludes: ${matcher.originalIncludes}`);
-  }
-  if (matcher.originalMatches !== undefined) {
-    parts.push(
-      `originalMatches: /${matcher.originalMatches.source}/${matcher.originalMatches.flags}`,
-    );
-  }
-  return parts.join(', ');
+  return describeCommandMatcherText(matcher, {style: 'compact'});
 }
 
 function toSingleLine(value: string): string {

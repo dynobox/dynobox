@@ -2,6 +2,10 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 
 import {
+  describeCommandMatcher as describeCommandMatcherText,
+  describeShellCommandMatcher,
+} from '@dynobox/evaluators';
+import {
   RUN_UPLOAD_LIMITS,
   RUN_UPLOAD_SCHEMA_VERSION,
   type RunUploadAssertionDefinitionV1,
@@ -702,24 +706,14 @@ function describeMatcher(
   matcher: Extract<IrAssertion, {kind: 'tool.called'}>['matcher'],
 ): string {
   if (matcher === undefined) return '';
-  if ('equals' in matcher) return `equals: ${matcher.equals}`;
-  if ('includes' in matcher) return `includes: ${matcher.includes}`;
-  if ('startsWith' in matcher) return `startsWith: ${matcher.startsWith}`;
-  return `matches: ${matcher.matches}`;
+  return describeShellCommandMatcher(matcher, {style: 'compact'});
 }
 
 function describeMatcherExpectation(
   matcher: Extract<IrAssertion, {kind: 'tool.called'}>['matcher'],
 ): string {
   if (matcher === undefined) return '';
-  if ('equals' in matcher) return `shell command equal to "${matcher.equals}"`;
-  if ('includes' in matcher) {
-    return `shell command including "${matcher.includes}"`;
-  }
-  if ('startsWith' in matcher) {
-    return `shell command starting with "${matcher.startsWith}"`;
-  }
-  return `shell command matching /${matcher.matches}/`;
+  return describeShellCommandMatcher(matcher, {style: 'expectation'});
 }
 
 function describeCommandMatcher(
@@ -727,26 +721,7 @@ function describeCommandMatcher(
     Extract<IrAssertion, {kind: 'command.called'}>['matcher']
   >,
 ): string {
-  const parts: string[] = [];
-  if (matcher.args !== undefined)
-    parts.push(`args: ${JSON.stringify(matcher.args)}`);
-  if (matcher.argsInOrder !== undefined) {
-    parts.push(`argsInOrder: ${JSON.stringify(matcher.argsInOrder)}`);
-  }
-  if (matcher.argsMatching !== undefined) {
-    parts.push(
-      `argsMatching: ${matcher.argsMatching.map((pattern) => `/${pattern.source}/${pattern.flags}`).join(', ')}`,
-    );
-  }
-  if (matcher.originalIncludes !== undefined) {
-    parts.push(`originalIncludes: ${matcher.originalIncludes}`);
-  }
-  if (matcher.originalMatches !== undefined) {
-    parts.push(
-      `originalMatches: /${matcher.originalMatches.source}/${matcher.originalMatches.flags}`,
-    );
-  }
-  return parts.join(', ');
+  return describeCommandMatcherText(matcher, {style: 'compact'});
 }
 
 function isToolEvent(value: unknown): value is ToolEvent {
