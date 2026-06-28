@@ -1,4 +1,10 @@
-import type {HarnessId, PermissionMode} from '@dynobox/sdk';
+import type {
+  HarnessId,
+  PermissionMode,
+  ToolEvent as SdkToolEvent,
+} from '@dynobox/sdk';
+
+export type {ShellToolEvent, ToolEvent, ToolKind} from '@dynobox/sdk';
 
 /** Configuration and environment passed to a harness invocation. */
 export type HarnessInput = {
@@ -15,7 +21,7 @@ export type HarnessInput = {
   /** Optional permission/sandbox mode for the harness invocation. */
   permissionMode?: PermissionMode;
   /** Optional live callback for tool events observed while the harness runs. */
-  onToolEvent?: (event: ToolEvent) => void;
+  onToolEvent?: (event: SdkToolEvent) => void;
 };
 
 /** Raw output from a harness invocation, before any extraction. */
@@ -24,33 +30,6 @@ export type HarnessRunOutput = {
   stdout: string;
   stderr: string;
   durationMs: number;
-};
-
-export type ToolKind =
-  | 'shell'
-  | 'read_file'
-  | 'write_file'
-  | 'edit_file'
-  | 'search_files'
-  | 'web_fetch'
-  | 'web_search'
-  | 'mcp'
-  | 'task'
-  | 'unknown';
-
-export type ToolEvent = {
-  kind: ToolKind;
-  rawName: string;
-  input: unknown;
-  status?: 'success' | 'failure';
-  message?: string;
-  startedAt?: string;
-  completedAt?: string;
-};
-
-export type ShellToolEvent = ToolEvent & {
-  kind: 'shell';
-  command: string;
 };
 
 /** Structured result after extracting transcript and final message. */
@@ -62,7 +41,7 @@ export type HarnessResult = {
   /** The final assistant message, if extractable. */
   finalMessage: string | undefined;
   /** Canonicalized harness tool events observed during the run. */
-  toolEvents: ToolEvent[];
+  toolEvents: SdkToolEvent[];
 };
 
 /**

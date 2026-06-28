@@ -34,9 +34,12 @@ export type {
   SequenceInOrderAssertion,
   SequenceStepAssertion,
   ShellCommandMatcher,
+  ShellToolEvent,
   SkillReferencedAssertion,
   TextMatcher,
   ToolCalledAssertion,
+  ToolEvent,
+  ToolEventBase,
   ToolKind,
   ToolNotCalledAssertion,
   ToolPathMatcher,
@@ -44,6 +47,7 @@ export type {
   VerifyCommandAssertion,
   VerifyCommandOptions,
 } from './types/brands.js';
+export {isShellToolEvent} from './types/brands.js';
 export type {DynoboxConfig, ScenarioInput} from './types/config.js';
 export type {EndpointSpec} from './types/endpointSpec.js';
 export {

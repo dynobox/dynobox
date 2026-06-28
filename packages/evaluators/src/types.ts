@@ -1,5 +1,7 @@
-import type {ToolKind} from '@dynobox/sdk';
+import type {ToolEvent} from '@dynobox/sdk';
 import type {IrAssertion} from '@dynobox/sdk/ir';
+
+export type {ToolEvent} from '@dynobox/sdk';
 
 /** Canonical HTTP event shape consumed by HTTP assertion evaluators. */
 export type HttpEvent = {
@@ -9,18 +11,6 @@ export type HttpEvent = {
   host: string;
   timestamp: string;
   status?: number;
-};
-
-/** Canonical tool event shape consumed by assertion evaluators. */
-export type ToolEvent = {
-  kind: ToolKind;
-  rawName: string;
-  input: unknown;
-  command?: string;
-  status?: 'success' | 'failure';
-  message?: string;
-  startedAt?: string;
-  completedAt?: string;
 };
 
 /** Captured output from a post-harness verification command. */

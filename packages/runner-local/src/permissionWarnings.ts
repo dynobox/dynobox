@@ -1,9 +1,6 @@
-import type {
-  HarnessResult,
-  HarnessRunOutput,
-  ShellToolEvent,
-  ToolEvent,
-} from './harnesses/index.js';
+import {isShellToolEvent} from '@dynobox/sdk';
+
+import type {HarnessResult, HarnessRunOutput, ToolEvent} from './harnesses/index.js';
 import type {LocalRunnerWarning} from './runTypes.js';
 
 export function permissionWarningsFromToolEvents(
@@ -69,10 +66,6 @@ function dedupeWarnings(
     deduped.push(warning);
   }
   return deduped;
-}
-
-function isShellToolEvent(event: ToolEvent): event is ShellToolEvent {
-  return event.kind === 'shell' && 'command' in event;
 }
 
 function isPermissionDeniedText(value: string): boolean {
