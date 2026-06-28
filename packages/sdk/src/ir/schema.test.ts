@@ -60,4 +60,74 @@ describe('irAssertionSchema tool matcher validation', () => {
       }).success,
     ).toBe(true);
   });
+
+  it('reports sequence step matcher errors at the nested step path', () => {
+    const result = irAssertionSchema.safeParse({
+      id: 'assertion.test.0',
+      kind: 'sequence.inOrder',
+      steps: [
+        {
+          kind: 'tool.called',
+          toolKind: 'read_file',
+          matcher: {includes: 'package.json'},
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected validation to fail');
+
+    expect(result.error.issues).toContainEqual(
+      expect.objectContaining({
+        path: ['steps', 0, 'matcher'],
+        message: TOOL_MATCHER_MESSAGES.shellMatcherOnlyOnShell,
+      }),
+    );
+  });
+
+  it('reports anyOf branch matcher errors once at the branch path', () => {
+    const result = irAssertionSchema.safeParse({
+      id: 'assertion.test.0',
+      kind: 'anyOf',
+      steps: [
+        {
+          kind: 'tool.called',
+          toolKind: 'read_file',
+          matcher: {includes: 'package.json'},
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected validation to fail');
+
+    expect(
+      result.error.issues.filter(
+        (issue) => issue.path.join('.') === 'steps.0.matcher',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('rejects verify command assertions inside anyOf branches', () => {
+    const result = irAssertionSchema.safeParse({
+      id: 'assertion.test.0',
+      kind: 'anyOf',
+      steps: [
+        {
+          kind: 'verify.command',
+          command: 'pnpm test',
+          exitCode: 0,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected validation to fail');
+
+    expect(
+      result.error.issues.some(
+        (issue) => issue.path[0] === 'steps' && issue.path[1] === 0,
+      ),
+    ).toBe(true);
+  });
 });

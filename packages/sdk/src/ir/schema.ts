@@ -66,67 +66,10 @@ const commandMatcherSchema = z.object({
   originalMatches: regexPatternSchema.optional(),
 });
 
-const irToolCalledAssertionSchema = z.object({
+const irAssertionBaseSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1).optional(),
-  kind: z.literal('tool.called'),
-  toolKind: z.enum(TOOL_KINDS),
-  matcher: shellCommandMatcherSchema.optional(),
-  pathMatcher: toolPathMatcherSchema.optional(),
 });
-
-const irToolNotCalledAssertionSchema = z.object({
-  id: z.string().min(1),
-  label: z.string().min(1).optional(),
-  kind: z.literal('tool.notCalled'),
-  toolKind: z.enum(TOOL_KINDS),
-  matcher: shellCommandMatcherSchema.optional(),
-  pathMatcher: toolPathMatcherSchema.optional(),
-});
-
-const irCommandCalledAssertionSchema = z.object({
-  id: z.string().min(1),
-  label: z.string().min(1).optional(),
-  kind: z.literal('command.called'),
-  executable: z.string().min(1),
-  matcher: commandMatcherSchema.optional(),
-});
-
-const irCommandNotCalledAssertionSchema = z.object({
-  id: z.string().min(1),
-  label: z.string().min(1).optional(),
-  kind: z.literal('command.notCalled'),
-  executable: z.string().min(1),
-  matcher: commandMatcherSchema.optional(),
-});
-
-const irVerifyCommandAssertionSchema = z.object({
-  id: z.string().min(1),
-  label: z.string().min(1).optional(),
-  kind: z.literal('verify.command'),
-  command: z.string().min(1),
-  exitCode: z.number().int().optional(),
-  stdout: textMatcherSchema.optional(),
-  stderr: textMatcherSchema.optional(),
-});
-
-const irSequenceToolCalledStepSchema = z.object({
-  kind: z.literal('tool.called'),
-  toolKind: z.enum(TOOL_KINDS),
-  matcher: shellCommandMatcherSchema.optional(),
-  pathMatcher: toolPathMatcherSchema.optional(),
-});
-
-const irSequenceCommandCalledStepSchema = z.object({
-  kind: z.literal('command.called'),
-  executable: z.string().min(1),
-  matcher: commandMatcherSchema.optional(),
-});
-
-const irSequenceStepSchema = z.discriminatedUnion('kind', [
-  irSequenceToolCalledStepSchema,
-  irSequenceCommandCalledStepSchema,
-]);
 
 const irHttpCalledAssertionNodeSchema = z.object({
   kind: z.literal('http.called'),
@@ -134,15 +77,84 @@ const irHttpCalledAssertionNodeSchema = z.object({
   status: z.number().int().optional(),
 });
 
+const irHttpCalledAssertionSchema = irAssertionBaseSchema.merge(
+  irHttpCalledAssertionNodeSchema,
+);
+
 const irHttpNotCalledAssertionNodeSchema = z.object({
   kind: z.literal('http.notCalled'),
   endpointId: z.string().min(1),
 });
 
+const irHttpNotCalledAssertionSchema = irAssertionBaseSchema.merge(
+  irHttpNotCalledAssertionNodeSchema,
+);
+
+const irToolCalledAssertionNodeSchema = z.object({
+  kind: z.literal('tool.called'),
+  toolKind: z.enum(TOOL_KINDS),
+  matcher: shellCommandMatcherSchema.optional(),
+  pathMatcher: toolPathMatcherSchema.optional(),
+});
+
+const irToolCalledAssertionSchema = irAssertionBaseSchema.merge(
+  irToolCalledAssertionNodeSchema,
+);
+
+const irToolNotCalledAssertionNodeSchema = z.object({
+  kind: z.literal('tool.notCalled'),
+  toolKind: z.enum(TOOL_KINDS),
+  matcher: shellCommandMatcherSchema.optional(),
+  pathMatcher: toolPathMatcherSchema.optional(),
+});
+
+const irToolNotCalledAssertionSchema = irAssertionBaseSchema.merge(
+  irToolNotCalledAssertionNodeSchema,
+);
+
+const irCommandCalledAssertionNodeSchema = z.object({
+  kind: z.literal('command.called'),
+  executable: z.string().min(1),
+  matcher: commandMatcherSchema.optional(),
+});
+
+const irCommandCalledAssertionSchema = irAssertionBaseSchema.merge(
+  irCommandCalledAssertionNodeSchema,
+);
+
+const irCommandNotCalledAssertionNodeSchema = z.object({
+  kind: z.literal('command.notCalled'),
+  executable: z.string().min(1),
+  matcher: commandMatcherSchema.optional(),
+});
+
+const irCommandNotCalledAssertionSchema = irAssertionBaseSchema.merge(
+  irCommandNotCalledAssertionNodeSchema,
+);
+
+const irVerifyCommandAssertionSchema = irAssertionBaseSchema.merge(
+  z.object({
+    kind: z.literal('verify.command'),
+    command: z.string().min(1),
+    exitCode: z.number().int().optional(),
+    stdout: textMatcherSchema.optional(),
+    stderr: textMatcherSchema.optional(),
+  }),
+);
+
+const irSequenceStepSchema = z.discriminatedUnion('kind', [
+  irToolCalledAssertionNodeSchema,
+  irCommandCalledAssertionNodeSchema,
+]);
+
 const irArtifactExistsAssertionNodeSchema = z.object({
   kind: z.literal('artifact.exists'),
   path: z.string().min(1),
 });
+
+const irArtifactExistsAssertionSchema = irAssertionBaseSchema.merge(
+  irArtifactExistsAssertionNodeSchema,
+);
 
 const irArtifactContainsAssertionNodeSchema = z.object({
   kind: z.literal('artifact.contains'),
@@ -150,20 +162,43 @@ const irArtifactContainsAssertionNodeSchema = z.object({
   text: z.string(),
 });
 
+const irArtifactContainsAssertionSchema = irAssertionBaseSchema.merge(
+  irArtifactContainsAssertionNodeSchema,
+);
+
 const irTranscriptContainsAssertionNodeSchema = z.object({
   kind: z.literal('transcript.contains'),
   text: z.string(),
 });
+
+const irTranscriptContainsAssertionSchema = irAssertionBaseSchema.merge(
+  irTranscriptContainsAssertionNodeSchema,
+);
 
 const irFinalMessageContainsAssertionNodeSchema = z.object({
   kind: z.literal('finalMessage.contains'),
   text: z.string(),
 });
 
+const irFinalMessageContainsAssertionSchema = irAssertionBaseSchema.merge(
+  irFinalMessageContainsAssertionNodeSchema,
+);
+
+const irSequenceInOrderAssertionSchema = irAssertionBaseSchema.merge(
+  z.object({
+    kind: z.literal('sequence.inOrder'),
+    steps: z.array(irSequenceStepSchema).min(1),
+  }),
+);
+
 const irSkillReferencedAssertionNodeSchema = z.object({
   kind: z.literal('skill.referenced'),
   skill: z.string().min(1),
 });
+
+const irSkillReferencedAssertionSchema = irAssertionBaseSchema.merge(
+  irSkillReferencedAssertionNodeSchema,
+);
 
 const irToolMatcherOptions = {
   kindField: 'kind' as const,
@@ -201,10 +236,10 @@ const irAssertionNodeSchema = z
   .discriminatedUnion('kind', [
     irHttpCalledAssertionNodeSchema,
     irHttpNotCalledAssertionNodeSchema,
-    irToolCalledAssertionSchema.omit({id: true, label: true}),
-    irToolNotCalledAssertionSchema.omit({id: true, label: true}),
-    irCommandCalledAssertionSchema.omit({id: true, label: true}),
-    irCommandNotCalledAssertionSchema.omit({id: true, label: true}),
+    irToolCalledAssertionNodeSchema,
+    irToolNotCalledAssertionNodeSchema,
+    irCommandCalledAssertionNodeSchema,
+    irCommandNotCalledAssertionNodeSchema,
     irArtifactExistsAssertionNodeSchema,
     irArtifactContainsAssertionNodeSchema,
     irTranscriptContainsAssertionNodeSchema,
@@ -215,69 +250,29 @@ const irAssertionNodeSchema = z
     validateIrAssertionNode(assertion, ctx, []);
   });
 
+const irAnyOfAssertionSchema = irAssertionBaseSchema.merge(
+  z.object({
+    kind: z.literal('anyOf'),
+    steps: z.array(irAssertionNodeSchema).min(1),
+  }),
+);
+
 export const irAssertionSchema = z
   .discriminatedUnion('kind', [
-    z.object({
-      id: z.string().min(1),
-      label: z.string().min(1).optional(),
-      kind: z.literal('http.called'),
-      endpointId: z.string().min(1),
-      status: z.number().int().optional(),
-    }),
-    z.object({
-      id: z.string().min(1),
-      label: z.string().min(1).optional(),
-      kind: z.literal('http.notCalled'),
-      endpointId: z.string().min(1),
-    }),
+    irHttpCalledAssertionSchema,
+    irHttpNotCalledAssertionSchema,
     irToolCalledAssertionSchema,
     irToolNotCalledAssertionSchema,
     irCommandCalledAssertionSchema,
     irCommandNotCalledAssertionSchema,
     irVerifyCommandAssertionSchema,
-    z.object({
-      id: z.string().min(1),
-      label: z.string().min(1).optional(),
-      kind: z.literal('artifact.exists'),
-      path: z.string().min(1),
-    }),
-    z.object({
-      id: z.string().min(1),
-      label: z.string().min(1).optional(),
-      kind: z.literal('artifact.contains'),
-      path: z.string().min(1),
-      text: z.string(),
-    }),
-    z.object({
-      id: z.string().min(1),
-      label: z.string().min(1).optional(),
-      kind: z.literal('transcript.contains'),
-      text: z.string(),
-    }),
-    z.object({
-      id: z.string().min(1),
-      label: z.string().min(1).optional(),
-      kind: z.literal('finalMessage.contains'),
-      text: z.string(),
-    }),
-    z.object({
-      id: z.string().min(1),
-      label: z.string().min(1).optional(),
-      kind: z.literal('sequence.inOrder'),
-      steps: z.array(irSequenceStepSchema).min(1),
-    }),
-    z.object({
-      id: z.string().min(1),
-      label: z.string().min(1).optional(),
-      kind: z.literal('anyOf'),
-      steps: z.array(irAssertionNodeSchema).min(1),
-    }),
-    z.object({
-      id: z.string().min(1),
-      label: z.string().min(1).optional(),
-      kind: z.literal('skill.referenced'),
-      skill: z.string().min(1),
-    }),
+    irArtifactExistsAssertionSchema,
+    irArtifactContainsAssertionSchema,
+    irTranscriptContainsAssertionSchema,
+    irFinalMessageContainsAssertionSchema,
+    irSequenceInOrderAssertionSchema,
+    irAnyOfAssertionSchema,
+    irSkillReferencedAssertionSchema,
   ])
   .superRefine((assertion, ctx) => {
     if (isToolAssertionKind(assertion.kind)) {

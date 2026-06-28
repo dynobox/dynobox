@@ -15,7 +15,7 @@ function collectIssues(fn: (ctx: z.RefinementCtx) => void): z.ZodIssue[] {
     addIssue: (issue: z.ZodIssue) => {
       issues.push(issue);
     },
-  } as z.RefinementCtx;
+  } as unknown as z.RefinementCtx;
   fn(ctx);
   return issues;
 }
