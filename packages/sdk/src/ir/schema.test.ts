@@ -122,5 +122,12 @@ describe('irAssertionSchema tool matcher validation', () => {
     });
 
     expect(result.success).toBe(false);
+    if (result.success) throw new Error('expected validation to fail');
+
+    expect(
+      result.error.issues.some(
+        (issue) => issue.path[0] === 'steps' && issue.path[1] === 0,
+      ),
+    ).toBe(true);
   });
 });
