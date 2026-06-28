@@ -69,10 +69,7 @@ describe('describeShellCommandMatcher', () => {
       describeShellCommandMatcher({includes: 'pnpm'}, {style: 'expectation'}),
     ).toBe('shell command including "pnpm"');
     expect(
-      describeShellCommandMatcher(
-        {startsWith: 'pnpm'},
-        {style: 'expectation'},
-      ),
+      describeShellCommandMatcher({startsWith: 'pnpm'}, {style: 'expectation'}),
     ).toBe('shell command starting with "pnpm"');
     expect(
       describeShellCommandMatcher({matches: '^pnpm'}, {style: 'expectation'}),

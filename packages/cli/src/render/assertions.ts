@@ -301,7 +301,10 @@ function artifactInspectionEvidence(
   result: LocalRunnerResult,
   assertionId: string,
 ): ArtifactInspection | undefined {
-  const evidence = assertionResultEvidence(result.assertionResults, assertionId);
+  const evidence = assertionResultEvidence(
+    result.assertionResults,
+    assertionId,
+  );
   return isArtifactInspection(evidence) ? evidence : undefined;
 }
 
@@ -336,7 +339,10 @@ function toolEventEvidence(
   result: LocalRunnerResult,
   assertionId: string,
 ): ToolEvent | undefined {
-  const evidence = assertionResultEvidence(result.assertionResults, assertionId);
+  const evidence = assertionResultEvidence(
+    result.assertionResults,
+    assertionId,
+  );
   return isToolEvent(evidence) ? evidence : undefined;
 }
 
@@ -344,7 +350,10 @@ function sequenceEvidence(
   result: LocalRunnerResult,
   assertionId: string,
 ): SequenceEvidence[] | undefined {
-  const evidence = assertionResultEvidence(result.assertionResults, assertionId);
+  const evidence = assertionResultEvidence(
+    result.assertionResults,
+    assertionId,
+  );
   return Array.isArray(evidence) && evidence.every(isSequenceEvidence)
     ? evidence
     : undefined;
@@ -354,7 +363,10 @@ function observedCommandArrayEvidence(
   result: LocalRunnerResult,
   assertionId: string,
 ): ObservedCommandEvidence[] | undefined {
-  const evidence = assertionResultEvidence(result.assertionResults, assertionId);
+  const evidence = assertionResultEvidence(
+    result.assertionResults,
+    assertionId,
+  );
   return Array.isArray(evidence) && evidence.every(isObservedCommand)
     ? evidence
     : undefined;
@@ -364,7 +376,10 @@ function httpEventEvidence(
   result: LocalRunnerResult,
   assertionId: string,
 ): HttpEvent | undefined {
-  const evidence = assertionResultEvidence(result.assertionResults, assertionId);
+  const evidence = assertionResultEvidence(
+    result.assertionResults,
+    assertionId,
+  );
   return isHttpEvent(evidence) ? evidence : undefined;
 }
 

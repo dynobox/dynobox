@@ -28,6 +28,13 @@ export {
   inspectArtifact,
   stringsFromUnknown,
 } from './inspection.js';
+export {
+  describeCommandMatcher,
+  describeShellCommandMatcher,
+  type MatcherPresentationStyle,
+  type ShellCommandMatcherEntry,
+  shellCommandMatcherEntry,
+} from './presentation.js';
 export type {
   AssertionResult,
   EvaluationInput,
@@ -35,13 +42,6 @@ export type {
   ToolEvent,
   VerifyCommandResult,
 } from './types.js';
-export {
-  describeCommandMatcher,
-  describeShellCommandMatcher,
-  shellCommandMatcherEntry,
-  type MatcherPresentationStyle,
-  type ShellCommandMatcherEntry,
-} from './presentation.js';
 
 /** Evaluate a scenario's compiled IR assertions against observed harness output. */
 export function evaluateAssertions(input: EvaluationInput): AssertionResult[] {

@@ -1,7 +1,6 @@
-import {describe, expect, it} from 'vitest';
-
 import type {AssertionResult} from '@dynobox/evaluators';
 import type {HttpEvent, ToolEvent} from '@dynobox/runner-local';
+import {describe, expect, it} from 'vitest';
 
 import {
   assertionResultEvidence,

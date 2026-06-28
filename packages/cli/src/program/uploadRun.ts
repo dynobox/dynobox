@@ -496,7 +496,10 @@ function assertionEvidence(
   assertion: IrAssertion | undefined,
   passed: boolean,
 ): RunUploadAssertionEvidenceV1 {
-  const evidence = assertionResultEvidence(result.assertionResults, assertionId);
+  const evidence = assertionResultEvidence(
+    result.assertionResults,
+    assertionId,
+  );
   const matches =
     assertion?.kind === 'command.called' && !passed
       ? []

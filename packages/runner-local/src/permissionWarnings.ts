@@ -1,6 +1,10 @@
 import {isShellToolEvent} from '@dynobox/sdk';
 
-import type {HarnessResult, HarnessRunOutput, ToolEvent} from './harnesses/index.js';
+import type {
+  HarnessResult,
+  HarnessRunOutput,
+  ToolEvent,
+} from './harnesses/index.js';
 import type {LocalRunnerWarning} from './runTypes.js';
 
 export function permissionWarningsFromToolEvents(
