@@ -29,6 +29,12 @@ import {
   assertionBranchWithId,
 } from '../util/assertionBranch.js';
 import {
+  assertionResultEvidence,
+  formatHttpEvent,
+  isHttpEvent,
+  isToolEvent,
+} from '../util/evidence.js';
+import {
   formatVerifyCommandResult,
   isVerifyCommandResult,
 } from '../util/verifyCommandResult.js';
@@ -167,7 +173,10 @@ function describeObservedFailure(
   }
 
   if (assertion.kind === 'command.notCalled') {
-    const evidence = assertionResultEvidence(result, assertion.id);
+    const evidence = assertionResultEvidence(
+      result.assertionResults,
+      assertion.id,
+    );
     return isObservedCommand(evidence)
       ? `matching command: ${formatObservedCommand(evidence)}`
       : fallback;
@@ -185,7 +194,10 @@ function describeObservedFailure(
   }
 
   if (assertion.kind === 'anyOf') {
-    const evidence = assertionResultEvidence(result, assertion.id);
+    const evidence = assertionResultEvidence(
+      result.assertionResults,
+      assertion.id,
+    );
     const matchedBranch = anyOfMatchedBranch(evidence);
     if (matchedBranch !== undefined) return `matched branch #${matchedBranch}`;
     const branchResults = anyOfBranchResults(evidence);
@@ -199,7 +211,10 @@ function describeObservedFailure(
   }
 
   if (assertion.kind === 'verify.command') {
-    const evidence = assertionResultEvidence(result, assertion.id);
+    const evidence = assertionResultEvidence(
+      result.assertionResults,
+      assertion.id,
+    );
     return isVerifyCommandResult(evidence)
       ? formatVerifyCommandResult(evidence, formatTextExcerpt)
       : fallback;
@@ -286,7 +301,10 @@ function artifactInspectionEvidence(
   result: LocalRunnerResult,
   assertionId: string,
 ): ArtifactInspection | undefined {
-  const evidence = assertionResultEvidence(result, assertionId);
+  const evidence = assertionResultEvidence(
+    result.assertionResults,
+    assertionId,
+  );
   return isArtifactInspection(evidence) ? evidence : undefined;
 }
 
@@ -321,9 +339,10 @@ function toolEventEvidence(
   result: LocalRunnerResult,
   assertionId: string,
 ): ToolEvent | undefined {
-  const evidence = result.assertionResults.find(
-    (candidate) => candidate.assertionId === assertionId,
-  )?.evidence;
+  const evidence = assertionResultEvidence(
+    result.assertionResults,
+    assertionId,
+  );
   return isToolEvent(evidence) ? evidence : undefined;
 }
 
@@ -331,9 +350,10 @@ function sequenceEvidence(
   result: LocalRunnerResult,
   assertionId: string,
 ): SequenceEvidence[] | undefined {
-  const evidence = result.assertionResults.find(
-    (candidate) => candidate.assertionId === assertionId,
-  )?.evidence;
+  const evidence = assertionResultEvidence(
+    result.assertionResults,
+    assertionId,
+  );
   return Array.isArray(evidence) && evidence.every(isSequenceEvidence)
     ? evidence
     : undefined;
@@ -343,9 +363,10 @@ function observedCommandArrayEvidence(
   result: LocalRunnerResult,
   assertionId: string,
 ): ObservedCommandEvidence[] | undefined {
-  const evidence = result.assertionResults.find(
-    (candidate) => candidate.assertionId === assertionId,
-  )?.evidence;
+  const evidence = assertionResultEvidence(
+    result.assertionResults,
+    assertionId,
+  );
   return Array.isArray(evidence) && evidence.every(isObservedCommand)
     ? evidence
     : undefined;
@@ -355,41 +376,11 @@ function httpEventEvidence(
   result: LocalRunnerResult,
   assertionId: string,
 ): HttpEvent | undefined {
-  const evidence = result.assertionResults.find(
-    (candidate) => candidate.assertionId === assertionId,
-  )?.evidence;
+  const evidence = assertionResultEvidence(
+    result.assertionResults,
+    assertionId,
+  );
   return isHttpEvent(evidence) ? evidence : undefined;
-}
-
-function assertionResultEvidence(
-  result: LocalRunnerResult,
-  assertionId: string,
-): unknown {
-  return result.assertionResults.find(
-    (candidate) => candidate.assertionId === assertionId,
-  )?.evidence;
-}
-
-function isToolEvent(value: unknown): value is ToolEvent {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'kind' in value &&
-    typeof value.kind === 'string' &&
-    'rawName' in value &&
-    typeof value.rawName === 'string'
-  );
-}
-
-function isHttpEvent(value: unknown): value is HttpEvent {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'method' in value &&
-    typeof value.method === 'string' &&
-    'url' in value &&
-    typeof value.url === 'string'
-  );
 }
 
 function isSequenceEvidence(value: unknown): value is SequenceEvidence {
@@ -425,11 +416,6 @@ function inputPreview(input: unknown): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function formatHttpEvent(event: HttpEvent): string {
-  const status = event.status === undefined ? '' : ` -> ${event.status}`;
-  return `${event.method} ${event.url}${status}`;
 }
 
 function shouldShowObservedShellCommands(

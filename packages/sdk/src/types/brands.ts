@@ -28,6 +28,30 @@ export type FileToolKind = Extract<
   'read_file' | 'write_file' | 'edit_file' | 'search_files'
 >;
 
+/** Canonical tool event metadata captured by harness adapters. */
+export type ToolEventBase = {
+  kind: ToolKind;
+  rawName: string;
+  input: unknown;
+  command?: never;
+  status?: 'success' | 'failure';
+  message?: string;
+  startedAt?: string;
+  completedAt?: string;
+};
+
+/** Shell tool event with the normalized command promoted from tool input. */
+export type ShellToolEvent = Omit<ToolEventBase, 'command' | 'kind'> & {
+  kind: 'shell';
+  command: string;
+};
+
+export type ToolEvent = ToolEventBase | ShellToolEvent;
+
+export function isShellToolEvent(event: ToolEvent): event is ShellToolEvent {
+  return event.kind === 'shell' && typeof event.command === 'string';
+}
+
 const SHELL_COMMAND_MATCHER_KEYS = [
   'equals',
   'includes',

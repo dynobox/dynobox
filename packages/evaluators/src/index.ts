@@ -28,6 +28,13 @@ export {
   inspectArtifact,
   stringsFromUnknown,
 } from './inspection.js';
+export {
+  describeCommandMatcher,
+  describeShellCommandMatcher,
+  type MatcherPresentationStyle,
+  type ShellCommandMatcherEntry,
+  shellCommandMatcherEntry,
+} from './presentation.js';
 export type {
   AssertionResult,
   EvaluationInput,

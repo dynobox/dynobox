@@ -1,5 +1,7 @@
 import type {ShellCommandMatcher} from '@dynobox/sdk';
 
+import {describeShellCommandMatcher} from './presentation.js';
+
 export type ShellMatcherResult = {
   passed: boolean;
   error?: string;
@@ -113,19 +115,7 @@ export function validateRegexMatcher(
 
 /** Describe a shell command matcher for failure messages and CLI output. */
 export function describeShellMatcher(matcher: ShellCommandMatcher): string {
-  if ('equals' in matcher && typeof matcher.equals === 'string') {
-    return `equals "${matcher.equals}"`;
-  }
-  if ('includes' in matcher && typeof matcher.includes === 'string') {
-    return `includes "${matcher.includes}"`;
-  }
-  if ('startsWith' in matcher && typeof matcher.startsWith === 'string') {
-    return `startsWith "${matcher.startsWith}"`;
-  }
-  if ('matches' in matcher && typeof matcher.matches === 'string') {
-    return `matches /${matcher.matches}/`;
-  }
-  return 'the requested matcher';
+  return describeShellCommandMatcher(matcher, {style: 'message'});
 }
 
 function invalidRegexMessage(pattern: string, error: unknown): string {

@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 
 import {ToolEventLineStream} from './runStreamingHarness.js';
+import type {ToolEventLineStreamOptions} from './runStreamingHarness.js';
 import type {ToolEvent} from './types.js';
 
 function createStream(
@@ -16,7 +17,7 @@ function createStream(
   const events: ToolEvent[] = [];
   const lineNumbers: number[] = [];
   const lines: string[] = [];
-  const streamOptions = {
+  const streamOptions: ToolEventLineStreamOptions = {
     parseLine: (line: string, lineNumber: number) => {
       lines.push(line);
       lineNumbers.push(lineNumber);
