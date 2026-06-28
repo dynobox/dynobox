@@ -1,6 +1,7 @@
 import type {IrAssertion} from '@dynobox/sdk/ir';
 import {parse as parseShellCommand, type ParseEntry} from 'shell-quote';
 
+import {describeCommandMatcher} from './presentation.js';
 import {passed} from './results.js';
 import type {AssertionResult, ToolEvent} from './types.js';
 
@@ -547,28 +548,4 @@ function describeExpectedCommand(
 ): string {
   if (assertion.matcher === undefined) return assertion.executable;
   return `${assertion.executable} with ${describeCommandMatcher(assertion.matcher)}`;
-}
-
-function describeCommandMatcher(matcher: CommandMatcher | undefined): string {
-  if (matcher === undefined) return 'any args';
-  const parts: string[] = [];
-  if (matcher.args !== undefined)
-    parts.push(`args ${JSON.stringify(matcher.args)}`);
-  if (matcher.argsInOrder !== undefined) {
-    parts.push(`argsInOrder ${JSON.stringify(matcher.argsInOrder)}`);
-  }
-  if (matcher.argsMatching !== undefined) {
-    parts.push(
-      `argsMatching ${matcher.argsMatching.map((pattern) => `/${pattern.source}/${pattern.flags}`).join(', ')}`,
-    );
-  }
-  if (matcher.originalIncludes !== undefined) {
-    parts.push(`originalIncludes "${matcher.originalIncludes}"`);
-  }
-  if (matcher.originalMatches !== undefined) {
-    parts.push(
-      `originalMatches /${matcher.originalMatches.source}/${matcher.originalMatches.flags}`,
-    );
-  }
-  return parts.join(', ');
 }
