@@ -16,27 +16,27 @@ export type IrEndpoint = z.infer<typeof irEndpointSchema>;
 export type IrHarnessConfig = z.infer<typeof irHarnessConfigSchema>;
 type BaseIrAssertion = z.infer<typeof irAssertionSchema>;
 export type IrSequenceStep =
-  | Omit<Extract<BaseIrAssertion, {kind: 'tool.called'}>, 'id' | 'label'>
-  | Omit<Extract<BaseIrAssertion, {kind: 'command.called'}>, 'id' | 'label'>;
+  | Omit<Extract<BaseIrAssertion, {type: 'tool.called'}>, 'id' | 'label'>
+  | Omit<Extract<BaseIrAssertion, {type: 'command.called'}>, 'id' | 'label'>;
 export type IrAssertionNode = Omit<
   Exclude<
     BaseIrAssertion,
-    {kind: 'sequence.inOrder'} | {kind: 'anyOf'} | {kind: 'verify.command'}
+    {type: 'sequence.inOrder'} | {type: 'anyOf'} | {type: 'verify.command'}
   >,
   'id' | 'label'
 >;
 export type IrAnyOfAssertion = {
   id: string;
   label?: string;
-  kind: 'anyOf';
+  type: 'anyOf';
   steps: IrAssertionNode[];
 };
 export type IrSequenceInOrderAssertion = Omit<
-  Extract<BaseIrAssertion, {kind: 'sequence.inOrder'}>,
+  Extract<BaseIrAssertion, {type: 'sequence.inOrder'}>,
   'steps'
 > & {steps: IrSequenceStep[]};
 export type IrAssertion =
-  | Exclude<BaseIrAssertion, {kind: 'sequence.inOrder'}>
+  | Exclude<BaseIrAssertion, {type: 'sequence.inOrder'}>
   | IrSequenceInOrderAssertion
   | IrAnyOfAssertion;
 type BaseIrScenario = z.infer<typeof irScenarioSchema>;

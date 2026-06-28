@@ -7,9 +7,9 @@ describe('irAssertionSchema tool matcher validation', () => {
   it('rejects shell command matchers on non-shell tool assertions', () => {
     const result = irAssertionSchema.safeParse({
       id: 'assertion.test.0',
-      kind: 'tool.called',
-      toolKind: 'read_file',
-      matcher: {includes: 'package.json'},
+      type: 'tool.called',
+      tool: 'read_file',
+      command: {includes: 'package.json'},
     });
 
     expect(result.success).toBe(false);
@@ -17,7 +17,7 @@ describe('irAssertionSchema tool matcher validation', () => {
 
     expect(result.error.issues).toContainEqual(
       expect.objectContaining({
-        path: ['matcher'],
+        path: ['command'],
         message: TOOL_MATCHER_MESSAGES.shellMatcherOnlyOnShell,
       }),
     );
@@ -26,9 +26,9 @@ describe('irAssertionSchema tool matcher validation', () => {
   it('rejects path matchers on non-file tool assertions', () => {
     const result = irAssertionSchema.safeParse({
       id: 'assertion.test.0',
-      kind: 'tool.called',
-      toolKind: 'web_search',
-      pathMatcher: {path: 'README.md'},
+      type: 'tool.called',
+      tool: 'web_search',
+      path: 'README.md',
     });
 
     expect(result.success).toBe(false);
@@ -36,7 +36,7 @@ describe('irAssertionSchema tool matcher validation', () => {
 
     expect(result.error.issues).toContainEqual(
       expect.objectContaining({
-        path: ['pathMatcher'],
+        path: ['path'],
         message: TOOL_MATCHER_MESSAGES.pathMatcherOnlyOnFileTools,
       }),
     );
@@ -46,17 +46,17 @@ describe('irAssertionSchema tool matcher validation', () => {
     expect(
       irAssertionSchema.safeParse({
         id: 'assertion.test.0',
-        kind: 'tool.called',
-        toolKind: 'shell',
-        matcher: {includes: 'pnpm test'},
+        type: 'tool.called',
+        tool: 'shell',
+        command: {includes: 'pnpm test'},
       }).success,
     ).toBe(true);
     expect(
       irAssertionSchema.safeParse({
         id: 'assertion.test.1',
-        kind: 'tool.called',
-        toolKind: 'read_file',
-        pathMatcher: {path: 'package.json'},
+        type: 'tool.called',
+        tool: 'read_file',
+        path: 'package.json',
       }).success,
     ).toBe(true);
   });
@@ -64,12 +64,12 @@ describe('irAssertionSchema tool matcher validation', () => {
   it('reports sequence step matcher errors at the nested step path', () => {
     const result = irAssertionSchema.safeParse({
       id: 'assertion.test.0',
-      kind: 'sequence.inOrder',
+      type: 'sequence.inOrder',
       steps: [
         {
-          kind: 'tool.called',
-          toolKind: 'read_file',
-          matcher: {includes: 'package.json'},
+          type: 'tool.called',
+          tool: 'read_file',
+          command: {includes: 'package.json'},
         },
       ],
     });
@@ -79,7 +79,7 @@ describe('irAssertionSchema tool matcher validation', () => {
 
     expect(result.error.issues).toContainEqual(
       expect.objectContaining({
-        path: ['steps', 0, 'matcher'],
+        path: ['steps', 0, 'command'],
         message: TOOL_MATCHER_MESSAGES.shellMatcherOnlyOnShell,
       }),
     );
@@ -88,12 +88,12 @@ describe('irAssertionSchema tool matcher validation', () => {
   it('reports anyOf branch matcher errors once at the branch path', () => {
     const result = irAssertionSchema.safeParse({
       id: 'assertion.test.0',
-      kind: 'anyOf',
+      type: 'anyOf',
       steps: [
         {
-          kind: 'tool.called',
-          toolKind: 'read_file',
-          matcher: {includes: 'package.json'},
+          type: 'tool.called',
+          tool: 'read_file',
+          command: {includes: 'package.json'},
         },
       ],
     });
@@ -103,7 +103,7 @@ describe('irAssertionSchema tool matcher validation', () => {
 
     expect(
       result.error.issues.filter(
-        (issue) => issue.path.join('.') === 'steps.0.matcher',
+        (issue) => issue.path.join('.') === 'steps.0.command',
       ),
     ).toHaveLength(1);
   });
@@ -111,10 +111,10 @@ describe('irAssertionSchema tool matcher validation', () => {
   it('rejects verify command assertions inside anyOf branches', () => {
     const result = irAssertionSchema.safeParse({
       id: 'assertion.test.0',
-      kind: 'anyOf',
+      type: 'anyOf',
       steps: [
         {
-          kind: 'verify.command',
+          type: 'verify.command',
           command: 'pnpm test',
           exitCode: 0,
         },

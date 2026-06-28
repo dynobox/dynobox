@@ -51,7 +51,7 @@ export function renderRunSummary(
           : assertionById.get(failedAssertion.assertionId);
       const detail =
         assertion === undefined
-          ? (failedAssertion?.kind ?? result.status)
+          ? (failedAssertion?.type ?? result.status)
           : describeAssertion(assertion);
       lines.push(
         `    ${job?.scenario.name ?? result.scenarioId}   ${detail}\n`,

@@ -95,26 +95,26 @@ describe('loadYamlDyno', () => {
       label: 'reads package.json',
     });
     expect(scenario.assertions[2]).toMatchObject({
-      kind: 'anyOf',
+      type: 'anyOf',
       steps: [
         {
-          kind: 'tool.called',
-          toolKind: 'read_file',
-          pathMatcher: {path: 'package.json'},
+          type: 'tool.called',
+          tool: 'read_file',
+          path: 'package.json',
         },
         {
-          kind: 'command.called',
+          type: 'command.called',
           executable: 'cat',
-          matcher: {args: ['package.json']},
+          command: {args: ['package.json']},
         },
       ],
     });
     expect(scenario.assertions[3]).toMatchObject({
-      kind: 'artifact.exists',
+      type: 'artifact.exists',
       path: 'package.json',
     });
     expect(scenario.assertions[4]).toMatchObject({
-      kind: 'verify.command',
+      type: 'verify.command',
       command: 'node --version',
       exitCode: 0,
       stdout: {startsWith: 'v'},

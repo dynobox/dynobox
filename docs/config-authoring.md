@@ -426,10 +426,8 @@ assertions: [http.called('npmPrettier', {status: 200})];
 Endpoint keys become part of stable IR ids, so they may only contain letters,
 numbers, underscores, and hyphens.
 
-Endpoint specs also accept `headers`, `body`, and `response` fields. The
-current local runner preserves those fields in the compiled IR, but HTTP
-assertions match observed requests by endpoint URL/method and optional response
-status. It does not use those fields to mock or shape requests yet.
+Endpoint specs include only `method` and `url`. HTTP assertions match observed
+requests by endpoint URL/method and optional response status.
 
 When a scenario includes HTTP assertions, Dynobox starts a per-job local proxy
 and sets proxy environment variables on the harness child process:

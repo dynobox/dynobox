@@ -19,7 +19,7 @@ const shellEvent: ToolEvent = {
 };
 
 function toolAssertion(
-  assertion: Omit<Extract<IrAssertion, {kind: 'tool.called'}>, 'id'>,
+  assertion: Omit<Extract<IrAssertion, {type: 'tool.called'}>, 'id'>,
 ): IrAssertion {
   return {
     id: 'assertion.test.0',
@@ -49,13 +49,13 @@ function createWorkDir(): string {
 describe('evaluateAssertions', () => {
   it('passes when a kind-only shell assertion observes a shell event', () => {
     const result = evaluateOne(
-      toolAssertion({kind: 'tool.called', toolKind: 'shell'}),
+      toolAssertion({type: 'tool.called', tool: 'shell'}),
       [shellEvent],
     );
 
     expect(result).toMatchObject({
       assertionId: 'assertion.test.0',
-      kind: 'tool.called',
+      type: 'tool.called',
       passed: true,
       message: 'Observed tool "shell".',
     });
@@ -64,7 +64,7 @@ describe('evaluateAssertions', () => {
 
   it('fails when a kind-only shell assertion observes no shell event', () => {
     const result = evaluateOne(
-      toolAssertion({kind: 'tool.called', toolKind: 'shell'}),
+      toolAssertion({type: 'tool.called', tool: 'shell'}),
       [],
     );
 
@@ -77,17 +77,17 @@ describe('evaluateAssertions', () => {
   it('evaluates includes shell matchers', () => {
     const pass = evaluateOne(
       toolAssertion({
-        kind: 'tool.called',
-        toolKind: 'shell',
-        matcher: {includes: 'pnpm test'},
+        type: 'tool.called',
+        tool: 'shell',
+        command: {includes: 'pnpm test'},
       }),
       [shellEvent],
     );
     const fail = evaluateOne(
       toolAssertion({
-        kind: 'tool.called',
-        toolKind: 'shell',
-        matcher: {includes: 'pnpm build'},
+        type: 'tool.called',
+        tool: 'shell',
+        command: {includes: 'pnpm build'},
       }),
       [shellEvent],
     );
@@ -110,11 +110,11 @@ describe('evaluateAssertions', () => {
     };
 
     const pass = evaluateOne(
-      toolAssertion({kind: 'tool.called', toolKind: 'edit_file'}),
+      toolAssertion({type: 'tool.called', tool: 'edit_file'}),
       [editEvent],
     );
     const fail = evaluateOne(
-      toolAssertion({kind: 'tool.called', toolKind: 'web_search'}),
+      toolAssertion({type: 'tool.called', tool: 'web_search'}),
       [editEvent],
     );
 
@@ -138,26 +138,26 @@ describe('evaluateAssertions', () => {
 
     const pass = evaluateOne(
       toolAssertion({
-        kind: 'tool.called',
-        toolKind: 'read_file',
-        pathMatcher: {path: 'matrix-failure-output.txt'},
+        type: 'tool.called',
+        tool: 'read_file',
+        path: 'matrix-failure-output.txt',
       }),
       [readEvent],
     );
     const fail = evaluateOne(
       toolAssertion({
-        kind: 'tool.called',
-        toolKind: 'read_file',
-        pathMatcher: {path: 'missing.txt'},
+        type: 'tool.called',
+        tool: 'read_file',
+        path: 'missing.txt',
       }),
       [readEvent],
     );
     const notCalled = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'tool.notCalled',
-        toolKind: 'read_file',
-        pathMatcher: {path: 'secrets.txt'},
+        type: 'tool.notCalled',
+        tool: 'read_file',
+        path: 'secrets.txt',
       },
       [readEvent],
     );
@@ -191,17 +191,17 @@ describe('evaluateAssertions', () => {
 
     const nestedPath = evaluateOne(
       toolAssertion({
-        kind: 'tool.called',
-        toolKind: 'edit_file',
-        pathMatcher: {path: 'src/index.ts'},
+        type: 'tool.called',
+        tool: 'edit_file',
+        path: 'src/index.ts',
       }),
       [editEvent],
     );
     const contentString = evaluateOne(
       toolAssertion({
-        kind: 'tool.called',
-        toolKind: 'edit_file',
-        pathMatcher: {path: 'README.md'},
+        type: 'tool.called',
+        tool: 'edit_file',
+        path: 'README.md',
       }),
       [editEvent],
     );
@@ -219,9 +219,9 @@ describe('evaluateAssertions', () => {
 
     const results = evaluateAssertions({
       assertions: [
-        {id: 'assertion.test.0', kind: 'tool.called', toolKind: 'mcp'},
-        {id: 'assertion.test.1', kind: 'tool.called', toolKind: 'task'},
-        {id: 'assertion.test.2', kind: 'tool.called', toolKind: 'unknown'},
+        {id: 'assertion.test.0', type: 'tool.called', tool: 'mcp'},
+        {id: 'assertion.test.1', type: 'tool.called', tool: 'task'},
+        {id: 'assertion.test.2', type: 'tool.called', tool: 'unknown'},
       ],
       toolEvents,
     });
@@ -237,7 +237,7 @@ describe('evaluateAssertions', () => {
     };
 
     const result = evaluateOne(
-      {id: 'assertion.test.0', kind: 'skill.referenced', skill: 'commit'},
+      {id: 'assertion.test.0', type: 'skill.referenced', skill: 'commit'},
       [event],
     );
 
@@ -259,7 +259,7 @@ describe('evaluateAssertions', () => {
     };
 
     const result = evaluateOne(
-      {id: 'assertion.test.0', kind: 'skill.referenced', skill: 'release'},
+      {id: 'assertion.test.0', type: 'skill.referenced', skill: 'release'},
       [event],
     );
 
@@ -278,7 +278,7 @@ describe('evaluateAssertions', () => {
     };
 
     const result = evaluateOne(
-      {id: 'assertion.test.0', kind: 'skill.referenced', skill: 'commit'},
+      {id: 'assertion.test.0', type: 'skill.referenced', skill: 'commit'},
       [event],
     );
 
@@ -287,7 +287,7 @@ describe('evaluateAssertions', () => {
 
   it('fails skill.referenced when no matching skill file reference is observed', () => {
     const result = evaluateOne(
-      {id: 'assertion.test.0', kind: 'skill.referenced', skill: 'commit'},
+      {id: 'assertion.test.0', type: 'skill.referenced', skill: 'commit'},
       [shellEvent],
     );
 
@@ -302,9 +302,9 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'tool.notCalled',
-        toolKind: 'shell',
-        matcher: {includes: 'npm publish'},
+        type: 'tool.notCalled',
+        tool: 'shell',
+        command: {includes: 'npm publish'},
       },
       [shellEvent],
     );
@@ -319,9 +319,9 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'tool.notCalled',
-        toolKind: 'shell',
-        matcher: {includes: 'pnpm test'},
+        type: 'tool.notCalled',
+        tool: 'shell',
+        command: {includes: 'pnpm test'},
       },
       [shellEvent],
     );
@@ -338,9 +338,9 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'command.called',
+        type: 'command.called',
         executable: 'git',
-        matcher: {args: ['status']},
+        command: {args: ['status']},
       },
       [
         {
@@ -367,9 +367,9 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'command.called',
+        type: 'command.called',
         executable: 'pnpm',
-        matcher: {argsMatching: [{source: '^test$', flags: ''}]},
+        command: {argsMatching: [{source: '^test$', flags: ''}]},
       },
       [
         {
@@ -390,15 +390,15 @@ describe('evaluateAssertions', () => {
   it('resets stateful command regex matchers before each test', () => {
     const argsAssertion: IrAssertion = {
       id: 'assertion.test.0',
-      kind: 'command.called',
+      type: 'command.called',
       executable: 'git',
-      matcher: {argsMatching: [{source: '^status$', flags: 'g'}]},
+      command: {argsMatching: [{source: '^status$', flags: 'g'}]},
     };
     const originalAssertion: IrAssertion = {
       id: 'assertion.test.1',
-      kind: 'command.called',
+      type: 'command.called',
       executable: 'git',
-      matcher: {originalMatches: {source: '^git status', flags: 'g'}},
+      command: {originalMatches: {source: '^git status', flags: 'g'}},
     };
     const events: ToolEvent[] = [
       {
@@ -419,9 +419,9 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'command.called',
+        type: 'command.called',
         executable: 'git',
-        matcher: {args: ['status']},
+        command: {args: ['status']},
       },
       [
         {
@@ -443,9 +443,9 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'command.called',
+        type: 'command.called',
         executable: 'git',
-        matcher: {args: ['commit']},
+        command: {args: ['commit']},
       },
       [
         {
@@ -472,7 +472,7 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'verify.command',
+        type: 'verify.command',
         command: 'dynobox validate out.dyno.ts',
         exitCode: 0,
         stdout: {includes: 'valid'},
@@ -504,7 +504,7 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'verify.command',
+        type: 'verify.command',
         command: 'tsc --noEmit out.ts',
         exitCode: 0,
         stderr: {includes: '0 errors'},
@@ -535,7 +535,7 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'verify.command',
+        type: 'verify.command',
         command: 'false',
       },
       [],
@@ -572,18 +572,18 @@ describe('evaluateAssertions', () => {
     const hashArg = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'command.called',
+        type: 'command.called',
         executable: 'gh',
-        matcher: {args: ['owner/repo#123']},
+        command: {args: ['owner/repo#123']},
       },
       toolEvents,
     );
     const variableArg = evaluateOne(
       {
         id: 'assertion.test.1',
-        kind: 'command.called',
+        type: 'command.called',
         executable: 'echo',
-        matcher: {args: ['$PWD']},
+        command: {args: ['$PWD']},
       },
       toolEvents,
     );
@@ -611,18 +611,18 @@ describe('evaluateAssertions', () => {
     const commented = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'command.called',
+        type: 'command.called',
         executable: 'git',
-        matcher: {args: ['commit']},
+        command: {args: ['commit']},
       },
       toolEvents,
     );
     const notCommented = evaluateOne(
       {
         id: 'assertion.test.1',
-        kind: 'command.notCalled',
+        type: 'command.notCalled',
         executable: 'git',
-        matcher: {args: ['commit']},
+        command: {args: ['commit']},
       },
       toolEvents,
     );
@@ -635,9 +635,9 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'command.called',
+        type: 'command.called',
         executable: 'pnpm',
-        matcher: {args: ['test']},
+        command: {args: ['test']},
       },
       [
         {
@@ -659,9 +659,9 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'command.called',
+        type: 'command.called',
         executable: 'git',
-        matcher: {args: ['status.log']},
+        command: {args: ['status.log']},
       },
       [
         {
@@ -683,9 +683,9 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'command.notCalled',
+        type: 'command.notCalled',
         executable: 'git',
-        matcher: {args: ['push']},
+        command: {args: ['push']},
       },
       [
         {
@@ -707,9 +707,9 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'command.called',
+        type: 'command.called',
         executable: 'grep',
-        matcher: {args: ['pattern']},
+        command: {args: ['pattern']},
       },
       [
         {
@@ -731,7 +731,7 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'command.notCalled',
+        type: 'command.notCalled',
         executable: 'curl',
       },
       [
@@ -751,9 +751,9 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'command.called',
+        type: 'command.called',
         executable: 'grep',
-        matcher: {args: ['error']},
+        command: {args: ['error']},
       },
       [
         {
@@ -793,17 +793,17 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'sequence.inOrder',
+        type: 'sequence.inOrder',
         steps: [
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'git status'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'git status'},
           },
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'git commit'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'git commit'},
           },
         ],
       },
@@ -821,17 +821,17 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'anyOf',
+        type: 'anyOf',
         steps: [
           {
-            kind: 'tool.called',
-            toolKind: 'read_file',
-            pathMatcher: {path: 'package.json'},
+            type: 'tool.called',
+            tool: 'read_file',
+            path: 'package.json',
           },
           {
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'cat',
-            matcher: {args: ['package.json']},
+            command: {args: ['package.json']},
           },
         ],
       },
@@ -860,10 +860,10 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'anyOf',
+        type: 'anyOf',
         steps: [
-          {kind: 'tool.called', toolKind: 'shell'},
-          {kind: 'command.called', executable: 'pwd'},
+          {type: 'tool.called', tool: 'shell'},
+          {type: 'command.called', executable: 'pwd'},
         ],
       },
       [
@@ -894,14 +894,14 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'anyOf',
+        type: 'anyOf',
         steps: [
           {
-            kind: 'tool.called',
-            toolKind: 'read_file',
-            pathMatcher: {path: 'report.json'},
+            type: 'tool.called',
+            tool: 'read_file',
+            path: 'report.json',
           },
-          {kind: 'artifact.exists', path: 'report.json'},
+          {type: 'artifact.exists', path: 'report.json'},
         ],
       },
       [],
@@ -923,13 +923,13 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'anyOf',
+        type: 'anyOf',
         steps: [
-          {kind: 'tool.called', toolKind: 'read_file'},
+          {type: 'tool.called', tool: 'read_file'},
           {
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'cat',
-            matcher: {args: ['a.txt']},
+            command: {args: ['a.txt']},
           },
         ],
       },
@@ -960,17 +960,17 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'sequence.inOrder',
+        type: 'sequence.inOrder',
         steps: [
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'git add'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'git add'},
           },
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'git commit'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'git commit'},
           },
         ],
       },
@@ -995,22 +995,22 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'sequence.inOrder',
+        type: 'sequence.inOrder',
         steps: [
           {
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'git',
-            matcher: {args: ['status']},
+            command: {args: ['status']},
           },
           {
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'git',
-            matcher: {argsInOrder: ['add', 'README.md']},
+            command: {argsInOrder: ['add', 'README.md']},
           },
           {
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'git',
-            matcher: {args: ['commit']},
+            command: {args: ['commit']},
           },
         ],
       },
@@ -1039,16 +1039,16 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'sequence.inOrder',
+        type: 'sequence.inOrder',
         steps: [
           {
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'git',
-            matcher: {args: ['status']},
+            command: {args: ['status']},
           },
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
+            type: 'tool.called',
+            tool: 'shell',
           },
         ],
       },
@@ -1073,17 +1073,17 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'sequence.inOrder',
+        type: 'sequence.inOrder',
         steps: [
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'git status'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'git status'},
           },
           {
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'git',
-            matcher: {args: ['commit']},
+            command: {args: ['commit']},
           },
         ],
       },
@@ -1110,22 +1110,22 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'sequence.inOrder',
+        type: 'sequence.inOrder',
         steps: [
           {
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'git',
-            matcher: {args: ['status']},
+            command: {args: ['status']},
           },
           {
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'git',
-            matcher: {args: ['diff']},
+            command: {args: ['diff']},
           },
           {
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'git',
-            matcher: {args: ['commit']},
+            command: {args: ['commit']},
           },
         ],
       },
@@ -1159,22 +1159,22 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'sequence.inOrder',
+        type: 'sequence.inOrder',
         steps: [
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'echo start'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'echo start'},
           },
           {
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'git',
-            matcher: {args: ['status']},
+            command: {args: ['status']},
           },
           {
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'git',
-            matcher: {args: ['commit']},
+            command: {args: ['commit']},
           },
         ],
       },
@@ -1196,17 +1196,17 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'sequence.inOrder',
+        type: 'sequence.inOrder',
         steps: [
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'git add'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'git add'},
           },
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'git commit'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'git commit'},
           },
         ],
       },
@@ -1244,22 +1244,22 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'sequence.inOrder',
+        type: 'sequence.inOrder',
         steps: [
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'git status'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'git status'},
           },
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'git diff'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'git diff'},
           },
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'git commit'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'git commit'},
           },
         ],
       },
@@ -1277,17 +1277,17 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'sequence.inOrder',
+        type: 'sequence.inOrder',
         steps: [
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'git status'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'git status'},
           },
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'git commit'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'git commit'},
           },
         ],
       },
@@ -1318,17 +1318,17 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'sequence.inOrder',
+        type: 'sequence.inOrder',
         steps: [
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'pnpm test'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'pnpm test'},
           },
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'pnpm test'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'pnpm test'},
           },
         ],
       },
@@ -1344,12 +1344,12 @@ describe('evaluateAssertions', () => {
     writeFileSync(join(workDir, 'CHANGELOG.md'), 'release notes');
 
     const pass = evaluateOne(
-      {id: 'assertion.test.0', kind: 'artifact.exists', path: 'CHANGELOG.md'},
+      {id: 'assertion.test.0', type: 'artifact.exists', path: 'CHANGELOG.md'},
       [],
       {workDir},
     );
     const fail = evaluateOne(
-      {id: 'assertion.test.1', kind: 'artifact.exists', path: 'missing.txt'},
+      {id: 'assertion.test.1', type: 'artifact.exists', path: 'missing.txt'},
       [],
       {workDir},
     );
@@ -1373,7 +1373,7 @@ describe('evaluateAssertions', () => {
     const pass = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'artifact.contains',
+        type: 'artifact.contains',
         path: 'CHANGELOG.md',
         text: 'dynobox@0.0.4',
       },
@@ -1383,7 +1383,7 @@ describe('evaluateAssertions', () => {
     const fail = evaluateOne(
       {
         id: 'assertion.test.1',
-        kind: 'artifact.contains',
+        type: 'artifact.contains',
         path: 'CHANGELOG.md',
         text: 'missing',
       },
@@ -1410,14 +1410,14 @@ describe('evaluateAssertions', () => {
   it('rejects artifact path traversal and absolute paths', () => {
     const workDir = createWorkDir();
     const traversal = evaluateOne(
-      {id: 'assertion.test.0', kind: 'artifact.exists', path: '../outside.txt'},
+      {id: 'assertion.test.0', type: 'artifact.exists', path: '../outside.txt'},
       [],
       {workDir},
     );
     const absolute = evaluateOne(
       {
         id: 'assertion.test.1',
-        kind: 'artifact.exists',
+        type: 'artifact.exists',
         path: join(workDir, 'x'),
       },
       [],
@@ -1432,12 +1432,12 @@ describe('evaluateAssertions', () => {
 
   it('evaluates transcript.contains pass and fail cases', () => {
     const pass = evaluateOne(
-      {id: 'assertion.test.0', kind: 'transcript.contains', text: 'EOTP'},
+      {id: 'assertion.test.0', type: 'transcript.contains', text: 'EOTP'},
       [],
       {transcript: 'hello EOTP'},
     );
     const fail = evaluateOne(
-      {id: 'assertion.test.1', kind: 'transcript.contains', text: 'missing'},
+      {id: 'assertion.test.1', type: 'transcript.contains', text: 'missing'},
       [],
       {transcript: 'hello'},
     );
@@ -1451,12 +1451,12 @@ describe('evaluateAssertions', () => {
 
   it('evaluates finalMessage.contains pass and fail cases', () => {
     const pass = evaluateOne(
-      {id: 'assertion.test.0', kind: 'finalMessage.contains', text: 'dirty'},
+      {id: 'assertion.test.0', type: 'finalMessage.contains', text: 'dirty'},
       [],
       {finalMessage: 'working tree is dirty'},
     );
     const fail = evaluateOne(
-      {id: 'assertion.test.1', kind: 'finalMessage.contains', text: 'dirty'},
+      {id: 'assertion.test.1', type: 'finalMessage.contains', text: 'dirty'},
       [],
       {},
     );
@@ -1473,7 +1473,7 @@ describe('evaluateAssertions', () => {
     const called = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'http.called',
+        type: 'http.called',
         endpointId: 'endpoint.test.getUser',
       },
       [],
@@ -1493,7 +1493,7 @@ describe('evaluateAssertions', () => {
     const notCalled = evaluateOne(
       {
         id: 'assertion.test.1',
-        kind: 'http.notCalled',
+        type: 'http.notCalled',
         endpointId: 'endpoint.test.deleteUser',
       },
       [],
@@ -1502,7 +1502,7 @@ describe('evaluateAssertions', () => {
 
     expect(called).toEqual({
       assertionId: 'assertion.test.0',
-      kind: 'http.called',
+      type: 'http.called',
       passed: true,
       message: 'Observed HTTP endpoint "endpoint.test.getUser".',
       evidence: {
@@ -1516,7 +1516,7 @@ describe('evaluateAssertions', () => {
     });
     expect(notCalled).toMatchObject({
       assertionId: 'assertion.test.1',
-      kind: 'http.notCalled',
+      type: 'http.notCalled',
       passed: true,
       message: 'Observed no calls to HTTP endpoint "endpoint.test.deleteUser".',
     });
@@ -1526,7 +1526,7 @@ describe('evaluateAssertions', () => {
     const pass = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'http.called',
+        type: 'http.called',
         endpointId: 'endpoint.test.getUser',
         status: 201,
       },
@@ -1547,7 +1547,7 @@ describe('evaluateAssertions', () => {
     const fail = evaluateOne(
       {
         id: 'assertion.test.1',
-        kind: 'http.called',
+        type: 'http.called',
         endpointId: 'endpoint.test.getUser',
         status: 200,
       },
@@ -1582,7 +1582,7 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'http.notCalled',
+        type: 'http.notCalled',
         endpointId: 'endpoint.test.getUser',
       },
       [],
@@ -1610,17 +1610,17 @@ describe('evaluateAssertions', () => {
     const result = evaluateOne(
       {
         id: 'assertion.test.0',
-        kind: 'custom.assertion',
+        type: 'custom.assertion',
       } as unknown as IrAssertion,
       [],
     );
 
     expect(result).toEqual({
       assertionId: 'assertion.test.0',
-      kind: 'custom.assertion',
+      type: 'custom.assertion',
       passed: false,
       message:
-        'Assertion kind "custom.assertion" is not supported by this evaluator.',
+        'Assertion type "custom.assertion" is not supported by this evaluator.',
     });
   });
 });

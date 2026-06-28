@@ -66,7 +66,7 @@ export function renderAssertionDetails(
     const status = assertionResult.passed ? 'pass' : 'fail';
     const label =
       assertion === undefined
-        ? assertionResult.kind
+        ? assertionResult.type
         : describeAssertionLabel(assertion);
     lines.push(
       `        ${colorStatus(ctx, symbol(ctx, status), status)} ${label}\n`,
@@ -143,36 +143,34 @@ function describeObservedFailure(
   result: LocalRunnerResult,
   fallback: string,
 ): string {
-  if (assertion.kind === 'tool.called') {
+  if (assertion.type === 'tool.called') {
     const events = result.harnessResult?.toolEvents ?? [];
-    const sameKind = events.filter(
-      (event) => event.kind === assertion.toolKind,
-    );
+    const sameKind = events.filter((event) => event.kind === assertion.tool);
     if (sameKind.length === 0)
-      return `no ${assertion.toolKind} tool calls observed`;
-    if (assertion.matcher !== undefined) {
-      return `${formatCount(sameKind.length, `${assertion.toolKind} tool call`)} observed, none matching`;
+      return `no ${assertion.tool} tool calls observed`;
+    if (assertion.command !== undefined) {
+      return `${formatCount(sameKind.length, `${assertion.tool} tool call`)} observed, none matching`;
     }
-    if (assertion.pathMatcher !== undefined) {
-      return `${formatCount(sameKind.length, `${assertion.toolKind} tool call`)} observed, none for path "${assertion.pathMatcher.path}"`;
+    if (assertion.path !== undefined) {
+      return `${formatCount(sameKind.length, `${assertion.tool} tool call`)} observed, none for path "${assertion.path}"`;
     }
     return fallback;
   }
 
-  if (assertion.kind === 'tool.notCalled') {
+  if (assertion.type === 'tool.notCalled') {
     const evidence = toolEventEvidence(result, assertion.id);
     return evidence === undefined
       ? fallback
       : `matching ${formatToolEvent(evidence)}`;
   }
 
-  if (assertion.kind === 'command.called') {
+  if (assertion.type === 'command.called') {
     const observed = observedCommandArrayEvidence(result, assertion.id);
     if (observed === undefined || observed.length === 0) return fallback;
     return formatCommandCalledFailure(observed.length);
   }
 
-  if (assertion.kind === 'command.notCalled') {
+  if (assertion.type === 'command.notCalled') {
     const evidence = assertionResultEvidence(
       result.assertionResults,
       assertion.id,
@@ -182,7 +180,7 @@ function describeObservedFailure(
       : fallback;
   }
 
-  if (assertion.kind === 'sequence.inOrder') {
+  if (assertion.type === 'sequence.inOrder') {
     const matched = sequenceEvidence(result, assertion.id);
     if (matched === undefined) return fallback;
     const last = matched.at(-1);
@@ -193,7 +191,7 @@ function describeObservedFailure(
     return `matched ${matched.length} of ${assertion.steps.length} ordered steps${suffix}`;
   }
 
-  if (assertion.kind === 'anyOf') {
+  if (assertion.type === 'anyOf') {
     const evidence = assertionResultEvidence(
       result.assertionResults,
       assertion.id,
@@ -206,11 +204,11 @@ function describeObservedFailure(
     }
   }
 
-  if (assertion.kind === 'skill.referenced') {
+  if (assertion.type === 'skill.referenced') {
     return `no matching SKILL.md reference observed`;
   }
 
-  if (assertion.kind === 'verify.command') {
+  if (assertion.type === 'verify.command') {
     const evidence = assertionResultEvidence(
       result.assertionResults,
       assertion.id,
@@ -220,7 +218,7 @@ function describeObservedFailure(
       : fallback;
   }
 
-  if (assertion.kind === 'http.called') {
+  if (assertion.type === 'http.called') {
     const matches = result.httpEvents.filter(
       (event) => event.endpointId === assertion.endpointId,
     );
@@ -231,35 +229,35 @@ function describeObservedFailure(
     ].join(', ')}`;
   }
 
-  if (assertion.kind === 'http.notCalled') {
+  if (assertion.type === 'http.notCalled') {
     const evidence = httpEventEvidence(result, assertion.id);
     return evidence === undefined
       ? fallback
       : `matching request: ${formatHttpEvent(evidence)}`;
   }
 
-  if (assertion.kind === 'artifact.exists') {
+  if (assertion.type === 'artifact.exists') {
     const artifact =
       artifactInspectionEvidence(result, assertion.id) ??
       inspectArtifact(assertion.path, result.workDir);
     return formatArtifactExists(artifact);
   }
 
-  if (assertion.kind === 'artifact.contains') {
+  if (assertion.type === 'artifact.contains') {
     const artifact =
       artifactInspectionEvidence(result, assertion.id) ??
       inspectArtifact(assertion.path, result.workDir);
     return formatArtifactContains(artifact);
   }
 
-  if (assertion.kind === 'finalMessage.contains') {
+  if (assertion.type === 'finalMessage.contains') {
     const finalMessage = result.harnessResult?.finalMessage;
     return finalMessage === undefined
       ? fallback
       : `final message: ${formatTextExcerpt(finalMessage)}`;
   }
 
-  if (assertion.kind === 'transcript.contains') {
+  if (assertion.type === 'transcript.contains') {
     const transcript = result.harnessResult?.transcript;
     return transcript === undefined
       ? fallback
@@ -462,63 +460,63 @@ function shouldShowObservedSkillFiles(
   return result.assertionResults.some((assertionResult) => {
     if (assertionResult.passed) return false;
     const assertion = assertionById.get(assertionResult.assertionId);
-    return assertion?.kind === 'skill.referenced';
+    return assertion?.type === 'skill.referenced';
   });
 }
 
 function assertionMentionsShell(assertion: IrAssertion | undefined): boolean {
   if (assertion === undefined) return false;
   if (
-    (assertion.kind === 'tool.called' || assertion.kind === 'tool.notCalled') &&
-    assertion.toolKind === 'shell'
+    (assertion.type === 'tool.called' || assertion.type === 'tool.notCalled') &&
+    assertion.tool === 'shell'
   ) {
     return true;
   }
   return (
-    (assertion.kind === 'sequence.inOrder' &&
+    (assertion.type === 'sequence.inOrder' &&
       assertion.steps.some(sequenceStepMentionsShell)) ||
-    (assertion.kind === 'anyOf' &&
+    (assertion.type === 'anyOf' &&
       assertion.steps.some(assertionNodeMentionsShell))
   );
 }
 
 function assertionMentionsCommand(assertion: IrAssertion): boolean {
   if (
-    assertion.kind === 'command.called' ||
-    assertion.kind === 'command.notCalled'
+    assertion.type === 'command.called' ||
+    assertion.type === 'command.notCalled'
   ) {
     return true;
   }
   return (
-    (assertion.kind === 'sequence.inOrder' &&
+    (assertion.type === 'sequence.inOrder' &&
       assertion.steps.some(sequenceStepMentionsCommand)) ||
-    (assertion.kind === 'anyOf' &&
+    (assertion.type === 'anyOf' &&
       assertion.steps.some(assertionNodeMentionsCommand))
   );
 }
 
 function assertionNodeMentionsShell(
-  assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
+  assertion: Extract<IrAssertion, {type: 'anyOf'}>['steps'][number],
 ): boolean {
   return assertionMentionsShell(assertionBranchWithId(assertion));
 }
 
 function assertionNodeMentionsCommand(
-  assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
+  assertion: Extract<IrAssertion, {type: 'anyOf'}>['steps'][number],
 ): boolean {
   return assertionMentionsCommand(assertionBranchWithId(assertion));
 }
 
 function sequenceStepMentionsShell(
-  step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
+  step: Extract<IrAssertion, {type: 'sequence.inOrder'}>['steps'][number],
 ): boolean {
-  return step.kind === 'tool.called' && step.toolKind === 'shell';
+  return step.type === 'tool.called' && step.tool === 'shell';
 }
 
 function sequenceStepMentionsCommand(
-  step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
+  step: Extract<IrAssertion, {type: 'sequence.inOrder'}>['steps'][number],
 ): boolean {
-  return step.kind === 'command.called';
+  return step.type === 'command.called';
 }
 
 function observedShellCommands(toolEvents: readonly ToolEvent[]): string[] {

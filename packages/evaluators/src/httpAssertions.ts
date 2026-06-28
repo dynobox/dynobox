@@ -4,7 +4,7 @@ import {failed, passed} from './results.js';
 import type {AssertionResult, HttpEvent} from './types.js';
 
 export function evaluateHttpCalled(
-  assertion: Extract<IrAssertion, {kind: 'http.called'}>,
+  assertion: Extract<IrAssertion, {type: 'http.called'}>,
   httpEvents: readonly HttpEvent[],
 ): AssertionResult {
   const matches = httpEvents.filter(
@@ -47,7 +47,7 @@ export function evaluateHttpCalled(
 }
 
 export function evaluateHttpNotCalled(
-  assertion: Extract<IrAssertion, {kind: 'http.notCalled'}>,
+  assertion: Extract<IrAssertion, {type: 'http.notCalled'}>,
   httpEvents: readonly HttpEvent[],
 ): AssertionResult {
   const match = httpEvents.find(
@@ -57,7 +57,7 @@ export function evaluateHttpNotCalled(
   if (match !== undefined) {
     return {
       assertionId: assertion.id,
-      kind: assertion.kind,
+      type: assertion.type,
       passed: false,
       message: `Expected HTTP endpoint "${assertion.endpointId}" not to be called, but observed a matching request.`,
       evidence: match,

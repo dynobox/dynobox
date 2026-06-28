@@ -11,14 +11,14 @@ export type HttpRoute = {
 export function scenarioNeedsHttpCapture(scenario: IrScenario): boolean {
   return scenario.assertions.some(
     (assertion) =>
-      assertion.kind === 'http.called' || assertion.kind === 'http.notCalled',
+      assertion.type === 'http.called' || assertion.type === 'http.notCalled',
   );
 }
 
 export function buildHttpRoutes(scenario: IrScenario): HttpRoute[] {
   const assertedEndpointIds = new Set(
     scenario.assertions.flatMap((assertion) =>
-      assertion.kind === 'http.called' || assertion.kind === 'http.notCalled'
+      assertion.type === 'http.called' || assertion.type === 'http.notCalled'
         ? [assertion.endpointId]
         : [],
     ),

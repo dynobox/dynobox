@@ -19,8 +19,8 @@ describe('renderJsonRunOutput', () => {
           {
             id: 'assertion.labels.reads-package',
             label: 'reads package.json',
-            kind: 'tool.called',
-            toolKind: 'shell',
+            type: 'tool.called',
+            tool: 'shell',
           },
         ],
       },
@@ -40,7 +40,7 @@ describe('renderJsonRunOutput', () => {
       assertionResults: [
         {
           assertionId: 'assertion.labels.reads-package',
-          kind: 'tool.called',
+          type: 'tool.called',
           passed: true,
           message: 'Observed tool "shell".',
         },
@@ -61,6 +61,7 @@ describe('renderJsonRunOutput', () => {
     expect(jobRecord.assertions[0]).toMatchObject({
       assertionId: 'assertion.labels.reads-package',
       label: 'reads package.json',
+      type: 'tool.called',
     });
   });
 

@@ -20,14 +20,14 @@ export type ObservedCommand = {
   end: number;
 };
 
-type CommandCalledAssertion = Extract<IrAssertion, {kind: 'command.called'}>;
+type CommandCalledAssertion = Extract<IrAssertion, {type: 'command.called'}>;
 type CommandNotCalledAssertion = Extract<
   IrAssertion,
-  {kind: 'command.notCalled'}
+  {type: 'command.notCalled'}
 >;
 export type CommandCalledStep = Omit<CommandCalledAssertion, 'id'>;
 type CommandNotCalledStep = Omit<CommandNotCalledAssertion, 'id'>;
-type CommandMatcher = NonNullable<CommandCalledAssertion['matcher']>;
+type CommandMatcher = NonNullable<CommandCalledAssertion['command']>;
 
 export function evaluateCommandCalledAssertion(
   assertion: CommandCalledAssertion,
@@ -48,7 +48,7 @@ export function evaluateCommandCalledAssertion(
 
   return {
     assertionId: assertion.id,
-    kind: assertion.kind,
+    type: assertion.type,
     passed: false,
     message: commandCalledFailMessage(assertion, observed),
     evidence: observed,
@@ -67,7 +67,7 @@ export function evaluateCommandNotCalledAssertion(
   if (match !== undefined) {
     return {
       assertionId: assertion.id,
-      kind: assertion.kind,
+      type: assertion.type,
       passed: false,
       message: `Expected no command ${describeExpectedCommand(assertion)}, but observed a matching command.`,
       evidence: match,
@@ -98,13 +98,13 @@ export function commandMatchesAssertion(
   assertion: CommandCalledStep | CommandNotCalledStep,
 ): boolean {
   if (observed.executable !== assertion.executable) return false;
-  if (assertion.matcher === undefined) return true;
-  return commandMatchesMatcher(observed, assertion.matcher);
+  if (assertion.command === undefined) return true;
+  return commandMatchesMatcher(observed, assertion.command);
 }
 
 export function describeCommandStep(step: CommandCalledStep): string {
-  if (step.matcher === undefined) return `command.called(${step.executable})`;
-  return `command.called(${step.executable}, ${describeCommandMatcher(step.matcher)})`;
+  if (step.command === undefined) return `command.called(${step.executable})`;
+  return `command.called(${step.executable}, ${describeCommandMatcher(step.command)})`;
 }
 
 export function describeObservedCommand(command: ObservedCommand): string {
@@ -531,7 +531,7 @@ function commandMatcherFailureDetail(
   if (sameExecutable.length === 0) {
     return `No observed ${assertion.executable} command.`;
   }
-  const matcher = assertion.matcher;
+  const matcher = assertion.command;
   if (matcher?.args !== undefined) {
     const missing = matcher.args.find((arg) =>
       sameExecutable.every((command) => !command.argv.includes(arg)),
@@ -546,6 +546,6 @@ function commandMatcherFailureDetail(
 function describeExpectedCommand(
   assertion: CommandCalledStep | CommandNotCalledStep,
 ): string {
-  if (assertion.matcher === undefined) return assertion.executable;
-  return `${assertion.executable} with ${describeCommandMatcher(assertion.matcher)}`;
+  if (assertion.command === undefined) return assertion.executable;
+  return `${assertion.executable} with ${describeCommandMatcher(assertion.command)}`;
 }

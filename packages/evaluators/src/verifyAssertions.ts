@@ -4,7 +4,7 @@ import {passed} from './results.js';
 import {describeShellMatcher, shellCommandMatches} from './shellMatcher.js';
 import type {AssertionResult, VerifyCommandResult} from './types.js';
 
-type VerifyCommandAssertion = Extract<IrAssertion, {kind: 'verify.command'}>;
+type VerifyCommandAssertion = Extract<IrAssertion, {type: 'verify.command'}>;
 
 export function evaluateVerifyCommandAssertion(
   assertion: VerifyCommandAssertion,
@@ -17,7 +17,7 @@ export function evaluateVerifyCommandAssertion(
   if (result === undefined) {
     return {
       assertionId: assertion.id,
-      kind: assertion.kind,
+      type: assertion.type,
       passed: false,
       message: `Verification command "${assertion.command}" was not run.`,
     };
@@ -30,7 +30,7 @@ export function evaluateVerifyCommandAssertion(
   ) {
     return {
       assertionId: assertion.id,
-      kind: assertion.kind,
+      type: assertion.type,
       passed: false,
       message:
         'Verification command assertions must specify exitCode, stdout, or stderr.',
@@ -76,7 +76,7 @@ export function evaluateVerifyCommandAssertion(
 
   return {
     assertionId: assertion.id,
-    kind: assertion.kind,
+    type: assertion.type,
     passed: false,
     message: `Verification command "${assertion.command}" failed: ${failures.join('; ')}.`,
     evidence: result,

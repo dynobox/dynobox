@@ -10,7 +10,7 @@ export type ShellCommandMatcherEntry =
   | {strategy: 'matches'; value: string};
 
 type CommandMatcher = NonNullable<
-  Extract<IrAssertion, {kind: 'command.called'}>['matcher']
+  Extract<IrAssertion, {type: 'command.called'}>['command']
 >;
 
 export function shellCommandMatcherEntry(

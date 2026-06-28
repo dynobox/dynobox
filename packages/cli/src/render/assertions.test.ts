@@ -25,8 +25,8 @@ describe('renderAssertionDetails', () => {
           {
             id: 'assertion.labels.reads-package',
             label: 'reads package.json',
-            kind: 'tool.called',
-            toolKind: 'shell',
+            type: 'tool.called',
+            tool: 'shell',
           },
         ],
       },
@@ -37,7 +37,7 @@ describe('renderAssertionDetails', () => {
       assertionResults: [
         {
           assertionId: 'assertion.labels.reads-package',
-          kind: 'tool.called',
+          type: 'tool.called',
           passed: true,
           message: 'Observed tool "shell".',
         },
@@ -68,7 +68,7 @@ describe('renderAssertionDetails', () => {
         assertions: [
           {
             id: 'assertion.final-message.contains',
-            kind: 'finalMessage.contains',
+            type: 'finalMessage.contains',
             text: 'does not invalidate the original matrix failure',
           },
         ],
@@ -80,7 +80,7 @@ describe('renderAssertionDetails', () => {
       assertionResults: [
         {
           assertionId: 'assertion.final-message.contains',
-          kind: 'finalMessage.contains',
+          type: 'finalMessage.contains',
           passed: false,
           message:
             'Expected final message to contain "does not invalidate the original matrix failure".',
@@ -125,29 +125,29 @@ describe('renderAssertionDetails', () => {
         assertions: [
           {
             id: 'assertion.tool.called',
-            kind: 'tool.called',
-            toolKind: 'read_file',
-            pathMatcher: {path: 'missing.txt'},
+            type: 'tool.called',
+            tool: 'read_file',
+            path: 'missing.txt',
           },
           {
             id: 'assertion.tool.not-called',
-            kind: 'tool.notCalled',
-            toolKind: 'shell',
-            matcher: {includes: 'pnpm test'},
+            type: 'tool.notCalled',
+            tool: 'shell',
+            command: {includes: 'pnpm test'},
           },
           {
             id: 'assertion.skill.referenced',
-            kind: 'skill.referenced',
+            type: 'skill.referenced',
             skill: 'dyno-debug',
           },
           {
             id: 'assertion.http.not-called',
-            kind: 'http.notCalled',
+            type: 'http.notCalled',
             endpointId: 'endpoint.test.getUser',
           },
           {
             id: 'assertion.artifact.contains',
-            kind: 'artifact.contains',
+            type: 'artifact.contains',
             path: 'output.txt',
             text: 'expected text',
           },
@@ -181,14 +181,14 @@ describe('renderAssertionDetails', () => {
       assertionResults: [
         {
           assertionId: 'assertion.tool.called',
-          kind: 'tool.called',
+          type: 'tool.called',
           passed: false,
           message:
             'Expected tool "read_file" with path "missing.txt" to be called, but observed none.',
         },
         {
           assertionId: 'assertion.tool.not-called',
-          kind: 'tool.notCalled',
+          type: 'tool.notCalled',
           passed: false,
           message:
             'Expected no shell command matching includes "pnpm test", but observed a matching command.',
@@ -196,14 +196,14 @@ describe('renderAssertionDetails', () => {
         },
         {
           assertionId: 'assertion.skill.referenced',
-          kind: 'skill.referenced',
+          type: 'skill.referenced',
           passed: false,
           message:
             'Expected skill "dyno-debug" to be referenced, but no reference to its SKILL.md was observed.',
         },
         {
           assertionId: 'assertion.http.not-called',
-          kind: 'http.notCalled',
+          type: 'http.notCalled',
           passed: false,
           message:
             'Expected HTTP endpoint "endpoint.test.getUser" not to be called, but observed a matching request.',
@@ -211,7 +211,7 @@ describe('renderAssertionDetails', () => {
         },
         {
           assertionId: 'assertion.artifact.contains',
-          kind: 'artifact.contains',
+          type: 'artifact.contains',
           passed: false,
           message: 'Expected artifact "output.txt" to contain "expected text".',
         },
@@ -258,7 +258,7 @@ describe('renderAssertionDetails', () => {
         assertions: [
           {
             id: 'assertion.artifact.exists',
-            kind: 'artifact.exists',
+            type: 'artifact.exists',
             path: 'created.txt',
           },
         ],
@@ -271,7 +271,7 @@ describe('renderAssertionDetails', () => {
       assertionResults: [
         {
           assertionId: 'assertion.artifact.exists',
-          kind: 'artifact.exists',
+          type: 'artifact.exists',
           passed: false,
           message: 'Expected artifact "created.txt" to exist.',
           evidence: {kind: 'missing', path: join(workDir, 'created.txt')},
@@ -306,9 +306,9 @@ describe('renderAssertionDetails', () => {
         assertions: [
           {
             id: 'assertion.command.called',
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'git',
-            matcher: {args: ['commit']},
+            command: {args: ['commit']},
           },
         ],
       },
@@ -319,7 +319,7 @@ describe('renderAssertionDetails', () => {
       assertionResults: [
         {
           assertionId: 'assertion.command.called',
-          kind: 'command.called',
+          type: 'command.called',
           passed: false,
           message:
             'Expected command:\n  git with args ["commit"]\nObserved commands:\n  1. git status\n  2. git add README.md\nNo observed git command included arg "commit".',
@@ -358,9 +358,9 @@ describe('renderAssertionDetails', () => {
         assertions: [
           {
             id: 'assertion.command.called',
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'git',
-            matcher: {args: ['commit']},
+            command: {args: ['commit']},
           },
         ],
       },
@@ -371,7 +371,7 @@ describe('renderAssertionDetails', () => {
       assertionResults: [
         {
           assertionId: 'assertion.command.called',
-          kind: 'command.called',
+          type: 'command.called',
           passed: false,
           message:
             'Expected command:\n  git with args ["commit"]\nObserved commands:\n  1. git status\n  2. git add README.md\nNo observed git command included arg "commit".',
@@ -419,17 +419,17 @@ describe('renderAssertionDetails', () => {
         assertions: [
           {
             id: 'assertion.anyof.read',
-            kind: 'anyOf',
+            type: 'anyOf',
             steps: [
               {
-                kind: 'tool.called',
-                toolKind: 'read_file',
-                pathMatcher: {path: 'package.json'},
+                type: 'tool.called',
+                tool: 'read_file',
+                path: 'package.json',
               },
               {
-                kind: 'command.called',
+                type: 'command.called',
                 executable: 'cat',
-                matcher: {args: ['package.json']},
+                command: {args: ['package.json']},
               },
             ],
           },
@@ -442,7 +442,7 @@ describe('renderAssertionDetails', () => {
       assertionResults: [
         {
           assertionId: 'assertion.anyof.read',
-          kind: 'anyOf',
+          type: 'anyOf',
           passed: false,
           message:
             'Expected anyOf to match at least one branch, but all 2 branches failed.\nBranch #1: Expected tool "read_file" with path "package.json" to be called, but observed none.\nBranch #2: Expected command:\n  cat with args ["package.json"]\nObserved commands:\n  1. pwd\nNo observed cat command included arg "package.json".',
@@ -503,22 +503,22 @@ describe('renderAssertionDetails', () => {
         assertions: [
           {
             id: 'assertion.sequence',
-            kind: 'sequence.inOrder',
+            type: 'sequence.inOrder',
             steps: [
               {
-                kind: 'command.called',
+                type: 'command.called',
                 executable: 'git',
-                matcher: {args: ['status']},
+                command: {args: ['status']},
               },
               {
-                kind: 'command.called',
+                type: 'command.called',
                 executable: 'git',
-                matcher: {argsInOrder: ['add', 'README.md']},
+                command: {argsInOrder: ['add', 'README.md']},
               },
               {
-                kind: 'command.called',
+                type: 'command.called',
                 executable: 'git',
-                matcher: {args: ['commit']},
+                command: {args: ['commit']},
               },
             ],
           },
@@ -531,7 +531,7 @@ describe('renderAssertionDetails', () => {
       assertionResults: [
         {
           assertionId: 'assertion.sequence',
-          kind: 'sequence.inOrder',
+          type: 'sequence.inOrder',
           passed: false,
           message:
             'Expected ordered step #3 (command.called(git)) to match an observed tool event, but none was observed after the previous step.',

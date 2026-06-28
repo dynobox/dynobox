@@ -330,7 +330,7 @@ export default defineDyno({
     expect(scenario.endpoints[0]!.id).toBe('endpoint.happy-path.getUser');
     expect(scenario.assertions[0]).toMatchObject({
       id: 'assertion.happy-path.0',
-      kind: 'http.called',
+      type: 'http.called',
       endpointId: 'endpoint.happy-path.getUser',
       status: 200,
     });
@@ -429,25 +429,25 @@ export default defineDyno({
     expect(ir.scenarios[0]!.assertions).toEqual([
       {
         id: 'assertion.uses-shell.0',
-        kind: 'tool.called',
-        toolKind: 'shell',
+        type: 'tool.called',
+        tool: 'shell',
       },
       {
         id: 'assertion.uses-shell.1',
-        kind: 'tool.called',
-        toolKind: 'shell',
-        matcher: {includes: 'pnpm test'},
+        type: 'tool.called',
+        tool: 'shell',
+        command: {includes: 'pnpm test'},
       },
       {
         id: 'assertion.uses-shell.2',
-        kind: 'tool.called',
-        toolKind: 'read_file',
-        pathMatcher: {path: 'README.md'},
+        type: 'tool.called',
+        tool: 'read_file',
+        path: 'README.md',
       },
       {
         id: 'assertion.uses-shell.3',
-        kind: 'tool.called',
-        toolKind: 'edit_file',
+        type: 'tool.called',
+        tool: 'edit_file',
       },
     ]);
     expect(irSchema.parse(ir)).toEqual(ir);
@@ -479,32 +479,32 @@ export default defineDyno({
     expect(ir.scenarios[0]!.assertions).toEqual([
       {
         id: 'assertion.uses-commands.0',
-        kind: 'command.called',
+        type: 'command.called',
         executable: 'git',
-        matcher: {
+        command: {
           args: ['status'],
           argsMatching: [{source: '^--short$', flags: ''}],
         },
       },
       {
         id: 'assertion.uses-commands.1',
-        kind: 'command.notCalled',
+        type: 'command.notCalled',
         executable: 'git',
-        matcher: {args: ['push']},
+        command: {args: ['push']},
       },
       {
         id: 'assertion.uses-commands.2',
-        kind: 'sequence.inOrder',
+        type: 'sequence.inOrder',
         steps: [
           {
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'git',
-            matcher: {args: ['status']},
+            command: {args: ['status']},
           },
           {
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'git',
-            matcher: {argsInOrder: ['add', 'README.md']},
+            command: {argsInOrder: ['add', 'README.md']},
           },
         ],
       },
@@ -540,21 +540,21 @@ export default defineDyno({
     expect(ir.scenarios[0]!.assertions).toEqual([
       {
         id: 'assertion.flexible-file-read.0',
-        kind: 'anyOf',
+        type: 'anyOf',
         steps: [
           {
-            kind: 'http.called',
+            type: 'http.called',
             endpointId: 'endpoint.flexible-file-read.package',
           },
           {
-            kind: 'tool.called',
-            toolKind: 'read_file',
-            pathMatcher: {path: 'package.json'},
+            type: 'tool.called',
+            tool: 'read_file',
+            path: 'package.json',
           },
           {
-            kind: 'command.called',
+            type: 'command.called',
             executable: 'cat',
-            matcher: {args: ['package.json']},
+            command: {args: ['package.json']},
           },
         ],
       },
@@ -668,11 +668,11 @@ export default defineDyno({
             assertions: [
               {
                 id: 'assertion.unsafe-verification-branch.0',
-                kind: 'anyOf',
+                type: 'anyOf',
                 steps: [
-                  {kind: 'artifact.exists', path: 'created.txt'},
+                  {type: 'artifact.exists', path: 'created.txt'},
                   {
-                    kind: 'verify.command',
+                    type: 'verify.command',
                     command: 'touch created.txt',
                     exitCode: 0,
                   },
@@ -699,11 +699,11 @@ export default defineDyno({
             assertions: [
               {
                 id: 'assertion.unsupported-anyof-sequence-step.0',
-                kind: 'sequence.inOrder',
+                type: 'sequence.inOrder',
                 steps: [
                   {
-                    kind: 'anyOf',
-                    steps: [{kind: 'tool.called', toolKind: 'shell'}],
+                    type: 'anyOf',
+                    steps: [{type: 'tool.called', tool: 'shell'}],
                   },
                 ],
               },
@@ -777,13 +777,13 @@ export default defineDyno({
     expect(ir.scenarios[0]!.assertions).toEqual([
       {
         id: 'assertion.verifies-output.0',
-        kind: 'verify.command',
+        type: 'verify.command',
         command: 'dynobox validate out.dyno.ts',
         exitCode: 0,
       },
       {
         id: 'assertion.verifies-output.1',
-        kind: 'verify.command',
+        type: 'verify.command',
         command: 'tsc --noEmit out.ts',
         exitCode: 0,
         stdout: {includes: 'valid'},
@@ -809,7 +809,7 @@ export default defineDyno({
             assertions: [
               {
                 id: 'assertion.verifies-output.0',
-                kind: 'verify.command',
+                type: 'verify.command',
                 command: 'false',
               },
             ],
@@ -848,61 +848,61 @@ export default defineDyno({
     expect(ir.scenarios[0]!.assertions).toEqual([
       {
         id: 'assertion.skill-flow.0',
-        kind: 'tool.notCalled',
-        toolKind: 'shell',
-        matcher: {includes: 'git push'},
+        type: 'tool.notCalled',
+        tool: 'shell',
+        command: {includes: 'git push'},
       },
       {
         id: 'assertion.skill-flow.1',
-        kind: 'tool.notCalled',
-        toolKind: 'read_file',
-        pathMatcher: {path: 'secrets.txt'},
+        type: 'tool.notCalled',
+        tool: 'read_file',
+        path: 'secrets.txt',
       },
       {
         id: 'assertion.skill-flow.2',
-        kind: 'artifact.exists',
+        type: 'artifact.exists',
         path: 'CHANGELOG.md',
       },
       {
         id: 'assertion.skill-flow.3',
-        kind: 'artifact.contains',
+        type: 'artifact.contains',
         path: 'CHANGELOG.md',
         text: 'dynobox@0.0.4',
       },
       {
         id: 'assertion.skill-flow.4',
-        kind: 'transcript.contains',
+        type: 'transcript.contains',
         text: 'EOTP',
       },
       {
         id: 'assertion.skill-flow.5',
-        kind: 'finalMessage.contains',
+        type: 'finalMessage.contains',
         text: 'working tree is dirty',
       },
       {
         id: 'assertion.skill-flow.6',
-        kind: 'sequence.inOrder',
+        type: 'sequence.inOrder',
         steps: [
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'git status'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'git status'},
           },
           {
-            kind: 'tool.called',
-            toolKind: 'read_file',
-            pathMatcher: {path: 'package.json'},
+            type: 'tool.called',
+            tool: 'read_file',
+            path: 'package.json',
           },
           {
-            kind: 'tool.called',
-            toolKind: 'shell',
-            matcher: {includes: 'git commit'},
+            type: 'tool.called',
+            tool: 'shell',
+            command: {includes: 'git commit'},
           },
         ],
       },
       {
         id: 'assertion.skill-flow.7',
-        kind: 'skill.referenced',
+        type: 'skill.referenced',
         skill: 'commit',
       },
     ]);
@@ -946,17 +946,17 @@ export default defineDyno({
         {
           id: 'assertion.yaml-shaped.reads-package',
           label: 'reads package.json',
-          kind: 'tool.called',
-          toolKind: 'shell',
-          matcher: {includes: 'package.json'},
+          type: 'tool.called',
+          tool: 'shell',
+          command: {includes: 'package.json'},
         },
         {
           id: 'assertion.yaml-shaped.1',
-          kind: 'artifact.contains',
+          type: 'artifact.contains',
         },
         {
           id: 'assertion.yaml-shaped.2',
-          kind: 'verify.command',
+          type: 'verify.command',
           command: 'node --version',
           exitCode: 0,
           stdout: {startsWith: 'v'},
@@ -1161,12 +1161,12 @@ export default defineDyno({
           assertions: [
             {
               id: 'assertion.invalid-anyof.0',
-              kind: 'anyOf',
+              type: 'anyOf',
               steps: [
                 {
-                  kind: 'tool.called',
-                  toolKind: 'read_file',
-                  matcher: {includes: 'package.json'},
+                  type: 'tool.called',
+                  tool: 'read_file',
+                  command: {includes: 'package.json'},
                 },
               ],
             },
@@ -1180,7 +1180,7 @@ export default defineDyno({
     expect(
       result.error.issues.filter(
         (issue) =>
-          issue.path.join('.') === 'scenarios.0.assertions.0.steps.0.matcher',
+          issue.path.join('.') === 'scenarios.0.assertions.0.steps.0.command',
       ),
     ).toHaveLength(1);
   });
@@ -1235,8 +1235,8 @@ export default defineDyno({
               {
                 "endpointId": "endpoint.lookup-package-metadata.getPrettierMetadata",
                 "id": "assertion.lookup-package-metadata.0",
-                "kind": "http.called",
                 "status": 200,
+                "type": "http.called",
               },
             ],
             "endpoints": [
@@ -1275,7 +1275,7 @@ export default defineDyno({
               {
                 "endpointId": "endpoint.avoid-unrelated-lookup.getLeftPadMetadata",
                 "id": "assertion.avoid-unrelated-lookup.0",
-                "kind": "http.notCalled",
+                "type": "http.notCalled",
               },
             ],
             "endpoints": [
@@ -1314,14 +1314,14 @@ export default defineDyno({
               {
                 "endpointId": "endpoint.compare-two-packages.getPrettierMetadata",
                 "id": "assertion.compare-two-packages.0",
-                "kind": "http.called",
                 "status": 200,
+                "type": "http.called",
               },
               {
                 "endpointId": "endpoint.compare-two-packages.getTypescriptMetadata",
                 "id": "assertion.compare-two-packages.1",
-                "kind": "http.called",
                 "status": 200,
+                "type": "http.called",
               },
             ],
             "endpoints": [
@@ -1356,7 +1356,7 @@ export default defineDyno({
             "setup": [],
           },
         ],
-        "version": "0.2",
+        "version": "0.3",
       }
     `);
   });
@@ -1386,7 +1386,7 @@ export default defineDyno({
     ]);
     expect(
       scenario.assertions.map((a) => {
-        if (a.kind !== 'http.called' && a.kind !== 'http.notCalled') {
+        if (a.type !== 'http.called' && a.type !== 'http.notCalled') {
           throw new Error('Unexpected non-HTTP assertion');
         }
         return a.endpointId;

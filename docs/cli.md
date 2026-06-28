@@ -266,7 +266,7 @@ output after jobs complete.
 
 ## JSON Reporter
 
-Every JSON reporter object includes `"schema": "dynobox.report.v1"` and a
+Every JSON reporter object includes `"schema": "dynobox.report.v2"` and a
 `type` field.
 
 Job records include:
@@ -284,7 +284,7 @@ Job records include:
 - `setup.commands`
 - `harnessOutput.exitCode` and `harnessOutput.durationMs` when the harness ran
 - `observations.toolEventCount` and `observations.httpEventCount`
-- `assertions`, with `assertionId`, optional `label`, `kind`, `passed`, and
+- `assertions`, with `assertionId`, optional `label`, `type`, `passed`, and
   `message`
 
 The summary record includes:

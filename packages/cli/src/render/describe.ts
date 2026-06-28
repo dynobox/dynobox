@@ -23,71 +23,71 @@ const SHELL_PREVIEW_MAX = 42;
  * `sequence.inOrder(2 steps)`, `artifact.exists(README.md)`.
  */
 export function describeAssertion(assertion: IrAssertion): string {
-  if (assertion.kind === 'tool.called') {
-    if (assertion.matcher !== undefined) {
-      return `tool.called(${assertion.toolKind}, ${describeShellMatcher(assertion.matcher)})`;
+  if (assertion.type === 'tool.called') {
+    if (assertion.command !== undefined) {
+      return `tool.called(${assertion.tool}, ${describeShellMatcher(assertion.command)})`;
     }
-    if (assertion.pathMatcher !== undefined) {
-      return `tool.called(${assertion.toolKind}, path: ${assertion.pathMatcher.path})`;
+    if (assertion.path !== undefined) {
+      return `tool.called(${assertion.tool}, path: ${assertion.path})`;
     }
-    return `tool.called(${assertion.toolKind})`;
+    return `tool.called(${assertion.tool})`;
   }
 
-  if (assertion.kind === 'tool.notCalled') {
-    if (assertion.matcher !== undefined) {
-      return `tool.notCalled(${assertion.toolKind}, ${describeShellMatcher(assertion.matcher)})`;
+  if (assertion.type === 'tool.notCalled') {
+    if (assertion.command !== undefined) {
+      return `tool.notCalled(${assertion.tool}, ${describeShellMatcher(assertion.command)})`;
     }
-    if (assertion.pathMatcher !== undefined) {
-      return `tool.notCalled(${assertion.toolKind}, path: ${assertion.pathMatcher.path})`;
+    if (assertion.path !== undefined) {
+      return `tool.notCalled(${assertion.tool}, path: ${assertion.path})`;
     }
-    return `tool.notCalled(${assertion.toolKind})`;
+    return `tool.notCalled(${assertion.tool})`;
   }
 
-  if (assertion.kind === 'command.called') {
-    return assertion.matcher === undefined
+  if (assertion.type === 'command.called') {
+    return assertion.command === undefined
       ? `command.called(${assertion.executable})`
-      : `command.called(${assertion.executable}, ${describeCommandMatcher(assertion.matcher)})`;
+      : `command.called(${assertion.executable}, ${describeCommandMatcher(assertion.command)})`;
   }
 
-  if (assertion.kind === 'command.notCalled') {
-    return assertion.matcher === undefined
+  if (assertion.type === 'command.notCalled') {
+    return assertion.command === undefined
       ? `command.notCalled(${assertion.executable})`
-      : `command.notCalled(${assertion.executable}, ${describeCommandMatcher(assertion.matcher)})`;
+      : `command.notCalled(${assertion.executable}, ${describeCommandMatcher(assertion.command)})`;
   }
 
-  if (assertion.kind === 'verify.command') {
+  if (assertion.type === 'verify.command') {
     return `verify.command(${assertion.command})`;
   }
 
-  if (assertion.kind === 'sequence.inOrder') {
+  if (assertion.type === 'sequence.inOrder') {
     return `sequence.inOrder(${assertion.steps.length} steps)`;
   }
 
-  if (assertion.kind === 'anyOf') {
+  if (assertion.type === 'anyOf') {
     return `anyOf(${assertion.steps.length} branches)`;
   }
 
-  if (assertion.kind === 'skill.referenced') {
+  if (assertion.type === 'skill.referenced') {
     return `skill.referenced(${assertion.skill})`;
   }
 
-  if (assertion.kind === 'artifact.exists') {
+  if (assertion.type === 'artifact.exists') {
     return `artifact.exists(${assertion.path})`;
   }
 
-  if (assertion.kind === 'artifact.contains') {
+  if (assertion.type === 'artifact.contains') {
     return `artifact.contains(${assertion.path})`;
   }
 
-  if (assertion.kind === 'transcript.contains') {
+  if (assertion.type === 'transcript.contains') {
     return 'transcript.contains';
   }
 
-  if (assertion.kind === 'finalMessage.contains') {
+  if (assertion.type === 'finalMessage.contains') {
     return 'finalMessage.contains';
   }
 
-  if (assertion.kind === 'http.called') {
+  if (assertion.type === 'http.called') {
     return assertion.status === undefined
       ? `http.called(${assertion.endpointId})`
       : `http.called(${assertion.endpointId}, status: ${assertion.status})`;
@@ -101,35 +101,35 @@ export function describeAssertion(assertion: IrAssertion): string {
  * `expected  …` lines.
  */
 export function describeExpectation(assertion: IrAssertion): string {
-  if (assertion.kind === 'tool.notCalled') {
-    if (assertion.matcher !== undefined) {
-      return `no ${describeShellMatcherExpectation(assertion.matcher)}`;
+  if (assertion.type === 'tool.notCalled') {
+    if (assertion.command !== undefined) {
+      return `no ${describeShellMatcherExpectation(assertion.command)}`;
     }
-    if (assertion.pathMatcher !== undefined) {
-      return `no ${assertion.toolKind} tool call for path "${assertion.pathMatcher.path}"`;
+    if (assertion.path !== undefined) {
+      return `no ${assertion.tool} tool call for path "${assertion.path}"`;
     }
-    return `no ${assertion.toolKind} tool call`;
+    return `no ${assertion.tool} tool call`;
   }
 
-  if (assertion.kind === 'sequence.inOrder') {
+  if (assertion.type === 'sequence.inOrder') {
     return assertion.steps.map(describeToolStepExpectation).join(' before ');
   }
 
-  if (assertion.kind === 'anyOf') {
+  if (assertion.type === 'anyOf') {
     return assertion.steps.map(describeAssertionNodeExpectation).join(' or ');
   }
 
-  if (assertion.kind === 'command.notCalled') {
-    return assertion.matcher === undefined
+  if (assertion.type === 'command.notCalled') {
+    return assertion.command === undefined
       ? `no ${assertion.executable} command`
-      : `no ${assertion.executable} command with ${describeCommandMatcher(assertion.matcher)}`;
+      : `no ${assertion.executable} command with ${describeCommandMatcher(assertion.command)}`;
   }
 
-  if (assertion.kind === 'skill.referenced') {
+  if (assertion.type === 'skill.referenced') {
     return `skill "${assertion.skill}" instruction file reference`;
   }
 
-  if (assertion.kind === 'verify.command') {
+  if (assertion.type === 'verify.command') {
     const checks: string[] = [];
     if (assertion.exitCode !== undefined) {
       checks.push(`exit code ${assertion.exitCode}`);
@@ -143,28 +143,28 @@ export function describeExpectation(assertion: IrAssertion): string {
     return `verification command "${assertion.command}" with ${checks.join(', ')}`;
   }
 
-  if (assertion.kind === 'artifact.exists') {
+  if (assertion.type === 'artifact.exists') {
     return `artifact "${assertion.path}" to exist`;
   }
 
-  if (assertion.kind === 'artifact.contains') {
+  if (assertion.type === 'artifact.contains') {
     return `artifact "${assertion.path}" containing "${assertion.text}"`;
   }
 
-  if (assertion.kind === 'transcript.contains') {
+  if (assertion.type === 'transcript.contains') {
     return `transcript containing "${assertion.text}"`;
   }
 
-  if (assertion.kind === 'finalMessage.contains') {
+  if (assertion.type === 'finalMessage.contains') {
     return `final message containing "${assertion.text}"`;
   }
 
-  if (assertion.kind !== 'tool.called') return describeAssertion(assertion);
-  if (assertion.pathMatcher !== undefined) {
-    return `${assertion.toolKind} tool call for path "${assertion.pathMatcher.path}"`;
+  if (assertion.type !== 'tool.called') return describeAssertion(assertion);
+  if (assertion.path !== undefined) {
+    return `${assertion.tool} tool call for path "${assertion.path}"`;
   }
-  if (assertion.matcher === undefined) return `${assertion.toolKind} tool call`;
-  return describeShellMatcherExpectation(assertion.matcher);
+  if (assertion.command === undefined) return `${assertion.tool} tool call`;
+  return describeShellMatcherExpectation(assertion.command);
 }
 
 /**
@@ -200,22 +200,22 @@ export function isObservedCommand(
 }
 
 function describeToolStepExpectation(
-  step: Extract<IrAssertion, {kind: 'sequence.inOrder'}>['steps'][number],
+  step: Extract<IrAssertion, {type: 'sequence.inOrder'}>['steps'][number],
 ): string {
-  if (step.kind === 'command.called') {
-    return step.matcher === undefined
+  if (step.type === 'command.called') {
+    return step.command === undefined
       ? `${step.executable} command`
-      : `${step.executable} command with ${describeCommandMatcher(step.matcher)}`;
+      : `${step.executable} command with ${describeCommandMatcher(step.command)}`;
   }
-  if (step.pathMatcher !== undefined) {
-    return `${step.toolKind} tool call for path "${step.pathMatcher.path}"`;
+  if (step.path !== undefined) {
+    return `${step.tool} tool call for path "${step.path}"`;
   }
-  if (step.matcher === undefined) return `${step.toolKind} tool call`;
-  return describeShellMatcherExpectation(step.matcher);
+  if (step.command === undefined) return `${step.tool} tool call`;
+  return describeShellMatcherExpectation(step.command);
 }
 
 function describeAssertionNodeExpectation(
-  assertion: Extract<IrAssertion, {kind: 'anyOf'}>['steps'][number],
+  assertion: Extract<IrAssertion, {type: 'anyOf'}>['steps'][number],
 ): string {
   return describeExpectation(assertionBranchWithId(assertion));
 }
@@ -230,7 +230,7 @@ function describeShellMatcher(matcher: ShellCommandMatcher): string {
 
 function describeCommandMatcher(
   matcher: NonNullable<
-    Extract<IrAssertion, {kind: 'command.called'}>['matcher']
+    Extract<IrAssertion, {type: 'command.called'}>['command']
   >,
 ): string {
   return describeCommandMatcherText(matcher, {style: 'compact'});

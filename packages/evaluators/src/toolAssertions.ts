@@ -16,15 +16,15 @@ import {
 } from './shellMatcher.js';
 import type {AssertionResult, ToolEvent} from './types.js';
 
-type ToolCalledAssertion = Extract<IrAssertion, {kind: 'tool.called'}>;
+type ToolCalledAssertion = Extract<IrAssertion, {type: 'tool.called'}>;
 type ToolCalledStep = Omit<ToolCalledAssertion, 'id'>;
 type CommandCalledStep = Omit<
-  Extract<IrAssertion, {kind: 'command.called'}>,
+  Extract<IrAssertion, {type: 'command.called'}>,
   'id'
 >;
 type SequenceStep = ToolCalledStep | CommandCalledStep;
 type ToolNotCalledStep = Omit<
-  Extract<IrAssertion, {kind: 'tool.notCalled'}>,
+  Extract<IrAssertion, {type: 'tool.notCalled'}>,
   'id'
 >;
 
@@ -43,7 +43,7 @@ export function evaluateToolCalledAssertion(
   if (match.error !== undefined) {
     return {
       assertionId: assertion.id,
-      kind: assertion.kind,
+      type: assertion.type,
       passed: false,
       message: match.error,
     };
@@ -55,14 +55,14 @@ export function evaluateToolCalledAssertion(
 
   return {
     assertionId: assertion.id,
-    kind: assertion.kind,
+    type: assertion.type,
     passed: false,
     message: toolCalledFailMessage(assertion),
   };
 }
 
 export function evaluateToolNotCalledAssertion(
-  assertion: Extract<IrAssertion, {kind: 'tool.notCalled'}>,
+  assertion: Extract<IrAssertion, {type: 'tool.notCalled'}>,
   toolEvents: readonly ToolEvent[],
 ): AssertionResult {
   const match = findMatchingToolEvent(assertion, toolEvents);
@@ -70,7 +70,7 @@ export function evaluateToolNotCalledAssertion(
   if (match.error !== undefined) {
     return {
       assertionId: assertion.id,
-      kind: assertion.kind,
+      type: assertion.type,
       passed: false,
       message: match.error,
     };
@@ -79,7 +79,7 @@ export function evaluateToolNotCalledAssertion(
   if (match.event !== undefined) {
     return {
       assertionId: assertion.id,
-      kind: assertion.kind,
+      type: assertion.type,
       passed: false,
       message: toolNotCalledFailMessage(assertion),
       evidence: match.event,
@@ -90,7 +90,7 @@ export function evaluateToolNotCalledAssertion(
 }
 
 export function evaluateSequenceInOrder(
-  assertion: Extract<IrAssertion, {kind: 'sequence.inOrder'}>,
+  assertion: Extract<IrAssertion, {type: 'sequence.inOrder'}>,
   toolEvents: readonly ToolEvent[],
 ): AssertionResult {
   const observedCommands = extractObservedCommands(toolEvents);
@@ -111,7 +111,7 @@ export function evaluateSequenceInOrder(
     if (match.error !== undefined) {
       return {
         assertionId: assertion.id,
-        kind: assertion.kind,
+        type: assertion.type,
         passed: false,
         message: match.error,
       };
@@ -120,7 +120,7 @@ export function evaluateSequenceInOrder(
     if (match.event === undefined || match.nextCursor === undefined) {
       return {
         assertionId: assertion.id,
-        kind: assertion.kind,
+        type: assertion.type,
         passed: false,
         message: `Expected ordered step #${stepIndex + 1} (${describeSequenceStep(step)}) to match an observed tool event, but none was observed after the previous step.`,
         evidence: matchedEvents,
@@ -148,7 +148,7 @@ function findMatchingSequenceStep(
   nextCursor?: SequenceCursor;
   error?: string;
 } {
-  if (step.kind === 'command.called') {
+  if (step.type === 'command.called') {
     for (const command of observedCommands) {
       if (command.eventIndex < cursor.eventIndex) continue;
       if (
@@ -171,16 +171,16 @@ function findMatchingSequenceStep(
     return {};
   }
 
-  if (step.matcher !== undefined) {
-    const invalidRegex = validateRegexMatcher(step.matcher);
+  if (step.command !== undefined) {
+    const invalidRegex = validateRegexMatcher(step.command);
     if (invalidRegex !== undefined) return {error: invalidRegex};
   }
 
   for (let index = cursor.eventIndex; index < toolEvents.length; index += 1) {
     const event = toolEvents[index]!;
-    if (event.kind !== step.toolKind) continue;
+    if (event.kind !== step.tool) continue;
 
-    if (step.matcher === undefined) {
+    if (step.command === undefined) {
       if (
         index === cursor.eventIndex &&
         event.kind === 'shell' &&
@@ -189,10 +189,7 @@ function findMatchingSequenceStep(
         continue;
       }
 
-      if (
-        step.pathMatcher !== undefined &&
-        !toolEventMatchesPath(event, step.pathMatcher.path)
-      ) {
+      if (step.path !== undefined && !toolEventMatchesPath(event, step.path)) {
         continue;
       }
       return {
@@ -206,7 +203,7 @@ function findMatchingSequenceStep(
     const startAt = index === cursor.eventIndex ? cursor.shellOffset : 0;
     const match = shellCommandMatchPosition(
       event.command,
-      step.matcher,
+      step.command,
       startAt,
     );
     if (!match.passed) {
@@ -232,8 +229,8 @@ function findMatchingToolEvent(
   toolEvents: readonly ToolEvent[],
   startIndex = 0,
 ): {event?: ToolEvent; index?: number; error?: string} {
-  if (assertion.matcher !== undefined) {
-    const invalidRegex = validateRegexMatcher(assertion.matcher);
+  if (assertion.command !== undefined) {
+    const invalidRegex = validateRegexMatcher(assertion.command);
     if (invalidRegex !== undefined) return {error: invalidRegex};
   }
 
@@ -250,65 +247,65 @@ function toolEventMatchesAssertion(
   event: ToolEvent,
   assertion: ToolCalledStep | ToolNotCalledStep,
 ): boolean {
-  if (event.kind !== assertion.toolKind) return false;
-  if (assertion.pathMatcher !== undefined) {
-    return toolEventMatchesPath(event, assertion.pathMatcher.path);
+  if (event.kind !== assertion.tool) return false;
+  if (assertion.path !== undefined) {
+    return toolEventMatchesPath(event, assertion.path);
   }
-  if (assertion.matcher === undefined) return true;
+  if (assertion.command === undefined) return true;
   if (event.kind !== 'shell' || typeof event.command !== 'string') return false;
-  return shellCommandMatches(event.command, assertion.matcher).passed;
+  return shellCommandMatches(event.command, assertion.command).passed;
 }
 
 function toolCalledPassMessage(assertion: ToolCalledStep): string {
-  if (assertion.pathMatcher !== undefined) {
-    return `Observed tool "${assertion.toolKind}" with path "${assertion.pathMatcher.path}".`;
+  if (assertion.path !== undefined) {
+    return `Observed tool "${assertion.tool}" with path "${assertion.path}".`;
   }
-  if (assertion.matcher === undefined) {
-    return `Observed tool "${assertion.toolKind}".`;
+  if (assertion.command === undefined) {
+    return `Observed tool "${assertion.tool}".`;
   }
-  return `Observed shell command matching ${describeShellMatcher(assertion.matcher)}.`;
+  return `Observed shell command matching ${describeShellMatcher(assertion.command)}.`;
 }
 
 function toolCalledFailMessage(assertion: ToolCalledStep): string {
-  if (assertion.pathMatcher !== undefined) {
-    return `Expected tool "${assertion.toolKind}" with path "${assertion.pathMatcher.path}" to be called, but observed none.`;
+  if (assertion.path !== undefined) {
+    return `Expected tool "${assertion.tool}" with path "${assertion.path}" to be called, but observed none.`;
   }
-  if (assertion.matcher === undefined) {
-    return `Expected tool "${assertion.toolKind}" to be called, but observed none.`;
+  if (assertion.command === undefined) {
+    return `Expected tool "${assertion.tool}" to be called, but observed none.`;
   }
-  return `Expected shell command matching ${describeShellMatcher(assertion.matcher)}, but no matching shell command was observed.`;
+  return `Expected shell command matching ${describeShellMatcher(assertion.command)}, but no matching shell command was observed.`;
 }
 
 function toolNotCalledPassMessage(assertion: ToolNotCalledStep): string {
-  if (assertion.pathMatcher !== undefined) {
-    return `Observed no tool "${assertion.toolKind}" calls with path "${assertion.pathMatcher.path}".`;
+  if (assertion.path !== undefined) {
+    return `Observed no tool "${assertion.tool}" calls with path "${assertion.path}".`;
   }
-  if (assertion.matcher === undefined) {
-    return `Observed no tool "${assertion.toolKind}" calls.`;
+  if (assertion.command === undefined) {
+    return `Observed no tool "${assertion.tool}" calls.`;
   }
-  return `Observed no shell command matching ${describeShellMatcher(assertion.matcher)}.`;
+  return `Observed no shell command matching ${describeShellMatcher(assertion.command)}.`;
 }
 
 function toolNotCalledFailMessage(assertion: ToolNotCalledStep): string {
-  if (assertion.pathMatcher !== undefined) {
-    return `Expected tool "${assertion.toolKind}" not to be called with path "${assertion.pathMatcher.path}", but observed a matching call.`;
+  if (assertion.path !== undefined) {
+    return `Expected tool "${assertion.tool}" not to be called with path "${assertion.path}", but observed a matching call.`;
   }
-  if (assertion.matcher === undefined) {
-    return `Expected tool "${assertion.toolKind}" not to be called, but observed a matching call.`;
+  if (assertion.command === undefined) {
+    return `Expected tool "${assertion.tool}" not to be called, but observed a matching call.`;
   }
-  return `Expected no shell command matching ${describeShellMatcher(assertion.matcher)}, but observed a matching command.`;
+  return `Expected no shell command matching ${describeShellMatcher(assertion.command)}, but observed a matching command.`;
 }
 
 function describeToolStep(step: ToolCalledStep): string {
-  if (step.pathMatcher !== undefined) {
-    return `tool.called(${step.toolKind}, path "${step.pathMatcher.path}")`;
+  if (step.path !== undefined) {
+    return `tool.called(${step.tool}, path "${step.path}")`;
   }
-  if (step.matcher === undefined) return `tool.called(${step.toolKind})`;
-  return `tool.called(${step.toolKind}, ${describeShellMatcher(step.matcher)})`;
+  if (step.command === undefined) return `tool.called(${step.tool})`;
+  return `tool.called(${step.tool}, ${describeShellMatcher(step.command)})`;
 }
 
 function describeSequenceStep(step: SequenceStep): string {
-  return step.kind === 'command.called'
+  return step.type === 'command.called'
     ? describeCommandStep(step)
     : describeToolStep(step);
 }

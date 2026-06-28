@@ -14,7 +14,7 @@ import {
 import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/httpMethod.js';
 
-export const IR_VERSION = '0.2' as const;
+export const IR_VERSION = '0.3' as const;
 
 export const irVersionSchema = z.literal(IR_VERSION);
 
@@ -23,15 +23,6 @@ export const irEndpointSchema = z.object({
   key: z.string().min(1),
   method: z.enum(HTTP_METHODS),
   url: z.url(),
-  headers: z.record(z.string(), z.string()).optional(),
-  body: z.unknown().optional(),
-  response: z
-    .object({
-      status: z.number().int().optional(),
-      headers: z.record(z.string(), z.string()).optional(),
-      body: z.unknown().optional(),
-    })
-    .optional(),
 });
 
 export const irHarnessConfigSchema = z.object({
@@ -48,10 +39,6 @@ const shellCommandMatcherSchema = z.custom<ShellCommandMatcher>(
 );
 
 const textMatcherSchema = shellCommandMatcherSchema;
-
-const toolPathMatcherSchema = z.object({
-  path: z.string().min(1),
-});
 
 const regexPatternSchema = z.object({
   source: z.string(),
@@ -72,7 +59,7 @@ const irAssertionBaseSchema = z.object({
 });
 
 const irHttpCalledAssertionNodeSchema = z.object({
-  kind: z.literal('http.called'),
+  type: z.literal('http.called'),
   endpointId: z.string().min(1),
   status: z.number().int().optional(),
 });
@@ -82,7 +69,7 @@ const irHttpCalledAssertionSchema = irAssertionBaseSchema.merge(
 );
 
 const irHttpNotCalledAssertionNodeSchema = z.object({
-  kind: z.literal('http.notCalled'),
+  type: z.literal('http.notCalled'),
   endpointId: z.string().min(1),
 });
 
@@ -91,10 +78,10 @@ const irHttpNotCalledAssertionSchema = irAssertionBaseSchema.merge(
 );
 
 const irToolCalledAssertionNodeSchema = z.object({
-  kind: z.literal('tool.called'),
-  toolKind: z.enum(TOOL_KINDS),
-  matcher: shellCommandMatcherSchema.optional(),
-  pathMatcher: toolPathMatcherSchema.optional(),
+  type: z.literal('tool.called'),
+  tool: z.enum(TOOL_KINDS),
+  command: shellCommandMatcherSchema.optional(),
+  path: z.string().min(1).optional(),
 });
 
 const irToolCalledAssertionSchema = irAssertionBaseSchema.merge(
@@ -102,10 +89,10 @@ const irToolCalledAssertionSchema = irAssertionBaseSchema.merge(
 );
 
 const irToolNotCalledAssertionNodeSchema = z.object({
-  kind: z.literal('tool.notCalled'),
-  toolKind: z.enum(TOOL_KINDS),
-  matcher: shellCommandMatcherSchema.optional(),
-  pathMatcher: toolPathMatcherSchema.optional(),
+  type: z.literal('tool.notCalled'),
+  tool: z.enum(TOOL_KINDS),
+  command: shellCommandMatcherSchema.optional(),
+  path: z.string().min(1).optional(),
 });
 
 const irToolNotCalledAssertionSchema = irAssertionBaseSchema.merge(
@@ -113,9 +100,9 @@ const irToolNotCalledAssertionSchema = irAssertionBaseSchema.merge(
 );
 
 const irCommandCalledAssertionNodeSchema = z.object({
-  kind: z.literal('command.called'),
+  type: z.literal('command.called'),
   executable: z.string().min(1),
-  matcher: commandMatcherSchema.optional(),
+  command: commandMatcherSchema.optional(),
 });
 
 const irCommandCalledAssertionSchema = irAssertionBaseSchema.merge(
@@ -123,9 +110,9 @@ const irCommandCalledAssertionSchema = irAssertionBaseSchema.merge(
 );
 
 const irCommandNotCalledAssertionNodeSchema = z.object({
-  kind: z.literal('command.notCalled'),
+  type: z.literal('command.notCalled'),
   executable: z.string().min(1),
-  matcher: commandMatcherSchema.optional(),
+  command: commandMatcherSchema.optional(),
 });
 
 const irCommandNotCalledAssertionSchema = irAssertionBaseSchema.merge(
@@ -134,7 +121,7 @@ const irCommandNotCalledAssertionSchema = irAssertionBaseSchema.merge(
 
 const irVerifyCommandAssertionSchema = irAssertionBaseSchema.merge(
   z.object({
-    kind: z.literal('verify.command'),
+    type: z.literal('verify.command'),
     command: z.string().min(1),
     exitCode: z.number().int().optional(),
     stdout: textMatcherSchema.optional(),
@@ -142,13 +129,13 @@ const irVerifyCommandAssertionSchema = irAssertionBaseSchema.merge(
   }),
 );
 
-const irSequenceStepSchema = z.discriminatedUnion('kind', [
+const irSequenceStepSchema = z.discriminatedUnion('type', [
   irToolCalledAssertionNodeSchema,
   irCommandCalledAssertionNodeSchema,
 ]);
 
 const irArtifactExistsAssertionNodeSchema = z.object({
-  kind: z.literal('artifact.exists'),
+  type: z.literal('artifact.exists'),
   path: z.string().min(1),
 });
 
@@ -157,7 +144,7 @@ const irArtifactExistsAssertionSchema = irAssertionBaseSchema.merge(
 );
 
 const irArtifactContainsAssertionNodeSchema = z.object({
-  kind: z.literal('artifact.contains'),
+  type: z.literal('artifact.contains'),
   path: z.string().min(1),
   text: z.string(),
 });
@@ -167,7 +154,7 @@ const irArtifactContainsAssertionSchema = irAssertionBaseSchema.merge(
 );
 
 const irTranscriptContainsAssertionNodeSchema = z.object({
-  kind: z.literal('transcript.contains'),
+  type: z.literal('transcript.contains'),
   text: z.string(),
 });
 
@@ -176,7 +163,7 @@ const irTranscriptContainsAssertionSchema = irAssertionBaseSchema.merge(
 );
 
 const irFinalMessageContainsAssertionNodeSchema = z.object({
-  kind: z.literal('finalMessage.contains'),
+  type: z.literal('finalMessage.contains'),
   text: z.string(),
 });
 
@@ -186,13 +173,13 @@ const irFinalMessageContainsAssertionSchema = irAssertionBaseSchema.merge(
 
 const irSequenceInOrderAssertionSchema = irAssertionBaseSchema.merge(
   z.object({
-    kind: z.literal('sequence.inOrder'),
+    type: z.literal('sequence.inOrder'),
     steps: z.array(irSequenceStepSchema).min(1),
   }),
 );
 
 const irSkillReferencedAssertionNodeSchema = z.object({
-  kind: z.literal('skill.referenced'),
+  type: z.literal('skill.referenced'),
   skill: z.string().min(1),
 });
 
@@ -201,10 +188,10 @@ const irSkillReferencedAssertionSchema = irAssertionBaseSchema.merge(
 );
 
 const irToolMatcherOptions = {
-  kindField: 'kind' as const,
-  toolKindField: 'toolKind',
-  shellMatcherField: 'matcher',
-  pathMatcherField: 'pathMatcher',
+  kindField: 'type' as const,
+  toolKindField: 'tool',
+  shellMatcherField: 'command',
+  pathMatcherField: 'path',
   messages: TOOL_MATCHER_MESSAGES,
 };
 
@@ -233,7 +220,7 @@ function validateIrSequenceStep(
 }
 
 const irAssertionNodeSchema = z
-  .discriminatedUnion('kind', [
+  .discriminatedUnion('type', [
     irHttpCalledAssertionNodeSchema,
     irHttpNotCalledAssertionNodeSchema,
     irToolCalledAssertionNodeSchema,
@@ -252,13 +239,13 @@ const irAssertionNodeSchema = z
 
 const irAnyOfAssertionSchema = irAssertionBaseSchema.merge(
   z.object({
-    kind: z.literal('anyOf'),
+    type: z.literal('anyOf'),
     steps: z.array(irAssertionNodeSchema).min(1),
   }),
 );
 
 export const irAssertionSchema = z
-  .discriminatedUnion('kind', [
+  .discriminatedUnion('type', [
     irHttpCalledAssertionSchema,
     irHttpNotCalledAssertionSchema,
     irToolCalledAssertionSchema,
@@ -275,12 +262,12 @@ export const irAssertionSchema = z
     irSkillReferencedAssertionSchema,
   ])
   .superRefine((assertion, ctx) => {
-    if (isToolAssertionKind(assertion.kind)) {
+    if (isToolAssertionKind(assertion.type)) {
       validateToolAssertionNode(assertion, ctx, [], irToolMatcherOptions);
     }
 
     if (
-      assertion.kind === 'verify.command' &&
+      assertion.type === 'verify.command' &&
       assertion.exitCode === undefined &&
       assertion.stdout === undefined &&
       assertion.stderr === undefined
@@ -292,7 +279,7 @@ export const irAssertionSchema = z
       });
     }
 
-    if (assertion.kind === 'sequence.inOrder') {
+    if (assertion.type === 'sequence.inOrder') {
       assertion.steps.forEach((step, index) => {
         validateIrSequenceStep(step, ctx, ['steps', index]);
       });

@@ -3,11 +3,11 @@ import {describe, expect, it} from 'vitest';
 import {
   RUN_UPLOAD_LIMITS,
   RUN_UPLOAD_SCHEMA_VERSION,
-  type RunUploadCreateInputV1,
-  RunUploadV1,
+  type RunUploadCreateInputV2,
+  RunUploadV2,
 } from './index.js';
 
-function validPayload(): RunUploadCreateInputV1 {
+function validPayload(): RunUploadCreateInputV2 {
   return {
     schemaVersion: RUN_UPLOAD_SCHEMA_VERSION,
     createdAt: '2026-05-30T00:00:00.000Z',
@@ -54,16 +54,16 @@ function validPayload(): RunUploadCreateInputV1 {
               {
                 assertionId: 'assertion.login.0',
                 label: 'Shows login form',
-                kind: 'finalMessage.includes',
+                type: 'finalMessage.contains',
                 passed: false,
                 message: 'Expected final message to include "login".',
                 definition: {
-                  kind: 'sequence.inOrder',
+                  type: 'sequence.inOrder',
                   steps: [
                     {
-                      kind: 'tool.called',
-                      toolKind: 'shell',
-                      matcher: {includes: 'pnpm test'},
+                      type: 'tool.called',
+                      tool: 'shell',
+                      command: {includes: 'pnpm test'},
                     },
                   ],
                 },
@@ -74,7 +74,7 @@ function validPayload(): RunUploadCreateInputV1 {
                   children: [
                     {
                       index: 1,
-                      kind: 'tool.called',
+                      type: 'tool.called',
                       title: 'tool.called(shell, includes: pnpm test)',
                       expectation: 'shell command including "pnpm test"',
                       observed: null,
@@ -105,11 +105,11 @@ function validDyno(): ValidDyno {
   return validPayload().dynos[0]!;
 }
 
-describe('RunUploadV1', () => {
+describe('RunUploadV2', () => {
   it('accepts a compact valid run upload payload', () => {
-    const parsed = RunUploadV1.parse(validPayload());
+    const parsed = RunUploadV2.parse(validPayload());
 
-    expect(parsed.schemaVersion).toBe(1);
+    expect(parsed.schemaVersion).toBe(2);
     expect(parsed.inputPath).toBe('packages/cli');
     expect(parsed.dynos[0]?.target).toBe('login-agent');
     expect(parsed.dynos[0]?.jobs[0]?.assertions[0]?.label).toBe(
@@ -123,13 +123,13 @@ describe('RunUploadV1', () => {
   it('accepts empty verify output matcher strings only', () => {
     const payload = validPayload();
     payload.dynos[0]!.jobs[0]!.assertions[0]!.definition = {
-      kind: 'verify.command',
+      type: 'verify.command',
       command: 'pnpm test',
       stdout: {equals: ''},
       stderr: {equals: ''},
     };
 
-    const parsed = RunUploadV1.parse(payload);
+    const parsed = RunUploadV2.parse(payload);
 
     expect(parsed.dynos[0]!.jobs[0]!.assertions[0]!.definition).toMatchObject({
       stdout: {equals: ''},
@@ -137,27 +137,27 @@ describe('RunUploadV1', () => {
     });
 
     payload.dynos[0]!.jobs[0]!.assertions[0]!.definition = {
-      kind: 'tool.called',
-      toolKind: 'shell',
-      matcher: {includes: ''},
+      type: 'tool.called',
+      tool: 'shell',
+      command: {includes: ''},
     };
 
-    expect(() => RunUploadV1.parse(payload)).toThrow();
+    expect(() => RunUploadV2.parse(payload)).toThrow();
   });
 
   it('accepts full anyOf branch definitions', () => {
     const payload = validPayload();
     payload.dynos[0]!.jobs[0]!.assertions[0]!.definition = {
-      kind: 'anyOf',
+      type: 'anyOf',
       steps: [
-        {kind: 'artifact.exists', path: 'report.json'},
-        {kind: 'http.called', endpointId: 'upload', status: 201},
-        {kind: 'transcript.contains', text: 'uploaded'},
-        {kind: 'skill.referenced', skill: 'release'},
+        {type: 'artifact.exists', path: 'report.json'},
+        {type: 'http.called', endpointId: 'upload', status: 201},
+        {type: 'transcript.contains', text: 'uploaded'},
+        {type: 'skill.referenced', skill: 'release'},
       ],
     };
 
-    expect(RunUploadV1.safeParse(payload).success).toBe(true);
+    expect(RunUploadV2.safeParse(payload).success).toBe(true);
   });
 
   it('rejects unknown fields at every payload level', () => {
@@ -165,21 +165,21 @@ describe('RunUploadV1', () => {
     const dyno = validDyno();
 
     expect(() =>
-      RunUploadV1.parse({
+      RunUploadV2.parse({
         ...payload,
         transcript: [{role: 'assistant', content: 'secret'}],
       }),
     ).toThrow();
 
     expect(() =>
-      RunUploadV1.parse({
+      RunUploadV2.parse({
         ...payload,
         dynos: [{...dyno, sourceText: 'secret'}],
       }),
     ).toThrow();
 
     expect(() =>
-      RunUploadV1.parse({
+      RunUploadV2.parse({
         ...payload,
         dynos: [
           {
@@ -191,7 +191,7 @@ describe('RunUploadV1', () => {
     ).toThrow();
 
     expect(() =>
-      RunUploadV1.parse({
+      RunUploadV2.parse({
         ...payload,
         dynos: [
           {
@@ -218,14 +218,14 @@ describe('RunUploadV1', () => {
     const dyno = validDyno();
 
     expect(() =>
-      RunUploadV1.parse({
+      RunUploadV2.parse({
         ...payload,
         dynos: Array.from({length: RUN_UPLOAD_LIMITS.dynos + 1}, () => dyno),
       }),
     ).toThrow();
 
     expect(() =>
-      RunUploadV1.parse({
+      RunUploadV2.parse({
         ...payload,
         dynos: [
           {
@@ -240,7 +240,7 @@ describe('RunUploadV1', () => {
     ).toThrow();
 
     expect(() =>
-      RunUploadV1.parse({
+      RunUploadV2.parse({
         ...payload,
         dynos: [
           {
@@ -260,7 +260,7 @@ describe('RunUploadV1', () => {
     ).toThrow();
 
     expect(() =>
-      RunUploadV1.parse({
+      RunUploadV2.parse({
         ...payload,
         dynos: [
           {
@@ -288,16 +288,16 @@ describe('RunUploadV1', () => {
     const payload = validPayload();
 
     payload.dynos[0]!.jobs[0]!.assertions[0]!.definition = {
-      kind: 'anyOf',
+      type: 'anyOf',
       steps: [
         {
-          kind: 'anyOf',
-          steps: [{kind: 'tool.called', toolKind: 'shell'}],
+          type: 'anyOf',
+          steps: [{type: 'tool.called', tool: 'shell'}],
         } as never,
       ],
     };
 
-    expect(() => RunUploadV1.parse(payload)).toThrow();
+    expect(() => RunUploadV2.parse(payload)).toThrow();
   });
 
   it('requires display fields for runs, dynos, jobs, and assertions', () => {
@@ -305,21 +305,21 @@ describe('RunUploadV1', () => {
     const dyno = validDyno();
 
     expect(() =>
-      RunUploadV1.parse({
+      RunUploadV2.parse({
         ...payload,
         totals: {...payload.totals, durationMs: undefined},
       }),
     ).toThrow();
 
     expect(() =>
-      RunUploadV1.parse({
+      RunUploadV2.parse({
         ...payload,
         dynos: [{...dyno, target: undefined}],
       }),
     ).toThrow();
 
     expect(() =>
-      RunUploadV1.parse({
+      RunUploadV2.parse({
         ...payload,
         dynos: [
           {
@@ -336,7 +336,7 @@ describe('RunUploadV1', () => {
     ).toThrow();
 
     expect(() =>
-      RunUploadV1.parse({
+      RunUploadV2.parse({
         ...payload,
         dynos: [
           {

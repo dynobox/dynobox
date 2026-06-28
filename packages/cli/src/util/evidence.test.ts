@@ -15,7 +15,7 @@ describe('assertionResultEvidence', () => {
     const results: AssertionResult[] = [
       {
         assertionId: 'assertion-1',
-        kind: 'tool.called',
+        type: 'tool.called',
         passed: true,
         message: 'passed',
         evidence,
