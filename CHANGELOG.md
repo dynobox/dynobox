@@ -8,6 +8,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## @dynobox/sdk@0.4.0 — 2026-07-02
+
 ### `@dynobox/sdk`
 
 - **Breaking:** Renamed `skill.invoked(...)` assertions to
@@ -18,6 +22,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   matchers use `command`, and path matchers use top-level `path`.
 - **Breaking:** Removed unused `headers`, `body`, and `response` endpoint spec
   fields. Endpoint specs now contain only `method` and `url`.
+
+## dynobox@0.7.0 — 2026-07-02
 
 ### `dynobox` (CLI)
 
@@ -32,8 +38,6 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Changed `dynobox run --save-run` to verify authentication before local
   execution, retry transient verification failures, and fail fast for invalid
   tokens before running scenarios.
-
----
 
 ## @dynobox/run-schema@0.1.0 — 2026-06-28
 
