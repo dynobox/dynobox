@@ -99,6 +99,10 @@ describe('loadDyno extension coverage', () => {
     expect(ir.name).toBe('ext-mts');
   });
 
+  // Exercises skill/fixtures defaults through the CLI loadDyno pipeline in the
+  // workspace. SDK resolves to packages/sdk/dist/, which already matched
+  // isSdkFrame before SDK_MODULE_FILE. Npx/published-path caller inference is
+  // covered in packages/sdk/src/index.test.ts.
   it('loads skill dynos with fixtures and skill setup defaults', async () => {
     const skillDir = join(ROOT, '.agents', 'skills', 'commit');
     const dynoDir = join(skillDir, 'dyno');
