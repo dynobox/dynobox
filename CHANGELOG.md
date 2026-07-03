@@ -8,6 +8,20 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `@dynobox/sdk`
+
+- Fixed `defineDyno(...)` authoring defaults so dynos loaded from published or
+  `npx` SDK paths correctly attach adjacent `fixtures/` directories and skill
+  `SKILL.md` setup.
+- Added an explicit dyno module URL context used by integrations before falling
+  back to stack-based caller inference.
+
+### `dynobox` (CLI)
+
+- Fixed JavaScript and TypeScript dyno loading to pass the dyno module URL to
+  the SDK while importing configs, avoiding stack-trace inference for fixture
+  and skill setup defaults.
+
 ---
 
 ## @dynobox/sdk@0.4.0 — 2026-07-02

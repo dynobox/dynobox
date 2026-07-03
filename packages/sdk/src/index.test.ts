@@ -1,4 +1,10 @@
-import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -34,6 +40,7 @@ import {
   type TranscriptContainsAssertion,
   verify,
   type VerifyCommandAssertion,
+  withDynoModuleUrl,
 } from './index.js';
 import {IR_VERSION, irSchema} from './ir.js';
 
@@ -64,6 +71,7 @@ describe('packages/sdk', () => {
     expect(typeof skill.referenced).toBe('function');
     expect(typeof verify.command).toBe('function');
     expect(typeof verify.succeeds).toBe('function');
+    expect(typeof withDynoModuleUrl).toBe('function');
   });
 
   it('provides dyno config path and shell quoting helpers', () => {
@@ -229,6 +237,89 @@ export default defineDyno({
         "mkdir -p '.claude/skills/commit'",
         expect.stringMatching(
           /^cp '.*\/\.claude\/skills\/commit\/SKILL\.md' '\.claude\/skills\/commit\/SKILL\.md'$/u,
+        ),
+      ]);
+    } finally {
+      rmSync(dir, {force: true, recursive: true});
+    }
+  });
+
+  it('defineDyno applies authoring defaults from an explicit module URL context', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dynobox-sdk-context-'));
+    try {
+      const skillDir = join(dir, '.agents', 'skills', 'commit');
+      const dynoDir = join(skillDir, 'dyno');
+      const configPath = join(dynoDir, 'commit.dyno.ts');
+      mkdirSync(join(dynoDir, 'fixtures'), {recursive: true});
+      writeFileSync(join(skillDir, 'SKILL.md'), '# Commit skill');
+      writeFileSync(join(dynoDir, 'fixtures', 'README.md'), '# Fixture');
+
+      const config = withDynoModuleUrl(pathToFileURL(configPath).href, () =>
+        defineDyno({
+          scenarios: [{name: 'commit skill', prompt: 'p'}],
+        }),
+      );
+
+      expect(config.scenarios[0].fixtures).toBe(join(dynoDir, 'fixtures'));
+      expect(config.scenarios[0].setup).toEqual([
+        "mkdir -p '.agents/skills/commit'",
+        expect.stringMatching(
+          /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.agents\/skills\/commit\/SKILL\.md'$/u,
+        ),
+      ]);
+    } finally {
+      rmSync(dir, {force: true, recursive: true});
+    }
+  });
+
+  it('defineDyno applies authoring defaults when loaded from an npx cache path', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dynobox-sdk-npx-'));
+    try {
+      const projectDir = join(dir, 'project');
+      const sdkDir = join(
+        dir,
+        '.npm',
+        '_npx',
+        'cache-entry',
+        'node_modules',
+        '@dynobox',
+        'sdk',
+      );
+      const sdkDistDir = join(sdkDir, 'dist');
+      mkdirSync(sdkDistDir, {recursive: true});
+      writeFileSync(join(sdkDir, 'package.json'), '{"type":"module"}\n');
+      copyFileSync(
+        join(process.cwd(), 'dist', 'index.js'),
+        join(sdkDistDir, 'index.js'),
+      );
+
+      const skillDir = join(projectDir, '.agents', 'skills', 'commit');
+      const dynoDir = join(skillDir, 'dyno');
+      mkdirSync(join(dynoDir, 'fixtures'), {recursive: true});
+      writeFileSync(join(skillDir, 'SKILL.md'), '# Commit skill');
+      writeFileSync(join(dynoDir, 'fixtures', 'README.md'), '# Fixture');
+
+      const sdkUrl = pathToFileURL(join(sdkDistDir, 'index.js')).href;
+      const configPath = join(dynoDir, 'commit.dyno.mjs');
+      writeFileSync(
+        configPath,
+        `import {defineDyno} from ${JSON.stringify(sdkUrl)};
+
+export default defineDyno({
+  scenarios: [{name: 'commit skill', prompt: 'p'}],
+});
+`,
+      );
+
+      const mod = await import(
+        `${pathToFileURL(configPath).href}?t=${Date.now()}`
+      );
+
+      expect(mod.default.scenarios[0].fixtures).toBe(join(dynoDir, 'fixtures'));
+      expect(mod.default.scenarios[0].setup).toEqual([
+        "mkdir -p '.agents/skills/commit'",
+        expect.stringMatching(
+          /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.agents\/skills\/commit\/SKILL\.md'$/u,
         ),
       ]);
     } finally {

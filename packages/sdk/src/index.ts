@@ -8,6 +8,7 @@
 
 export {anyOf} from './any-of/index.js';
 export {artifact} from './artifact/index.js';
+export {withDynoModuleUrl} from './authoring/context.js';
 export {defineDyno} from './authoring/defineDyno.js';
 export {defineScenario} from './authoring/defineScenario.js';
 export {command} from './command/index.js';

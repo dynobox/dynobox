@@ -6,8 +6,11 @@ import {shellQuote} from '../dyno/index.js';
 import type {Endpoint} from '../types/brands.js';
 import type {DynoboxConfig, ScenarioInput} from '../types/config.js';
 import type {HarnessRunConfig} from '../types/harness.js';
+import {currentDynoModuleUrl} from './context.js';
 
 type EndpointMap = Record<string, Endpoint>;
+
+const SDK_MODULE_FILE = normalizeStackFrameFile(import.meta.url);
 
 /**
  * For a tuple of scenario shapes, produce a parallel tuple where each
@@ -57,7 +60,7 @@ export function defineDyno<
 }
 
 function applyAuthoringDefaults(config: DynoboxConfig): DynoboxConfig {
-  const callerUrl = inferConfigModuleUrl();
+  const callerUrl = currentDynoModuleUrl() ?? inferConfigModuleUrl();
   if (callerUrl === undefined) return config;
 
   return applyDefaultSkillSetup(
@@ -174,9 +177,15 @@ function parseStackFrameFile(line: string): string | undefined {
 }
 
 function isSdkFrame(file: string): boolean {
-  const normalized = file.replaceAll('\\', '/');
+  const normalized = normalizeStackFrameFile(file);
   return (
+    normalized === SDK_MODULE_FILE ||
     normalized.includes('/packages/sdk/src/authoring/defineDyno.') ||
     normalized.includes('/packages/sdk/dist/')
   );
+}
+
+function normalizeStackFrameFile(file: string): string {
+  const path = file.startsWith('file://') ? fileURLToPath(file) : file;
+  return path.replaceAll('\\', '/');
 }
