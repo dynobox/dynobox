@@ -122,8 +122,12 @@ export default defineDyno({
 
     const loaded = await loadDyno(file);
     const config = resolveConfigModule(normalizeLoadedModule(loaded));
-    expect(config.scenarios[0].fixtures).toBe(join(dynoDir, 'fixtures'));
-    expect(config.scenarios[0].setup).toEqual([
+    const scenario = config.scenarios[0];
+    if (!scenario) {
+      throw new Error('Expected loaded dyno to contain a scenario');
+    }
+    expect(scenario.fixtures).toBe(join(dynoDir, 'fixtures'));
+    expect(scenario.setup).toEqual([
       "mkdir -p '.agents/skills/commit'",
       expect.stringMatching(
         /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.agents\/skills\/commit\/SKILL\.md'$/u,

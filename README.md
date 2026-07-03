@@ -1,8 +1,13 @@
 # Dynobox
 
+[![npm version](https://img.shields.io/npm/v/dynobox.svg)](https://www.npmjs.com/package/dynobox)
+[![License](https://img.shields.io/github/license/dynobox/dynobox.svg)](./LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/dynobox/dynobox/ci.yml?branch=main&label=ci)](https://github.com/dynobox/dynobox/actions)
+[![Node.js >=22](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+
 Cross-harness testing for multi-step agent and skill workflows.
 
-**Status:** Under active development. Dynobox is usable for local experimentation, but APIs and output formats may still change.
+**Status:** Early access. Dynobox is ready for local skill and agent workflow testing while the CLI, SDK, and report formats continue to evolve before 1.0.
 
 Dynobox runs agent scenarios through local harnesses such as Claude Code and Codex, captures observable behavior, and evaluates assertions against what actually happened. It is designed for testing skills and agent flows where you care about tool usage, file effects, transcripts, final answers, and behavior across harnesses.
 
@@ -17,6 +22,8 @@ Use Dynobox when you want to answer questions like:
 - Does the same task work under Claude Code and Codex?
 
 ## Quick Start
+
+Requires Node.js 22 or later.
 
 Install the CLI and a starter dyno file, then run it:
 
@@ -184,14 +191,15 @@ tools and binaries with their own trust stores may bypass local HTTPS capture.
 
 This repository is a pnpm monorepo. Published packages live under `packages/`.
 
-| Package                                            | npm                                                          | Description                                            |
+| Package                                            | Registry                                                     | Description                                            |
 | -------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------ |
 | [`dynobox`](./packages/cli)                        | [`dynobox`](https://www.npmjs.com/package/dynobox)           | CLI for loading configs and running local scenarios    |
 | [`@dynobox/sdk`](./packages/sdk)                   | [`@dynobox/sdk`](https://www.npmjs.com/package/@dynobox/sdk) | SDK for authoring configs and compiling canonical IR   |
+| [`@dynobox/run-schema`](./packages/run-schema)     | [GitHub Packages](./packages/run-schema#registry)            | Shared run upload schema and API response types        |
 | [`@dynobox/runner-local`](./packages/runner-local) | Unpublished                                                  | Local runner for harness execution and tool assertions |
 | [`@dynobox/evaluators`](./packages/evaluators)     | Unpublished                                                  | Assertion evaluators shared by runner code             |
 
-`@dynobox/runner-local` and `@dynobox/evaluators` are private workspace packages. They are bundled into the published `dynobox` CLI instead of exposed as public npm dependencies.
+`@dynobox/run-schema` is published to GitHub Packages under the `@dynobox` scope. `@dynobox/runner-local` and `@dynobox/evaluators` are private workspace packages bundled into the published `dynobox` CLI instead of exposed as public dependencies.
 
 ## Project Site
 

@@ -302,19 +302,8 @@ export default defineDyno({
     const dir = mkdtempSync(join(tmpdir(), 'dynobox-sdk-symlink-'));
     try {
       const projectDir = join(dir, 'project');
-      const realSdkDir = join(
-        dir,
-        'store',
-        'node_modules',
-        '@dynobox',
-        'sdk',
-      );
-      const linkSdkDir = join(
-        projectDir,
-        'node_modules',
-        '@dynobox',
-        'sdk',
-      );
+      const realSdkDir = join(dir, 'store', 'node_modules', '@dynobox', 'sdk');
+      const linkSdkDir = join(projectDir, 'node_modules', '@dynobox', 'sdk');
       const realDistDir = join(realSdkDir, 'dist');
       mkdirSync(realDistDir, {recursive: true});
       mkdirSync(join(linkSdkDir, '..'), {recursive: true});

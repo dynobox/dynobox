@@ -17,8 +17,10 @@ Run from the repository root:
 pnpm build
 pnpm test
 pnpm typecheck
-pnpm check
+pnpm validate
 ```
+
+`validate` runs Prettier and ESLint in check-only mode.
 
 Package-scoped examples:
 

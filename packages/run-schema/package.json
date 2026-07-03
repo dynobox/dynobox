@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Shared Dynobox run upload schema and types",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
