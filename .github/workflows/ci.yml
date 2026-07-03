@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   test:
-    name: Build, Test, Check, Typecheck
+    name: Test, Validate, Typecheck
     runs-on: ubuntu-latest
 
     steps:
@@ -31,14 +31,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: pnpm build
-
       - name: Test
         run: pnpm test
 
-      - name: Check
-        run: pnpm check
+      - name: Validate
+        run: pnpm validate
 
       - name: Typecheck
-        run: pnpm typecheck
+        run: pnpm -r typecheck

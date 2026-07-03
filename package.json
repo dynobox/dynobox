@@ -10,7 +10,7 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "build": "pnpm -r build",
-    "check": "pnpm run format && pnpm run lint",
+    "validate": "pnpm run format && pnpm run lint",
     "dynolocal": "sh -c 'cd \"$INIT_CWD\" && DYNOBOX_API_URL=http://localhost:8787 tsx \"$OLDPWD/packages/cli/src/bin.ts\" \"$@\"' --",
     "format": "prettier --check \"**/*.{js,cjs,mjs,ts,cts,mts,tsx,jsx,json}\"",
     "format:write": "prettier --write \"**/*.{js,cjs,mjs,ts,cts,mts,tsx,jsx,json}\"",

@@ -23,6 +23,8 @@ Use Dynobox when you want to answer questions like:
 
 ## Quick Start
 
+Requires Node.js 22 or later.
+
 Install the CLI and a starter dyno file, then run it:
 
 ```bash
@@ -193,7 +195,7 @@ This repository is a pnpm monorepo. Published packages live under `packages/`.
 | -------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------ |
 | [`dynobox`](./packages/cli)                        | [`dynobox`](https://www.npmjs.com/package/dynobox)           | CLI for loading configs and running local scenarios    |
 | [`@dynobox/sdk`](./packages/sdk)                   | [`@dynobox/sdk`](https://www.npmjs.com/package/@dynobox/sdk) | SDK for authoring configs and compiling canonical IR   |
-| [`@dynobox/run-schema`](./packages/run-schema)     | GitHub Packages                                              | Shared run upload schema and API response types        |
+| [`@dynobox/run-schema`](./packages/run-schema)     | [GitHub Packages](./packages/run-schema#registry)            | Shared run upload schema and API response types        |
 | [`@dynobox/runner-local`](./packages/runner-local) | Unpublished                                                  | Local runner for harness execution and tool assertions |
 | [`@dynobox/evaluators`](./packages/evaluators)     | Unpublished                                                  | Assertion evaluators shared by runner code             |
 
