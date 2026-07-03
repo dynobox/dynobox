@@ -10,6 +10,14 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ---
 
+## dynobox@0.7.1 — 2026-07-02
+
+### `dynobox` (CLI)
+
+- Updated the bundled `@dynobox/sdk` dependency to `0.4.1` so `dynobox run`
+  and `dynobox validate` pick up the `defineDyno(...)` authoring defaults fix
+  for dynos loaded from published or `npx` SDK paths.
+
 ## @dynobox/sdk@0.4.1 — 2026-07-02
 
 ### `@dynobox/sdk`
