@@ -6,7 +6,6 @@ import {shellQuote} from '../dyno/index.js';
 import type {Endpoint} from '../types/brands.js';
 import type {DynoboxConfig, ScenarioInput} from '../types/config.js';
 import type {HarnessRunConfig} from '../types/harness.js';
-import {currentDynoModuleUrl} from './context.js';
 
 type EndpointMap = Record<string, Endpoint>;
 
@@ -60,7 +59,7 @@ export function defineDyno<
 }
 
 function applyAuthoringDefaults(config: DynoboxConfig): DynoboxConfig {
-  const callerUrl = currentDynoModuleUrl() ?? inferConfigModuleUrl();
+  const callerUrl = inferConfigModuleUrl();
   if (callerUrl === undefined) return config;
 
   return applyDefaultSkillSetup(

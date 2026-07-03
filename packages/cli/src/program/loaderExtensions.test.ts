@@ -99,7 +99,7 @@ describe('loadDyno extension coverage', () => {
     expect(ir.name).toBe('ext-mts');
   });
 
-  it('loads skill dynos with module-url authoring defaults', async () => {
+  it('loads skill dynos with fixtures and skill setup defaults', async () => {
     const skillDir = join(ROOT, '.agents', 'skills', 'commit');
     const dynoDir = join(skillDir, 'dyno');
     mkdirSync(join(dynoDir, 'fixtures'), {recursive: true});

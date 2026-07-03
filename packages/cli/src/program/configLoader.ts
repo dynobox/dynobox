@@ -20,8 +20,6 @@ import {pathToFileURL} from 'node:url';
 
 import {tsImport} from 'tsx/esm/api';
 
-import {withDynoModuleUrl} from '@dynobox/sdk';
-
 import {loadYamlDyno} from './yamlLoader.js';
 
 const YAML_EXTENSIONS = new Set(['.yaml', '.yml']);
@@ -46,9 +44,7 @@ export async function loadDyno(filePath: string): Promise<unknown> {
   }
   registerDynoboxSdkResolver();
   const configUrl = pathToFileURL(absolute).href;
-  return withDynoModuleUrl(configUrl, () =>
-    tsImport(configUrl, import.meta.url),
-  );
+  return tsImport(configUrl, import.meta.url);
 }
 
 export function normalizeLoadedModule(moduleExport: unknown): unknown {

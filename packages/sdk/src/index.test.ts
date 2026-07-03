@@ -40,7 +40,6 @@ import {
   type TranscriptContainsAssertion,
   verify,
   type VerifyCommandAssertion,
-  withDynoModuleUrl,
 } from './index.js';
 import {IR_VERSION, irSchema} from './ir.js';
 
@@ -71,7 +70,6 @@ describe('packages/sdk', () => {
     expect(typeof skill.referenced).toBe('function');
     expect(typeof verify.command).toBe('function');
     expect(typeof verify.succeeds).toBe('function');
-    expect(typeof withDynoModuleUrl).toBe('function');
   });
 
   it('provides dyno config path and shell quoting helpers', () => {
@@ -237,34 +235,6 @@ export default defineDyno({
         "mkdir -p '.claude/skills/commit'",
         expect.stringMatching(
           /^cp '.*\/\.claude\/skills\/commit\/SKILL\.md' '\.claude\/skills\/commit\/SKILL\.md'$/u,
-        ),
-      ]);
-    } finally {
-      rmSync(dir, {force: true, recursive: true});
-    }
-  });
-
-  it('defineDyno applies authoring defaults from an explicit module URL context', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'dynobox-sdk-context-'));
-    try {
-      const skillDir = join(dir, '.agents', 'skills', 'commit');
-      const dynoDir = join(skillDir, 'dyno');
-      const configPath = join(dynoDir, 'commit.dyno.ts');
-      mkdirSync(join(dynoDir, 'fixtures'), {recursive: true});
-      writeFileSync(join(skillDir, 'SKILL.md'), '# Commit skill');
-      writeFileSync(join(dynoDir, 'fixtures', 'README.md'), '# Fixture');
-
-      const config = withDynoModuleUrl(pathToFileURL(configPath).href, () =>
-        defineDyno({
-          scenarios: [{name: 'commit skill', prompt: 'p'}],
-        }),
-      );
-
-      expect(config.scenarios[0].fixtures).toBe(join(dynoDir, 'fixtures'));
-      expect(config.scenarios[0].setup).toEqual([
-        "mkdir -p '.agents/skills/commit'",
-        expect.stringMatching(
-          /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.agents\/skills\/commit\/SKILL\.md'$/u,
         ),
       ]);
     } finally {
