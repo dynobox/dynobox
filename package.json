@@ -4,6 +4,9 @@
   "private": true,
   "description": "dynobox monorepo — cross-harness testing for multi-step agent flows",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "build": "pnpm -r build",

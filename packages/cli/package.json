@@ -17,6 +17,9 @@
     "directory": "packages/cli"
   },
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
   "type": "module",
   "exports": {
     "./package.json": "./package.json"
