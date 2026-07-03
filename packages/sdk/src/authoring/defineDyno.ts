@@ -1,4 +1,4 @@
-import {existsSync} from 'node:fs';
+import {existsSync, realpathSync} from 'node:fs';
 import {dirname, join, sep} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
@@ -8,6 +8,38 @@ import type {DynoboxConfig, ScenarioInput} from '../types/config.js';
 import type {HarnessRunConfig} from '../types/harness.js';
 
 type EndpointMap = Record<string, Endpoint>;
+
+function normalizeStackFrameFile(file: string): string {
+  const path = file.startsWith('file://') ? fileURLToPath(file) : file;
+  return path.replaceAll('\\', '/');
+}
+
+function tryRealpath(path: string): string {
+  try {
+    return realpathSync(path).replaceAll('\\', '/');
+  } catch {
+    return path;
+  }
+}
+
+function getSdkPackageRoot(moduleFile: string): string {
+  const distMarker = '/dist/';
+  const distIndex = moduleFile.lastIndexOf(distMarker);
+  if (distIndex !== -1) {
+    return moduleFile.slice(0, distIndex);
+  }
+
+  const srcMarker = '/src/';
+  const srcIndex = moduleFile.lastIndexOf(srcMarker);
+  if (srcIndex !== -1) {
+    return moduleFile.slice(0, srcIndex);
+  }
+
+  return dirname(dirname(moduleFile));
+}
+
+const SDK_MODULE_FILE = normalizeStackFrameFile(import.meta.url);
+const SDK_PACKAGE_ROOT = getSdkPackageRoot(SDK_MODULE_FILE);
 
 /**
  * For a tuple of scenario shapes, produce a parallel tuple where each
@@ -174,9 +206,15 @@ function parseStackFrameFile(line: string): string | undefined {
 }
 
 function isSdkFrame(file: string): boolean {
-  const normalized = file.replaceAll('\\', '/');
-  return (
-    normalized.includes('/packages/sdk/src/authoring/defineDyno.') ||
-    normalized.includes('/packages/sdk/dist/')
-  );
+  const normalized = normalizeStackFrameFile(file);
+  const resolved = tryRealpath(normalized);
+  const resolvedModule = tryRealpath(SDK_MODULE_FILE);
+  if (resolved === resolvedModule) return true;
+
+  const resolvedRoot = tryRealpath(SDK_PACKAGE_ROOT);
+  if (resolved === resolvedRoot || resolved.startsWith(`${resolvedRoot}/`)) {
+    return true;
+  }
+
+  return normalized.includes('/node_modules/@dynobox/sdk/');
 }

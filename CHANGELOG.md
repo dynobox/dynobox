@@ -8,6 +8,13 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `@dynobox/sdk`
+
+- Fixed `defineDyno(...)` authoring defaults so dynos loaded from published or
+  `npx` SDK paths correctly attach adjacent `fixtures/` directories and skill
+  `SKILL.md` setup. Caller inference now recognizes the SDK's own installed
+  module path as an SDK frame instead of treating it as the dyno file.
+
 ---
 
 ## @dynobox/sdk@0.4.0 — 2026-07-02

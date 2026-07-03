@@ -99,6 +99,38 @@ describe('loadDyno extension coverage', () => {
     expect(ir.name).toBe('ext-mts');
   });
 
+  // Exercises skill/fixtures defaults through the CLI loadDyno pipeline in the
+  // workspace. SDK resolves to packages/sdk/dist/, which already matched
+  // isSdkFrame before SDK_MODULE_FILE. Npx/published-path caller inference is
+  // covered in packages/sdk/src/index.test.ts.
+  it('loads skill dynos with fixtures and skill setup defaults', async () => {
+    const skillDir = join(ROOT, '.agents', 'skills', 'commit');
+    const dynoDir = join(skillDir, 'dyno');
+    mkdirSync(join(dynoDir, 'fixtures'), {recursive: true});
+    writeFileSync(join(skillDir, 'SKILL.md'), '# Commit skill');
+    writeFileSync(join(dynoDir, 'fixtures', 'README.md'), '# Fixture');
+    const file = join(dynoDir, 'commit.dyno.ts');
+    writeFileSync(
+      file,
+      `import {defineDyno} from '@dynobox/sdk';
+
+export default defineDyno({
+  scenarios: [{name: 'commit skill', prompt: 'p'}],
+});
+`,
+    );
+
+    const loaded = await loadDyno(file);
+    const config = resolveConfigModule(normalizeLoadedModule(loaded));
+    expect(config.scenarios[0].fixtures).toBe(join(dynoDir, 'fixtures'));
+    expect(config.scenarios[0].setup).toEqual([
+      "mkdir -p '.agents/skills/commit'",
+      expect.stringMatching(
+        /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.agents\/skills\/commit\/SKILL\.md'$/u,
+      ),
+    ]);
+  });
+
   it('DYNO_FILE_GLOBS contains exactly the extensions exercised here plus yaml/yml', () => {
     // Guards against silent drift: if anyone adds a new extension to
     // `DYNO_FILE_GLOBS` without adding a test for it, this fails and
