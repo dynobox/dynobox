@@ -28,7 +28,6 @@ export function renderQuietRun(
   ctx: RenderContext,
 ): string {
   const jobs = dynos.flatMap((dyno) => dyno.jobs);
-  const assertionById = assertionByIdForJobs(jobs);
   const multiIteration = jobs.some((job) => job.iteration > 0);
   const marks = results.map((result) => (result.passed ? '.' : 'F')).join('');
   const summaryPrefix = '  dynobox  ';
@@ -61,7 +60,7 @@ export function renderQuietRun(
       for (const entry of group.entries) {
         if (entry.result.passed) continue;
         const prefix = multiIteration ? `iter ${entry.job.iteration + 1} ` : '';
-        for (const detail of describeJobFailures(entry, assertionById)) {
+        for (const detail of describeJobFailures(entry)) {
           lines.push(`        ${prefix}${detail}\n`);
         }
       }
@@ -88,10 +87,8 @@ export function renderQuietRun(
   return lines.join('');
 }
 
-function describeJobFailures(
-  entry: GroupedJobEntry,
-  assertionById: Map<string, IrAssertion>,
-): string[] {
+function describeJobFailures(entry: GroupedJobEntry): string[] {
+  const assertionById = assertionByIdForJobs([entry.job]);
   if (entry.result.status === 'setup_failed') return ['setup failed'];
   if (entry.result.status === 'harness_failed') {
     const lines = ['harness failed', ...entry.result.diagnostics];

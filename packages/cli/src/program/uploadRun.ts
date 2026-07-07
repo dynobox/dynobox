@@ -141,13 +141,11 @@ export function buildRunUploadPayload(input: {
       `Expected ${allJobs.length} runner results for upload, but received ${input.results.length}.`,
     );
   }
-  const assertionById = assertionByIdForJobs(allJobs);
-
   let offset = 0;
   const dynos = input.dynos.map((dyno) => {
     const results = input.results.slice(offset, offset + dyno.jobs.length);
     offset += dyno.jobs.length;
-    return buildRunUploadDyno(dyno, results, assertionById);
+    return buildRunUploadDyno(dyno, results);
   });
 
   const failed = dynos.reduce((count, dyno) => count + dyno.totals.failed, 0);
@@ -175,11 +173,10 @@ export function buildRunUploadPayload(input: {
 function buildRunUploadDyno(
   dyno: UploadRunDynoInput,
   results: readonly LocalRunnerResult[],
-  assertionById: ReadonlyMap<string, IrAssertion>,
 ): RunUploadDynoV2 {
   const jobs = dyno.jobs.map((job, index) => {
     const result = results[index]!;
-    return buildRunUploadJob(job, result, assertionById);
+    return buildRunUploadJob(job, result);
   });
   const failed = jobs.filter((job) => !job.passed).length;
 
@@ -219,8 +216,8 @@ export async function collectGitHash(): Promise<string | null> {
 function buildRunUploadJob(
   job: LocalRunnerJob,
   result: LocalRunnerResult,
-  assertionById: ReadonlyMap<string, IrAssertion>,
 ): RunUploadJobV2 {
+  const assertionById = assertionByIdForJobs([job]);
   return {
     jobId: truncate(result.jobId, RUN_UPLOAD_LIMITS.scenarioIdLength),
     scenario: {

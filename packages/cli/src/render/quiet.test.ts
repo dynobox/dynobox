@@ -17,6 +17,7 @@ type JobSpec = {
   harness?: 'claude-code' | 'codex';
   iteration?: number;
   assertionCount?: number;
+  assertionTool?: 'shell' | 'edit_file';
 };
 
 function makeJob(spec: JobSpec = {}): LocalRunnerJob {
@@ -37,7 +38,7 @@ function makeJob(spec: JobSpec = {}): LocalRunnerJob {
       assertions: Array.from({length: assertionCount}, (_, index) => ({
         id: `${scenarioId}.assert.${index}`,
         type: 'tool.called' as const,
-        tool: 'shell' as const,
+        tool: spec.assertionTool ?? 'shell',
       })),
     },
     harness,
@@ -130,6 +131,28 @@ describe('renderQuietRun', () => {
     expect(output).toContain('FAIL  package-script-check / test scenario');
     expect(output).toContain('tool.called(shell)');
     expect(output).toContain('1 of 1 jobs failed, 1 failed assertion');
+  });
+
+  it('uses assertion definitions from the failed dyno when assertion ids collide', () => {
+    const jobA = makeJob({assertionTool: 'shell'});
+    const jobB = makeJob({assertionTool: 'edit_file'});
+    const output = renderQuietRun(
+      [
+        dynoOf([jobA]),
+        dynoOf([jobB], {name: 'other-dyno', path: 'other.dyno.ts'}),
+      ],
+      [
+        makeResult(jobA, {
+          status: 'assertion_failed',
+          failedAssertionIndexes: [0],
+        }),
+        makeResult(jobB),
+      ],
+      ctx,
+    );
+
+    expect(output).toContain('tool.called(shell)');
+    expect(output).not.toContain('tool.called(edit_file)');
   });
 
   it('reports setup and harness job errors', () => {

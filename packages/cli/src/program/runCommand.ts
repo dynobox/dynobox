@@ -473,7 +473,6 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
   const jobs = dynos.flatMap((dyno) => dyno.jobs);
 
   writeStdout(renderRunHeader(dynos, ctx));
-  const assertionById = assertionByIdForJobs(jobs);
   const multiHarness = uniqueHarnessLabels(jobs).length > 1;
   const labelWidth = harnessLabelColumnWidth(jobs);
   const live = createLiveWriter(writeStdout, ctx.color, SPINNER_FRAMES[0]);
@@ -511,6 +510,7 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
   ): Promise<void> => {
     live.beginJob(renderRunningGroupRow(ctx, rowOptions));
     const result = await runOneJob(job);
+    const assertionById = assertionByIdForJobs([job]);
     const row = renderHarnessGroupRow([{job, result}], ctx, rowOptions);
 
     if (expanded) {
@@ -549,6 +549,7 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
         entries.push({job, result: await runOneJob(job)});
       }
       live.collapseToHeadline(renderHarnessGroupRow(entries, ctx, rowOptions));
+      const assertionById = assertionByIdForJobs(groupJobs);
       writeStdout(renderIterationDetailLines(entries, assertionById, ctx));
       return;
     }
@@ -563,6 +564,7 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
       const entry = {job, result};
       entries.push(entry);
       live.rewriteHeadline(renderIterationResultLine(entry, ctx));
+      const assertionById = assertionByIdForJobs([job]);
       const debugLogPaths = maybeWriteDebugLogs(ctx, result);
       writeStdout(
         renderLiveJobCompletion(

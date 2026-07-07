@@ -19,6 +19,8 @@ type JobSpec = {
   model?: string;
   iteration?: number;
   assertionCount?: number;
+  assertionLabel?: string;
+  assertionTool?: 'shell' | 'edit_file';
 };
 
 function makeJob(spec: JobSpec = {}): LocalRunnerJob {
@@ -39,7 +41,10 @@ function makeJob(spec: JobSpec = {}): LocalRunnerJob {
       assertions: Array.from({length: assertionCount}, (_, index) => ({
         id: `${scenarioId}.assert.${index}`,
         type: 'tool.called' as const,
-        tool: 'shell' as const,
+        tool: spec.assertionTool ?? 'shell',
+        ...(spec.assertionLabel === undefined
+          ? {}
+          : {label: spec.assertionLabel}),
       })),
     },
     harness,
@@ -237,6 +242,34 @@ describe('renderGroupedRun', () => {
     expect(output).toContain('✗ 1 of 2 failed');
     expect(output).toContain('✗ tool.called(shell)');
     expect(output).not.toContain('✓ tool.called(shell)');
+  });
+
+  it('uses assertion definitions from the failed dyno when assertion ids collide', () => {
+    const jobA = makeJob({
+      assertionLabel: 'alpha assertion',
+      assertionTool: 'shell',
+    });
+    const jobB = makeJob({
+      assertionLabel: 'beta assertion',
+      assertionTool: 'edit_file',
+    });
+    const output = renderGroupedRun({
+      dynos: [
+        dynoOf([jobA]),
+        dynoOf([jobB], {name: 'other-dyno', path: 'other.dyno.ts'}),
+      ],
+      results: [
+        makeResult(jobA, {
+          status: 'assertion_failed',
+          failedAssertionIndexes: [0],
+        }),
+        makeResult(jobB),
+      ],
+      ctx,
+    });
+
+    expect(output).toContain('alpha assertion  tool.called(shell)');
+    expect(output).not.toContain('beta assertion  tool.called(edit_file)');
   });
 
   it('renders setup failures as job errors, not assertion failures', () => {

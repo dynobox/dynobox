@@ -316,7 +316,6 @@ export type GroupedRunRenderInput = {
 export function renderGroupedRun(input: GroupedRunRenderInput): string {
   const {dynos, results, ctx} = input;
   const jobs = dynos.flatMap((dyno) => dyno.jobs);
-  const assertionById = assertionByIdForJobs(jobs);
   const multiHarness = uniqueHarnessLabels(jobs).length > 1;
   const labelWidth = harnessLabelColumnWidth(jobs);
   const expandAll = ctx.mode === 'verbose' || ctx.mode === 'debug';
@@ -335,7 +334,7 @@ export function renderGroupedRun(input: GroupedRunRenderInput): string {
         lines.push(
           `${renderHarnessGroupRow(group.entries, ctx, rowOptions)}\n`,
         );
-        lines.push(renderGroupDetails(group, assertionById, input, expandAll));
+        lines.push(renderGroupDetails(group, input, expandAll));
       }
     }
   }
@@ -344,11 +343,13 @@ export function renderGroupedRun(input: GroupedRunRenderInput): string {
 
 function renderGroupDetails(
   group: GroupedHarnessGroup,
-  assertionById: Map<string, IrAssertion>,
   input: GroupedRunRenderInput,
   expandAll: boolean,
 ): string {
   const {ctx} = input;
+  const assertionById = assertionByIdForJobs(
+    group.entries.map((entry) => entry.job),
+  );
   if (group.entries.length === 1) {
     const entry = group.entries[0]!;
     if (expandAll) {
