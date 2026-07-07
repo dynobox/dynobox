@@ -130,7 +130,7 @@ describe('buildGroupedRunView', () => {
   it('falls back to the dyno path when no name is authored', () => {
     const jobs = [makeJob()];
     const view = buildGroupedRunView(
-      [dynoOf(jobs, {name: undefined})],
+      [{path: 'checks.dyno.ts', jobs}],
       jobs.map((job) => makeResult(job)),
     );
 
