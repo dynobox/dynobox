@@ -25,7 +25,6 @@ import {
 } from '../terminal/index.js';
 import type {DebugLogPaths} from '../util/transcript.js';
 import {renderAssertionDetails} from './assertions.js';
-import {describeAssertion} from './describe.js';
 import {
   renderHarnessFailureDetails,
   renderSetupFailureDetails,
@@ -192,8 +191,9 @@ export function renderSingleJobFailureDetails(
 }
 
 /**
- * Default-mode details under a multi-iteration row: one `iter N …` line per
- * failed assertion, job error, or warning, in iteration order.
+ * Default-mode details under a multi-iteration row: per failed iteration,
+ * `iter N`-prefixed failed assertions with their expected/observed evidence,
+ * or the setup/harness failure diagnostics, plus any warnings.
  */
 export function renderIterationDetailLines(
   entries: readonly GroupedJobEntry[],
@@ -206,23 +206,20 @@ export function renderIterationDetailLines(
     if (result.status === 'setup_failed') {
       lines.push(
         `${DETAIL_INDENT}${iter} ${colorStatus(ctx, `${symbol(ctx, 'fail')} setup failed`, 'fail')}\n`,
+        renderSetupFailureDetails(result, ctx),
       );
     } else if (result.status === 'harness_failed') {
       lines.push(
         `${DETAIL_INDENT}${iter} ${colorStatus(ctx, `${symbol(ctx, 'fail')} harness failed`, 'fail')}\n`,
+        renderHarnessFailureDetails(result, ctx),
       );
     } else if (!result.passed) {
-      for (const assertionResult of result.assertionResults) {
-        if (assertionResult.passed) continue;
-        const assertion = assertionById.get(assertionResult.assertionId);
-        const label =
-          assertion === undefined
-            ? assertionResult.type
-            : describeAssertion(assertion);
-        lines.push(
-          `${DETAIL_INDENT}${iter} ${colorStatus(ctx, symbol(ctx, 'fail'), 'fail')} ${label}\n`,
-        );
-      }
+      lines.push(
+        renderAssertionDetails(result, assertionById, ctx, {
+          failedOnly: true,
+          linePrefix: `${iter} `,
+        }),
+      );
     }
     for (const warning of result.warnings) {
       lines.push(

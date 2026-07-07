@@ -276,6 +276,21 @@ describe('renderGroupedRun', () => {
     expect(output).toContain('✗ 2/5 failed   .FF..');
     expect(output).toContain('iter 2 ✗ tool.called(shell)');
     expect(output).toContain('iter 3 ✗ tool.called(shell)');
+    // Failed iterations keep their expected/observed evidence.
+    expect(output).toContain('expected  shell tool call');
+    expect(output).toContain('observed  no shell tool calls observed');
+  });
+
+  it('shows job error diagnostics for failed iterations', () => {
+    const jobs = [makeJob({iteration: 0}), makeJob({iteration: 1})];
+    const results = [
+      makeResult(jobs[0]!),
+      makeResult(jobs[1]!, {status: 'harness_failed'}),
+    ];
+    const output = renderGroupedRun({dynos: [dynoOf(jobs)], results, ctx});
+
+    expect(output).toContain('iter 2 ✗ harness failed');
+    expect(output).toContain('codex exited with code 1');
   });
 
   it('separates multiple dynos into top-level groups', () => {
