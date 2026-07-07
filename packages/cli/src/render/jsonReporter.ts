@@ -14,14 +14,18 @@ export type RenderJsonRunOutputInput = {
   jobs: readonly LocalRunnerJob[];
   results: readonly LocalRunnerResult[];
   configErrorCount?: number;
-  debugLogPaths?: Map<string, DebugLogPaths>;
+  debugLogPaths?: Map<LocalRunnerJob, DebugLogPaths>;
 };
 
 export function renderJsonRunOutput(input: RenderJsonRunOutputInput): string {
   const records = [
-    ...input.results.map((result) => {
-      const job = input.jobs.find((candidate) => candidate.id === result.jobId);
-      return jobRecord(result, job, input.debugLogPaths?.get(result.jobId));
+    ...input.results.map((result, index) => {
+      const job = input.jobs[index];
+      return jobRecord(
+        result,
+        job,
+        job === undefined ? undefined : input.debugLogPaths?.get(job),
+      );
     }),
     summaryRecord(input),
   ];

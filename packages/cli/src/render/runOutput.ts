@@ -6,7 +6,7 @@
  * `program/runCommand.ts` using the same grouped row renderers.
  */
 
-import type {LocalRunnerResult} from '@dynobox/runner-local';
+import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 
 import {createRenderContext, type RenderContext} from '../terminal/index.js';
 import type {DebugLogPaths} from '../util/transcript.js';
@@ -22,11 +22,11 @@ export type RenderRunOutputInput = {
   results: readonly LocalRunnerResult[];
   ctx?: RenderContext;
   /**
-   * Optional map of jobId → debug log paths, populated by the runner
-   * when running in `debug` mode. Used to print the log path in debug
-   * details without coupling renderers to the filesystem.
+   * Optional map of job → debug log paths, populated by the runner when
+   * running in `debug` mode. Used to print the log path in debug details
+   * without coupling renderers to the filesystem.
    */
-  debugLogPaths?: Map<string, DebugLogPaths>;
+  debugLogPaths?: Map<LocalRunnerJob, DebugLogPaths>;
 };
 
 export function renderRunOutput(input: RenderRunOutputInput): string {

@@ -1,6 +1,6 @@
 import type {LocalRunnerJob} from '@dynobox/runner-local';
 
-import {formatCount} from '../terminal/index.js';
+import {formatCount, visibleLength} from '../terminal/index.js';
 import {unique} from '../util/unique.js';
 
 /** One discovered dyno's identity plus the jobs built from it. */
@@ -54,11 +54,11 @@ export function renderDiscoverySummary(
   const iterationPart = iterations > 1 ? ` · iterations: ${iterations}` : '';
   if (harnessLabels.length === 1) {
     const full = `${counts} · harness: ${harnessLabels[0]}${iterationPart}`;
-    if (full.length <= maxWidth) return full;
+    if (visibleLength(full) <= maxWidth) return full;
     return `${counts} · harnesses: 1${iterationPart}`;
   }
 
   const full = `${counts} · harnesses: ${harnessLabels.join(', ')}${iterationPart}`;
-  if (full.length <= maxWidth) return full;
+  if (visibleLength(full) <= maxWidth) return full;
   return `${counts} · harnesses: ${harnessLabels.length}${iterationPart}`;
 }

@@ -770,6 +770,57 @@ export default defineDyno({
     );
   });
 
+  it('excludes dynos with no matching scenarios from the discovery summary', async () => {
+    const multiDynoDir = join(fixtures.dir, 'multi-dyno-filter');
+    mkdirSync(multiDynoDir, {recursive: true});
+    writeFileSync(
+      join(multiDynoDir, 'alpha.dyno.ts'),
+      `import {defineDyno, tool} from '@dynobox/sdk';
+
+export default defineDyno({
+  name: 'alpha-runner',
+  scenarios: [
+    {
+      name: 'alpha test',
+      prompt: 'Run alpha.',
+      assertions: [tool.called('shell')],
+    },
+  ],
+});
+`,
+    );
+    writeFileSync(
+      join(multiDynoDir, 'beta.dyno.ts'),
+      `import {defineDyno, tool} from '@dynobox/sdk';
+
+export default defineDyno({
+  name: 'beta-runner',
+  scenarios: [
+    {
+      name: 'beta test',
+      prompt: 'Run beta.',
+      assertions: [tool.called('shell')],
+    },
+  ],
+});
+`,
+    );
+
+    const result = await executeCli(
+      ['run', multiDynoDir, '--scenario', 'alpha*'],
+      {
+        harnesses: [createPassingHarness()],
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('alpha test');
+    expect(result.stdout).not.toContain('beta test');
+    expect(result.stdout).not.toContain('beta-runner');
+    expect(result.stdout).toContain('1 dyno · 1 scenario');
+    expect(result.stdout).not.toContain('2 dynos');
+  });
+
   it('prints an inline sparkline row for repeated iterations', async () => {
     const result = await executeCli(
       ['run', fixtures.validConfigPath, '--iterations', '2'],

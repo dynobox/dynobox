@@ -239,13 +239,13 @@ export async function runCommandAction(
   }
   // Rendering groups jobs by their source dyno; the label prefers the
   // authored dyno name and falls back to a readable path.
-  const renderDynos: RunDynoGroup[] = dynoGroups.map(
-    ({entry, jobs: dynoJobs}) => ({
+  const renderDynos: RunDynoGroup[] = dynoGroups
+    .filter(({jobs: dynoJobs}) => dynoJobs.length > 0)
+    .map(({entry, jobs: dynoJobs}) => ({
       ...(entry.ir.name === undefined ? {} : {name: entry.ir.name}),
       path: dynoDisplayPath(entry.filePath),
       jobs: dynoJobs,
-    }),
-  );
+    }));
 
   const results =
     reporter === 'json'
@@ -437,7 +437,7 @@ async function runStatic(input: RunPathInput): Promise<LocalRunnerResult[]> {
   for (const job of jobs) {
     results.push(await runJob(job, input.runOptions));
   }
-  const debugLogPaths = writeDebugLogsIfDebug(input.ctx, results);
+  const debugLogPaths = writeDebugLogsIfDebug(input.ctx, input.dynos, results);
   if (input.reporter === 'json') {
     input.writeStdout(
       renderJsonRunOutput({
@@ -709,17 +709,22 @@ function uniqueHarnessSelections<T extends {id: string; model?: string}>(
 
 /**
  * If we're in debug mode, write each result's harness debug logs to its
- * work directory and return a `Map<jobId, paths>` for the renderer.
+ * work directory and return a `Map<job, paths>` for the renderer.
  */
 function writeDebugLogsIfDebug(
   ctx: RenderContext,
+  dynos: readonly RunDynoGroup[],
   results: readonly LocalRunnerResult[],
-): Map<string, DebugLogPaths> | undefined {
+): Map<LocalRunnerJob, DebugLogPaths> | undefined {
   if (ctx.mode !== 'debug') return undefined;
-  const map = new Map<string, DebugLogPaths>();
-  for (const result of results) {
+  const jobs = dynos.flatMap((dyno) => dyno.jobs);
+  const map = new Map<LocalRunnerJob, DebugLogPaths>();
+  for (let index = 0; index < jobs.length; index++) {
+    const job = jobs[index]!;
+    const result = results[index];
+    if (result === undefined) continue;
     const paths = maybeWriteDebugLogs(ctx, result);
-    if (paths !== undefined) map.set(result.jobId, paths);
+    if (paths !== undefined) map.set(job, paths);
   }
   return map.size === 0 ? undefined : map;
 }

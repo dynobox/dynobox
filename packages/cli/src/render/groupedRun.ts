@@ -97,6 +97,24 @@ export function groupJobs(jobs: readonly LocalRunnerJob[]): JobScenarioGroup[] {
   return scenarios;
 }
 
+function assertPositionalPairing(
+  dynos: readonly RunDynoGroup[],
+  results: readonly LocalRunnerResult[],
+): void {
+  const jobs = dynos.flatMap((dyno) => dyno.jobs);
+  const ids = jobs.map((job) => job.id);
+  if (new Set(ids).size !== ids.length) return;
+
+  for (let index = 0; index < jobs.length; index++) {
+    const result = results[index];
+    if (result !== undefined && result.jobId !== jobs[index]!.id) {
+      throw new Error(
+        `Result/job mismatch at index ${index}: expected ${jobs[index]!.id}, got ${result.jobId}`,
+      );
+    }
+  }
+}
+
 /**
  * Group `(job, result)` pairs by dyno → scenario → harness label, preserving
  * job order.
@@ -110,6 +128,7 @@ export function buildGroupedRunView(
   dynos: readonly RunDynoGroup[],
   results: readonly LocalRunnerResult[],
 ): GroupedDyno[] {
+  assertPositionalPairing(dynos, results);
   let resultIndex = 0;
   return dynos.map((dyno) => {
     const resultByJob = new Map<LocalRunnerJob, LocalRunnerResult>();
@@ -287,7 +306,7 @@ export type GroupedRunRenderInput = {
   dynos: readonly RunDynoGroup[];
   results: readonly LocalRunnerResult[];
   ctx: RenderContext;
-  debugLogPaths?: Map<string, DebugLogPaths>;
+  debugLogPaths?: Map<LocalRunnerJob, DebugLogPaths>;
 };
 
 /**
@@ -365,7 +384,7 @@ function debugLogPathsOption(
   input: GroupedRunRenderInput,
   entry: GroupedJobEntry,
 ): {debugLogPaths?: DebugLogPaths} {
-  const paths = input.debugLogPaths?.get(entry.job.id);
+  const paths = input.debugLogPaths?.get(entry.job);
   return paths === undefined ? {} : {debugLogPaths: paths};
 }
 

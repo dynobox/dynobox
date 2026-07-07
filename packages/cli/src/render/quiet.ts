@@ -93,13 +93,26 @@ function describeJobFailures(
   assertionById: Map<string, IrAssertion>,
 ): string[] {
   if (entry.result.status === 'setup_failed') return ['setup failed'];
-  if (
-    entry.result.status === 'harness_failed' &&
-    entry.result.assertionResults.length === 0
-  ) {
-    return ['harness failed'];
+  if (entry.result.status === 'harness_failed') {
+    const lines = ['harness failed', ...entry.result.diagnostics];
+    if (
+      entry.result.assertionResults.length > 0 &&
+      entry.result.harnessResult !== undefined
+    ) {
+      lines.push(
+        ...failedAssertionLabels(entry.result, assertionById),
+      );
+    }
+    return lines;
   }
-  return entry.result.assertionResults
+  return failedAssertionLabels(entry.result, assertionById);
+}
+
+function failedAssertionLabels(
+  result: GroupedJobEntry['result'],
+  assertionById: Map<string, IrAssertion>,
+): string[] {
+  return result.assertionResults
     .filter((assertionResult) => !assertionResult.passed)
     .map((assertionResult) => {
       const assertion = assertionById.get(assertionResult.assertionId);

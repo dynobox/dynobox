@@ -175,6 +175,18 @@ describe('buildGroupedRunView', () => {
       view[1]?.scenarios[0]?.harnessGroups[0]?.entries[0]?.result.passed,
     ).toBe(false);
   });
+
+  it('throws when results are misaligned and job ids are unique', () => {
+    const jobs = [
+      makeJob({scenarioId: 'scenario.a'}),
+      makeJob({scenarioId: 'scenario.b'}),
+    ];
+    const results = [makeResult(jobs[1]!), makeResult(jobs[0]!)];
+
+    expect(() => buildGroupedRunView([dynoOf(jobs)], results)).toThrow(
+      /Result\/job mismatch at index 0/,
+    );
+  });
 });
 
 describe('renderGroupedRun', () => {
@@ -291,6 +303,31 @@ describe('renderGroupedRun', () => {
 
     expect(output).toContain('iter 2 ✗ harness failed');
     expect(output).toContain('codex exited with code 1');
+  });
+
+  it('attaches debug log paths by job reference when job ids duplicate across dynos', () => {
+    const jobA = makeJob();
+    const jobB = makeJob();
+    const debugLogPaths = new Map([
+      [jobA, {transcript: '/tmp/alpha/dynobox-transcript.log'}],
+      [jobB, {transcript: '/tmp/beta/dynobox-transcript.log'}],
+    ]);
+    const output = renderGroupedRun({
+      dynos: [
+        dynoOf([jobA]),
+        dynoOf([jobB], {name: 'other-dyno', path: 'other.dyno.ts'}),
+      ],
+      results: [makeResult(jobA), makeResult(jobB)],
+      ctx: createRenderContext({mode: 'debug'}),
+      debugLogPaths,
+    });
+
+    expect(output).toContain(
+      'log       transcript /tmp/alpha/dynobox-transcript.log',
+    );
+    expect(output).toContain(
+      'log       transcript /tmp/beta/dynobox-transcript.log',
+    );
   });
 
   it('separates multiple dynos into top-level groups', () => {
