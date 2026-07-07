@@ -1,74 +1,132 @@
 /**
- * The summary block printed at the end of every run: pass/fail totals,
- * total duration, and (when present) a list of failed scenarios.
+ * The summary line printed at the end of every run. Leads with job counts;
+ * assertion detail is secondary and always labeled. Zero-count entries are
+ * never rendered.
  */
 
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 
-import {assertionByIdForJobs} from '../jobs.js';
 import {
   colorStatus,
   createRenderContext,
+  formatCount,
   formatDuration,
-  leftRight,
   type RenderContext,
   separator,
+  symbol,
 } from '../terminal/index.js';
-import {describeAssertion} from './describe.js';
-import {describeWarning} from './warnings.js';
+
+export type RunSummaryTotals = {
+  jobs: number;
+  passedJobs: number;
+  failedJobs: number;
+  passedAssertions: number;
+  failedAssertions: number;
+  jobErrors: number;
+  warnings: number;
+  durationMs: number;
+};
+
+/** Aggregate job/assertion/warning totals from finalized results. */
+export function summarizeRunResults(
+  results: readonly LocalRunnerResult[],
+): RunSummaryTotals {
+  const passedJobs = results.filter((result) => result.passed).length;
+  const assertionResults = results.flatMap((result) => result.assertionResults);
+  const failedAssertions = assertionResults.filter(
+    (assertionResult) => !assertionResult.passed,
+  ).length;
+  return {
+    jobs: results.length,
+    passedJobs,
+    failedJobs: results.length - passedJobs,
+    passedAssertions: assertionResults.length - failedAssertions,
+    failedAssertions,
+    jobErrors: results.filter(
+      (result) =>
+        result.status === 'setup_failed' || result.status === 'harness_failed',
+    ).length,
+    warnings: results.reduce((sum, result) => sum + result.warnings.length, 0),
+    durationMs: results.reduce((sum, result) => sum + result.timing.totalMs, 0),
+  };
+}
+
+/**
+ * The ordered summary segments (without separator/indentation), shared by
+ * the default and quiet summaries:
+ *
+ * 1. Job counts (passed fraction when all passed or only job errors;
+ *    failed fraction when assertion failures exist).
+ * 2. Labeled assertion detail, when meaningful.
+ * 3. Job error count, if nonzero.
+ * 4. Warning count, if nonzero.
+ */
+export function runSummarySegments(
+  totals: RunSummaryTotals,
+  ctx: RenderContext,
+): string[] {
+  const segments: string[] = [];
+  if (totals.failedAssertions > 0) {
+    segments.push(
+      colorStatus(
+        ctx,
+        `${symbol(ctx, 'fail')} ${totals.failedJobs} of ${totals.jobs} jobs failed`,
+        'fail',
+      ),
+    );
+    segments.push(formatCount(totals.failedAssertions, 'failed assertion'));
+  } else if (totals.failedJobs > 0) {
+    segments.push(
+      colorStatus(
+        ctx,
+        `${symbol(ctx, 'pass')} ${totals.passedJobs} of ${totals.jobs} jobs passed`,
+        'pass',
+      ),
+    );
+  } else {
+    segments.push(
+      colorStatus(
+        ctx,
+        `${symbol(ctx, 'pass')} ${formatCount(totals.passedJobs, 'job')} passed`,
+        'pass',
+      ),
+    );
+    segments.push(
+      totals.passedAssertions === 0
+        ? 'no assertions'
+        : formatCount(totals.passedAssertions, 'assertion'),
+    );
+  }
+
+  if (totals.jobErrors > 0) {
+    segments.push(
+      colorStatus(
+        ctx,
+        `${symbol(ctx, 'fail')} ${formatCount(totals.jobErrors, 'job error')}`,
+        'fail',
+      ),
+    );
+  }
+  if (totals.warnings > 0) {
+    segments.push(
+      colorStatus(ctx, formatCount(totals.warnings, 'warning'), 'skip'),
+    );
+  }
+  return segments;
+}
 
 export function renderRunSummary(
-  jobs: readonly LocalRunnerJob[],
+  _jobs: readonly LocalRunnerJob[],
   results: readonly LocalRunnerResult[],
   ctx: RenderContext = createRenderContext(),
 ): string {
-  const assertionById = assertionByIdForJobs(jobs);
-  const passedCount = results.filter((result) => result.passed).length;
-  const failedCount = results.length - passedCount;
-  const totalMs = results.reduce(
-    (sum, result) => sum + result.timing.totalMs,
-    0,
-  );
-  const summary = `${colorStatus(ctx, `${passedCount} passed`, passedCount === results.length ? 'pass' : 'plain')}   ${colorStatus(ctx, `${failedCount} failed`, failedCount === 0 ? 'plain' : 'fail')}`;
-  const lines = [
-    `
-  ${separator(ctx)}
-  ${leftRight(summary, formatDuration(totalMs), ctx.width)}
-`,
+  const totals = summarizeRunResults(results);
+  const segments = [
+    ...runSummarySegments(totals, ctx),
+    formatDuration(totals.durationMs),
   ];
-
-  const failedResults = results.filter((result) => !result.passed);
-  if (failedResults.length > 0) {
-    lines.push('\n  failed scenarios:\n');
-    for (const result of failedResults) {
-      const job = jobs.find((candidate) => candidate.id === result.jobId);
-      const failedAssertion = result.assertionResults.find(
-        (assertionResult) => !assertionResult.passed,
-      );
-      const assertion =
-        failedAssertion === undefined
-          ? undefined
-          : assertionById.get(failedAssertion.assertionId);
-      const detail =
-        assertion === undefined
-          ? (failedAssertion?.type ?? result.status)
-          : describeAssertion(assertion);
-      lines.push(
-        `    ${job?.scenario.name ?? result.scenarioId}   ${detail}\n`,
-      );
-    }
-  }
-
-  const warningResults = results.filter((result) => result.warnings.length > 0);
-  if (warningResults.length > 0) {
-    lines.push('\n  permission warnings:\n');
-    for (const result of warningResults) {
-      const job = jobs.find((candidate) => candidate.id === result.jobId);
-      lines.push(
-        `    ${job?.scenario.name ?? result.scenarioId}   ${describeWarning(result.warnings[0]!)}\n`,
-      );
-    }
-  }
-
-  return lines.join('');
+  return `
+  ${separator(ctx)}
+  ${segments.join(' · ')}
+`;
 }

@@ -158,7 +158,7 @@ reference.
   `--harness claude-code,codex --model sonnet,gpt-5.5`.
 - Filter scenarios at runtime with `--scenario <pattern>`.
 - Repeat each scenario/harness pair with `--iterations <count>` and view
-  sparkline pass-rate matrix cells such as `.F...`.
+  inline pass-rate sparklines such as `.F...`.
 - Configure harness permission behavior with `permissionMode` or
   `--permission-mode`; dangerous full-access modes are opt-in.
 - Emit newline-delimited JSON reports with `--reporter json`.

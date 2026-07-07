@@ -23,7 +23,7 @@ describe('--harness override validation', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(
-      'dynobox  1 scenario · 1 harness · 1 iteration',
+      'dynobox  1 dyno · 1 scenario · harness: codex',
     );
   });
 
@@ -52,7 +52,9 @@ describe('--harness override validation', () => {
     );
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('1 scenario · 1 harness · 1 iteration');
+    expect(result.stdout).toContain(
+      '1 dyno · 1 scenario · harness: claude-code/dangerous',
+    );
   });
 
   it('rejects an unknown permission mode with the config-error exit code', async () => {

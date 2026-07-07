@@ -3,19 +3,29 @@
  */
 
 /**
- * Pluralize a count: `1 scenario`, `3 scenarios`.
+ * Pluralize a count: `1 scenario`, `3 scenarios`. Pass `plural` for
+ * irregular plurals: `formatCount(2, 'harness', 'harnesses')`.
  */
-export function formatCount(count: number, singular: string): string {
-  return `${count} ${count === 1 ? singular : `${singular}s`}`;
+export function formatCount(
+  count: number,
+  singular: string,
+  plural = `${singular}s`,
+): string {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
 /**
  * Format a duration with one decimal place of seconds, e.g. `1.2s`.
+ * Durations of a minute or more render as `1m02s`.
  *
  * Used for finalized phase/run durations where a stable display is desirable.
  */
 export function formatDuration(durationMs: number): string {
-  return `${(durationMs / 1000).toFixed(1)}s`;
+  const totalSeconds = durationMs / 1000;
+  if (totalSeconds < 60) return `${totalSeconds.toFixed(1)}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  return `${minutes}m${String(seconds).padStart(2, '0')}s`;
 }
 
 /**

@@ -160,7 +160,7 @@ describe('dynobox init', () => {
     });
     expect(runResult.exitCode).toBe(0);
     expect(runResult.stdout).toContain('inspects package.json');
-    expect(runResult.stdout).toContain('1 passed');
+    expect(runResult.stdout).toContain('1 job passed');
   });
 
   it('scaffolds a YAML starter that passes `dynobox run` end-to-end', async () => {
@@ -175,6 +175,6 @@ describe('dynobox init', () => {
     });
     expect(runResult.exitCode).toBe(0);
     expect(runResult.stdout).toContain('inspects package.json');
-    expect(runResult.stdout).toContain('1 passed');
+    expect(runResult.stdout).toContain('1 job passed');
   });
 });

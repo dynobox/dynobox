@@ -27,21 +27,27 @@ const EXPECTED_PLACEHOLDER = `
 `;
 
 function expectedPassingRunHeader(configPath: string): string {
-  return renderRunHeader(configPath, [
+  return renderRunHeader([
     {
-      id: 'scenario.uses-shell.iteration.0',
-      iteration: 0,
-      harness: 'claude-code',
-      scenario: {
-        id: 'scenario.uses-shell',
-        name: 'uses shell',
-        prompt: 'Run pnpm test and summarize the result.',
-        harnesses: [{id: 'claude-code'}],
-        setup: [],
-        fixtures: [],
-        endpoints: [],
-        assertions: [],
-      },
+      name: 'cli-local-runner',
+      path: configPath,
+      jobs: [
+        {
+          id: 'scenario.uses-shell.iteration.0',
+          iteration: 0,
+          harness: 'claude-code',
+          scenario: {
+            id: 'scenario.uses-shell',
+            name: 'uses shell',
+            prompt: 'Run pnpm test and summarize the result.',
+            harnesses: [{id: 'claude-code'}],
+            setup: [],
+            fixtures: [],
+            endpoints: [],
+            assertions: [],
+          },
+        },
+      ],
     },
   ]);
 }

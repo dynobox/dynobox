@@ -227,26 +227,35 @@ sonnet,gpt-5.5` maps `sonnet` to `claude-code` and `gpt-5.5` to `codex`.
 selected harness.
 
 Iterations are a runtime option, not part of dyno configs. `--iterations 5`
-runs every selected scenario/harness pair five times and reports aggregate
-pass-rate matrix cells such as `.F...`. Passing marks are `.` and failing
-marks are `F`; marks are colored when ANSI color output is enabled.
+runs every selected scenario/harness pair five times and reports a per-row
+job fraction with an inline sparkline such as `✗ 2/5 failed   .FF..`. Passing
+marks are `.` and failing marks are `F`; marks are colored when ANSI color
+output is enabled. Every failed iteration is listed under its row.
 
 ## Output Modes
 
-Default output prints the run header, a pass-rate matrix, assertion details for
-failed jobs, and a final summary. Passing jobs are represented by matrix cells.
-Assertion details include the expected behavior and an `observed` line with
-the evidence Dynobox actually saw. For path-aware tool assertions, the rendered
-expectation includes the matched path, such as
-`tool.called(read_file, path: package.json)`.
+Default output groups results by dyno, then by scenario. The header shows a
+discovery summary (`discovered 1 dyno · 2 scenarios · harness: …`) including
+the full harness label with model and permission mode when configured. When a
+run spans multiple harness labels, each scenario shows one aligned row per
+harness. Failed rows show the failed assertions, including the expected
+behavior and an `observed` line with the evidence Dynobox actually saw. For
+path-aware tool assertions, the rendered expectation includes the matched
+path, such as `tool.called(read_file, path: package.json)`.
 
-`--quiet` prints compact CI-friendly progress, the pass-rate matrix, and
-failure information.
+The final summary leads with job counts (a job is one executed
+`scenario × harness × iteration` unit); assertion detail is always labeled,
+such as `✗ 1 of 2 jobs failed · 1 failed assertion · 1m02s`. Setup and
+harness failures are counted separately as job errors.
 
-`--verbose` prints the pass-rate matrix and expands scenario details even when
-jobs pass.
+`--quiet` prints compact CI-friendly `.`/`F` progress marks and failure
+information, with the same job-led summary semantics.
 
-`--debug` prints the pass-rate matrix, includes temporary work-directory paths,
+`--verbose` uses the grouped layout and expands every job with phase rows and
+all assertion results, even when jobs pass.
+
+`--debug` prints everything `--verbose` does, includes temporary
+work-directory paths,
 and writes debug logs inside each job's work directory when data is available.
 Debug logs can include:
 
