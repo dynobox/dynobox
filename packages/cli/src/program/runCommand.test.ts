@@ -269,6 +269,73 @@ describe('dynobox run — upload', () => {
     expect(JSON.stringify(payload)).not.toContain('harnessOutput');
   });
 
+  it('only uploads dynos with jobs after scenario filtering', async () => {
+    const dir = join(fixtures.dir, 'filtered-upload');
+    mkdirSync(dir, {recursive: true});
+    writeFileSync(
+      join(dir, 'alpha.dyno.ts'),
+      `import {defineDyno, tool} from '@dynobox/sdk';
+
+export default defineDyno({
+  scenarios: [
+    {
+      name: 'alpha scenario',
+      prompt: 'Run pnpm test.',
+      assertions: [tool.called('shell')],
+    },
+  ],
+});
+`,
+    );
+    writeFileSync(
+      join(dir, 'beta.dyno.ts'),
+      `import {defineDyno, tool} from '@dynobox/sdk';
+
+export default defineDyno({
+  scenarios: [
+    {
+      name: 'beta scenario',
+      prompt: 'Run pnpm test.',
+      assertions: [tool.called('shell')],
+    },
+  ],
+});
+`,
+    );
+    const fetchMock = stubFetch(async (url) => {
+      if (String(url).endsWith('/auth/identity')) {
+        return Response.json({identity: {email: 'user@example.com'}});
+      }
+
+      return Response.json({id: 'run-1'});
+    });
+
+    const result = await executeCli(
+      ['run', dir, '--scenario', 'alpha*', '--save-run'],
+      {
+        env: {
+          DYNOBOX_API_URL: 'http://localhost:8787',
+          DYNOBOX_TOKEN: 'token',
+        },
+        harnesses: [createPassingHarness()],
+      },
+    );
+    const [, request] = fetchMock.mock.calls[1] as [string, RequestInit];
+    const payload = JSON.parse(String(request.body)) as Record<string, unknown>;
+
+    expect(result.exitCode).toBe(0);
+    expect(payload).toMatchObject({
+      totals: {jobs: 1},
+      dynos: [
+        {
+          dynoPath: expect.stringContaining('alpha.dyno.ts'),
+          totals: {jobs: 1},
+          jobs: [{scenario: {name: 'alpha scenario'}}],
+        },
+      ],
+    });
+  });
+
   it('errors before running when --save-run has no token', async () => {
     const fetchMock = stubFetch(async () => Response.json({id: 'run-1'}));
     const harness = createPassingHarness();

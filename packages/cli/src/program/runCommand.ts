@@ -273,12 +273,14 @@ export async function runCommandAction(
 
   if (commandFlags.saveRun === true) {
     await uploadRun({
-      dynos: dynoGroups.map(({entry, jobs: dynoJobs}) => ({
-        dynoPath: dynoDisplayPath(entry.filePath),
-        name: entry.ir.name ?? null,
-        target: dynoTarget(entry),
-        jobs: dynoJobs,
-      })),
+      dynos: dynoGroups
+        .filter(({jobs: dynoJobs}) => dynoJobs.length > 0)
+        .map(({entry, jobs: dynoJobs}) => ({
+          dynoPath: dynoDisplayPath(entry.filePath),
+          name: entry.ir.name ?? null,
+          target: dynoTarget(entry),
+          jobs: dynoJobs,
+        })),
       results,
       runFailed,
       inputPath: inputLabel,
