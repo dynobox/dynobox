@@ -27,8 +27,6 @@ export function renderQuietRun(
   results: readonly LocalRunnerResult[],
   ctx: RenderContext,
 ): string {
-  const jobs = dynos.flatMap((dyno) => dyno.jobs);
-  const multiIteration = jobs.some((job) => job.iteration > 0);
   const marks = results.map((result) => (result.passed ? '.' : 'F')).join('');
   const summaryPrefix = '  dynobox  ';
   const lines = [
@@ -57,6 +55,7 @@ export function renderQuietRun(
     lines.push('\n');
     for (const {label, group} of failedGroups) {
       lines.push(`  FAIL  ${label}\n`);
+      const multiIteration = group.entries.length > 1;
       for (const entry of group.entries) {
         if (entry.result.passed) continue;
         const prefix = multiIteration ? `iter ${entry.job.iteration + 1} ` : '';
@@ -71,6 +70,7 @@ export function renderQuietRun(
     lines.push('\n');
     for (const {label, group} of warnedGroups) {
       lines.push(`  WARN  ${label}\n`);
+      const multiIteration = group.entries.length > 1;
       for (const entry of group.entries) {
         const prefix = multiIteration ? `iter ${entry.job.iteration + 1} ` : '';
         for (const warning of entry.result.warnings) {
@@ -126,7 +126,7 @@ function quietSummarySegments(totals: RunSummaryTotals): string[] {
     segments.push(`${totals.failedJobs} of ${totals.jobs} jobs failed`);
     segments.push(formatCount(totals.failedAssertions, 'failed assertion'));
   } else if (totals.failedJobs > 0) {
-    segments.push(`${totals.passedJobs} of ${totals.jobs} jobs passed`);
+    segments.push(`${totals.failedJobs} of ${totals.jobs} jobs failed`);
   } else {
     segments.push(`${formatCount(totals.passedJobs, 'job')} passed`);
     segments.push(

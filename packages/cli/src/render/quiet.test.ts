@@ -169,8 +169,13 @@ describe('renderQuietRun', () => {
     );
 
     expect(setupOutput).toContain('setup failed');
+    expect(setupOutput).toContain('1 of 1 jobs failed, 1 job error');
+    expect(setupOutput).not.toContain('jobs passed');
+
     expect(harnessOutput).toContain('harness failed');
     expect(harnessOutput).toContain('codex exited with code 1');
+    expect(harnessOutput).toContain('1 of 1 jobs failed, 1 job error');
+    expect(harnessOutput).not.toContain('jobs passed');
   });
 
   it('shows harness diagnostics before assertion labels when both are present', () => {
@@ -201,6 +206,56 @@ describe('renderQuietRun', () => {
     expect(harnessIndex).toBeGreaterThan(-1);
     expect(diagnosticIndex).toBeGreaterThan(harnessIndex);
     expect(assertionIndex).toBeGreaterThan(diagnosticIndex);
+  });
+
+  it('does not prefix single-iteration groups when another group has iterations', () => {
+    const singleJob = makeJob({
+      scenarioId: 'scenario.single',
+      scenarioName: 'single scenario',
+    });
+    const multiJobs = [
+      makeJob({
+        scenarioId: 'scenario.multi',
+        scenarioName: 'multi scenario',
+        iteration: 0,
+      }),
+      makeJob({
+        scenarioId: 'scenario.multi',
+        scenarioName: 'multi scenario',
+        iteration: 1,
+      }),
+    ];
+    const output = renderQuietRun(
+      [dynoOf([singleJob, ...multiJobs])],
+      [
+        makeResult(singleJob, {
+          status: 'assertion_failed',
+          failedAssertionIndexes: [0],
+        }),
+        makeResult(multiJobs[0]!),
+        makeResult(multiJobs[1]!, {
+          status: 'assertion_failed',
+          failedAssertionIndexes: [0],
+        }),
+      ],
+      ctx,
+    );
+
+    const singleFailIndex = output.indexOf(
+      'FAIL  package-script-check / single scenario',
+    );
+    const multiFailIndex = output.indexOf(
+      'FAIL  package-script-check / multi scenario',
+    );
+    const singleDetail = output.slice(
+      singleFailIndex,
+      multiFailIndex > singleFailIndex ? multiFailIndex : undefined,
+    );
+    const multiDetail = output.slice(multiFailIndex);
+
+    expect(singleDetail).toContain('tool.called(shell)');
+    expect(singleDetail).not.toContain('iter 1 ');
+    expect(multiDetail).toContain('iter 2 tool.called(shell)');
   });
 
   it('prefixes failed iterations with iter labels', () => {
