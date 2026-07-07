@@ -357,7 +357,7 @@ describe('renderRunSummary', () => {
     ];
     const results = jobs.map((job) => makeResult(job));
 
-    const summary = renderRunSummary(jobs, results, ctx);
+    const summary = renderRunSummary(results, ctx);
 
     expect(summary).toContain('✓ 2 jobs passed · 5 assertions');
   });
@@ -372,7 +372,7 @@ describe('renderRunSummary', () => {
       }),
     ];
 
-    const summary = renderRunSummary(jobs, results, ctx);
+    const summary = renderRunSummary(results, ctx);
 
     expect(summary).toContain('✗ 1 of 2 jobs failed · 1 failed assertion');
     expect(summary).not.toContain('0 ');
@@ -385,9 +385,9 @@ describe('renderRunSummary', () => {
       makeResult(jobs[1]!, {status: 'harness_failed'}),
     ];
 
-    const summary = renderRunSummary(jobs, results, ctx);
+    const summary = renderRunSummary(results, ctx);
 
-    expect(summary).toContain('✓ 1 of 2 jobs passed · ✗ 1 job error');
+    expect(summary).toContain('✗ 1 of 2 jobs failed · ✗ 1 job error');
     expect(summary).not.toContain('failed assertion');
   });
 
@@ -395,7 +395,7 @@ describe('renderRunSummary', () => {
     const jobs = [makeJob({assertionCount: 0})];
     const results = jobs.map((job) => makeResult(job));
 
-    const summary = renderRunSummary(jobs, results, ctx);
+    const summary = renderRunSummary(results, ctx);
 
     expect(summary).toContain('✓ 1 job passed · no assertions');
   });
@@ -404,7 +404,7 @@ describe('renderRunSummary', () => {
     const jobs = [makeJob()];
     const results = [makeResult(jobs[0]!, {totalMs: 62_000})];
 
-    const summary = renderRunSummary(jobs, results, ctx);
+    const summary = renderRunSummary(results, ctx);
 
     expect(summary).toContain('1m02s');
   });

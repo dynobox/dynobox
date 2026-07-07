@@ -31,8 +31,9 @@ export function renderQuietRun(
   const assertionById = assertionByIdForJobs(jobs);
   const multiIteration = jobs.some((job) => job.iteration > 0);
   const marks = results.map((result) => (result.passed ? '.' : 'F')).join('');
+  const summaryPrefix = '  dynobox  ';
   const lines = [
-    `  dynobox  ${renderDiscoverySummary(dynos, ctx.width - 11)}\n\n`,
+    `${summaryPrefix}${renderDiscoverySummary(dynos, ctx.width - summaryPrefix.length)}\n\n`,
     `  ${marks}\n`,
   ];
 

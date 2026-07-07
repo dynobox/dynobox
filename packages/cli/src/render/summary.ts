@@ -4,7 +4,7 @@
  * never rendered.
  */
 
-import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
+import type {LocalRunnerResult} from '@dynobox/runner-local';
 
 import {
   colorStatus,
@@ -55,8 +55,8 @@ export function summarizeRunResults(
  * The ordered summary segments (without separator/indentation), shared by
  * the default and quiet summaries:
  *
- * 1. Job counts (passed fraction when all passed or only job errors;
- *    failed fraction when assertion failures exist).
+ * 1. Job counts (passed count when all passed; failed fraction when any job
+ *    failed).
  * 2. Labeled assertion detail, when meaningful.
  * 3. Job error count, if nonzero.
  * 4. Warning count, if nonzero.
@@ -79,8 +79,8 @@ export function runSummarySegments(
     segments.push(
       colorStatus(
         ctx,
-        `${symbol(ctx, 'pass')} ${totals.passedJobs} of ${totals.jobs} jobs passed`,
-        'pass',
+        `${symbol(ctx, 'fail')} ${totals.failedJobs} of ${totals.jobs} jobs failed`,
+        'fail',
       ),
     );
   } else {
@@ -116,7 +116,6 @@ export function runSummarySegments(
 }
 
 export function renderRunSummary(
-  _jobs: readonly LocalRunnerJob[],
   results: readonly LocalRunnerResult[],
   ctx: RenderContext = createRenderContext(),
 ): string {

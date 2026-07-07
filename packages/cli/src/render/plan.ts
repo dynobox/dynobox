@@ -53,7 +53,9 @@ export function renderDiscoverySummary(
   const counts = `${formatCount(dynos.length, 'dyno')} · ${formatCount(scenarioCount, 'scenario')}`;
   const iterationPart = iterations > 1 ? ` · iterations: ${iterations}` : '';
   if (harnessLabels.length === 1) {
-    return `${counts} · harness: ${harnessLabels[0]}${iterationPart}`;
+    const full = `${counts} · harness: ${harnessLabels[0]}${iterationPart}`;
+    if (full.length <= maxWidth) return full;
+    return `${counts} · harnesses: 1${iterationPart}`;
   }
 
   const full = `${counts} · harnesses: ${harnessLabels.join(', ')}${iterationPart}`;

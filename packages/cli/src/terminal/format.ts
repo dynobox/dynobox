@@ -22,9 +22,10 @@ export function formatCount(
  */
 export function formatDuration(durationMs: number): string {
   const totalSeconds = durationMs / 1000;
-  if (totalSeconds < 60) return `${totalSeconds.toFixed(1)}s`;
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = Math.floor(totalSeconds % 60);
+  if (totalSeconds < 59.95) return `${totalSeconds.toFixed(1)}s`;
+  const roundedSeconds = Math.round(totalSeconds);
+  const minutes = Math.floor(roundedSeconds / 60);
+  const seconds = roundedSeconds % 60;
   return `${minutes}m${String(seconds).padStart(2, '0')}s`;
 }
 

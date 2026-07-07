@@ -35,7 +35,7 @@ import {
   SPINNER_FRAMES,
 } from '../live/index.js';
 import {
-  formatJobHarness,
+  groupJobs,
   harnessLabelColumnWidth,
   renderDynoLine,
   renderHarnessGroupRow,
@@ -460,37 +460,6 @@ async function runStatic(input: RunPathInput): Promise<LocalRunnerResult[]> {
   return results;
 }
 
-/** Scenario → harness-label job grouping used to drive live output order. */
-type LiveScenarioGroup = {
-  name: string;
-  harnessGroups: Array<{label: string; jobs: LocalRunnerJob[]}>;
-};
-
-function groupJobsForLive(
-  jobs: readonly LocalRunnerJob[],
-): LiveScenarioGroup[] {
-  const scenarios: LiveScenarioGroup[] = [];
-  const scenarioById = new Map<string, LiveScenarioGroup>();
-  for (const job of jobs) {
-    let scenario = scenarioById.get(job.scenario.id);
-    if (scenario === undefined) {
-      scenario = {name: job.scenario.name, harnessGroups: []};
-      scenarioById.set(job.scenario.id, scenario);
-      scenarios.push(scenario);
-    }
-    const label = formatJobHarness(job);
-    let group = scenario.harnessGroups.find(
-      (candidate) => candidate.label === label,
-    );
-    if (group === undefined) {
-      group = {label, jobs: []};
-      scenario.harnessGroups.push(group);
-    }
-    group.jobs.push(job);
-  }
-  return scenarios;
-}
-
 /**
  * Live path: print a header, then stream grouped output — dyno and scenario
  * lines as groups begin, a spinner-driven row per harness group that advances
@@ -615,7 +584,7 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
       if (!firstDyno) writeStdout('\n');
       firstDyno = false;
       writeStdout(`${renderDynoLine(dyno.name ?? dyno.path, ctx)}\n`);
-      for (const scenario of groupJobsForLive(dyno.jobs)) {
+      for (const scenario of groupJobs(dyno.jobs)) {
         writeStdout(`${renderScenarioLine(scenario.name, ctx)}\n`);
         for (const group of scenario.harnessGroups) {
           const rowOptions: RowLabelOptions = multiHarness
@@ -633,7 +602,7 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
     spinner?.stop();
   }
 
-  writeStdout(renderRunSummary(jobs, results, ctx));
+  writeStdout(renderRunSummary(results, ctx));
   return results;
 }
 

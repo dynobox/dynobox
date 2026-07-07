@@ -29,6 +29,7 @@ export {
   type GroupedHarnessGroup,
   type GroupedJobEntry,
   type GroupedScenario,
+  groupJobs,
   harnessLabelColumnWidth,
   renderDynoLine,
   renderGroupedRun,

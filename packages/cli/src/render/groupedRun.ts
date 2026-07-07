@@ -63,6 +63,40 @@ export type GroupedDyno = {
   scenarios: GroupedScenario[];
 };
 
+export type JobHarnessGroup = {
+  label: string;
+  jobs: LocalRunnerJob[];
+};
+
+export type JobScenarioGroup = {
+  name: string;
+  harnessGroups: JobHarnessGroup[];
+};
+
+/** Group jobs by scenario -> harness label, preserving first-seen order. */
+export function groupJobs(jobs: readonly LocalRunnerJob[]): JobScenarioGroup[] {
+  const scenarios: JobScenarioGroup[] = [];
+  const scenarioById = new Map<string, JobScenarioGroup>();
+  for (const job of jobs) {
+    let scenario = scenarioById.get(job.scenario.id);
+    if (scenario === undefined) {
+      scenario = {name: job.scenario.name, harnessGroups: []};
+      scenarioById.set(job.scenario.id, scenario);
+      scenarios.push(scenario);
+    }
+    const label = formatJobHarness(job);
+    let group = scenario.harnessGroups.find(
+      (candidate) => candidate.label === label,
+    );
+    if (group === undefined) {
+      group = {label, jobs: []};
+      scenario.harnessGroups.push(group);
+    }
+    group.jobs.push(job);
+  }
+  return scenarios;
+}
+
 /**
  * Group `(job, result)` pairs by dyno → scenario → harness label, preserving
  * job order.
@@ -78,28 +112,25 @@ export function buildGroupedRunView(
 ): GroupedDyno[] {
   let resultIndex = 0;
   return dynos.map((dyno) => {
-    const scenarios: GroupedScenario[] = [];
-    const scenarioById = new Map<string, GroupedScenario>();
+    const resultByJob = new Map<LocalRunnerJob, LocalRunnerResult>();
     for (const job of dyno.jobs) {
       const result = results[resultIndex];
       resultIndex += 1;
       if (result === undefined) continue;
-      let scenario = scenarioById.get(job.scenario.id);
-      if (scenario === undefined) {
-        scenario = {name: job.scenario.name, harnessGroups: []};
-        scenarioById.set(job.scenario.id, scenario);
-        scenarios.push(scenario);
-      }
-      const label = formatJobHarness(job);
-      let group = scenario.harnessGroups.find(
-        (candidate) => candidate.label === label,
-      );
-      if (group === undefined) {
-        group = {label, entries: []};
-        scenario.harnessGroups.push(group);
-      }
-      group.entries.push({job, result});
+      resultByJob.set(job, result);
     }
+    const scenarios = groupJobs(dyno.jobs).flatMap((scenario) => {
+      const harnessGroups = scenario.harnessGroups.flatMap((group) => {
+        const entries = group.jobs.flatMap((job) => {
+          const result = resultByJob.get(job);
+          return result === undefined ? [] : [{job, result}];
+        });
+        return entries.length === 0 ? [] : [{label: group.label, entries}];
+      });
+      return harnessGroups.length === 0
+        ? []
+        : [{name: scenario.name, harnessGroups}];
+    });
     return {label: dyno.name ?? dyno.path, scenarios};
   });
 }

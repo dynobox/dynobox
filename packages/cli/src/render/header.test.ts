@@ -37,12 +37,15 @@ describe('renderRunHeader', () => {
   });
 
   it('includes model and permission mode in the harness label', () => {
-    const header = renderRunHeader([
-      {
-        path: 'example/example.dyno.ts',
-        jobs: [job({model: 'gpt-5.4-mini', permissionMode: 'dangerous'})],
-      },
-    ]);
+    const header = renderRunHeader(
+      [
+        {
+          path: 'example/example.dyno.ts',
+          jobs: [job({model: 'gpt-5.4-mini', permissionMode: 'dangerous'})],
+        },
+      ],
+      createRenderContext({terminalWidth: 120}),
+    );
 
     expect(header).toContain('harness: claude-code/gpt-5.4-mini/dangerous');
   });
@@ -84,6 +87,22 @@ describe('renderRunHeader', () => {
 
     expect(header).toContain('harnesses: 2');
     expect(header).not.toContain('harnesses: claude-code');
+  });
+
+  it('falls back to a harness count when one label exceeds the width', () => {
+    const ctx = createRenderContext({terminalWidth: 40});
+    const header = renderRunHeader(
+      [
+        {
+          path: 'example/example.dyno.ts',
+          jobs: [job({model: 'sonnet', permissionMode: 'dangerous'})],
+        },
+      ],
+      ctx,
+    );
+
+    expect(header).toContain('harnesses: 1');
+    expect(header).not.toContain('harness: claude-code/sonnet/dangerous');
   });
 
   it('shows the iteration count for multi-iteration runs', () => {

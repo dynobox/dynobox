@@ -35,7 +35,6 @@ export function renderRunOutput(input: RenderRunOutputInput): string {
     return renderQuietRun(input.dynos, input.results, ctx);
   }
 
-  const jobs = input.dynos.flatMap((dyno) => dyno.jobs);
   return [
     renderRunHeader(input.dynos, ctx),
     renderGroupedRun({
@@ -46,6 +45,6 @@ export function renderRunOutput(input: RenderRunOutputInput): string {
         ? {}
         : {debugLogPaths: input.debugLogPaths}),
     }),
-    renderRunSummary(jobs, input.results, ctx),
+    renderRunSummary(input.results, ctx),
   ].join('');
 }
