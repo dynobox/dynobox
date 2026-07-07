@@ -8,6 +8,11 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Fixed grouped, quiet, live, and saved-run assertion details so duplicate
+  assertion IDs across dyno files resolve against the correct job definition.
+
 ---
 
 ## dynobox@0.7.1 — 2026-07-02

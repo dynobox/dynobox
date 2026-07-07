@@ -4,7 +4,10 @@
  * helpers from this module.
  */
 
-export {renderAssertionDetails} from './assertions.js';
+export {
+  type AssertionDetailsOptions,
+  renderAssertionDetails,
+} from './assertions.js';
 export {
   renderConfigErrorMessage,
   renderRunConfigErrorMessage,
@@ -20,14 +23,28 @@ export {
   renderHarnessFailureDetails,
   renderSetupFailureDetails,
 } from './failure.js';
+export {
+  buildGroupedRunView,
+  type GroupedDyno,
+  type GroupedHarnessGroup,
+  type GroupedJobEntry,
+  type GroupedScenario,
+  groupJobs,
+  harnessLabelColumnWidth,
+  renderDynoLine,
+  renderGroupedRun,
+  renderHarnessGroupRow,
+  renderIterationDetailLines,
+  renderIterationResultLine,
+  renderRunningGroupRow,
+  renderRunningIterationRow,
+  renderScenarioLine,
+  renderSingleJobFailureDetails,
+  type RowLabelOptions,
+} from './groupedRun.js';
 export {renderRunHeader} from './header.js';
-export {type HeadlineStatus, renderHeadline} from './headline.js';
 export {renderJobDetails} from './jobDetails.js';
 export {renderJsonRunOutput} from './jsonReporter.js';
-export {
-  renderPassRateMatrix,
-  renderPassRateMatrixFromMatrix,
-} from './matrix.js';
 export {
   type PhaseRowInput,
   type PhaseStatus,
@@ -38,9 +55,20 @@ export {
   setupDurationMs,
 } from './phases.js';
 export {renderPlaceholderMessage} from './placeholder.js';
-export {formatJobHarness, renderPlan, renderPlanFromMatrix} from './plan.js';
+export {
+  formatJobHarness,
+  iterationCount,
+  renderDiscoverySummary,
+  type RunDynoGroup,
+  uniqueHarnessLabels,
+} from './plan.js';
 export {renderQuietRun} from './quiet.js';
 export {renderRunOutput, type RenderRunOutputInput} from './runOutput.js';
-export {renderRunSummary} from './summary.js';
+export {
+  renderRunSummary,
+  runSummarySegments,
+  type RunSummaryTotals,
+  summarizeRunResults,
+} from './summary.js';
 export {renderJsonValidateOutput} from './validateReporter.js';
 export {describeWarning, renderWarningDetails} from './warnings.js';

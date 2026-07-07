@@ -35,13 +35,24 @@ import {
   SPINNER_FRAMES,
 } from '../live/index.js';
 import {
-  renderHeadline,
+  groupJobs,
+  harnessLabelColumnWidth,
+  renderDynoLine,
+  renderHarnessGroupRow,
+  renderIterationDetailLines,
+  renderIterationResultLine,
   renderJsonRunOutput,
-  renderPassRateMatrix,
   renderRunConfigErrorMessage,
   renderRunHeader,
+  renderRunningGroupRow,
+  renderRunningIterationRow,
   renderRunOutput,
   renderRunSummary,
+  renderScenarioLine,
+  renderSingleJobFailureDetails,
+  type RowLabelOptions,
+  type RunDynoGroup,
+  uniqueHarnessLabels,
 } from '../render/index.js';
 import {createRenderContext, type RenderContext} from '../terminal/index.js';
 import {reportConfigError} from '../util/reportConfigError.js';
@@ -226,13 +237,20 @@ export async function runCommandAction(
   ) {
     writeStdout(`config: ${dynoDisplayPath(appliedConfigPath)}\n`);
   }
-  const headerLabel = renderHeaderLabel(inputLabel, compiled);
+  // Rendering groups jobs by their source dyno; the label prefers the
+  // authored dyno name and falls back to a readable path.
+  const renderDynos: RunDynoGroup[] = dynoGroups
+    .filter(({jobs: dynoJobs}) => dynoJobs.length > 0)
+    .map(({entry, jobs: dynoJobs}) => ({
+      ...(entry.ir.name === undefined ? {} : {name: entry.ir.name}),
+      path: dynoDisplayPath(entry.filePath),
+      jobs: dynoJobs,
+    }));
 
   const results =
     reporter === 'json'
       ? await runStatic({
-          headerLabel,
-          jobs,
+          dynos: renderDynos,
           runOptions,
           ctx,
           writeStdout,
@@ -240,10 +258,9 @@ export async function runCommandAction(
           configErrorCount: errors.length,
         })
       : shouldRenderLive(options, ctx)
-        ? await runLive({headerLabel, jobs, runOptions, ctx, writeStdout})
+        ? await runLive({dynos: renderDynos, runOptions, ctx, writeStdout})
         : await runStatic({
-            headerLabel,
-            jobs,
+            dynos: renderDynos,
             runOptions,
             ctx,
             writeStdout,
@@ -256,12 +273,14 @@ export async function runCommandAction(
 
   if (commandFlags.saveRun === true) {
     await uploadRun({
-      dynos: dynoGroups.map(({entry, jobs: dynoJobs}) => ({
-        dynoPath: dynoDisplayPath(entry.filePath),
-        name: entry.ir.name ?? null,
-        target: dynoTarget(entry),
-        jobs: dynoJobs,
-      })),
+      dynos: dynoGroups
+        .filter(({jobs: dynoJobs}) => dynoJobs.length > 0)
+        .map(({entry, jobs: dynoJobs}) => ({
+          dynoPath: dynoDisplayPath(entry.filePath),
+          name: entry.ir.name ?? null,
+          target: dynoTarget(entry),
+          jobs: dynoJobs,
+        })),
       results,
       runFailed,
       inputPath: inputLabel,
@@ -374,23 +393,6 @@ function dynoTarget(entry: DynoCompileSuccess): string {
   return parent === '' || parent === '.' ? basename(entry.filePath) : parent;
 }
 
-/**
- * Build a short label for the run header that captures what the user
- * asked to run. When discovery found multiple files, append the count
- * so a reader knows the run spans more than a single config.
- */
-function renderHeaderLabel(
-  inputLabel: string,
-  compiled: readonly DynoCompileSuccess[],
-): string {
-  if (compiled.length === 1) {
-    const only = compiled[0];
-    if (only === undefined) return inputLabel;
-    return only.filePath;
-  }
-  return `${inputLabel}  (${compiled.length} dyno files)`;
-}
-
 async function discoverOrFail(
   configPath: string | undefined,
   resolvedInputPath: string,
@@ -418,8 +420,7 @@ async function discoverOrFail(
 }
 
 type RunPathInput = {
-  headerLabel: string;
-  jobs: readonly LocalRunnerJob[];
+  dynos: readonly RunDynoGroup[];
   runOptions: RunJobOptions;
   ctx: RenderContext;
   writeStdout: OutputWriter;
@@ -433,15 +434,16 @@ type RunPathInput = {
  * doesn't support live updates.
  */
 async function runStatic(input: RunPathInput): Promise<LocalRunnerResult[]> {
+  const jobs = input.dynos.flatMap((dyno) => dyno.jobs);
   const results: LocalRunnerResult[] = [];
-  for (const job of input.jobs) {
+  for (const job of jobs) {
     results.push(await runJob(job, input.runOptions));
   }
-  const debugLogPaths = writeDebugLogsIfDebug(input.ctx, results);
+  const debugLogPaths = writeDebugLogsIfDebug(input.ctx, input.dynos, results);
   if (input.reporter === 'json') {
     input.writeStdout(
       renderJsonRunOutput({
-        jobs: input.jobs,
+        jobs,
         results,
         configErrorCount: input.configErrorCount ?? 0,
         ...(debugLogPaths === undefined ? {} : {debugLogPaths}),
@@ -451,8 +453,7 @@ async function runStatic(input: RunPathInput): Promise<LocalRunnerResult[]> {
   }
   input.writeStdout(
     renderRunOutput({
-      configPath: input.headerLabel,
-      jobs: input.jobs,
+      dynos: input.dynos,
       results,
       ctx: input.ctx,
       ...(debugLogPaths === undefined ? {} : {debugLogPaths}),
@@ -462,15 +463,20 @@ async function runStatic(input: RunPathInput): Promise<LocalRunnerResult[]> {
 }
 
 /**
- * Live path: print a header, then for each job stream a spinner-driven row
- * that advances through phases as runner events arrive. Passing jobs in
- * default mode collapse to a one-liner; everything else stays expanded.
+ * Live path: print a header, then stream grouped output — dyno and scenario
+ * lines as groups begin, a spinner-driven row per harness group that advances
+ * through phases as runner events arrive, and a grouped summary at the end.
+ *
+ * Passing groups in default mode collapse to a one-line grouped row;
+ * failures and expanded modes keep their detail blocks.
  */
 async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
-  const {headerLabel, jobs, runOptions, ctx, writeStdout} = input;
+  const {dynos, runOptions, ctx, writeStdout} = input;
+  const jobs = dynos.flatMap((dyno) => dyno.jobs);
 
-  writeStdout(renderRunHeader(headerLabel, jobs, ctx));
-  const assertionById = assertionByIdForJobs(jobs);
+  writeStdout(renderRunHeader(dynos, ctx));
+  const multiHarness = uniqueHarnessLabels(jobs).length > 1;
+  const labelWidth = harnessLabelColumnWidth(jobs);
   const live = createLiveWriter(writeStdout, ctx.color, SPINNER_FRAMES[0]);
   const spinnerEnabled = ctx.color && !ctx.usePlainSymbols;
   const spinner = spinnerEnabled
@@ -481,60 +487,126 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
   const expanded = ctx.mode === 'verbose' || ctx.mode === 'debug';
   const results: LocalRunnerResult[] = [];
 
+  const runOneJob = async (job: LocalRunnerJob): Promise<LocalRunnerResult> => {
+    const state: LiveJobState = {
+      setupCommandCount: 0,
+      fixturesCount: 0,
+      toolCount: 0,
+      assertionCount: 0,
+      phaseStartedAtMs: Date.now(),
+    };
+    const result = await runJob(job, {
+      ...runOptions,
+      onProgress: (event) => {
+        live.emit(renderLiveProgressEvent(event, state, ctx));
+      },
+    });
+    results.push(result);
+    live.flush();
+    return result;
+  };
+
+  const runSingleIterationGroup = async (
+    job: LocalRunnerJob,
+    rowOptions: RowLabelOptions,
+  ): Promise<void> => {
+    live.beginJob(renderRunningGroupRow(ctx, rowOptions));
+    const result = await runOneJob(job);
+    const assertionById = assertionByIdForJobs([job]);
+    const row = renderHarnessGroupRow([{job, result}], ctx, rowOptions);
+
+    if (expanded) {
+      live.rewriteHeadline(row);
+      const debugLogPaths = maybeWriteDebugLogs(ctx, result);
+      writeStdout(
+        renderLiveJobCompletion(
+          result,
+          assertionById,
+          ctx,
+          debugLogPaths === undefined ? {} : {debugLogPaths},
+        ),
+      );
+      return;
+    }
+
+    // Default mode: collapse phase rows away and keep only the grouped row
+    // (plus failure/warning details), matching the static grouped output.
+    live.collapseToHeadline(row);
+    if (!result.passed || result.warnings.length > 0) {
+      writeStdout(renderSingleJobFailureDetails(result, assertionById, ctx));
+    }
+  };
+
+  const runMultiIterationGroup = async (
+    groupJobs: readonly LocalRunnerJob[],
+    rowOptions: RowLabelOptions,
+  ): Promise<void> => {
+    if (!expanded) {
+      // One live row for the whole group; per-iteration phase rows are
+      // transient and collapse into the sparkline row when the group ends.
+      live.beginJob(renderRunningGroupRow(ctx, rowOptions));
+      const entries: Array<{job: LocalRunnerJob; result: LocalRunnerResult}> =
+        [];
+      for (const job of groupJobs) {
+        entries.push({job, result: await runOneJob(job)});
+      }
+      live.collapseToHeadline(renderHarnessGroupRow(entries, ctx, rowOptions));
+      const assertionById = assertionByIdForJobs(groupJobs);
+      writeStdout(renderIterationDetailLines(entries, assertionById, ctx));
+      return;
+    }
+
+    // Expanded modes stream one row per iteration; the aggregate sparkline
+    // row lands after the iterations instead of above them (the static
+    // renderer puts it first, but live output can't rewrite history).
+    const entries: Array<{job: LocalRunnerJob; result: LocalRunnerResult}> = [];
+    for (const job of groupJobs) {
+      live.beginJob(renderRunningIterationRow(job.iteration, ctx));
+      const result = await runOneJob(job);
+      const entry = {job, result};
+      entries.push(entry);
+      live.rewriteHeadline(renderIterationResultLine(entry, ctx));
+      const assertionById = assertionByIdForJobs([job]);
+      const debugLogPaths = maybeWriteDebugLogs(ctx, result);
+      writeStdout(
+        renderLiveJobCompletion(
+          result,
+          assertionById,
+          ctx,
+          debugLogPaths === undefined ? {} : {debugLogPaths},
+        ),
+      );
+    }
+    writeStdout(`${renderHarnessGroupRow(entries, ctx, rowOptions)}\n`);
+  };
+
   try {
     spinner?.start();
-    for (const job of jobs) {
-      const state: LiveJobState = {
-        setupCommandCount: 0,
-        fixturesCount: 0,
-        toolCount: 0,
-        assertionCount: 0,
-        phaseStartedAtMs: Date.now(),
-      };
-      live.beginJob(renderHeadline(job, ctx, 'running', undefined));
-
-      const result = await runJob(job, {
-        ...runOptions,
-        onProgress: (event) => {
-          live.emit(renderLiveProgressEvent(event, state, ctx));
-        },
-      });
-      results.push(result);
-      live.flush();
-
-      const finalStatus: 'pass' | 'fail' = result.passed ? 'pass' : 'fail';
-      const collapse =
-        result.passed && result.warnings.length === 0 && !expanded;
-      const finalHeadline = renderHeadline(
-        job,
-        ctx,
-        finalStatus,
-        collapse ? result.timing.totalMs : undefined,
-      );
-
-      if (collapse) {
-        live.collapseToHeadline(finalHeadline);
-      } else {
-        live.rewriteHeadline(finalHeadline);
-        const debugLogPaths = maybeWriteDebugLogs(ctx, result);
-        writeStdout(
-          renderLiveJobCompletion(
-            result,
-            assertionById,
-            ctx,
-            debugLogPaths === undefined ? {} : {debugLogPaths},
-          ),
-        );
+    let firstDyno = true;
+    for (const dyno of dynos) {
+      if (dyno.jobs.length === 0) continue;
+      if (!firstDyno) writeStdout('\n');
+      firstDyno = false;
+      writeStdout(`${renderDynoLine(dyno.name ?? dyno.path, ctx)}\n`);
+      for (const scenario of groupJobs(dyno.jobs)) {
+        writeStdout(`${renderScenarioLine(scenario.name, ctx)}\n`);
+        for (const group of scenario.harnessGroups) {
+          const rowOptions: RowLabelOptions = multiHarness
+            ? {harnessLabel: group.label, harnessLabelWidth: labelWidth}
+            : {};
+          if (group.jobs.length === 1) {
+            await runSingleIterationGroup(group.jobs[0]!, rowOptions);
+          } else {
+            await runMultiIterationGroup(group.jobs, rowOptions);
+          }
+        }
       }
     }
   } finally {
     spinner?.stop();
   }
 
-  if (jobs.some((job) => job.iteration > 0)) {
-    writeStdout(renderPassRateMatrix(jobs, results, ctx));
-  }
-  writeStdout(renderRunSummary(jobs, results, ctx));
+  writeStdout(renderRunSummary(results, ctx));
   return results;
 }
 
@@ -641,17 +713,22 @@ function uniqueHarnessSelections<T extends {id: string; model?: string}>(
 
 /**
  * If we're in debug mode, write each result's harness debug logs to its
- * work directory and return a `Map<jobId, paths>` for the renderer.
+ * work directory and return a `Map<job, paths>` for the renderer.
  */
 function writeDebugLogsIfDebug(
   ctx: RenderContext,
+  dynos: readonly RunDynoGroup[],
   results: readonly LocalRunnerResult[],
-): Map<string, DebugLogPaths> | undefined {
+): Map<LocalRunnerJob, DebugLogPaths> | undefined {
   if (ctx.mode !== 'debug') return undefined;
-  const map = new Map<string, DebugLogPaths>();
-  for (const result of results) {
+  const jobs = dynos.flatMap((dyno) => dyno.jobs);
+  const map = new Map<LocalRunnerJob, DebugLogPaths>();
+  for (let index = 0; index < jobs.length; index++) {
+    const job = jobs[index]!;
+    const result = results[index];
+    if (result === undefined) continue;
     const paths = maybeWriteDebugLogs(ctx, result);
-    if (paths !== undefined) map.set(result.jobId, paths);
+    if (paths !== undefined) map.set(job, paths);
   }
   return map.size === 0 ? undefined : map;
 }

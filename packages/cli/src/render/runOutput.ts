@@ -1,77 +1,50 @@
 /**
- * Static-mode (non-live) run output orchestrator. Composes header + per-job
- * headline (and optionally job details) + summary into a single string.
+ * Static-mode (non-live) run output orchestrator. Composes header + grouped
+ * run body + summary into a single string.
  *
  * The live path doesn't go through here — it streams to a `LiveWriter` in
- * `program/runCommand.ts`.
+ * `program/runCommand.ts` using the same grouped row renderers.
  */
 
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 
-import {assertionByIdForJobs} from '../jobs.js';
 import {createRenderContext, type RenderContext} from '../terminal/index.js';
 import type {DebugLogPaths} from '../util/transcript.js';
+import {renderGroupedRun} from './groupedRun.js';
 import {renderRunHeader} from './header.js';
-import {renderHeadline} from './headline.js';
-import {renderJobDetails} from './jobDetails.js';
-import {renderPassRateMatrix} from './matrix.js';
+import type {RunDynoGroup} from './plan.js';
 import {renderQuietRun} from './quiet.js';
 import {renderRunSummary} from './summary.js';
 
 export type RenderRunOutputInput = {
-  configPath: string;
-  jobs: readonly LocalRunnerJob[];
+  /** Jobs grouped by the dyno they were discovered from, in execution order. */
+  dynos: readonly RunDynoGroup[];
   results: readonly LocalRunnerResult[];
   ctx?: RenderContext;
   /**
-   * Optional map of jobId → debug log paths, populated by the runner
-   * when running in `debug` mode. Used to print the log path in debug
-   * details without coupling renderers to the filesystem.
+   * Optional map of job → debug log paths, populated by the runner when
+   * running in `debug` mode. Used to print the log path in debug details
+   * without coupling renderers to the filesystem.
    */
-  debugLogPaths?: Map<string, DebugLogPaths>;
+  debugLogPaths?: Map<LocalRunnerJob, DebugLogPaths>;
 };
 
 export function renderRunOutput(input: RenderRunOutputInput): string {
   const ctx = input.ctx ?? createRenderContext();
   if (ctx.mode === 'quiet') {
-    return renderQuietRun(input.jobs, input.results, ctx);
+    return renderQuietRun(input.dynos, input.results, ctx);
   }
 
-  const assertionById = assertionByIdForJobs(input.jobs);
-  const lines: string[] = [renderRunHeader(input.configPath, input.jobs, ctx)];
-  const expandAll = ctx.mode === 'verbose' || ctx.mode === 'debug';
-  const matrixRun = input.jobs.some((job) => job.iteration > 0);
-  if (matrixRun)
-    lines.push(renderPassRateMatrix(input.jobs, input.results, ctx));
-
-  for (const [index, job] of input.jobs.entries()) {
-    const result = input.results[index];
-    if (result === undefined) continue;
-    if (matrixRun && !expandAll && result.passed) continue;
-
-    const expand = expandAll || !result.passed || result.warnings.length > 0;
-    const status: 'pass' | 'fail' = result.passed ? 'pass' : 'fail';
-    const headline = renderHeadline(
-      job,
+  return [
+    renderRunHeader(input.dynos, ctx),
+    renderGroupedRun({
+      dynos: input.dynos,
+      results: input.results,
       ctx,
-      status,
-      expand ? undefined : result.timing.totalMs,
-    );
-    lines.push(`${headline}\n`);
-    if (expand) {
-      const debugLogPaths = input.debugLogPaths?.get(job.id);
-      lines.push(
-        renderJobDetails(
-          result,
-          assertionById,
-          ctx,
-          debugLogPaths === undefined ? {} : {debugLogPaths},
-        ),
-      );
-    }
-  }
-
-  lines.push(renderRunSummary(input.jobs, input.results, ctx));
-
-  return lines.join('');
+      ...(input.debugLogPaths === undefined
+        ? {}
+        : {debugLogPaths: input.debugLogPaths}),
+    }),
+    renderRunSummary(input.results, ctx),
+  ].join('');
 }

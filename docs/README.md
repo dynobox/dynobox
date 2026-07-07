@@ -65,7 +65,7 @@ You can assert:
 - Post-harness verification commands with `verify.command(...)`.
 
 Use `dynobox run --iterations <count>` to repeat every selected
-scenario/harness pair and render sparkline pass-rate matrix cells such as
+scenario/harness pair and render inline pass-rate sparklines such as
 `.F...`.
 
 ## Supported Harnesses

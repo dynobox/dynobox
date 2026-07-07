@@ -48,6 +48,13 @@ import {
 
 type SequenceEvidence = ToolEvent | ObservedCommandEvidence;
 
+export type AssertionDetailsOptions = {
+  /** Only render failed assertions (grouped default-mode rows). */
+  failedOnly?: boolean;
+  /** Prefix for each assertion line, e.g. `iter 2 ` in multi-iteration rows. */
+  linePrefix?: string;
+};
+
 /**
  * Render the per-assertion checklist for a job. Failed assertions also show
  * `expected …` / `observed …` lines, and (when relevant) lists of shell
@@ -57,11 +64,19 @@ export function renderAssertionDetails(
   result: LocalRunnerResult,
   assertionById: Map<string, IrAssertion>,
   ctx: RenderContext,
+  options: AssertionDetailsOptions = {},
 ): string {
   if (result.assertionResults.length === 0) return '';
 
   const lines: string[] = [];
-  for (const assertionResult of result.assertionResults) {
+  const assertionResults =
+    options.failedOnly === true
+      ? result.assertionResults.filter(
+          (assertionResult) => !assertionResult.passed,
+        )
+      : result.assertionResults;
+  const linePrefix = options.linePrefix ?? '';
+  for (const assertionResult of assertionResults) {
     const assertion = assertionById.get(assertionResult.assertionId);
     const status = assertionResult.passed ? 'pass' : 'fail';
     const label =
@@ -69,7 +84,7 @@ export function renderAssertionDetails(
         ? assertionResult.type
         : describeAssertionLabel(assertion);
     lines.push(
-      `        ${colorStatus(ctx, symbol(ctx, status), status)} ${label}\n`,
+      `        ${linePrefix}${colorStatus(ctx, symbol(ctx, status), status)} ${label}\n`,
     );
 
     if (!assertionResult.passed && assertion !== undefined) {

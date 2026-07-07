@@ -34,7 +34,10 @@ export type PhaseRowInput = {
 /**
  * Render a single phase row of the form:
  *
- *     ✓ setup      3 commands                                   1.4s
+ *         ✓ setup      3 commands                               1.4s
+ *
+ * Indented to sit under a grouped scenario result row, aligned with the
+ * per-assertion detail lines.
  */
 export function renderPhaseRow(
   ctx: RenderContext,
@@ -45,7 +48,7 @@ export function renderPhaseRow(
     input.omitIcon === true
       ? dim(ctx, `${labelText}${input.detail}`)
       : `${renderPhaseIcon(ctx, input)} ${labelText}${input.detail}`;
-  const left = `   ${inner}`;
+  const left = `      ${inner}`;
   const formatter =
     input.status === 'running' ? formatLiveDuration : formatDuration;
   const right =

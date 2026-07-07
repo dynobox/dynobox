@@ -97,7 +97,7 @@ describe('dynobox run — config loading', () => {
       }),
     ).resolves.toEqual({
       exitCode: 0,
-      stdout: expect.stringContaining('✓  uses shell'),
+      stdout: expect.stringContaining('✓ 2 assertions'),
       stderr: '',
     });
   });
@@ -109,7 +109,7 @@ describe('dynobox run — config loading', () => {
       }),
     ).resolves.toEqual({
       exitCode: 0,
-      stdout: expect.stringContaining('✓  uses dyno mjs'),
+      stdout: expect.stringContaining('uses dyno mjs'),
       stderr: '',
     });
   });
@@ -267,6 +267,73 @@ describe('dynobox run — upload', () => {
     expect(JSON.stringify(payload)).not.toContain('workDir');
     expect(JSON.stringify(payload)).not.toContain('artifacts');
     expect(JSON.stringify(payload)).not.toContain('harnessOutput');
+  });
+
+  it('only uploads dynos with jobs after scenario filtering', async () => {
+    const dir = join(fixtures.dir, 'filtered-upload');
+    mkdirSync(dir, {recursive: true});
+    writeFileSync(
+      join(dir, 'alpha.dyno.ts'),
+      `import {defineDyno, tool} from '@dynobox/sdk';
+
+export default defineDyno({
+  scenarios: [
+    {
+      name: 'alpha scenario',
+      prompt: 'Run pnpm test.',
+      assertions: [tool.called('shell')],
+    },
+  ],
+});
+`,
+    );
+    writeFileSync(
+      join(dir, 'beta.dyno.ts'),
+      `import {defineDyno, tool} from '@dynobox/sdk';
+
+export default defineDyno({
+  scenarios: [
+    {
+      name: 'beta scenario',
+      prompt: 'Run pnpm test.',
+      assertions: [tool.called('shell')],
+    },
+  ],
+});
+`,
+    );
+    const fetchMock = stubFetch(async (url) => {
+      if (String(url).endsWith('/auth/identity')) {
+        return Response.json({identity: {email: 'user@example.com'}});
+      }
+
+      return Response.json({id: 'run-1'});
+    });
+
+    const result = await executeCli(
+      ['run', dir, '--scenario', 'alpha*', '--save-run'],
+      {
+        env: {
+          DYNOBOX_API_URL: 'http://localhost:8787',
+          DYNOBOX_TOKEN: 'token',
+        },
+        harnesses: [createPassingHarness()],
+      },
+    );
+    const [, request] = fetchMock.mock.calls[1] as [string, RequestInit];
+    const payload = JSON.parse(String(request.body)) as Record<string, unknown>;
+
+    expect(result.exitCode).toBe(0);
+    expect(payload).toMatchObject({
+      totals: {jobs: 1},
+      dynos: [
+        {
+          dynoPath: expect.stringContaining('alpha.dyno.ts'),
+          totals: {jobs: 1},
+          jobs: [{scenario: {name: 'alpha scenario'}}],
+        },
+      ],
+    });
   });
 
   it('errors before running when --save-run has no token', async () => {
@@ -462,10 +529,10 @@ describe('dynobox run — output modes', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(
-      'dynobox  1 scenario · 1 harness · 1 iteration',
+      'dynobox  1 dyno · 1 scenario · harness: claude-code',
     );
     expect(result.stdout).toContain('\n  .\n');
-    expect(result.stdout).toContain('1 passed, 0 failed in 0.1s');
+    expect(result.stdout).toContain('1 job passed, 2 assertions in 0.1s');
   });
 
   it('prints permission warnings for passing jobs', async () => {
@@ -478,11 +545,11 @@ describe('dynobox run — output modes', () => {
     });
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('✓  uses shell');
+    expect(result.stdout).toContain('✓ 2 assertions');
     expect(result.stdout).toContain(
       'permission denied for shell command: git commit -m test',
     );
-    expect(result.stdout).toContain('permission warnings:');
+    expect(result.stdout).toContain('· 1 warning ·');
   });
 
   it('prints permission warnings in quiet output without changing marks', async () => {
@@ -499,7 +566,9 @@ describe('dynobox run — output modes', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('\n  .\n');
-    expect(result.stdout).toContain('WARN  uses shell [claude-code]');
+    expect(result.stdout).toContain(
+      'WARN  cli-local-runner / uses shell [claude-code]',
+    );
     expect(result.stdout).toContain(
       'permission denied for shell command: git commit -m test',
     );
@@ -511,8 +580,8 @@ describe('dynobox run — output modes', () => {
     });
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('✓  uses shell');
-    expect(result.stdout).not.toContain('pass-rate matrix');
+    expect(result.stdout).toContain('uses shell');
+    expect(result.stdout).toContain('✓ 2 assertions');
     expect(result.stdout).not.toContain('✓ setup');
     expect(result.stdout).not.toContain('✓ harness');
     expect(result.stdout).not.toContain('tool.called(shell)');
@@ -527,7 +596,8 @@ describe('dynobox run — output modes', () => {
     );
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('✓  uses shell');
+    expect(result.stdout).toContain('uses shell');
+    expect(result.stdout).toContain('✓ 2 assertions');
     expect(result.stdout).toContain('setup      0 commands');
     expect(result.stdout).toContain('harness    ran prompt');
     expect(result.stdout).toContain('assertions 2 of 2 passed');
@@ -544,7 +614,7 @@ describe('dynobox run — output modes', () => {
     );
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('[ ok ]  uses shell');
+    expect(result.stdout).toContain('[ ok ] 2 assertions');
     expect(result.stdout).toContain('[ ok ] tool.called(shell)');
     expect(result.stdout).not.toContain('✓');
   });
@@ -760,12 +830,65 @@ export default defineDyno({
     );
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('✓  deploy package');
+    expect(result.stdout).toContain('deploy package');
     expect(result.stdout).not.toContain('lint package');
-    expect(result.stdout).toContain('1 scenario · 1 harness · 1 iteration');
+    expect(result.stdout).toContain(
+      '1 dyno · 1 scenario · harness: claude-code',
+    );
   });
 
-  it('prints a pass-rate matrix for repeated iterations', async () => {
+  it('excludes dynos with no matching scenarios from the discovery summary', async () => {
+    const multiDynoDir = join(fixtures.dir, 'multi-dyno-filter');
+    mkdirSync(multiDynoDir, {recursive: true});
+    writeFileSync(
+      join(multiDynoDir, 'alpha.dyno.ts'),
+      `import {defineDyno, tool} from '@dynobox/sdk';
+
+export default defineDyno({
+  name: 'alpha-runner',
+  scenarios: [
+    {
+      name: 'alpha test',
+      prompt: 'Run alpha.',
+      assertions: [tool.called('shell')],
+    },
+  ],
+});
+`,
+    );
+    writeFileSync(
+      join(multiDynoDir, 'beta.dyno.ts'),
+      `import {defineDyno, tool} from '@dynobox/sdk';
+
+export default defineDyno({
+  name: 'beta-runner',
+  scenarios: [
+    {
+      name: 'beta test',
+      prompt: 'Run beta.',
+      assertions: [tool.called('shell')],
+    },
+  ],
+});
+`,
+    );
+
+    const result = await executeCli(
+      ['run', multiDynoDir, '--scenario', 'alpha*'],
+      {
+        harnesses: [createPassingHarness()],
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('alpha test');
+    expect(result.stdout).not.toContain('beta test');
+    expect(result.stdout).not.toContain('beta-runner');
+    expect(result.stdout).toContain('1 dyno · 1 scenario');
+    expect(result.stdout).not.toContain('2 dynos');
+  });
+
+  it('prints an inline sparkline row for repeated iterations', async () => {
     const result = await executeCli(
       ['run', fixtures.validConfigPath, '--iterations', '2'],
       {
@@ -774,9 +897,10 @@ export default defineDyno({
     );
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('pass-rate matrix');
-    expect(result.stdout).toContain('uses shell  ..');
-    expect(result.stdout).not.toContain('✓  uses shell');
+    expect(result.stdout).toContain('iterations: 2');
+    expect(result.stdout).toContain('✓ 2/2 passed   ..');
+    expect(result.stdout).not.toContain('pass-rate matrix');
+    expect(result.stdout).toContain('✓ 2 jobs passed · 4 assertions');
   });
 
   it('runs each scenario and harness for the requested iterations', async () => {
@@ -929,7 +1053,7 @@ describe('dynobox run — live output', () => {
     expect(result.exitCode).toBe(0);
     expect(writes.join('')).toContain('Bash: pnpm test 1 tool');
     expect(writes.join('')).toContain('✓ tool.called(shell)');
-    expect(writes.join('')).toContain('1 passed');
+    expect(writes.join('')).toContain('1 job passed');
   });
 
   it('keeps multiline live shell progress on one rendered row', async () => {
@@ -982,17 +1106,19 @@ describe('dynobox run — failures and diagnostics', () => {
     });
 
     expect(result.exitCode).toBe(runFailureExitCode);
-    expect(result.stdout).toContain('✗  uses shell');
-    expect(result.stdout).toContain('✗ assertions 1 of 2 passed');
+    expect(result.stdout).toContain('✗ 1 of 2 failed');
     expect(result.stdout).toContain(
       '✗ tool.called(shell, includes: pnpm test)',
     );
+    expect(result.stdout).not.toContain('✓ tool.called(shell)');
     expect(result.stdout).toContain(
       'expected  shell command including "pnpm test"',
     );
     expect(result.stdout).toContain('observed shell commands during this run:');
     expect(result.stdout).toContain('1. npm test');
-    expect(result.stdout).toContain('0 passed   1 failed');
+    expect(result.stdout).toContain(
+      '✗ 1 of 1 jobs failed · 1 failed assertion',
+    );
     expect(result.stderr).toBe('');
   });
 
@@ -1124,13 +1250,11 @@ describe('dynobox run — failures and diagnostics', () => {
     });
 
     expect(result.exitCode).toBe(runFailureExitCode);
-    expect(result.stdout).toContain('✗  setup breaks');
-    expect(result.stdout).toContain('✗ setup      1 command');
+    expect(result.stdout).toContain('setup breaks');
+    expect(result.stdout).toContain('✗ setup failed');
     expect(result.stdout).toContain('$ echo setup failed >&2 && exit 7');
     expect(result.stdout).toContain('exit code 7');
-    expect(result.stdout).toContain('setup failed');
-    expect(result.stdout).toContain('– harness    skipped');
-    expect(result.stdout).toContain('– assertions skipped');
+    expect(result.stdout).toContain('✗ 1 job error');
   });
 
   it('exits nonzero with diagnostics when no harness is registered', async () => {
@@ -1139,12 +1263,11 @@ describe('dynobox run — failures and diagnostics', () => {
     });
 
     expect(result.exitCode).toBe(runFailureExitCode);
-    expect(result.stdout).toContain('✗  uses shell');
-    expect(result.stdout).toContain('✗ harness    failed');
+    expect(result.stdout).toContain('✗ harness failed');
     expect(result.stdout).toContain(
       'No harness registered for scenario harness "claude-code".',
     );
-    expect(result.stdout).toContain('– assertions skipped');
+    expect(result.stdout).toContain('✗ 1 job error');
     expect(result.stderr).toBe('');
   });
 });

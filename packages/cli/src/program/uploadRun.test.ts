@@ -110,6 +110,108 @@ describe('buildRunUploadPayload', () => {
     ).toThrow('Expected 1 runner results for upload, but received 0.');
   });
 
+  it('uses per-job assertion definitions when assertion ids collide across dynos', () => {
+    const jobA = {
+      id: 'scenario.shared.claude-code.iteration.0',
+      scenario: {
+        id: 'scenario.shared',
+        name: 'shared scenario',
+        prompt: 'p',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        endpoints: [],
+        assertions: [
+          {
+            id: 'assertion.shared.0',
+            label: 'alpha assertion',
+            type: 'tool.called',
+            tool: 'shell',
+          },
+        ],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const jobB = {
+      ...jobA,
+      scenario: {
+        ...jobA.scenario,
+        assertions: [
+          {
+            id: 'assertion.shared.0',
+            label: 'beta assertion',
+            type: 'tool.called',
+            tool: 'edit_file',
+          },
+        ],
+      },
+    } satisfies LocalRunnerJob;
+    const resultA = {
+      jobId: jobA.id,
+      scenarioId: jobA.scenario.id,
+      harness: 'claude-code',
+      iteration: 0,
+      status: 'passed',
+      passed: true,
+      setupResult: {success: true, logs: []},
+      httpEvents: [],
+      artifacts: [],
+      assertionResults: [
+        {
+          assertionId: 'assertion.shared.0',
+          type: 'tool.called',
+          passed: true,
+          message: 'Observed tool "shell".',
+        },
+      ],
+      diagnostics: [],
+      warnings: [],
+      timing: {setupMs: 0, harnessMs: 10, assertionsMs: 1, totalMs: 11},
+    } as unknown as LocalRunnerResult;
+    const resultB = {
+      ...resultA,
+      jobId: jobB.id,
+      assertionResults: [
+        {
+          assertionId: 'assertion.shared.0',
+          type: 'tool.called',
+          passed: true,
+          message: 'Observed tool "edit_file".',
+        },
+      ],
+    } as unknown as LocalRunnerResult;
+
+    const parsed = RunUploadV2.parse(
+      buildRunUploadPayload({
+        dynos: [
+          {
+            dynoPath: 'alpha.dyno.ts',
+            name: 'alpha',
+            target: 'alpha',
+            jobs: [jobA],
+          },
+          {
+            dynoPath: 'beta.dyno.ts',
+            name: 'beta',
+            target: 'beta',
+            jobs: [jobB],
+          },
+        ],
+        results: [resultA, resultB],
+        inputPath: '.',
+        gitHash: null,
+      }),
+    );
+
+    const alphaAssertion = parsed.dynos[0]!.jobs[0]!.assertions[0]!;
+    const betaAssertion = parsed.dynos[1]!.jobs[0]!.assertions[0]!;
+    expect(alphaAssertion.label).toBe('alpha assertion  tool.called(shell)');
+    expect(alphaAssertion.definition?.tool).toBe('shell');
+    expect(betaAssertion.label).toBe('beta assertion  tool.called(edit_file)');
+    expect(betaAssertion.definition?.tool).toBe('edit_file');
+  });
+
   it('includes nested sequence assertion display details', () => {
     const job = {
       id: 'scenario.commit.claude-code.iteration.0',
