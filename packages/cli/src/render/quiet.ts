@@ -96,9 +96,7 @@ function describeJobFailures(entry: GroupedJobEntry): string[] {
       entry.result.assertionResults.length > 0 &&
       entry.result.harnessResult !== undefined
     ) {
-      lines.push(
-        ...failedAssertionLabels(entry.result, assertionById),
-      );
+      lines.push(...failedAssertionLabels(entry.result, assertionById));
     }
     return lines;
   }
