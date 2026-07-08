@@ -179,9 +179,10 @@ reference.
 - Assert harness transcript and final response text with
   `transcript.contains(...)` and `finalMessage.contains(...)`.
 - Run post-harness checks with `verify.command(...)` for generated artifacts.
-- Stream live progress and tool events in interactive terminals.
-- Use default, `--quiet`, `--verbose`, and `--debug` output modes, including
-  debug log paths for transcripts, raw chat JSONL, and normalized tool events.
+- Stream live grouped progress and tool events in interactive terminals.
+- Use default grouped output, `--quiet` dots-and-failures output, `--verbose`
+  phase/assertion details, and `--debug` work-directory, artifact, transcript,
+  raw chat JSONL, and normalized tool-event paths.
 
 HTTP endpoint declarations and HTTP assertions can evaluate local child-process
 traffic that honors proxy and CA environment variables. Harness-native web

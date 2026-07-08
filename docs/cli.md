@@ -186,8 +186,9 @@ validated config and a final summary record.
 --iterations <count>       Run each selected scenario/harness pair this many
                            times. Defaults to 1.
 --quiet                    Print compact CI-friendly output.
---verbose                  Expand scenario details even when passing.
---debug                    Include debug paths and artifacts.
+--verbose                  Expand every job with phase and assertion details.
+--debug                    Include verbose details plus work dirs, artifact
+                           paths, and debug logs.
 --reporter <fmt>           Output reporter format: text or json.
 --config <path>            Use a specific dyno.config.json file.
 --save-run                 Upload a compact run summary to the dashboard
@@ -236,27 +237,33 @@ output is enabled. Every failed iteration is listed under its row.
 
 Default output groups results by dyno, then by scenario. The header shows a
 discovery summary (`discovered 1 dyno · 2 scenarios · harness: …`) including
-the full harness label with model and permission mode when configured. When a
-run spans multiple harness labels, each scenario shows one aligned row per
-harness. Failed rows show the failed assertions, including the expected
-behavior and an `observed` line with the evidence Dynobox actually saw. For
-path-aware tool assertions, the rendered expectation includes the matched
-path, such as `tool.called(read_file, path: package.json)`.
+model and permission mode in harness labels when configured. When a run spans
+multiple harness labels, each scenario shows one aligned row per harness. A
+single harness label is shown in the header but omitted from result rows to keep
+the grouped output compact.
+
+Failed rows show failed assertions with an `expected` line and an `observed`
+line describing the evidence Dynobox actually saw. For path-aware tool
+assertions, the rendered expectation includes the matched path, such as
+`tool.called(read_file, path: package.json)`. Failed `command.called(...)`
+assertions show a compact match-count summary by default.
 
 The final summary leads with job counts (a job is one executed
 `scenario × harness × iteration` unit); assertion detail is always labeled,
 such as `✗ 1 of 2 jobs failed · 1 failed assertion · 1m02s`. Setup and
 harness failures are counted separately as job errors.
 
-`--quiet` prints compact CI-friendly `.`/`F` progress marks and failure
-information, with the same job-led summary semantics.
+`--quiet` prints a one-line discovery summary, compact `.`/`F` progress marks,
+`FAIL`/`WARN` groups when needed, and the same job-led summary semantics.
 
-`--verbose` uses the grouped layout and expands every job with phase rows and
-all assertion results, even when jobs pass.
+`--verbose` uses the grouped layout and expands every job with setup, harness,
+and assertion phase rows plus all assertion results, even when jobs pass. When
+command assertions are present, verbose output also lists parsed command
+segments observed during the run.
 
-`--debug` prints everything `--verbose` does, includes temporary
-work-directory paths,
-and writes debug logs inside each job's work directory when data is available.
+`--debug` prints everything `--verbose` does, includes temporary work-directory
+and artifact paths, and writes debug logs inside each job's work directory when
+data is available.
 Debug logs can include:
 
 - `dynobox-transcript.log`
@@ -335,7 +342,7 @@ Dynobox exits with `1` for:
 
 ## Harness Requirements
 
-The CLI registers both real harnesses by default:
+The CLI supports both real harnesses:
 
 - `claude-code` invokes Claude Code with stream JSON output and hook events.
 - `codex` invokes Codex with JSON output, no color, and the git-repo check
@@ -367,11 +374,14 @@ execution and retries transient verification failures before asking you to try
 failed upload prints a warning and never changes job status, assertion results,
 or the exit code.
 
-The uploaded summary includes scenario and assertion details and, for failing jobs,
-**diagnostics (command and harness error output), the URLs of requested HTTP
-endpoints, and tool commands**. These values are length-capped but are **not
-redacted**, so avoid `--save-run` for runs whose command output or request URLs may
-contain secrets.
+The uploaded summary includes scenario and assertion details. Assertion records
+include the authored definition, display-ready expectation/observed text, and
+compact evidence metadata when available; this is richer than the local
+`--reporter json` output. For failing jobs, uploads also include **diagnostics
+(command and harness error output), the URLs of requested HTTP endpoints, and
+tool commands**. These values are length-capped but are **not redacted**, so
+avoid `--save-run` for runs whose command output or request URLs may contain
+secrets.
 
 ## Dashboard
 

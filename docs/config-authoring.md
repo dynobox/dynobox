@@ -53,7 +53,9 @@ type DynoboxConfig = {
 
 Top-level `setup` commands and `endpoints` are merged into each scenario.
 Top-level `harnesses` apply when a scenario does not define its own harnesses.
-Scenario harnesses replace the top-level harness list.
+Scenario harnesses replace the top-level harness list. If neither the scenario
+nor the top-level config defines harnesses, Dynobox defaults that scenario to
+`claude-code`.
 
 `target` names the thing being tested (for example `github-pr-agent`). Dynos
 that share a target are grouped together in saved-run reporting and on the

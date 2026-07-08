@@ -217,8 +217,11 @@ dynobox run --reporter json
 dynobox run --save-run
 ```
 
-`--debug` includes each job's temporary work directory and writes debug logs
-when data is available:
+`--verbose` expands every job with setup, harness, and assertion phase rows. It
+also lists parsed command segments when command assertions are present.
+
+`--debug` includes everything from `--verbose`, prints each job's temporary work
+directory and artifact paths, and writes debug logs when data is available:
 
 - `dynobox-transcript.log`
 - `dynobox-chat-history.jsonl`

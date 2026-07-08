@@ -72,9 +72,10 @@ Dynobox supports assertions for:
 
 ## Common Run Flags
 
-- `--quiet`: compact dots-and-failures output for CI.
-- `--verbose`: expand scenario details even when they pass.
-- `--debug`: include work directory, artifact paths, and debug log paths.
+- `--quiet`: compact discovery, dots-and-failures, and summary output for CI.
+- `--verbose`: expand every job with phase rows and assertion details.
+- `--debug`: include verbose details plus work directory, artifact paths, and
+  debug log paths.
 - `--reporter json`: emit newline-delimited JSON reports.
 - `--scenario <pattern>`: run only matching scenarios.
 - `--iterations <count>`: repeat each selected scenario/harness pair.
