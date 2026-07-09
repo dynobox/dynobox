@@ -12,6 +12,8 @@ shipping a prompt, skill, or workflow change.
 
 - [Getting Started](./getting-started.md): install the CLI, scaffold a dyno,
   and run your first scenario.
+- [Agent Skills](./agent-skills.md): install AI agent skills for creating dynos
+  and debugging failed runs.
 - [Config Authoring](./config-authoring.md): write JavaScript, TypeScript, or
   YAML dynos with the `@dynobox/sdk` helpers.
 - [CLI Reference](./cli.md): commands, flags, output modes, JSON reports, and

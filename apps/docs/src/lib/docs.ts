@@ -12,6 +12,7 @@ export const docsSite = 'https://docs.dynobox.xyz';
 const docFiles = [
   'README.md',
   'getting-started.md',
+  'agent-skills.md',
   'config-authoring.md',
   'cli.md',
   'ci.md',
@@ -93,6 +94,20 @@ const docMetadata: Record<
       'init',
       'run',
       'harnesses',
+      'debug',
+    ],
+  },
+  'agent-skills.md': {
+    agentSummary:
+      'Install and use the dynobox/skills AI agent skills from skills.sh to create dynos and debug failed or flaky Dynobox runs.',
+    description:
+      'Install Dynobox AI agent skills for creating dynos and debugging failed Dynobox runs.',
+    topics: [
+      'agent skills',
+      'skills.sh',
+      'dynobox/skills',
+      'dyno-create',
+      'dyno-debug',
       'debug',
     ],
   },
