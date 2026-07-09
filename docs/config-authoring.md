@@ -261,8 +261,10 @@ executable is `git`.
 - **Subshell and brace-group wrappers** are unwrapped:  
   `(npx dynobox validate tmp/x.dyno.yaml 2>&1; echo "EXIT: $?")` and  
   `{ npx dynobox validate tmp/x.dyno.yaml; echo "EXIT: $?"; }` normalize to the
-  same observed commands as their ungrouped forms (`npx …` and `echo …`). This
-  covers the common agent pattern of capturing exit codes in a group.
+  same observed commands as their ungrouped forms (`npx …` and `echo …`). Trailing
+  redirections on the group are allowed
+  (`{ …; } 2>&1`, `(…; echo done) >out`). This covers the common agent pattern
+  of capturing exit codes in a group.
 - **Leading environment assignments** are skipped: `NODE_ENV=test pnpm test`
   normalizes to executable `pnpm`.
 - **Shell wrappers** are unwrapped: `bash -lc "git status"` (and `sh`/`zsh`,

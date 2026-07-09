@@ -58,8 +58,10 @@ export function evaluateCommandCalledAssertion(
     type: assertion.type,
     passed: false,
     message: commandCalledFailMessage(assertion, observed, rawShellMatches),
-    evidence:
-      rawShellMatches.length === 0 ? observed : {observed, rawShellMatches},
+    // Keep evidence as ObservedCommand[] so CLI/upload consumers that check
+    // Array.isArray(evidence) still render the observed command list. Raw shell
+    // matches for normalization gaps live in the failure message only.
+    evidence: observed,
   };
 }
 
@@ -267,26 +269,26 @@ function parseCommand(
 }
 
 /**
- * If `command` is one outer subshell `(…)` or brace group `{…}`, return the
- * inner text and its offset within `command`.
+ * If `command` is one outer subshell `(…)` or brace group `{…}`, optionally
+ * followed only by redirections (e.g. `2>&1`, `>out`), return the inner text
+ * and its offset within `command`.
  */
 function unwrapShellGrouping(
   command: string,
 ): {command: string; offset: number} | undefined {
   const start = command.match(/^\s*/)?.[0].length ?? 0;
-  let end = command.length;
-  while (end > start && /\s/.test(command[end - 1]!)) end -= 1;
-  if (end - start < 2) return undefined;
+  if (start >= command.length) return undefined;
 
   const open = command[start]!;
   const close = GROUP_CLOSE_FOR[open];
-  if (close === undefined || command[end - 1] !== close) return undefined;
+  if (close === undefined) return undefined;
 
-  // Depth must return to zero only on the final character (not mid-string).
   let depth = 0;
   let inSingle = false;
   let inDouble = false;
-  for (let index = start; index < end; index += 1) {
+  let closeIndex = -1;
+
+  for (let index = start; index < command.length; index += 1) {
     const char = command[index]!;
     if (char === '\\' && !inSingle) {
       index += 1;
@@ -302,19 +304,92 @@ function unwrapShellGrouping(
     }
     if (inSingle || inDouble) continue;
 
-    if (char === open) depth += 1;
-    else if (char === close) {
+    if (char === open) {
+      depth += 1;
+      continue;
+    }
+    if (char === close) {
       depth -= 1;
-      if (depth === 0 && index !== end - 1) return undefined;
+      if (depth === 0) {
+        closeIndex = index;
+        break;
+      }
       if (depth < 0) return undefined;
     }
   }
-  if (depth !== 0 || inSingle || inDouble) return undefined;
+
+  if (closeIndex === -1 || inSingle || inDouble) return undefined;
+  // Allow only redirections after the group closer so shapes like
+  // `(cmd; echo done) >out` and `{ cmd; } 2>&1` still unwrap.
+  if (!isTrailingRedirectionOnly(command.slice(closeIndex + 1))) {
+    return undefined;
+  }
 
   return {
-    command: command.slice(start + 1, end - 1),
+    command: command.slice(start + 1, closeIndex),
     offset: start + 1,
   };
+}
+
+/**
+ * True when `suffix` is empty/whitespace or only shell redirections
+ * (`2>&1`, `>out`, `>>log`, `<in`, etc.), not another command.
+ */
+function isTrailingRedirectionOnly(suffix: string): boolean {
+  let index = 0;
+  while (index < suffix.length && /\s/.test(suffix[index]!)) index += 1;
+  if (index >= suffix.length) return true;
+
+  while (index < suffix.length) {
+    while (index < suffix.length && /\s/.test(suffix[index]!)) index += 1;
+    if (index >= suffix.length) return true;
+
+    // Optional fd number before the operator (e.g. `2>` in `2>&1`).
+    if (/\d/.test(suffix[index]!)) {
+      while (index < suffix.length && /\d/.test(suffix[index]!)) index += 1;
+    }
+
+    const rest = suffix.slice(index);
+    let operatorLength = 0;
+    if (rest.startsWith('&>>') || rest.startsWith('<&') || rest.startsWith('>&')) {
+      operatorLength = rest.startsWith('&>>') ? 3 : 2;
+    } else if (
+      rest.startsWith('>>') ||
+      rest.startsWith('<<') ||
+      rest.startsWith('&>') ||
+      rest.startsWith('<>') ||
+      rest.startsWith('>|')
+    ) {
+      operatorLength = 2;
+    } else if (rest.startsWith('>') || rest.startsWith('<')) {
+      operatorLength = 1;
+    } else {
+      return false;
+    }
+    index += operatorLength;
+
+    while (index < suffix.length && /\s/.test(suffix[index]!)) index += 1;
+    if (index >= suffix.length) return false;
+
+    // Target: `&1` / `word` (stop at shell metacharacters).
+    if (suffix[index] === '&') {
+      index += 1;
+      if (index >= suffix.length || !/\d/.test(suffix[index]!)) return false;
+      while (index < suffix.length && /\d/.test(suffix[index]!)) index += 1;
+      continue;
+    }
+
+    const targetStart = index;
+    while (
+      index < suffix.length &&
+      !/[\s;&|<>(){}]/.test(suffix[index]!)
+    ) {
+      index += 1;
+    }
+    if (index === targetStart) return false;
+  }
+
+  return true;
 }
 
 function parseSegment(

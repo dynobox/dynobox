@@ -61,6 +61,44 @@ describe('extractObservedCommands shell grouping', () => {
     ]);
   });
 
+  it('unwraps groups that are followed only by redirections', () => {
+    expect(
+      observedSummary(
+        extractObservedCommands([
+          shellEvent(
+            '{ npx dynobox validate tmp/x; echo "EXIT: $?"; } 2>&1',
+          ),
+        ]),
+      ),
+    ).toEqual([
+      {
+        executable: 'npx',
+        argv: ['dynobox', 'validate', 'tmp/x'],
+      },
+      {
+        executable: 'echo',
+        argv: ['EXIT: $?'],
+      },
+    ]);
+
+    expect(
+      observedSummary(
+        extractObservedCommands([
+          shellEvent('(npx dynobox validate; echo done) >out'),
+        ]),
+      ),
+    ).toEqual([
+      {
+        executable: 'npx',
+        argv: ['dynobox', 'validate'],
+      },
+      {
+        executable: 'echo',
+        argv: ['done'],
+      },
+    ]);
+  });
+
   it('keeps outer compound separators while unwrapping grouped segments', () => {
     const command = 'echo start && (git status; git diff) && echo done';
 
@@ -85,6 +123,15 @@ describe('extractObservedCommands shell grouping', () => {
         argv: ['commit', '-m', 'fix: (a; b) {c}'],
       },
     ]);
+  });
+
+  it('does not unwrap a group when non-redirection text follows the closer', () => {
+    // Adjacent groups are one segment; do not strip only the first pair.
+    expect(
+      observedSummary(
+        extractObservedCommands([shellEvent('(echo a) (echo b)')]),
+      ),
+    ).toEqual([]);
   });
 });
 
@@ -156,8 +203,7 @@ describe('evaluateCommandCalledAssertion grouping and diagnostics', () => {
       'Raw shell events included text matching "npx"; command normalization may not support this shell shape.',
     );
     expect(result.message).toContain(`- ${raw}`);
-    expect(result.evidence).toMatchObject({
-      rawShellMatches: [raw],
-    });
+    // Evidence stays ObservedCommand[] for CLI/upload Array.isArray consumers.
+    expect(Array.isArray(result.evidence)).toBe(true);
   });
 });
