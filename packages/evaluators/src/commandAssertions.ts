@@ -59,9 +59,7 @@ export function evaluateCommandCalledAssertion(
     passed: false,
     message: commandCalledFailMessage(assertion, observed, rawShellMatches),
     evidence:
-      rawShellMatches.length === 0
-        ? observed
-        : {observed, rawShellMatches},
+      rawShellMatches.length === 0 ? observed : {observed, rawShellMatches},
   };
 }
 

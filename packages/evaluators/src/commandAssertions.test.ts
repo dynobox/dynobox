@@ -29,62 +29,62 @@ describe('extractObservedCommands shell grouping', () => {
     const command =
       '(npx dynobox validate tmp/failing.dyno.yaml 2>&1; echo "EXIT: $?")';
 
-    expect(observedSummary(extractObservedCommands([shellEvent(command)]))).toEqual(
-      [
-        {
-          executable: 'npx',
-          argv: ['dynobox', 'validate', 'tmp/failing.dyno.yaml', '2'],
-        },
-        {
-          executable: 'echo',
-          argv: ['EXIT: $?'],
-        },
-      ],
-    );
+    expect(
+      observedSummary(extractObservedCommands([shellEvent(command)])),
+    ).toEqual([
+      {
+        executable: 'npx',
+        argv: ['dynobox', 'validate', 'tmp/failing.dyno.yaml', '2'],
+      },
+      {
+        executable: 'echo',
+        argv: ['EXIT: $?'],
+      },
+    ]);
   });
 
   it('unwraps brace-group wrappers and splits compound commands inside them', () => {
     const command =
       '{ npx dynobox validate tmp/failing.dyno.yaml; echo "EXIT: $?"; }';
 
-    expect(observedSummary(extractObservedCommands([shellEvent(command)]))).toEqual(
-      [
-        {
-          executable: 'npx',
-          argv: ['dynobox', 'validate', 'tmp/failing.dyno.yaml'],
-        },
-        {
-          executable: 'echo',
-          argv: ['EXIT: $?'],
-        },
-      ],
-    );
+    expect(
+      observedSummary(extractObservedCommands([shellEvent(command)])),
+    ).toEqual([
+      {
+        executable: 'npx',
+        argv: ['dynobox', 'validate', 'tmp/failing.dyno.yaml'],
+      },
+      {
+        executable: 'echo',
+        argv: ['EXIT: $?'],
+      },
+    ]);
   });
 
   it('keeps outer compound separators while unwrapping grouped segments', () => {
     const command = 'echo start && (git status; git diff) && echo done';
 
-    expect(observedSummary(extractObservedCommands([shellEvent(command)]))).toEqual(
-      [
-        {executable: 'echo', argv: ['start']},
-        {executable: 'git', argv: ['status']},
-        {executable: 'git', argv: ['diff']},
-        {executable: 'echo', argv: ['done']},
-      ],
-    );
+    expect(
+      observedSummary(extractObservedCommands([shellEvent(command)])),
+    ).toEqual([
+      {executable: 'echo', argv: ['start']},
+      {executable: 'git', argv: ['status']},
+      {executable: 'git', argv: ['diff']},
+      {executable: 'echo', argv: ['done']},
+    ]);
   });
 
   it('does not split on separators inside quotes even with grouping markers', () => {
     const command = 'git commit -m "fix: (a; b) {c}"';
 
-    expect(observedSummary(extractObservedCommands([shellEvent(command)]))).toEqual(
-      [
-        {
-          executable: 'git',
-          argv: ['commit', '-m', 'fix: (a; b) {c}'],
-        },
-      ],
-    );
+    expect(
+      observedSummary(extractObservedCommands([shellEvent(command)])),
+    ).toEqual([
+      {
+        executable: 'git',
+        argv: ['commit', '-m', 'fix: (a; b) {c}'],
+      },
+    ]);
   });
 });
 
@@ -151,9 +151,7 @@ describe('evaluateCommandCalledAssertion grouping and diagnostics', () => {
     );
 
     expect(result.passed).toBe(false);
-    expect(result.message).toContain(
-      'No normalized npx command was observed.',
-    );
+    expect(result.message).toContain('No normalized npx command was observed.');
     expect(result.message).toContain(
       'Raw shell events included text matching "npx"; command normalization may not support this shell shape.',
     );
