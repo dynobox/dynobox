@@ -497,7 +497,7 @@ import SiteLayout from '../layouts/SiteLayout.astro';
     async function runTerminal(currentToken) {
       const lines = [
         `${C.red}❯${C.end} ${C.white}${COMMAND}${C.end}`,
-        `  ${C.red}■${C.end} ${C.white}dynobox${C.end}  ${C.dim}0.8.0${C.end}`,
+        `  ${C.red}■${C.end} ${C.white}dynobox${C.end}  ${C.dim}0.8.1${C.end}`,
         `  ${C.dim}discovered 2 dynos · 3 scenarios · harnesses: 2${C.end}`,
       ];
       const commit = () => renderText(`${lines.join('\n')}\n`);
@@ -544,7 +544,7 @@ import SiteLayout from '../layouts/SiteLayout.astro';
     function finalState() {
       const lines = [
         `${C.red}❯${C.end} ${C.white}${COMMAND}${C.end}`,
-        `  ${C.red}■${C.end} ${C.white}dynobox${C.end}  ${C.dim}0.8.0${C.end}`,
+        `  ${C.red}■${C.end} ${C.white}dynobox${C.end}  ${C.dim}0.8.1${C.end}`,
         `  ${C.dim}discovered 2 dynos · 3 scenarios · harnesses: 2${C.end}`,
       ];
       for (const job of JOBS) {
