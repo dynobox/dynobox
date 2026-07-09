@@ -65,9 +65,7 @@ describe('extractObservedCommands shell grouping', () => {
     expect(
       observedSummary(
         extractObservedCommands([
-          shellEvent(
-            '{ npx dynobox validate tmp/x; echo "EXIT: $?"; } 2>&1',
-          ),
+          shellEvent('{ npx dynobox validate tmp/x; echo "EXIT: $?"; } 2>&1'),
         ]),
       ),
     ).toEqual([
