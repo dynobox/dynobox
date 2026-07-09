@@ -350,22 +350,8 @@ function isTrailingRedirectionOnly(suffix: string): boolean {
     }
 
     const rest = suffix.slice(index);
-    let operatorLength = 0;
-    if (rest.startsWith('&>>') || rest.startsWith('<&') || rest.startsWith('>&')) {
-      operatorLength = rest.startsWith('&>>') ? 3 : 2;
-    } else if (
-      rest.startsWith('>>') ||
-      rest.startsWith('<<') ||
-      rest.startsWith('&>') ||
-      rest.startsWith('<>') ||
-      rest.startsWith('>|')
-    ) {
-      operatorLength = 2;
-    } else if (rest.startsWith('>') || rest.startsWith('<')) {
-      operatorLength = 1;
-    } else {
-      return false;
-    }
+    const operatorLength = redirectionOperatorLength(rest);
+    if (operatorLength === undefined) return false;
     index += operatorLength;
 
     while (index < suffix.length && /\s/.test(suffix[index]!)) index += 1;
@@ -380,16 +366,31 @@ function isTrailingRedirectionOnly(suffix: string): boolean {
     }
 
     const targetStart = index;
-    while (
-      index < suffix.length &&
-      !/[\s;&|<>(){}]/.test(suffix[index]!)
-    ) {
+    while (index < suffix.length && !/[\s;&|<>(){}]/.test(suffix[index]!)) {
       index += 1;
     }
     if (index === targetStart) return false;
   }
 
   return true;
+}
+
+/** Length of a leading redirection operator in `text`, or undefined if none. */
+function redirectionOperatorLength(text: string): number | undefined {
+  if (text.startsWith('&>>')) return 3;
+  if (
+    text.startsWith('<&') ||
+    text.startsWith('>&') ||
+    text.startsWith('>>') ||
+    text.startsWith('<<') ||
+    text.startsWith('&>') ||
+    text.startsWith('<>') ||
+    text.startsWith('>|')
+  ) {
+    return 2;
+  }
+  if (text.startsWith('>') || text.startsWith('<')) return 1;
+  return undefined;
 }
 
 function parseSegment(
