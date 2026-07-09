@@ -256,7 +256,13 @@ executable is `git`.
 
 - **Compound commands** are split on `;`, `&&`, `||`, `|`, and `|&` into
   separate command segments, so each side of a pipe or operator is matched
-  independently.
+  independently. Separators inside `(...)` subshells and `{...}` brace groups
+  are left intact until those wrappers are unwrapped.
+- **Subshell and brace-group wrappers** are unwrapped:  
+  `(npx dynobox validate tmp/x.dyno.yaml 2>&1; echo "EXIT: $?")` and  
+  `{ npx dynobox validate tmp/x.dyno.yaml; echo "EXIT: $?"; }` normalize to the
+  same observed commands as their ungrouped forms (`npx …` and `echo …`). This
+  covers the common agent pattern of capturing exit codes in a group.
 - **Leading environment assignments** are skipped: `NODE_ENV=test pnpm test`
   normalizes to executable `pnpm`.
 - **Shell wrappers** are unwrapped: `bash -lc "git status"` (and `sh`/`zsh`,
@@ -289,6 +295,12 @@ not observed:
   so text after it may be observed as its own command.
 - `originalIncludes` / `originalMatches` match the text of a **single** command
   segment, not the whole compound line.
+
+When `command.called` fails because no normalized command matches the expected
+executable, but raw shell text still mentions that name, the failure message
+calls out a possible normalization gap and includes the matching raw shell
+line(s). That usually means the agent used a shell shape Dynobox does not yet
+unwrap (for example `eval` or command substitution).
 
 > `command.notCalled` is a behavioral check, not a security boundary. Because
 > the constructs above are not parsed, a forbidden command concealed inside one
