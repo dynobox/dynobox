@@ -8,6 +8,15 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Fixed `command.called(...)` normalization so subshell `(...)` and brace-group
+  `{...}` wrappers (common for exit-code capture) yield the same observed
+  commands as their ungrouped forms.
+- Improved `command.called(...)` failure messages when an executable appears in
+  raw shell text but not among normalized commands, including the matching raw
+  shell line(s).
+
 ---
 
 ## dynobox@0.8.0 — 2026-07-07

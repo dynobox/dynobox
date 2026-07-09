@@ -46,11 +46,21 @@ export function evaluateCommandCalledAssertion(
     );
   }
 
+  const sameExecutable = observed.some(
+    (command) => command.executable === assertion.executable,
+  );
+  const rawShellMatches = sameExecutable
+    ? []
+    : rawShellCommandsMatching(toolEvents, assertion.executable);
+
   return {
     assertionId: assertion.id,
     type: assertion.type,
     passed: false,
-    message: commandCalledFailMessage(assertion, observed),
+    message: commandCalledFailMessage(assertion, observed, rawShellMatches),
+    // Keep evidence as ObservedCommand[] so CLI/upload consumers that check
+    // Array.isArray(evidence) still render the observed command list. Raw shell
+    // matches for normalization gaps live in the failure message only.
     evidence: observed,
   };
 }
@@ -166,6 +176,12 @@ function argsAppearInOrder(
   return true;
 }
 
+const SHELL_WRAPPERS = new Set(['bash', 'sh', 'zsh']);
+const GROUP_CLOSE_FOR: Record<string, string> = {
+  '(': ')',
+  '{': '}',
+};
+
 function parseCommand(
   command: string,
   event: ToolEvent,
@@ -177,11 +193,28 @@ function parseCommand(
 ): ObservedCommand[] {
   if (depth > 2) return [];
 
-  const segments = splitCommandSegments(command);
   const commands: ObservedCommand[] = [];
   let segmentIndex = segmentStart;
 
-  for (const segment of segments) {
+  for (const segment of splitCommandSegments(command)) {
+    // Unwrap a whole-segment `(…)` / `{…}`, then re-parse so inner separators
+    // become normal top-level splits.
+    const grouping = unwrapShellGrouping(segment.command);
+    if (grouping !== undefined) {
+      const nested = parseCommand(
+        grouping.command,
+        event,
+        eventIndex,
+        segmentIndex,
+        shell,
+        depth,
+        sourceOffset + segment.start + grouping.offset,
+      );
+      commands.push(...nested);
+      segmentIndex += Math.max(1, nested.length);
+      continue;
+    }
+
     const parsed = parseSegment(segment.command);
     if (parsed === undefined) continue;
 
@@ -235,6 +268,131 @@ function parseCommand(
   return commands;
 }
 
+/**
+ * If `command` is one outer subshell `(…)` or brace group `{…}`, optionally
+ * followed only by redirections (e.g. `2>&1`, `>out`), return the inner text
+ * and its offset within `command`.
+ */
+function unwrapShellGrouping(
+  command: string,
+): {command: string; offset: number} | undefined {
+  const start = command.match(/^\s*/)?.[0].length ?? 0;
+  if (start >= command.length) return undefined;
+
+  const open = command[start]!;
+  const close = GROUP_CLOSE_FOR[open];
+  if (close === undefined) return undefined;
+
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let closeIndex = -1;
+
+  for (let index = start; index < command.length; index += 1) {
+    const char = command[index]!;
+    if (char === '\\' && !inSingle) {
+      index += 1;
+      continue;
+    }
+    if (!inDouble && char === "'") {
+      inSingle = !inSingle;
+      continue;
+    }
+    if (!inSingle && char === '"') {
+      inDouble = !inDouble;
+      continue;
+    }
+    if (inSingle || inDouble) continue;
+
+    if (char === open) {
+      depth += 1;
+      continue;
+    }
+    if (char === close) {
+      depth -= 1;
+      if (depth === 0) {
+        closeIndex = index;
+        break;
+      }
+      if (depth < 0) return undefined;
+    }
+  }
+
+  if (closeIndex === -1 || inSingle || inDouble) return undefined;
+  // Allow only redirections after the group closer so shapes like
+  // `(cmd; echo done) >out` and `{ cmd; } 2>&1` still unwrap.
+  if (!isTrailingRedirectionOnly(command.slice(closeIndex + 1))) {
+    return undefined;
+  }
+
+  return {
+    command: command.slice(start + 1, closeIndex),
+    offset: start + 1,
+  };
+}
+
+/**
+ * True when `suffix` is empty/whitespace or only shell redirections
+ * (`2>&1`, `>out`, `>>log`, `<in`, etc.), not another command.
+ */
+function isTrailingRedirectionOnly(suffix: string): boolean {
+  let index = 0;
+  while (index < suffix.length && /\s/.test(suffix[index]!)) index += 1;
+  if (index >= suffix.length) return true;
+
+  while (index < suffix.length) {
+    while (index < suffix.length && /\s/.test(suffix[index]!)) index += 1;
+    if (index >= suffix.length) return true;
+
+    // Optional fd number before the operator (e.g. `2>` in `2>&1`).
+    if (/\d/.test(suffix[index]!)) {
+      while (index < suffix.length && /\d/.test(suffix[index]!)) index += 1;
+    }
+
+    const rest = suffix.slice(index);
+    const operatorLength = redirectionOperatorLength(rest);
+    if (operatorLength === undefined) return false;
+    index += operatorLength;
+
+    while (index < suffix.length && /\s/.test(suffix[index]!)) index += 1;
+    if (index >= suffix.length) return false;
+
+    // Target: `&1` / `word` (stop at shell metacharacters).
+    if (suffix[index] === '&') {
+      index += 1;
+      if (index >= suffix.length || !/\d/.test(suffix[index]!)) return false;
+      while (index < suffix.length && /\d/.test(suffix[index]!)) index += 1;
+      continue;
+    }
+
+    const targetStart = index;
+    while (index < suffix.length && !/[\s;&|<>(){}]/.test(suffix[index]!)) {
+      index += 1;
+    }
+    if (index === targetStart) return false;
+  }
+
+  return true;
+}
+
+/** Length of a leading redirection operator in `text`, or undefined if none. */
+function redirectionOperatorLength(text: string): number | undefined {
+  if (text.startsWith('&>>')) return 3;
+  if (
+    text.startsWith('<&') ||
+    text.startsWith('>&') ||
+    text.startsWith('>>') ||
+    text.startsWith('<<') ||
+    text.startsWith('&>') ||
+    text.startsWith('<>') ||
+    text.startsWith('>|')
+  ) {
+    return 2;
+  }
+  if (text.startsWith('>') || text.startsWith('<')) return 1;
+  return undefined;
+}
+
 function parseSegment(
   segment: string,
 ): {executable: string; executablePath?: string; argv: string[]} | undefined {
@@ -257,7 +415,7 @@ function shellWrappedCommand(parsed: {
   executablePath?: string;
   argv: string[];
 }): {shell: string; command: string} | undefined {
-  if (!new Set(['bash', 'sh', 'zsh']).has(parsed.executable)) return undefined;
+  if (!SHELL_WRAPPERS.has(parsed.executable)) return undefined;
 
   const commandFlagIndex = parsed.argv.findIndex((arg) =>
     /^-[A-Za-z]*c$/.test(arg),
@@ -275,13 +433,17 @@ function splitCommandSegments(
   const segments: {command: string; start: number; end: number}[] = [];
   let current = '';
   let currentStart = 0;
-  let quote: 'single' | 'double' | undefined;
+  let inSingle = false;
+  let inDouble = false;
+  // Expected closers for open `(…)` / `{…}` groups. Separators only split when
+  // this is empty; groups are unwrapped later in parseCommand.
+  const groupStack: string[] = [];
 
   for (let index = 0; index < command.length; index += 1) {
     const char = command[index]!;
     const next = command[index + 1];
 
-    if (char === '\\') {
+    if (char === '\\' && !inSingle) {
       current += char;
       if (next !== undefined) {
         current += next;
@@ -290,34 +452,38 @@ function splitCommandSegments(
       continue;
     }
 
-    if (quote === undefined && char === "'") {
-      quote = 'single';
+    if (!inDouble && char === "'") {
+      inSingle = !inSingle;
       current += char;
       continue;
     }
-    if (quote === 'single' && char === "'") {
-      quote = undefined;
+    if (!inSingle && char === '"') {
+      inDouble = !inDouble;
       current += char;
       continue;
     }
-    if (quote === undefined && char === '"') {
-      quote = 'double';
-      current += char;
-      continue;
-    }
-    if (quote === 'double' && char === '"') {
-      quote = undefined;
+    if (inSingle || inDouble) {
       current += char;
       continue;
     }
 
-    // Two-char separators: logical operators and the stderr pipe `|&`. These
-    // must be checked before the single-char `|` so `||` is not mistaken for an
-    // empty pipe stage. Backgrounding `&` is intentionally not a separator (see
-    // the limitations note in docs/config-authoring.md).
+    const expectedClose = GROUP_CLOSE_FOR[char];
+    if (expectedClose !== undefined) {
+      groupStack.push(expectedClose);
+      current += char;
+      continue;
+    }
+    if (groupStack.length > 0 && char === groupStack[groupStack.length - 1]) {
+      groupStack.pop();
+      current += char;
+      continue;
+    }
+
+    // Two-char separators before single-char `|` so `||` / `|&` are not split
+    // as empty pipe stages. Bare `&` is intentionally not a separator.
     const twoChar = next === undefined ? '' : `${char}${next}`;
     if (
-      quote === undefined &&
+      groupStack.length === 0 &&
       (twoChar === '&&' || twoChar === '||' || twoChar === '|&')
     ) {
       pushCommandSegment(segments, current, currentStart, index);
@@ -327,7 +493,7 @@ function splitCommandSegments(
       continue;
     }
 
-    if (quote === undefined && (char === ';' || char === '|')) {
+    if (groupStack.length === 0 && (char === ';' || char === '|')) {
       pushCommandSegment(segments, current, currentStart, index);
       current = '';
       currentStart = index + 1;
@@ -507,6 +673,7 @@ function regexMatches(
 function commandCalledFailMessage(
   assertion: CommandCalledAssertion,
   observed: readonly ObservedCommand[],
+  rawShellMatches: readonly string[],
 ): string {
   const sameExecutable = observed.filter(
     (command) => command.executable === assertion.executable,
@@ -520,16 +687,33 @@ function commandCalledFailMessage(
               `  ${index + 1}. ${describeObservedCommand(command)}`,
           )
           .join('\n');
-  const details = commandMatcherFailureDetail(assertion, sameExecutable);
+  const details = commandMatcherFailureDetail(
+    assertion,
+    sameExecutable,
+    rawShellMatches,
+  );
   return `Expected command:\n  ${describeExpectedCommand(assertion)}\nObserved commands:\n${observedLines}${details === undefined ? '' : `\n${details}`}`;
 }
 
 function commandMatcherFailureDetail(
   assertion: CommandCalledAssertion,
   sameExecutable: readonly ObservedCommand[],
+  rawShellMatches: readonly string[],
 ): string | undefined {
   if (sameExecutable.length === 0) {
-    return `No observed ${assertion.executable} command.`;
+    if (rawShellMatches.length === 0) {
+      return `No observed ${assertion.executable} command.`;
+    }
+
+    const rawLines = rawShellMatches
+      .map((command) => `  - ${command}`)
+      .join('\n');
+    return [
+      `No normalized ${assertion.executable} command was observed.`,
+      `Raw shell events included text matching "${assertion.executable}"; command normalization may not support this shell shape.`,
+      'Raw shell matches:',
+      rawLines,
+    ].join('\n');
   }
   const matcher = assertion.command;
   if (matcher?.args !== undefined) {
@@ -541,6 +725,35 @@ function commandMatcherFailureDetail(
     }
   }
   return `No observed ${assertion.executable} command matched ${describeCommandMatcher(matcher)}.`;
+}
+
+/** Collect raw shell command strings that mention an executable name. */
+function rawShellCommandsMatching(
+  toolEvents: readonly ToolEvent[],
+  executable: string,
+): string[] {
+  const matches: string[] = [];
+  for (const event of toolEvents) {
+    if (event.kind !== 'shell' || typeof event.command !== 'string') continue;
+    if (!rawShellTextMentionsExecutable(event.command, executable)) continue;
+    matches.push(event.command);
+  }
+  return matches;
+}
+
+/**
+ * True when raw shell text appears to mention `executable` as a command word
+ * (word-boundary style), not merely as a substring of another token.
+ */
+function rawShellTextMentionsExecutable(
+  command: string,
+  executable: string,
+): boolean {
+  if (executable.length === 0) return false;
+  const escaped = executable.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^A-Za-z0-9_./-])${escaped}([^A-Za-z0-9_.-]|$)`).test(
+    command,
+  );
 }
 
 function describeExpectedCommand(

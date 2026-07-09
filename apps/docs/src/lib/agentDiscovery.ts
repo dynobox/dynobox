@@ -47,6 +47,7 @@ Prefer page-specific Markdown URLs when fetching content:
 
 - Overview: https://docs.dynobox.xyz/README.md
 - Getting started: https://docs.dynobox.xyz/getting-started.md
+- Agent skills: https://docs.dynobox.xyz/agent-skills.md
 - Config authoring: https://docs.dynobox.xyz/config-authoring.md
 - CLI reference: https://docs.dynobox.xyz/cli.md
 - CI: https://docs.dynobox.xyz/ci.md
