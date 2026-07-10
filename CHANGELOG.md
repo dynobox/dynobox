@@ -8,6 +8,20 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.9.0 — 2026-07-10
+
+### `dynobox` (CLI)
+
+- Rendered diagnostics for `artifact.notExists` and `artifact.unchanged`,
+  including resolved paths, baseline/final byte sizes, and nested verification
+  exit code, stdout, and stderr when every `anyOf` branch fails.
+- Preserved new artifact path fields and nested verification definition fields
+  in `--save-run` upload payloads.
+
+## @dynobox/sdk@0.5.0 — 2026-07-10
+
 ### `@dynobox/sdk`
 
 - Added `artifact.notExists(path)` to assert a workdir path is truly absent
@@ -24,14 +38,6 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Changed authored skill staging so `defineDyno(...)` copies `SKILL.md` into
   both `.agents/skills/<name>/` and `.claude/skills/<name>/` (authored root
   first).
-
-### `dynobox` (CLI)
-
-- Rendered diagnostics for `artifact.notExists` and `artifact.unchanged`,
-  including resolved paths, baseline/final byte sizes, and nested verification
-  exit code, stdout, and stderr when every `anyOf` branch fails.
-- Preserved new artifact path fields and nested verification definition fields
-  in `--save-run` upload payloads.
 
 ---
 

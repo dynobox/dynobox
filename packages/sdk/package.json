@@ -1,6 +1,6 @@
 {
   "name": "@dynobox/sdk",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Dynobox SDK for authoring scenario configs",
   "keywords": [
     "agent",
