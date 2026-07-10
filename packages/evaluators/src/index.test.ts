@@ -286,6 +286,27 @@ describe('evaluateAssertions', () => {
     expect(result.passed).toBe(true);
   });
 
+  it('passes skill.referenced when a native Skill tool invokes the skill', () => {
+    const event: ToolEvent = {
+      kind: 'unknown',
+      rawName: 'Skill',
+      input: {
+        skill: 'commit',
+        args: 'Commit the README.md change.',
+      },
+    };
+
+    const result = evaluateOne(
+      {id: 'assertion.test.0', type: 'skill.referenced', skill: 'commit'},
+      [event],
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      evidence: event,
+    });
+  });
+
   it('fails skill.referenced when no matching skill file reference is observed', () => {
     const result = evaluateOne(
       {id: 'assertion.test.0', type: 'skill.referenced', skill: 'commit'},
