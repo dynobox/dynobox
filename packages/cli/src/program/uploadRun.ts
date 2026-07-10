@@ -369,7 +369,11 @@ function assertionDefinition(
         : {stderr: textMatcherUploadValue(assertion.stderr)}),
     };
   }
-  if (assertion.type === 'artifact.exists') {
+  if (
+    assertion.type === 'artifact.exists' ||
+    assertion.type === 'artifact.notExists' ||
+    assertion.type === 'artifact.unchanged'
+  ) {
     return {...base, path: truncateDetail(assertion.path)};
   }
   if (assertion.type === 'artifact.contains') {

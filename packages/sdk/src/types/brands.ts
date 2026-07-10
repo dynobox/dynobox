@@ -239,6 +239,15 @@ export type ArtifactExistsAssertion = {
   readonly path: string;
 };
 
+/** Assertion that a work-directory artifact path is absent. */
+export type ArtifactNotExistsAssertion = {
+  readonly [ASSERTION_BRAND]: true;
+  readonly id?: string;
+  readonly label?: string;
+  readonly type: 'artifact.notExists';
+  readonly path: string;
+};
+
 /** Assertion that a work-directory artifact contains text. */
 export type ArtifactContainsAssertion = {
   readonly [ASSERTION_BRAND]: true;
@@ -247,6 +256,18 @@ export type ArtifactContainsAssertion = {
   readonly type: 'artifact.contains';
   readonly path: string;
   readonly text: string;
+};
+
+/**
+ * Assertion that a regular file's raw bytes are unchanged from the post-setup
+ * baseline captured before the harness starts.
+ */
+export type ArtifactUnchangedAssertion = {
+  readonly [ASSERTION_BRAND]: true;
+  readonly id?: string;
+  readonly label?: string;
+  readonly type: 'artifact.unchanged';
+  readonly path: string;
 };
 
 /** Assertion that the full harness transcript contains text. */
@@ -290,10 +311,13 @@ export type AnyOfBranchAssertion<K extends string = string> =
   | ToolCalledAssertion
   | ToolNotCalledAssertion
   | ArtifactExistsAssertion
+  | ArtifactNotExistsAssertion
   | ArtifactContainsAssertion
+  | ArtifactUnchangedAssertion
   | TranscriptContainsAssertion
   | FinalMessageContainsAssertion
-  | SkillReferencedAssertion;
+  | SkillReferencedAssertion
+  | VerifyCommandAssertion;
 
 /** Assertion that passes when any branch assertion passes. */
 export type AnyOfAssertion<K extends string = string> = {

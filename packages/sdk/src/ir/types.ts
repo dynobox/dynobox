@@ -19,10 +19,7 @@ export type IrSequenceStep =
   | Omit<Extract<BaseIrAssertion, {type: 'tool.called'}>, 'id' | 'label'>
   | Omit<Extract<BaseIrAssertion, {type: 'command.called'}>, 'id' | 'label'>;
 export type IrAssertionNode = Omit<
-  Exclude<
-    BaseIrAssertion,
-    {type: 'sequence.inOrder'} | {type: 'anyOf'} | {type: 'verify.command'}
-  >,
+  Exclude<BaseIrAssertion, {type: 'sequence.inOrder'} | {type: 'anyOf'}>,
   'id' | 'label'
 >;
 export type IrAnyOfAssertion = {

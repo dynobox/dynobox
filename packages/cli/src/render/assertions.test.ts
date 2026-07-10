@@ -241,6 +241,86 @@ describe('renderAssertionDetails', () => {
     expect(output).not.toContain('observed  Expected');
   });
 
+  it('renders artifact.notExists and artifact.unchanged failures', () => {
+    const workDir = mkdtempSync(join(tmpdir(), 'dynobox-render-'));
+    const resolved = join(workDir, 'leftover.txt');
+    writeFileSync(resolved, 'still here');
+
+    const job = {
+      id: 'job.1',
+      scenario: {
+        id: 'scenario.artifact-new',
+        name: 'artifact new',
+        prompt: 'p',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        endpoints: [],
+        assertions: [
+          {
+            id: 'assertion.artifact.not-exists',
+            type: 'artifact.notExists',
+            path: 'leftover.txt',
+          },
+          {
+            id: 'assertion.artifact.unchanged',
+            type: 'artifact.unchanged',
+            path: 'stable.txt',
+          },
+        ],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const result = {
+      workDir,
+      assertionResults: [
+        {
+          assertionId: 'assertion.artifact.not-exists',
+          type: 'artifact.notExists',
+          passed: false,
+          message: `Expected artifact "leftover.txt" to be absent, but it exists at ${resolved}.`,
+          evidence: {kind: 'exists', path: resolved},
+        },
+        {
+          assertionId: 'assertion.artifact.unchanged',
+          type: 'artifact.unchanged',
+          passed: false,
+          message:
+            'Expected artifact "stable.txt" to be unchanged, but contents differ (baseline 4 bytes, final 5 bytes).',
+          evidence: {
+            kind: 'unchanged',
+            path: 'stable.txt',
+            baseline: {
+              kind: 'file',
+              path: join(workDir, 'stable.txt'),
+              size: 4,
+            },
+            final: {
+              kind: 'file',
+              path: join(workDir, 'stable.txt'),
+              size: 5,
+            },
+          },
+        },
+      ],
+      harnessResult: {toolEvents: []},
+    } as unknown as LocalRunnerResult;
+
+    const output = renderAssertionDetails(
+      result,
+      assertionByIdForJobs([job]),
+      createRenderContext({usePlainSymbols: true}, {}),
+    );
+
+    expect(output).toContain('artifact.notExists(leftover.txt)');
+    expect(output).toContain(`artifact still exists at ${resolved}`);
+    expect(output).toContain('artifact.unchanged(stable.txt)');
+    expect(output).toContain('baseline file');
+    expect(output).toContain('4 bytes');
+    expect(output).toContain('5 bytes');
+  });
+
   it('renders artifact failures from captured evidence', () => {
     const workDir = mkdtempSync(join(tmpdir(), 'dynobox-render-'));
     writeFileSync(join(workDir, 'created.txt'), 'created later');
@@ -487,6 +567,82 @@ describe('renderAssertionDetails', () => {
     expect(output).toContain('#2');
     expect(output).toContain('cat');
     expect(output).not.toContain('observed  Expected anyOf to match');
+  });
+
+  it('includes nested verify command output when every anyOf branch fails', () => {
+    const job = {
+      id: 'job.1',
+      scenario: {
+        id: 'scenario.anyof-verify',
+        name: 'anyOf verify',
+        prompt: 'p',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        endpoints: [],
+        assertions: [
+          {
+            id: 'assertion.anyof.verify',
+            type: 'anyOf',
+            steps: [
+              {type: 'artifact.exists', path: 'missing.txt'},
+              {
+                type: 'verify.command',
+                command: 'pnpm test',
+                exitCode: 0,
+              },
+            ],
+          },
+        ],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const result = {
+      assertionResults: [
+        {
+          assertionId: 'assertion.anyof.verify',
+          type: 'anyOf',
+          passed: false,
+          message: 'all branches failed',
+          evidence: {
+            kind: 'anyOf',
+            branches: [
+              {
+                type: 'artifact.exists',
+                passed: false,
+                message: 'Expected artifact "missing.txt" to exist.',
+              },
+              {
+                type: 'verify.command',
+                passed: false,
+                message: 'Verification command "pnpm test" failed: exit code 1',
+                evidence: {
+                  assertionId: 'assertion.anyof.verify#branch:2',
+                  command: 'pnpm test',
+                  exitCode: 1,
+                  stdout: 'FAIL suite',
+                  stderr: 'boom',
+                  durationMs: 12,
+                },
+              },
+            ],
+          },
+        },
+      ],
+      harnessResult: {toolEvents: []},
+    } as unknown as LocalRunnerResult;
+
+    const output = renderAssertionDetails(
+      result,
+      assertionByIdForJobs([job]),
+      createRenderContext({usePlainSymbols: true}, {}),
+    );
+
+    expect(output).toContain('0/2 branches matched');
+    expect(output).toContain('exit 1');
+    expect(output).toContain('FAIL suite');
+    expect(output).toContain('boom');
   });
 
   it('shows command evidence for failed sequence.inOrder assertions', () => {

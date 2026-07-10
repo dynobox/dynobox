@@ -1,10 +1,20 @@
-import {existsSync, readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {lstatSync, readFileSync, type Stats} from 'node:fs';
 
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
-import {type ArtifactInspection, resolveArtifactPath} from './inspection.js';
+import {
+  type ArtifactInspection,
+  pathPresence,
+  resolveArtifactPath,
+} from './inspection.js';
 import {failed, passed} from './results.js';
-import type {AssertionResult} from './types.js';
+import type {
+  ArtifactBaseline,
+  ArtifactPathState,
+  ArtifactUnchangedEvidence,
+  AssertionResult,
+} from './types.js';
 
 export function evaluateArtifactExists(
   assertion: Extract<IrAssertion, {type: 'artifact.exists'}>,
@@ -18,7 +28,16 @@ export function evaluateArtifactExists(
     });
   }
 
-  if (existsSync(resolved.path)) {
+  // lstat presence so dangling symlinks count as existing (matches notExists).
+  const presence = pathPresence(resolved.path);
+  if (presence.kind === 'error') {
+    return failedWithEvidence(
+      assertion,
+      `Could not inspect artifact "${assertion.path}": ${presence.message}`,
+      {kind: 'invalid', message: presence.message},
+    );
+  }
+  if (presence.kind === 'exists') {
     return passed(assertion, `Artifact "${assertion.path}" exists.`, {
       kind: 'exists',
       path: resolved.path,
@@ -29,6 +48,41 @@ export function evaluateArtifactExists(
     assertion,
     `Expected artifact "${assertion.path}" to exist.`,
     {kind: 'missing', path: resolved.path},
+  );
+}
+
+export function evaluateArtifactNotExists(
+  assertion: Extract<IrAssertion, {type: 'artifact.notExists'}>,
+  workDir: string | undefined,
+): AssertionResult {
+  const resolved = resolveArtifactPath(assertion.path, workDir);
+  if (resolved.error !== undefined) {
+    return failedWithEvidence(assertion, resolved.error, {
+      kind: 'invalid',
+      message: resolved.error,
+    });
+  }
+
+  // Same lstat presence as exists: notExists is the true complement.
+  const presence = pathPresence(resolved.path);
+  if (presence.kind === 'error') {
+    return failedWithEvidence(
+      assertion,
+      `Could not inspect artifact "${assertion.path}": ${presence.message}`,
+      {kind: 'invalid', message: presence.message},
+    );
+  }
+  if (presence.kind === 'missing') {
+    return passed(assertion, `Artifact "${assertion.path}" is absent.`, {
+      kind: 'missing',
+      path: resolved.path,
+    });
+  }
+
+  return failedWithEvidence(
+    assertion,
+    `Expected artifact "${assertion.path}" to be absent, but it exists at ${resolved.path}.`,
+    {kind: 'exists', path: resolved.path},
   );
 }
 
@@ -61,14 +115,279 @@ export function evaluateArtifactContains(
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const presence = pathPresence(resolved.path);
     return failedWithEvidence(
       assertion,
       `Could not read artifact "${assertion.path}" as UTF-8: ${message}`,
-      existsSync(resolved.path)
+      presence.kind === 'exists'
         ? {kind: 'exists', path: resolved.path}
         : {kind: 'missing', path: resolved.path},
     );
   }
+}
+
+/**
+ * Capture a post-setup baseline for `artifact.unchanged`. Snapshot failures are
+ * returned as baseline values so they remain assertion-level later.
+ * Regular files store size + SHA-256 of raw bytes (not the bytes themselves).
+ */
+export function captureArtifactBaseline(
+  path: string,
+  workDir: string | undefined,
+): ArtifactBaseline {
+  const resolved = resolveArtifactPath(path, workDir);
+  if (resolved.error !== undefined) {
+    return {kind: 'invalid', message: resolved.error};
+  }
+
+  try {
+    const stats = lstatSync(resolved.path);
+    if (stats.isSymbolicLink()) {
+      return {
+        kind: 'not-file',
+        path: resolved.path,
+        fileType: 'symlink',
+      };
+    }
+    if (stats.isDirectory()) {
+      return {
+        kind: 'not-file',
+        path: resolved.path,
+        fileType: 'directory',
+      };
+    }
+    if (!stats.isFile()) {
+      return {
+        kind: 'not-file',
+        path: resolved.path,
+        fileType: 'other',
+      };
+    }
+
+    const bytes = readFileSync(resolved.path);
+    return {
+      kind: 'file',
+      path: resolved.path,
+      size: bytes.byteLength,
+      sha256: sha256Hex(bytes),
+    };
+  } catch (error) {
+    if (isEnoent(error)) {
+      return {kind: 'missing', path: resolved.path};
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return {kind: 'unreadable', path: resolved.path, message};
+  }
+}
+
+export function evaluateArtifactUnchanged(
+  assertion: Extract<IrAssertion, {type: 'artifact.unchanged'}>,
+  workDir: string | undefined,
+  baselines: ReadonlyMap<string, ArtifactBaseline> | undefined,
+): AssertionResult {
+  const baseline = baselines?.get(assertion.id);
+  if (baseline === undefined) {
+    return {
+      ...failed(
+        assertion,
+        `No baseline was captured for artifact "${assertion.path}".`,
+      ),
+      evidence: unchangedEvidence(assertion.path, undefined, undefined),
+    };
+  }
+
+  if (baseline.kind === 'invalid') {
+    return {
+      ...failed(assertion, baseline.message),
+      evidence: unchangedEvidence(assertion.path, baseline, undefined),
+    };
+  }
+
+  if (baseline.kind === 'missing') {
+    return {
+      ...failed(
+        assertion,
+        `Expected artifact "${assertion.path}" to exist as a regular file before the harness started.`,
+      ),
+      evidence: unchangedEvidence(assertion.path, baseline, {
+        kind: 'missing',
+        path: baseline.path,
+      }),
+    };
+  }
+
+  if (baseline.kind === 'not-file') {
+    return {
+      ...failed(
+        assertion,
+        `Expected artifact "${assertion.path}" to be a regular file before the harness started, but found ${baseline.fileType}.`,
+      ),
+      evidence: unchangedEvidence(assertion.path, baseline, undefined),
+    };
+  }
+
+  if (baseline.kind === 'unreadable') {
+    return {
+      ...failed(
+        assertion,
+        `Could not read artifact "${assertion.path}" before the harness started: ${baseline.message}`,
+      ),
+      evidence: unchangedEvidence(assertion.path, baseline, undefined),
+    };
+  }
+
+  const resolved = resolveArtifactPath(assertion.path, workDir);
+  if (resolved.error !== undefined) {
+    return {
+      ...failed(assertion, resolved.error),
+      evidence: unchangedEvidence(assertion.path, baseline, {
+        kind: 'invalid',
+        message: resolved.error,
+      }),
+    };
+  }
+
+  try {
+    const stats = lstatSync(resolved.path);
+    const finalState = finalStateFromStats(resolved.path, stats);
+    if (finalState.kind !== 'file') {
+      return {
+        ...failed(
+          assertion,
+          `Expected artifact "${assertion.path}" to remain a regular file, but final path is ${describeFinalKind(finalState)}.`,
+        ),
+        evidence: unchangedEvidence(assertion.path, baseline, finalState),
+      };
+    }
+
+    const finalBytes = readFileSync(resolved.path);
+    const finalWithSize = {
+      kind: 'file' as const,
+      path: resolved.path,
+      size: finalBytes.byteLength,
+    };
+    const finalHash = sha256Hex(finalBytes);
+
+    if (
+      baseline.size === finalBytes.byteLength &&
+      baseline.sha256 === finalHash
+    ) {
+      return passed(
+        assertion,
+        `Artifact "${assertion.path}" is unchanged (${finalBytes.byteLength} bytes).`,
+        unchangedEvidence(assertion.path, baseline, finalWithSize),
+      );
+    }
+
+    return {
+      ...failed(
+        assertion,
+        `Expected artifact "${assertion.path}" to be unchanged, but contents differ (baseline ${baseline.size} bytes, final ${finalBytes.byteLength} bytes).`,
+      ),
+      evidence: unchangedEvidence(assertion.path, baseline, finalWithSize),
+    };
+  } catch (error) {
+    if (isEnoent(error)) {
+      return {
+        ...failed(
+          assertion,
+          `Expected artifact "${assertion.path}" to be unchanged, but it was deleted.`,
+        ),
+        evidence: unchangedEvidence(assertion.path, baseline, {
+          kind: 'missing',
+          path: resolved.path,
+        }),
+      };
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ...failed(
+        assertion,
+        `Could not read artifact "${assertion.path}" after the harness: ${message}`,
+      ),
+      evidence: unchangedEvidence(assertion.path, baseline, {
+        kind: 'unreadable',
+        path: resolved.path,
+        message,
+      }),
+    };
+  }
+}
+
+function finalStateFromStats(path: string, stats: Stats): ArtifactPathState {
+  if (stats.isSymbolicLink()) {
+    return {kind: 'not-file', path, fileType: 'symlink'};
+  }
+  if (stats.isDirectory()) {
+    return {kind: 'not-file', path, fileType: 'directory'};
+  }
+  if (!stats.isFile()) {
+    return {kind: 'not-file', path, fileType: 'other'};
+  }
+  return {kind: 'file', path, size: stats.size};
+}
+
+function describeFinalKind(final: ArtifactPathState): string {
+  if (final.kind === 'missing') return 'missing';
+  if (final.kind === 'not-file') return final.fileType;
+  if (final.kind === 'unreadable') return 'unreadable';
+  if (final.kind === 'invalid') return 'invalid';
+  return 'a regular file';
+}
+
+function unchangedEvidence(
+  authoredPath: string,
+  baseline: ArtifactBaseline | undefined,
+  final: ArtifactPathState | undefined,
+): ArtifactUnchangedEvidence {
+  const evidence: ArtifactUnchangedEvidence = {
+    kind: 'unchanged',
+    path: authoredPath,
+  };
+  if (baseline !== undefined) {
+    evidence.baseline = baselineSummary(baseline);
+  }
+  if (final !== undefined) {
+    evidence.final = final;
+  }
+  return evidence;
+}
+
+function baselineSummary(baseline: ArtifactBaseline): ArtifactPathState {
+  if (baseline.kind === 'file') {
+    return {kind: 'file', path: baseline.path, size: baseline.size};
+  }
+  if (baseline.kind === 'missing') {
+    return {kind: 'missing', path: baseline.path};
+  }
+  if (baseline.kind === 'not-file') {
+    return {
+      kind: 'not-file',
+      path: baseline.path,
+      fileType: baseline.fileType,
+    };
+  }
+  if (baseline.kind === 'unreadable') {
+    return {
+      kind: 'unreadable',
+      path: baseline.path,
+      message: baseline.message,
+    };
+  }
+  return {kind: 'invalid', message: baseline.message};
+}
+
+function sha256Hex(bytes: Uint8Array | Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+function isEnoent(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'ENOENT'
+  );
 }
 
 function failedWithEvidence(

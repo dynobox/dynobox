@@ -59,8 +59,10 @@ You can assert:
   `command.notCalled(...)`.
 - Skill instruction file references with `skill.referenced(...)`.
 - Ordered behavior sequences and valid alternatives with `sequence.inOrder(...)`
-  and `anyOf(...)`.
-- Files present inside the scenario work directory.
+  and `anyOf(...)`, including nested `verify.command(...)` branches.
+- Work-directory artifacts with `artifact.exists(...)`,
+  `artifact.notExists(...)`, `artifact.contains(...)`, and
+  `artifact.unchanged(...)`.
 - Harness transcript and final-message text.
 - HTTP requests made by local child-process tools that honor proxy environment
   variables.

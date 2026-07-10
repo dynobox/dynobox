@@ -8,8 +8,10 @@ export function evaluateSkillReferenced(
   assertion: Extract<IrAssertion, {type: 'skill.referenced'}>,
   toolEvents: readonly ToolEvent[],
 ): AssertionResult {
-  const event = toolEvents.find((toolEvent) =>
-    toolEventMentionsSkillFile(toolEvent, assertion.skill),
+  const event = toolEvents.find(
+    (toolEvent) =>
+      toolEventMentionsSkillFile(toolEvent, assertion.skill) ||
+      toolEventInvokesSkill(toolEvent, assertion.skill),
   );
 
   if (event !== undefined) {
@@ -32,6 +34,17 @@ function toolEventMentionsSkillFile(
 ): boolean {
   return stringsFromUnknown(event).some((value) =>
     stringMentionsSkillFile(value, skillName),
+  );
+}
+
+function toolEventInvokesSkill(event: ToolEvent, skillName: string): boolean {
+  if (event.rawName.toLowerCase() !== 'skill') return false;
+  if (typeof event.input !== 'object' || event.input === null) return false;
+
+  const invokedSkill = (event.input as {skill?: unknown}).skill;
+  return (
+    typeof invokedSkill === 'string' &&
+    invokedSkill.toLowerCase() === skillName.toLowerCase()
   );
 }
 

@@ -292,21 +292,31 @@ Path matchers are supported for `read_file`, `write_file`, `edit_file`, and
 `search_files`. They match path-like tool input fields such as `path`,
 `file_path`, `filepath`, `file`, or nested entries like `files[].path`.
 
-### artifact.exists and artifact.contains
+### artifact.exists, artifact.notExists, artifact.contains, artifact.unchanged
 
-Artifacts are read from the scenario work directory after the harness exits.
+Artifacts are inspected in the scenario work directory after the harness exits.
 
 ```yaml
 - type: artifact.exists
   path: README.md
 
+- type: artifact.notExists
+  path: scratch.tmp
+
 - type: artifact.contains
   path: package.json
   text: vitest run
+
+- type: artifact.unchanged
+  path: package-lock.json
 ```
 
 Paths must be relative and stay inside the work directory.
 
+`artifact.exists` and `artifact.notExists` both use lstat presence, so valid and
+dangling symlinks count as present (exists passes, notExists fails).
+`artifact.unchanged` fingerprints size + SHA-256 of raw bytes after fixtures and
+setup, then re-checks after the harness (still raw-byte equality).
 ### transcript.contains and finalMessage.contains
 
 ```yaml
@@ -331,6 +341,22 @@ Asserts that observed harness events referenced a named skill's `SKILL.md`.
 ```
 
 This is useful for testing observable skill-file references, not general task success.
+
+### anyOf
+
+Use when any one of several assertion paths is acceptable. Branches may include
+regular observation assertions and nested `verify.command` / `verify.succeeds`
+checks. Nested `anyOf` and `sequence.inOrder` are not allowed.
+
+```yaml
+- type: anyOf
+  steps:
+    - type: artifact.exists
+      path: out.js
+    - type: verify.command
+      command: node --check out.js
+      exitCode: 0
+```
 
 ### sequence.inOrder
 
@@ -389,24 +415,38 @@ variables. Harness-native web tools with separate trust stores may bypass it.
 5. Add at least one assertion. A scenario with no assertions only proves that
    the harness exited.
 6. Prefer durable assertions:
-    - `artifact.exists` or `artifact.contains` for produced files
+    - `artifact.exists`, `artifact.notExists`, `artifact.contains`, or
+      `artifact.unchanged` for workdir file state
     - `command.called` for observed CLI behavior
     - `tool.called` for meaningful non-shell tool interactions
     - `tool.notCalled` for dangerous or wrong behavior
     - `finalMessage.contains` for user-visible answers
     - `skill.referenced` when testing observed skill file references
+    - `anyOf` when multiple valid success paths exist (including nested
+      `verify.command`)
 7. Use `sequence.inOrder` sparingly. It is powerful, but easy to make too
    brittle across harnesses.
 
 ## Skill Smoke Tests
 
 For skill smoke tests, keep the scratch repo realistic and make the skill
-available inside the work directory:
+available inside the work directory. When the dyno lives under
+`.agents/skills/<name>/` or `.claude/skills/<name>/` and uses `defineDyno(...)`,
+Dynobox automatically stages `SKILL.md` into both harness layouts:
+
+```text
+.agents/skills/<skill-name>/SKILL.md
+.claude/skills/<skill-name>/SKILL.md
+```
+
+If you stage skills manually (for example outside a skill root), copy both:
 
 ```js
 setup: [
   'mkdir -p .agents/skills/<skill-name>',
   `cp ${here.q('../SKILL.md')} .agents/skills/<skill-name>/SKILL.md`,
+  'mkdir -p .claude/skills/<skill-name>',
+  `cp ${here.q('../SKILL.md')} .claude/skills/<skill-name>/SKILL.md`,
 ];
 ```
 
@@ -415,6 +455,8 @@ Then assert both routing and behavior:
 ```js
 assertions: [
   skill.referenced('<skill-name>'),
+  artifact.exists('.agents/skills/<skill-name>/SKILL.md'),
+  artifact.exists('.claude/skills/<skill-name>/SKILL.md'),
   tool.called('read_file', {path: 'input.txt'}),
   finalMessage.contains('Expected section'),
 ];

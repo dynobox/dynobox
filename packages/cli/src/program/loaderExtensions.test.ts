@@ -132,6 +132,10 @@ export default defineDyno({
       expect.stringMatching(
         /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.agents\/skills\/commit\/SKILL\.md'$/u,
       ),
+      "mkdir -p '.claude/skills/commit'",
+      expect.stringMatching(
+        /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.claude\/skills\/commit\/SKILL\.md'$/u,
+      ),
     ]);
   });
 

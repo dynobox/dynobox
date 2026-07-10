@@ -23,6 +23,57 @@ export type VerifyCommandResult = {
   durationMs: number;
 };
 
+/**
+ * Post-setup baseline for `artifact.unchanged`. Successful regular-file
+ * snapshots keep size and a SHA-256 of the raw bytes (not the bytes themselves)
+ * so equality is still raw-byte exact without retaining full file buffers.
+ */
+export type ArtifactBaseline =
+  | {
+      kind: 'file';
+      path: string;
+      size: number;
+      sha256: string;
+    }
+  | {
+      kind: 'missing';
+      path: string;
+    }
+  | {
+      kind: 'not-file';
+      path: string;
+      fileType: 'directory' | 'symlink' | 'other';
+    }
+  | {
+      kind: 'unreadable';
+      path: string;
+      message: string;
+    }
+  | {
+      kind: 'invalid';
+      message: string;
+    };
+
+/** Snapshot/final path state without raw file contents. */
+export type ArtifactPathState =
+  | {kind: 'file'; path: string; size: number}
+  | {kind: 'missing'; path: string}
+  | {
+      kind: 'not-file';
+      path: string;
+      fileType: 'directory' | 'symlink' | 'other';
+    }
+  | {kind: 'unreadable'; path: string; message: string}
+  | {kind: 'invalid'; message: string};
+
+/** Diagnostic evidence for `artifact.unchanged` without raw file contents. */
+export type ArtifactUnchangedEvidence = {
+  kind: 'unchanged';
+  path: string;
+  baseline?: ArtifactPathState;
+  final?: ArtifactPathState;
+};
+
 /** Inputs available when evaluating one scenario's compiled assertions. */
 export type EvaluationInput = {
   assertions: readonly IrAssertion[];
@@ -32,6 +83,16 @@ export type EvaluationInput = {
   workDir?: string | undefined;
   transcript?: string | undefined;
   finalMessage?: string | undefined;
+  /** Baselines keyed by assertion id, including nested anyOf branch ids. */
+  artifactBaselines?: ReadonlyMap<string, ArtifactBaseline> | undefined;
+  /**
+   * Pre-evaluated non-verification `anyOf` branches keyed by anyOf assertion
+   * id. Entries are undefined for verification branches deferred until after
+   * verify commands run.
+   */
+  anyOfObservationBranches?:
+    | ReadonlyMap<string, readonly (AssertionResult | undefined)[]>
+    | undefined;
 };
 
 /** Result for one compiled assertion. */

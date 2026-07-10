@@ -1,4 +1,5 @@
 import type {VerifyCommandResult} from '@dynobox/evaluators';
+import {collectVerifyCommandAssertions} from '@dynobox/evaluators';
 import type {IrScenario} from '@dynobox/sdk/ir';
 import {execaCommand} from 'execa';
 
@@ -8,7 +9,10 @@ export type RunVerifyCommandsOptions = {
   env?: Record<string, string>;
 };
 
-/** Execute post-harness verification commands in authored assertion order. */
+/**
+ * Execute post-harness verification commands in authored order, including
+ * nested `verify.command` branches inside anyOf assertions.
+ */
 export async function runVerifyCommands(
   opts: RunVerifyCommandsOptions,
 ): Promise<VerifyCommandResult[]> {
@@ -16,7 +20,9 @@ export async function runVerifyCommands(
     opts.env === undefined ? process.env : {...process.env, ...opts.env};
   const results: VerifyCommandResult[] = [];
 
-  for (const assertion of verifyCommandAssertions(opts.scenario.assertions)) {
+  for (const assertion of collectVerifyCommandAssertions(
+    opts.scenario.assertions,
+  )) {
     const result = await execaCommand(assertion.command, {
       cwd: opts.workDir,
       env,
@@ -35,19 +41,4 @@ export async function runVerifyCommands(
   }
 
   return results;
-}
-
-type RunnableVerifyCommandAssertion = {
-  id: string;
-  type: 'verify.command';
-  command: string;
-};
-
-function verifyCommandAssertions(
-  assertions: IrScenario['assertions'],
-): RunnableVerifyCommandAssertion[] {
-  return assertions.filter(
-    (assertion): assertion is RunnableVerifyCommandAssertion =>
-      assertion.type === 'verify.command',
-  );
 }

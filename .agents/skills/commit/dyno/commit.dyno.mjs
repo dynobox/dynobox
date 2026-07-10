@@ -25,6 +25,7 @@ export default defineDyno({
         skill.referenced('commit'),
         command.called('git', {args: ['add']}),
         artifact.exists('.agents/skills/commit/SKILL.md'),
+        artifact.exists('.claude/skills/commit/SKILL.md'),
         command.notCalled('git', {args: ['push']}),
         command.notCalled('git', {args: ['commit', '--amend']}),
       ],

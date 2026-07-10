@@ -8,6 +8,31 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `@dynobox/sdk`
+
+- Added `artifact.notExists(path)` to assert a workdir path is truly absent
+  (files, directories, valid symlinks, and dangling symlinks all fail).
+  `artifact.exists` and `artifact.notExists` both use `lstat` presence, so
+  dangling symlinks count as present for both.
+- Added `artifact.unchanged(path)` to assert a regular file matches the
+  post-setup baseline (size + SHA-256 of raw bytes) captured before the harness
+  starts.
+- Allowed `verify.command(...)` and `verify.succeeds(...)` as `anyOf([...])`
+  branches. Nested verification commands receive stable synthetic branch IDs
+  (`${anyOfId}#branch:${n}`, collision-safe vs authored ids) and cannot
+  retroactively change observation-branch artifact results.
+- Changed authored skill staging so `defineDyno(...)` copies `SKILL.md` into
+  both `.agents/skills/<name>/` and `.claude/skills/<name>/` (authored root
+  first).
+
+### `dynobox` (CLI)
+
+- Rendered diagnostics for `artifact.notExists` and `artifact.unchanged`,
+  including resolved paths, baseline/final byte sizes, and nested verification
+  exit code, stdout, and stderr when every `anyOf` branch fails.
+- Preserved new artifact path fields and nested verification definition fields
+  in `--save-run` upload payloads.
+
 ---
 
 ## dynobox@0.8.1 — 2026-07-09

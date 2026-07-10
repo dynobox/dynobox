@@ -417,6 +417,75 @@ describe('runJob', () => {
             path: 'CHANGELOG.md',
             text: 'dynobox@0.0.4',
           },
+          {
+            id: 'assertion.uses-shell.1',
+            type: 'artifact.notExists',
+            path: 'scratch.tmp',
+          },
+        ],
+      }),
+      {scratchRoot, harnesses: [new FakeHarness()]},
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.assertionResults.map((entry) => entry.passed)).toEqual([
+      true,
+      true,
+    ]);
+  });
+
+  it('captures artifact.unchanged baselines before the harness runs', async () => {
+    const scratchRoot = createScratchRoot();
+    const harness = new RecordingHarness(undefined, []);
+    // Mutate the file during the harness run after setup wrote the baseline.
+    harness.run = async (input) => {
+      const {writeFileSync} = await import('node:fs');
+      writeFileSync(join(input.workDir, 'stable.txt'), 'changed');
+      return {
+        exitCode: 0,
+        stdout: 'ok',
+        stderr: '',
+        durationMs: 10,
+      };
+    };
+
+    const result = await runJob(
+      createJob({
+        setup: [
+          "node -e \"require('node:fs').writeFileSync('stable.txt', 'baseline')\"",
+        ],
+        assertions: [
+          {
+            id: 'assertion.stable.0',
+            type: 'artifact.unchanged',
+            path: 'stable.txt',
+          },
+        ],
+      }),
+      {scratchRoot, harnesses: [harness]},
+    );
+
+    expect(result.status).toBe('assertion_failed');
+    expect(result.assertionResults[0]).toMatchObject({
+      passed: false,
+      message: expect.stringContaining('contents differ'),
+    });
+  });
+
+  it('passes artifact.unchanged when the harness leaves the file byte-identical', async () => {
+    const scratchRoot = createScratchRoot();
+
+    const result = await runJob(
+      createJob({
+        setup: [
+          "node -e \"require('node:fs').writeFileSync('stable.txt', 'baseline')\"",
+        ],
+        assertions: [
+          {
+            id: 'assertion.stable.0',
+            type: 'artifact.unchanged',
+            path: 'stable.txt',
+          },
         ],
       }),
       {scratchRoot, harnesses: [new FakeHarness()]},
@@ -424,6 +493,92 @@ describe('runJob', () => {
 
     expect(result.status).toBe('passed');
     expect(result.assertionResults[0]).toMatchObject({passed: true});
+  });
+
+  it('keeps invalid artifact.unchanged baselines assertion-level without blocking the harness', async () => {
+    const scratchRoot = createScratchRoot();
+    const harness = new RecordingHarness();
+
+    const result = await runJob(
+      createJob({
+        assertions: [
+          {
+            id: 'assertion.stable.0',
+            type: 'artifact.unchanged',
+            path: 'missing.txt',
+          },
+        ],
+      }),
+      {scratchRoot, harnesses: [harness]},
+    );
+
+    expect(harness.inputs).toHaveLength(1);
+    expect(result.status).toBe('assertion_failed');
+    expect(result.assertionResults[0]?.message).toContain(
+      'before the harness started',
+    );
+  });
+
+  it('runs nested anyOf verification branches without mutating observation results', async () => {
+    const scratchRoot = createScratchRoot();
+
+    const result = await runJob(
+      createJob({
+        assertions: [
+          {
+            id: 'assertion.flexible.0',
+            type: 'anyOf',
+            steps: [
+              {type: 'artifact.notExists', path: 'created.txt'},
+              {
+                type: 'verify.command',
+                command:
+                  "node -e \"require('node:fs').writeFileSync('created.txt', 'created')\"",
+                exitCode: 0,
+              },
+            ],
+          },
+        ],
+      }),
+      {scratchRoot, harnesses: [new RecordingHarness()]},
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.assertionResults[0]).toMatchObject({
+      passed: true,
+      // Observation branch was cached before verify created the file.
+      evidence: {kind: 'anyOf', branchIndex: 1},
+    });
+  });
+
+  it('passes anyOf via nested verify when observation branches fail', async () => {
+    const scratchRoot = createScratchRoot();
+
+    const result = await runJob(
+      createJob({
+        assertions: [
+          {
+            id: 'assertion.flexible.0',
+            type: 'anyOf',
+            steps: [
+              {type: 'artifact.exists', path: 'missing.txt'},
+              {
+                type: 'verify.command',
+                command: 'node -e "process.exit(0)"',
+                exitCode: 0,
+              },
+            ],
+          },
+        ],
+      }),
+      {scratchRoot, harnesses: [new RecordingHarness()]},
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.assertionResults[0]).toMatchObject({
+      passed: true,
+      evidence: {kind: 'anyOf', branchIndex: 2},
+    });
   });
 
   it('evaluates harness transcript and final message assertions', async () => {

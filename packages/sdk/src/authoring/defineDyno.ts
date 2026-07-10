@@ -70,8 +70,9 @@ type ConstrainScenarios<
  * When called from a JS/TS dyno file with an adjacent `fixtures/` directory,
  * scenarios that omit `fixtures` are automatically assigned that directory.
  * Dynos inside `.agents/skills/<name>/...` or `.claude/skills/<name>/...`
- * also get setup commands that copy the skill instructions into each scenario
- * work directory.
+ * also get setup commands that copy the skill instructions into both
+ * `.agents/skills/<name>/SKILL.md` and `.claude/skills/<name>/SKILL.md` in each
+ * scenario work directory.
  */
 export function defineDyno<
   const GE extends EndpointMap | undefined,
@@ -120,9 +121,11 @@ function applyDefaultSkillSetup(
   const skill = defaultSkillSetup(callerUrl);
   if (skill === undefined) return config;
 
+  // Stage into the authored root first, then the alternate harness convention
+  // so both Claude Code and Agents-compatible layouts see the same SKILL.md.
   const skillSetup = [
-    `mkdir -p ${shellQuote(skill.targetDir)}`,
-    `cp ${shellQuote(skill.sourceFile)} ${shellQuote(skill.targetFile)}`,
+    ...skillCopyCommands(skill.sourceFile, skill.primaryRoot, skill.name),
+    ...skillCopyCommands(skill.sourceFile, skill.alternateRoot, skill.name),
   ];
   const scenarios = config.scenarios.map((scenario) => ({
     ...scenario,
@@ -135,6 +138,18 @@ function applyDefaultSkillSetup(
   };
 }
 
+function skillCopyCommands(
+  sourceFile: string,
+  root: '.agents' | '.claude',
+  name: string,
+): string[] {
+  const targetDir = `${root}/skills/${name}`;
+  return [
+    `mkdir -p ${shellQuote(targetDir)}`,
+    `cp ${shellQuote(sourceFile)} ${shellQuote(`${targetDir}/SKILL.md`)}`,
+  ];
+}
+
 function defaultFixturesPath(callerUrl: string): string | undefined {
   const fixtures = join(dirname(fileURLToPath(callerUrl)), 'fixtures');
   return existsSync(fixtures) ? fixtures : undefined;
@@ -143,8 +158,9 @@ function defaultFixturesPath(callerUrl: string): string | undefined {
 function defaultSkillSetup(callerUrl: string):
   | {
       sourceFile: string;
-      targetDir: string;
-      targetFile: string;
+      name: string;
+      primaryRoot: '.agents' | '.claude';
+      alternateRoot: '.agents' | '.claude';
     }
   | undefined {
   const skillDir = findAuthoredSkillDir(dirname(fileURLToPath(callerUrl)));
@@ -153,11 +169,12 @@ function defaultSkillSetup(callerUrl: string):
   const sourceFile = join(skillDir.dir, 'SKILL.md');
   if (!existsSync(sourceFile)) return undefined;
 
-  const targetDir = `${skillDir.root}/skills/${skillDir.name}`;
+  const alternateRoot = skillDir.root === '.agents' ? '.claude' : '.agents';
   return {
     sourceFile,
-    targetDir,
-    targetFile: `${targetDir}/SKILL.md`,
+    name: skillDir.name,
+    primaryRoot: skillDir.root,
+    alternateRoot,
   };
 }
 

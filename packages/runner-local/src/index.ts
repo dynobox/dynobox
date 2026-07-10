@@ -2,8 +2,13 @@ import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import {type AssertionResult, evaluateAssertions} from '@dynobox/evaluators';
-import type {IrAssertion} from '@dynobox/sdk/ir';
+import {
+  assertionRequiresVerify,
+  type AssertionResult,
+  captureArtifactBaselines,
+  evaluateAssertions,
+  preEvaluateAnyOfObservationBranches,
+} from '@dynobox/evaluators';
 
 import {
   errorMessage,
@@ -143,6 +148,13 @@ export async function runJob(
       timing: buildTiming({setupMs}),
     });
   }
+
+  // Capture unchanged baselines after fixtures/setup succeed and before the
+  // harness can mutate the workdir. Snapshot failures stay assertion-level.
+  const artifactBaselines = captureArtifactBaselines(
+    job.scenario.assertions,
+    workDir,
+  );
 
   emitProgress(options, {
     type: 'harness.started',
@@ -324,6 +336,20 @@ export async function runJob(
     assertionCount: job.scenario.assertions.length,
   });
   const assertionsStartedAt = Date.now();
+  const observationInput = {
+    toolEvents: harnessResult.toolEvents,
+    httpEvents,
+    workDir,
+    transcript: harnessResult.transcript,
+    finalMessage: harnessResult.finalMessage,
+    artifactBaselines,
+  };
+  // Cache observation branches before verification commands can mutate the
+  // workdir (including nested anyOf verify branches).
+  const anyOfObservationBranches = preEvaluateAnyOfObservationBranches(
+    job.scenario.assertions,
+    observationInput,
+  );
   const preVerifyAssertions = job.scenario.assertions.filter(
     (assertion) => !assertionRequiresVerify(assertion),
   );
@@ -332,11 +358,8 @@ export async function runJob(
   );
   const nonVerifyAssertionResults = evaluateAssertions({
     assertions: preVerifyAssertions,
-    toolEvents: harnessResult.toolEvents,
-    httpEvents,
-    workDir,
-    transcript: harnessResult.transcript,
-    finalMessage: harnessResult.finalMessage,
+    ...observationInput,
+    anyOfObservationBranches,
   });
   const verifyOptions: Parameters<typeof runVerifyCommands>[0] = {
     scenario: job.scenario,
@@ -346,8 +369,9 @@ export async function runJob(
   const verifyCommandResults = await runVerifyCommands(verifyOptions);
   const verifyAssertionResults = evaluateAssertions({
     assertions: postVerifyAssertions,
-    toolEvents: harnessResult.toolEvents,
+    ...observationInput,
     verifyCommandResults,
+    anyOfObservationBranches,
   });
   const resultsByAssertionId = new Map<string, AssertionResult[]>();
   for (const result of [
@@ -390,12 +414,6 @@ export async function runJob(
       assertionsMs,
     }),
   });
-}
-
-function assertionRequiresVerify(assertion: IrAssertion): boolean {
-  // Nested verify.command is rejected by the SDK schema; only top-level
-  // assertions need to be split into the post-harness verification pass.
-  return assertion.type === 'verify.command';
 }
 
 async function createWorkDir(scratchRoot: string | undefined): Promise<string> {

@@ -343,15 +343,20 @@ Use `anyOf` when any one of several assertion paths is acceptable.
 anyOf([
   tool.called('read_file', {path: 'package.json'}),
   command.called('cat', {args: ['package.json']}),
+  verify.succeeds('node --check out.js'),
 ]);
 ```
 
-Branches may use any regular assertion kind except nested `anyOf`,
-`sequence.inOrder`, or `verify.command`. Branch-level `id` and `label` fields
-are not supported; label the `anyOf` assertion itself instead.
+Branches may use any regular assertion kind except nested `anyOf` or
+`sequence.inOrder`. Nested `verify.command(...)` / `verify.succeeds(...)`
+branches are supported. Branch-level `id` and `label` fields are not supported;
+label the `anyOf` assertion itself instead.
 
 Every branch is evaluated on each run, even after one branch already passes.
 When multiple branches pass, the lowest-index branch is reported as the match.
+Observation branches (artifacts, tools, commands, and so on) are evaluated
+before nested verification commands run, so a verify branch cannot mutate the
+workdir and retroactively change an artifact branch result.
 
 `*.notCalled` branches (`tool.notCalled`, `command.notCalled`, `http.notCalled`)
 can make an `anyOf` pass vacuously when the forbidden action never occurred.
@@ -377,12 +382,30 @@ a harness semantically activated or followed the skill instructions.
 
 ### Artifacts
 
-Artifact assertions read files inside the scenario work directory.
+Artifact assertions read paths inside the scenario work directory.
 
 ```ts
 artifact.exists('README.md');
+artifact.notExists('scratch.tmp');
 artifact.contains('package.json', 'vitest run');
+artifact.unchanged('package-lock.json');
 ```
+
+- `artifact.exists(path)` passes when a directory entry is present after the
+  harness runs. Dynobox uses `lstat` semantics, so valid and dangling symlinks
+  both count as present.
+- `artifact.notExists(path)` is the complement: it passes only when the path is
+  truly absent (including when an intermediate component is a regular file, so
+  `file/child` cannot exist). Files, directories, valid symlinks, and dangling
+  symlinks all fail.
+- `artifact.contains(path, text)` reads the file as UTF-8 and checks for a
+  substring.
+- `artifact.unchanged(path)` fingerprints the regular file after fixtures and
+  setup complete (size + SHA-256 of raw bytes), then compares the same
+  fingerprint after the harness exits. Equality is still raw-byte exact: line
+  endings, whitespace, formatting, and structured data are not normalized.
+  Missing, unreadable, or non-file baselines fail as assertion-level authoring
+  errors without blocking the harness.
 
 Artifact paths must be relative and must stay inside the work directory.
 
@@ -547,11 +570,20 @@ Supported skill roots:
 - `.agents/skills/<name>/`
 - `.claude/skills/<name>/`
 
+For either authored root, Dynobox stages the same source `SKILL.md` into both
+harness layouts:
+
+- `.agents/skills/<name>/SKILL.md`
+- `.claude/skills/<name>/SKILL.md`
+
+The authored root is copied first, then the alternate destination. Authored
+scenario setup commands run after both generated copies.
+
 For example, a dyno at `.agents/skills/commit/dyno/commit.dyno.mjs` with
-`.agents/skills/commit/SKILL.md` gets setup commands that create
-`.agents/skills/commit/SKILL.md` in the scenario work directory. This makes
-skill reference tests work without manually copying the instruction file in
-each scenario.
+`.agents/skills/commit/SKILL.md` gets setup commands that create both
+`.agents/skills/commit/SKILL.md` and `.claude/skills/commit/SKILL.md` in the
+scenario work directory. This makes skill reference tests work across harness
+conventions without manually copying the instruction file in each scenario.
 
 ## Reusable Scenarios
 
@@ -625,7 +657,9 @@ JSON output.
 | `command.notCalled('git', {args: ['push']})`           | `{type: command.notCalled, executable: git, command: {args: [push]}}` |
 | `verify.command('dynobox validate out.dyno.ts', {exitCode: 0})` | `{type: verify.command, command: dynobox validate out.dyno.ts, exitCode: 0}` |
 | `artifact.exists('README.md')`                         | `{type: artifact.exists, path: README.md}`                            |
+| `artifact.notExists('scratch.tmp')`                    | `{type: artifact.notExists, path: scratch.tmp}`                       |
 | `artifact.contains('pkg.json', 'foo')`                 | `{type: artifact.contains, path: pkg.json, text: foo}`                |
+| `artifact.unchanged('package-lock.json')`              | `{type: artifact.unchanged, path: package-lock.json}`                 |
 | `transcript.contains('done')`                          | `{type: transcript.contains, text: done}`                             |
 | `finalMessage.contains('ok')`                          | `{type: finalMessage.contains, text: ok}`                             |
 | `skill.referenced('commit')`                           | `{type: skill.referenced, skill: commit}`                             |
