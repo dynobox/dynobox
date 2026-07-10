@@ -75,8 +75,16 @@ export function describeAssertion(assertion: IrAssertion): string {
     return `artifact.exists(${assertion.path})`;
   }
 
+  if (assertion.type === 'artifact.notExists') {
+    return `artifact.notExists(${assertion.path})`;
+  }
+
   if (assertion.type === 'artifact.contains') {
     return `artifact.contains(${assertion.path})`;
+  }
+
+  if (assertion.type === 'artifact.unchanged') {
+    return `artifact.unchanged(${assertion.path})`;
   }
 
   if (assertion.type === 'transcript.contains') {
@@ -147,8 +155,16 @@ export function describeExpectation(assertion: IrAssertion): string {
     return `artifact "${assertion.path}" to exist`;
   }
 
+  if (assertion.type === 'artifact.notExists') {
+    return `artifact "${assertion.path}" to be absent`;
+  }
+
   if (assertion.type === 'artifact.contains') {
     return `artifact "${assertion.path}" containing "${assertion.text}"`;
+  }
+
+  if (assertion.type === 'artifact.unchanged') {
+    return `artifact "${assertion.path}" unchanged from post-setup baseline`;
   }
 
   if (assertion.type === 'transcript.contains') {

@@ -12,7 +12,12 @@ export function assertionBranchWithId(assertion: IrAnyOfBranch): IrAssertion {
   return irAssertionFromNode(ASSERTION_BRANCH_ID, assertion);
 }
 
-type AnyOfBranchResult = {passed: boolean; message: string};
+export type AnyOfBranchResult = {
+  passed: boolean;
+  message: string;
+  type?: string;
+  evidence?: unknown;
+};
 
 export function anyOfMatchedBranch(evidence: unknown): number | undefined {
   if (typeof evidence !== 'object' || evidence === null) return undefined;

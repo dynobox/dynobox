@@ -5,6 +5,7 @@
 
 import {
   type ArtifactInspection,
+  type ArtifactUnchangedEvidence,
   extractObservedCommands,
   extractSkillFiles,
   inspectArtifact,
@@ -258,11 +259,28 @@ function describeObservedFailure(
     return formatArtifactExists(artifact);
   }
 
+  if (assertion.type === 'artifact.notExists') {
+    const artifact =
+      artifactInspectionEvidence(result, assertion.id) ??
+      inspectArtifact(assertion.path, result.workDir);
+    return formatArtifactNotExists(artifact);
+  }
+
   if (assertion.type === 'artifact.contains') {
     const artifact =
       artifactInspectionEvidence(result, assertion.id) ??
       inspectArtifact(assertion.path, result.workDir);
     return formatArtifactContains(artifact);
+  }
+
+  if (assertion.type === 'artifact.unchanged') {
+    const evidence = assertionResultEvidence(
+      result.assertionResults,
+      assertion.id,
+    );
+    return isArtifactUnchangedEvidence(evidence)
+      ? formatArtifactUnchanged(evidence)
+      : fallback;
   }
 
   if (assertion.type === 'finalMessage.contains') {
@@ -291,10 +309,18 @@ function formatCommandCalledFailure(observedCount: number): string {
 }
 
 function formatAnyOfFailure(
-  branchResults: readonly {message: string}[],
+  branchResults: readonly {
+    message: string;
+    type?: string;
+    evidence?: unknown;
+  }[],
 ): string {
   const summaries = branchResults.map((branch, index) => {
-    const detail = formatTextExcerpt(branch.message, 72);
+    const verifyDetail =
+      branch.type === 'verify.command' && isVerifyCommandResult(branch.evidence)
+        ? formatVerifyCommandResult(branch.evidence, formatTextExcerpt)
+        : undefined;
+    const detail = formatTextExcerpt(verifyDetail ?? branch.message, 96);
     return `#${index + 1} ${detail}`;
   });
   return `0/${branchResults.length} branches matched (${summaries.join('; ')})`;
@@ -328,6 +354,14 @@ function formatArtifactExists(artifact: ArtifactInspection): string {
   return artifact.message;
 }
 
+function formatArtifactNotExists(artifact: ArtifactInspection): string {
+  if (artifact.kind === 'missing')
+    return `artifact absent at ${artifact.path}`;
+  if (artifact.kind === 'exists')
+    return `artifact still exists at ${artifact.path}`;
+  return artifact.message;
+}
+
 function formatArtifactContains(artifact: ArtifactInspection): string {
   if (artifact.kind === 'exists') {
     return artifact.contents === undefined
@@ -339,6 +373,34 @@ function formatArtifactContains(artifact: ArtifactInspection): string {
   return artifact.message;
 }
 
+function formatArtifactUnchanged(evidence: ArtifactUnchangedEvidence): string {
+  const parts: string[] = [];
+  if (evidence.baseline !== undefined) {
+    parts.push(`baseline ${formatPathState(evidence.baseline)}`);
+  }
+  if (evidence.final !== undefined) {
+    parts.push(`final ${formatPathState(evidence.final)}`);
+  }
+  if (parts.length === 0) return `artifact "${evidence.path}" baseline missing`;
+  return parts.join('; ');
+}
+
+function formatPathState(
+  state: NonNullable<ArtifactUnchangedEvidence['baseline']>,
+): string {
+  if (state.kind === 'file') {
+    return `file at ${state.path} (${state.size} bytes)`;
+  }
+  if (state.kind === 'missing') return `missing at ${state.path}`;
+  if (state.kind === 'not-file') {
+    return `${state.fileType} at ${state.path}`;
+  }
+  if (state.kind === 'unreadable') {
+    return `unreadable at ${state.path}: ${state.message}`;
+  }
+  return state.message;
+}
+
 function isArtifactInspection(value: unknown): value is ArtifactInspection {
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as Partial<ArtifactInspection>;
@@ -346,6 +408,19 @@ function isArtifactInspection(value: unknown): value is ArtifactInspection {
     return typeof candidate.path === 'string';
   }
   return candidate.kind === 'invalid' && typeof candidate.message === 'string';
+}
+
+function isArtifactUnchangedEvidence(
+  value: unknown,
+): value is ArtifactUnchangedEvidence {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'kind' in value &&
+    value.kind === 'unchanged' &&
+    'path' in value &&
+    typeof value.path === 'string'
+  );
 }
 
 function toolEventEvidence(
