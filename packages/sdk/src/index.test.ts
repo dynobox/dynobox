@@ -162,6 +162,10 @@ export default defineDyno({
         expect.stringMatching(
           /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.agents\/skills\/commit\/SKILL\.md'$/u,
         ),
+        "mkdir -p '.claude/skills/commit'",
+        expect.stringMatching(
+          /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.claude\/skills\/commit\/SKILL\.md'$/u,
+        ),
       ]);
     } finally {
       rmSync(dir, {force: true, recursive: true});
@@ -207,6 +211,10 @@ export default defineDyno({
         expect.stringMatching(
           /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.agents\/skills\/commit\/SKILL\.md'$/u,
         ),
+        "mkdir -p '.claude/skills/commit'",
+        expect.stringMatching(
+          /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.claude\/skills\/commit\/SKILL\.md'$/u,
+        ),
       ]);
     } finally {
       rmSync(dir, {force: true, recursive: true});
@@ -240,6 +248,10 @@ export default defineDyno({
         "mkdir -p '.claude/skills/commit'",
         expect.stringMatching(
           /^cp '.*\/\.claude\/skills\/commit\/SKILL\.md' '\.claude\/skills\/commit\/SKILL\.md'$/u,
+        ),
+        "mkdir -p '.agents/skills/commit'",
+        expect.stringMatching(
+          /^cp '.*\/\.claude\/skills\/commit\/SKILL\.md' '\.agents\/skills\/commit\/SKILL\.md'$/u,
         ),
       ]);
     } finally {
@@ -296,6 +308,10 @@ export default defineDyno({
         expect.stringMatching(
           /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.agents\/skills\/commit\/SKILL\.md'$/u,
         ),
+        "mkdir -p '.claude/skills/commit'",
+        expect.stringMatching(
+          /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.claude\/skills\/commit\/SKILL\.md'$/u,
+        ),
       ]);
     } finally {
       rmSync(dir, {force: true, recursive: true});
@@ -345,6 +361,10 @@ export default defineDyno({
         "mkdir -p '.agents/skills/commit'",
         expect.stringMatching(
           /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.agents\/skills\/commit\/SKILL\.md'$/u,
+        ),
+        "mkdir -p '.claude/skills/commit'",
+        expect.stringMatching(
+          /^cp '.*\/\.agents\/skills\/commit\/SKILL\.md' '\.claude\/skills\/commit\/SKILL\.md'$/u,
         ),
       ]);
     } finally {
