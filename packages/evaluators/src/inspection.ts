@@ -53,7 +53,11 @@ export function inspectArtifact(
   }
 }
 
-/** lstat-based path presence: dangling symlinks count as present. */
+/**
+ * lstat-based path presence: dangling symlinks count as present.
+ * ENOENT and ENOTDIR both mean the path cannot exist (ENOTDIR covers
+ * intermediate components that are regular files, e.g. `file/child`).
+ */
 export function pathPresence(
   absolutePath: string,
 ): {kind: 'exists'} | {kind: 'missing'} | {kind: 'error'; message: string} {
@@ -61,7 +65,7 @@ export function pathPresence(
     lstatSync(absolutePath);
     return {kind: 'exists'};
   } catch (error) {
-    if (isEnoent(error)) {
+    if (isAbsentPathError(error)) {
       return {kind: 'missing'};
     }
     const message = error instanceof Error ? error.message : String(error);
@@ -69,12 +73,12 @@ export function pathPresence(
   }
 }
 
-function isEnoent(error: unknown): boolean {
+function isAbsentPathError(error: unknown): boolean {
   return (
     typeof error === 'object' &&
     error !== null &&
     'code' in error &&
-    error.code === 'ENOENT'
+    (error.code === 'ENOENT' || error.code === 'ENOTDIR')
   );
 }
 

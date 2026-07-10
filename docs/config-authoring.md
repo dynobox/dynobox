@@ -395,8 +395,9 @@ artifact.unchanged('package-lock.json');
   harness runs. Dynobox uses `lstat` semantics, so valid and dangling symlinks
   both count as present.
 - `artifact.notExists(path)` is the complement: it passes only when the path is
-  truly absent. Files, directories, valid symlinks, and dangling symlinks all
-  fail.
+  truly absent (including when an intermediate component is a regular file, so
+  `file/child` cannot exist). Files, directories, valid symlinks, and dangling
+  symlinks all fail.
 - `artifact.contains(path, text)` reads the file as UTF-8 and checks for a
   substring.
 - `artifact.unchanged(path)` fingerprints the regular file after fixtures and

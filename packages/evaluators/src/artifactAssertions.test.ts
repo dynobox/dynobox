@@ -91,6 +91,37 @@ describe('evaluateArtifactNotExists', () => {
     }
   });
 
+  it('treats ENOTDIR (intermediate file component) as absent for exists and notExists', () => {
+    const workDir = createWorkDir();
+    writeFileSync(join(workDir, 'parent'), 'regular file');
+
+    const notExists = evaluateArtifactNotExists(
+      {
+        id: 'assertion.test.0',
+        type: 'artifact.notExists',
+        path: 'parent/child',
+      },
+      workDir,
+    );
+    const exists = evaluateArtifactExists(
+      {
+        id: 'assertion.test.1',
+        type: 'artifact.exists',
+        path: 'parent/child',
+      },
+      workDir,
+    );
+
+    expect(notExists).toMatchObject({
+      passed: true,
+      evidence: {kind: 'missing', path: join(workDir, 'parent/child')},
+    });
+    expect(exists).toMatchObject({
+      passed: false,
+      evidence: {kind: 'missing', path: join(workDir, 'parent/child')},
+    });
+  });
+
   it('fails for invalid paths and includes resolved diagnostics', () => {
     const workDir = createWorkDir();
     const traversal = evaluateArtifactNotExists(
