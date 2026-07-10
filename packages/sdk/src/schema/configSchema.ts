@@ -179,11 +179,27 @@ const artifactExistsAssertionSchema = z
   .merge(assertionBaseSchema)
   .strict();
 
+const artifactNotExistsAssertionSchema = z
+  .object({
+    type: z.literal('artifact.notExists'),
+    path: z.string().min(1),
+  })
+  .merge(assertionBaseSchema)
+  .strict();
+
 const artifactContainsAssertionSchema = z
   .object({
     type: z.literal('artifact.contains'),
     path: z.string().min(1),
     text: z.string(),
+  })
+  .merge(assertionBaseSchema)
+  .strict();
+
+const artifactUnchangedAssertionSchema = z
+  .object({
+    type: z.literal('artifact.unchanged'),
+    path: z.string().min(1),
   })
   .merge(assertionBaseSchema)
   .strict();
@@ -228,10 +244,13 @@ const anyOfBranchAssertionSchema = z.discriminatedUnion('type', [
   toolCalledAssertionSchema,
   toolNotCalledAssertionSchema,
   artifactExistsAssertionSchema,
+  artifactNotExistsAssertionSchema,
   artifactContainsAssertionSchema,
+  artifactUnchangedAssertionSchema,
   transcriptContainsAssertionSchema,
   finalMessageContainsAssertionSchema,
   skillReferencedAssertionSchema,
+  verifyCommandAssertionSchema,
 ]);
 
 const anyOfAssertionSchema = z
@@ -260,7 +279,9 @@ export const assertionSchema = z
     toolCalledAssertionSchema,
     toolNotCalledAssertionSchema,
     artifactExistsAssertionSchema,
+    artifactNotExistsAssertionSchema,
     artifactContainsAssertionSchema,
+    artifactUnchangedAssertionSchema,
     transcriptContainsAssertionSchema,
     finalMessageContainsAssertionSchema,
     sequenceInOrderAssertionSchema,

@@ -19,6 +19,8 @@ import {
   artifact,
   type ArtifactContainsAssertion,
   type ArtifactExistsAssertion,
+  type ArtifactNotExistsAssertion,
+  type ArtifactUnchangedAssertion,
   type CalledAssertion,
   command,
   type CommandCalledAssertion,
@@ -63,7 +65,9 @@ describe('packages/sdk', () => {
     expect(typeof tool.called).toBe('function');
     expect(typeof tool.notCalled).toBe('function');
     expect(typeof artifact.exists).toBe('function');
+    expect(typeof artifact.notExists).toBe('function');
     expect(typeof artifact.contains).toBe('function');
+    expect(typeof artifact.unchanged).toBe('function');
     expect(typeof transcript.contains).toBe('function');
     expect(typeof finalMessage.contains).toBe('function');
     expect(typeof sequence.inOrder).toBe('function');
@@ -386,8 +390,14 @@ export default defineDyno({
       artifact.exists('CHANGELOG.md'),
     ).toEqualTypeOf<ArtifactExistsAssertion>();
     expectTypeOf(
+      artifact.notExists('scratch.tmp'),
+    ).toEqualTypeOf<ArtifactNotExistsAssertion>();
+    expectTypeOf(
       artifact.contains('CHANGELOG.md', 'dynobox@0.0.4'),
     ).toEqualTypeOf<ArtifactContainsAssertion>();
+    expectTypeOf(
+      artifact.unchanged('package.json'),
+    ).toEqualTypeOf<ArtifactUnchangedAssertion>();
     expectTypeOf(
       transcript.contains('EOTP'),
     ).toEqualTypeOf<TranscriptContainsAssertion>();
@@ -403,12 +413,16 @@ export default defineDyno({
     expectTypeOf(
       anyOf([http.called('getUser'), tool.called('shell')]),
     ).toEqualTypeOf<AnyOfAssertion<'getUser'>>();
+    expectTypeOf(
+      anyOf([
+        artifact.exists('out.txt'),
+        verify.succeeds('dynobox validate out.dyno.ts'),
+      ]),
+    ).toEqualTypeOf<AnyOfAssertion>();
     // @ts-expect-error sequence.inOrder cannot be evaluated inside anyOf.
     anyOf([sequence.inOrder([tool.called('shell')])]);
     // @ts-expect-error anyOf cannot be evaluated inside sequence.inOrder.
     sequence.inOrder([anyOf([tool.called('shell')])]);
-    // @ts-expect-error verify.command cannot be evaluated inside anyOf.
-    anyOf([verify.succeeds('dynobox validate out.dyno.ts')]);
     expectTypeOf(
       skill.referenced('commit'),
     ).toEqualTypeOf<SkillReferencedAssertion>();
@@ -674,31 +688,46 @@ export default defineDyno({
     expect(irSchema.parse(ir)).toEqual(ir);
   });
 
-  it('rejects unsupported assertions inside anyOf and sequence.inOrder', () => {
-    expect(() =>
-      compile({
-        scenarios: [
+  it('compiles verification and new artifact branches inside anyOf', () => {
+    const config = defineDyno({
+      scenarios: [
+        {
+          name: 'flexible verification',
+          prompt: 'Create or validate a file.',
+          assertions: [
+            anyOf([
+              artifact.exists('created.txt'),
+              artifact.notExists('scratch.tmp'),
+              artifact.unchanged('package.json'),
+              verify.succeeds('dynobox validate out.dyno.ts'),
+            ]),
+          ],
+        },
+      ],
+    });
+
+    const ir = compile(config);
+
+    expect(ir.scenarios[0]!.assertions).toEqual([
+      {
+        id: 'assertion.flexible-verification.0',
+        type: 'anyOf',
+        steps: [
+          {type: 'artifact.exists', path: 'created.txt'},
+          {type: 'artifact.notExists', path: 'scratch.tmp'},
+          {type: 'artifact.unchanged', path: 'package.json'},
           {
-            name: 'unsafe verification branch',
-            prompt: 'Create a file.',
-            assertions: [
-              {
-                type: 'anyOf',
-                steps: [
-                  {type: 'artifact.exists', path: 'created.txt'},
-                  {
-                    type: 'verify.command',
-                    command: 'touch created.txt',
-                    exitCode: 0,
-                  },
-                ],
-              },
-            ],
+            type: 'verify.command',
+            command: 'dynobox validate out.dyno.ts',
+            exitCode: 0,
           },
         ],
-      } as unknown as Parameters<typeof compile>[0]),
-    ).toThrow();
+      },
+    ]);
+    expect(irSchema.parse(ir)).toEqual(ir);
+  });
 
+  it('rejects unsupported assertions inside anyOf and sequence.inOrder', () => {
     expect(() =>
       compile({
         scenarios: [
@@ -763,37 +792,6 @@ export default defineDyno({
           },
         ],
       } as unknown as Parameters<typeof compile>[0]),
-    ).toThrow();
-
-    expect(() =>
-      irSchema.parse({
-        version: IR_VERSION,
-        scenarios: [
-          {
-            id: 'scenario.unsafe-verification-branch',
-            name: 'unsafe verification branch',
-            prompt: 'Create a file.',
-            harnesses: [{id: 'claude-code'}],
-            setup: [],
-            fixtures: [],
-            endpoints: [],
-            assertions: [
-              {
-                id: 'assertion.unsafe-verification-branch.0',
-                type: 'anyOf',
-                steps: [
-                  {type: 'artifact.exists', path: 'created.txt'},
-                  {
-                    type: 'verify.command',
-                    command: 'touch created.txt',
-                    exitCode: 0,
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      }),
     ).toThrow();
 
     expect(() =>

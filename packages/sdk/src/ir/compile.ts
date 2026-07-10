@@ -215,12 +215,20 @@ function buildIrAssertionNode(
     return {type: 'artifact.exists', path: assertion.path};
   }
 
+  if (assertion.type === 'artifact.notExists') {
+    return {type: 'artifact.notExists', path: assertion.path};
+  }
+
   if (assertion.type === 'artifact.contains') {
     return {
       type: 'artifact.contains',
       path: assertion.path,
       text: assertion.text,
     };
+  }
+
+  if (assertion.type === 'artifact.unchanged') {
+    return {type: 'artifact.unchanged', path: assertion.path};
   }
 
   if (assertion.type === 'transcript.contains') {
@@ -288,8 +296,9 @@ function buildIrAnyOfBranch(
   endpointIdByKey: Map<string, string>,
   assertion: AuthoredAnyOfBranch,
 ): IrAssertionNode {
-  // Authoring validation excludes nested sequence, anyOf, and verify nodes,
-  // leaving exactly the node variants accepted by the IR schema.
+  // Authoring validation excludes nested sequence and anyOf nodes, leaving
+  // exactly the node variants accepted by the IR schema (including nested
+  // verify.command branches).
   return buildIrAssertionNode(
     scenarioName,
     index,

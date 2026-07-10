@@ -119,14 +119,16 @@ const irCommandNotCalledAssertionSchema = irAssertionBaseSchema.merge(
   irCommandNotCalledAssertionNodeSchema,
 );
 
+const irVerifyCommandAssertionNodeSchema = z.object({
+  type: z.literal('verify.command'),
+  command: z.string().min(1),
+  exitCode: z.number().int().optional(),
+  stdout: textMatcherSchema.optional(),
+  stderr: textMatcherSchema.optional(),
+});
+
 const irVerifyCommandAssertionSchema = irAssertionBaseSchema.merge(
-  z.object({
-    type: z.literal('verify.command'),
-    command: z.string().min(1),
-    exitCode: z.number().int().optional(),
-    stdout: textMatcherSchema.optional(),
-    stderr: textMatcherSchema.optional(),
-  }),
+  irVerifyCommandAssertionNodeSchema,
 );
 
 const irSequenceStepSchema = z.discriminatedUnion('type', [
@@ -143,6 +145,15 @@ const irArtifactExistsAssertionSchema = irAssertionBaseSchema.merge(
   irArtifactExistsAssertionNodeSchema,
 );
 
+const irArtifactNotExistsAssertionNodeSchema = z.object({
+  type: z.literal('artifact.notExists'),
+  path: z.string().min(1),
+});
+
+const irArtifactNotExistsAssertionSchema = irAssertionBaseSchema.merge(
+  irArtifactNotExistsAssertionNodeSchema,
+);
+
 const irArtifactContainsAssertionNodeSchema = z.object({
   type: z.literal('artifact.contains'),
   path: z.string().min(1),
@@ -151,6 +162,15 @@ const irArtifactContainsAssertionNodeSchema = z.object({
 
 const irArtifactContainsAssertionSchema = irAssertionBaseSchema.merge(
   irArtifactContainsAssertionNodeSchema,
+);
+
+const irArtifactUnchangedAssertionNodeSchema = z.object({
+  type: z.literal('artifact.unchanged'),
+  path: z.string().min(1),
+});
+
+const irArtifactUnchangedAssertionSchema = irAssertionBaseSchema.merge(
+  irArtifactUnchangedAssertionNodeSchema,
 );
 
 const irTranscriptContainsAssertionNodeSchema = z.object({
@@ -227,14 +247,29 @@ const irAssertionNodeSchema = z
     irToolNotCalledAssertionNodeSchema,
     irCommandCalledAssertionNodeSchema,
     irCommandNotCalledAssertionNodeSchema,
+    irVerifyCommandAssertionNodeSchema,
     irArtifactExistsAssertionNodeSchema,
+    irArtifactNotExistsAssertionNodeSchema,
     irArtifactContainsAssertionNodeSchema,
+    irArtifactUnchangedAssertionNodeSchema,
     irTranscriptContainsAssertionNodeSchema,
     irFinalMessageContainsAssertionNodeSchema,
     irSkillReferencedAssertionNodeSchema,
   ])
   .superRefine((assertion, ctx) => {
     validateIrAssertionNode(assertion, ctx, []);
+    if (
+      assertion.type === 'verify.command' &&
+      assertion.exitCode === undefined &&
+      assertion.stdout === undefined &&
+      assertion.stderr === undefined
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'Verify command assertions must specify exitCode, stdout, or stderr.',
+      });
+    }
   });
 
 const irAnyOfAssertionSchema = irAssertionBaseSchema.merge(
@@ -254,7 +289,9 @@ export const irAssertionSchema = z
     irCommandNotCalledAssertionSchema,
     irVerifyCommandAssertionSchema,
     irArtifactExistsAssertionSchema,
+    irArtifactNotExistsAssertionSchema,
     irArtifactContainsAssertionSchema,
+    irArtifactUnchangedAssertionSchema,
     irTranscriptContainsAssertionSchema,
     irFinalMessageContainsAssertionSchema,
     irSequenceInOrderAssertionSchema,

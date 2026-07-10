@@ -22,6 +22,8 @@ export type {
   AnyOfAssertion,
   ArtifactContainsAssertion,
   ArtifactExistsAssertion,
+  ArtifactNotExistsAssertion,
+  ArtifactUnchangedAssertion,
   Assertion,
   CalledAssertion,
   CommandCalledAssertion,

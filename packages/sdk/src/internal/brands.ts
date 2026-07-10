@@ -3,6 +3,8 @@ import type {
   AnyOfBranchAssertion,
   ArtifactContainsAssertion,
   ArtifactExistsAssertion,
+  ArtifactNotExistsAssertion,
+  ArtifactUnchangedAssertion,
   CalledAssertion,
   CommandCalledAssertion,
   CommandMatcher,
@@ -149,6 +151,17 @@ export function createArtifactExistsAssertion(
   };
 }
 
+/** Create an assertion that a path is absent from the scenario work directory. */
+export function createArtifactNotExistsAssertion(
+  path: string,
+): ArtifactNotExistsAssertion {
+  return {
+    [ASSERTION_BRAND]: true as const,
+    type: 'artifact.notExists' as const,
+    path,
+  };
+}
+
 /** Create an assertion that a file contains expected text. */
 export function createArtifactContainsAssertion(
   path: string,
@@ -159,6 +172,20 @@ export function createArtifactContainsAssertion(
     type: 'artifact.contains' as const,
     path,
     text,
+  };
+}
+
+/**
+ * Create an assertion that a regular file's raw bytes match the post-setup
+ * baseline captured before the harness starts.
+ */
+export function createArtifactUnchangedAssertion(
+  path: string,
+): ArtifactUnchangedAssertion {
+  return {
+    [ASSERTION_BRAND]: true as const,
+    type: 'artifact.unchanged' as const,
+    path,
   };
 }
 

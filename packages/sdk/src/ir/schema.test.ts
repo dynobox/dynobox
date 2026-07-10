@@ -108,7 +108,7 @@ describe('irAssertionSchema tool matcher validation', () => {
     ).toHaveLength(1);
   });
 
-  it('rejects verify command assertions inside anyOf branches', () => {
+  it('accepts verify command assertions inside anyOf branches', () => {
     const result = irAssertionSchema.safeParse({
       id: 'assertion.test.0',
       type: 'anyOf',
@@ -118,16 +118,40 @@ describe('irAssertionSchema tool matcher validation', () => {
           command: 'pnpm test',
           exitCode: 0,
         },
+        {
+          type: 'artifact.notExists',
+          path: 'scratch.tmp',
+        },
+        {
+          type: 'artifact.unchanged',
+          path: 'package.json',
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects incomplete verify command assertions inside anyOf branches', () => {
+    const result = irAssertionSchema.safeParse({
+      id: 'assertion.test.0',
+      type: 'anyOf',
+      steps: [
+        {
+          type: 'verify.command',
+          command: 'pnpm test',
+        },
       ],
     });
 
     expect(result.success).toBe(false);
     if (result.success) throw new Error('expected validation to fail');
 
-    expect(
-      result.error.issues.some(
-        (issue) => issue.path[0] === 'steps' && issue.path[1] === 0,
-      ),
-    ).toBe(true);
+    expect(result.error.issues).toContainEqual(
+      expect.objectContaining({
+        message:
+          'Verify command assertions must specify exitCode, stdout, or stderr.',
+      }),
+    );
   });
 });
