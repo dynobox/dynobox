@@ -172,10 +172,12 @@ reference.
   escape hatches.
 - Assert HTTP requests to declared endpoints with `http.called(...)` and
   `http.notCalled(...)`.
-- Express valid alternative behavior paths with `anyOf(...)`.
+- Express valid alternative behavior paths with `anyOf(...)`, including nested
+  `verify.command(...)` branches.
 - Assert ordered tool-call sequences with `sequence.inOrder(...)`.
-- Assert work-directory artifacts with `artifact.exists(...)` and
-  `artifact.contains(...)`.
+- Assert work-directory artifacts with `artifact.exists(...)`,
+  `artifact.notExists(...)`, `artifact.contains(...)`, and
+  `artifact.unchanged(...)`.
 - Assert harness transcript and final response text with
   `transcript.contains(...)` and `finalMessage.contains(...)`.
 - Run post-harness checks with `verify.command(...)` for generated artifacts.

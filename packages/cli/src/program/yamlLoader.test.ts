@@ -38,6 +38,17 @@ scenarios:
               args: [package.json]
       - type: artifact.exists
         path: package.json
+      - type: artifact.notExists
+        path: scratch.tmp
+      - type: artifact.unchanged
+        path: package.json
+      - type: anyOf
+        steps:
+          - type: artifact.exists
+            path: package.json
+          - type: verify.command
+            command: node --version
+            exitCode: 0
       - type: verify.command
         command: node --version
         exitCode: 0
@@ -114,12 +125,31 @@ describe('loadYamlDyno', () => {
       path: 'package.json',
     });
     expect(scenario.assertions[4]).toMatchObject({
+      type: 'artifact.notExists',
+      path: 'scratch.tmp',
+    });
+    expect(scenario.assertions[5]).toMatchObject({
+      type: 'artifact.unchanged',
+      path: 'package.json',
+    });
+    expect(scenario.assertions[6]).toMatchObject({
+      type: 'anyOf',
+      steps: [
+        {type: 'artifact.exists', path: 'package.json'},
+        {
+          type: 'verify.command',
+          command: 'node --version',
+          exitCode: 0,
+        },
+      ],
+    });
+    expect(scenario.assertions[7]).toMatchObject({
       type: 'verify.command',
       command: 'node --version',
       exitCode: 0,
       stdout: {startsWith: 'v'},
     });
-    expect(scenario.assertions.length).toBeGreaterThanOrEqual(4);
+    expect(scenario.assertions.length).toBeGreaterThanOrEqual(8);
   });
 
   it('throws YamlDynoParseError with a line:column pointer on malformed YAML', async () => {

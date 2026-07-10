@@ -21,9 +21,10 @@ Authoring helpers for user config files:
 - `http.notCalled()`
 - `tool.called()`, `tool.notCalled()`
 - `command.called()`, `command.notCalled()`
-- `anyOf()`
+- `anyOf()` (supports nested `verify.command(...)` / `verify.succeeds(...)`)
 - `skill.referenced()`
-- `artifact.exists()`, `artifact.contains()`
+- `artifact.exists()`, `artifact.notExists()`, `artifact.contains()`,
+  `artifact.unchanged()`
 - `transcript.contains()`
 - `finalMessage.contains()`
 - `sequence.inOrder()`
@@ -34,7 +35,8 @@ Authoring helpers for user config files:
 TypeScript dynos: adjacent `fixtures/` directories are attached to scenarios
 that do not set `fixtures`, and dynos authored under `.agents/skills/<name>/`
 or `.claude/skills/<name>/` get setup commands that copy that skill's
-`SKILL.md` into the scenario work directory.
+`SKILL.md` into both `.agents/skills/<name>/` and `.claude/skills/<name>/` in
+the scenario work directory.
 
 ### `@dynobox/sdk/compiler`
 
