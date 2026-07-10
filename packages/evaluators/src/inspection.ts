@@ -1,4 +1,4 @@
-import {existsSync, readFileSync} from 'node:fs';
+import {lstatSync, readFileSync} from 'node:fs';
 import {isAbsolute, relative, resolve} from 'node:path';
 
 export type ArtifactInspection =
@@ -6,6 +6,10 @@ export type ArtifactInspection =
   | {kind: 'missing'; path: string}
   | {kind: 'invalid'; message: string};
 
+/**
+ * Inspect a workdir-relative path using lstat presence semantics so dangling
+ * symlinks count as present (aligned with artifact.exists / artifact.notExists).
+ */
 export function inspectArtifact(
   artifactPath: string,
   workDir: string | undefined,
@@ -30,7 +34,11 @@ export function inspectArtifact(
     };
   }
 
-  if (!existsSync(resolvedPath)) {
+  const presence = pathPresence(resolvedPath);
+  if (presence.kind === 'error') {
+    return {kind: 'invalid', message: presence.message};
+  }
+  if (presence.kind === 'missing') {
     return {kind: 'missing', path: resolvedPath};
   }
 
@@ -43,6 +51,31 @@ export function inspectArtifact(
   } catch {
     return {kind: 'exists', path: resolvedPath};
   }
+}
+
+/** lstat-based path presence: dangling symlinks count as present. */
+export function pathPresence(
+  absolutePath: string,
+): {kind: 'exists'} | {kind: 'missing'} | {kind: 'error'; message: string} {
+  try {
+    lstatSync(absolutePath);
+    return {kind: 'exists'};
+  } catch (error) {
+    if (isEnoent(error)) {
+      return {kind: 'missing'};
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return {kind: 'error', message};
+  }
+}
+
+function isEnoent(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'ENOENT'
+  );
 }
 
 export function resolveArtifactPath(

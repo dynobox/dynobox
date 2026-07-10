@@ -391,17 +391,20 @@ artifact.contains('package.json', 'vitest run');
 artifact.unchanged('package-lock.json');
 ```
 
-- `artifact.exists(path)` passes when the path exists after the harness runs.
-- `artifact.notExists(path)` passes only when the path is truly absent. Files,
-  directories, valid symlinks, and dangling symlinks all fail. Dynobox uses
-  `lstat` semantics so a dangling symlink is treated as present.
+- `artifact.exists(path)` passes when a directory entry is present after the
+  harness runs. Dynobox uses `lstat` semantics, so valid and dangling symlinks
+  both count as present.
+- `artifact.notExists(path)` is the complement: it passes only when the path is
+  truly absent. Files, directories, valid symlinks, and dangling symlinks all
+  fail.
 - `artifact.contains(path, text)` reads the file as UTF-8 and checks for a
   substring.
-- `artifact.unchanged(path)` snapshots the regular file's raw bytes after
-  fixtures and setup complete, then compares those exact bytes after the
-  harness exits. Line endings, whitespace, formatting, and structured data are
-  not normalized. Missing, unreadable, or non-file baselines fail as
-  assertion-level authoring errors without blocking the harness.
+- `artifact.unchanged(path)` fingerprints the regular file after fixtures and
+  setup complete (size + SHA-256 of raw bytes), then compares the same
+  fingerprint after the harness exits. Equality is still raw-byte exact: line
+  endings, whitespace, formatting, and structured data are not normalized.
+  Missing, unreadable, or non-file baselines fail as assertion-level authoring
+  errors without blocking the harness.
 
 Artifact paths must be relative and must stay inside the work directory.
 

@@ -313,9 +313,10 @@ Artifacts are inspected in the scenario work directory after the harness exits.
 
 Paths must be relative and stay inside the work directory.
 
-`artifact.notExists` fails for files, directories, valid symlinks, and dangling
-symlinks. `artifact.unchanged` compares raw bytes against a baseline captured
-after fixtures and setup, before the harness starts.
+`artifact.exists` and `artifact.notExists` both use lstat presence, so valid and
+dangling symlinks count as present (exists passes, notExists fails).
+`artifact.unchanged` fingerprints size + SHA-256 of raw bytes after fixtures and
+setup, then re-checks after the harness (still raw-byte equality).
 ### transcript.contains and finalMessage.contains
 
 ```yaml

@@ -13,6 +13,7 @@ import {describe, expect, it} from 'vitest';
 
 import {
   captureArtifactBaseline,
+  evaluateArtifactExists,
   evaluateArtifactNotExists,
   evaluateArtifactUnchanged,
 } from './artifactAssertions.js';
@@ -62,35 +63,32 @@ describe('evaluateArtifactNotExists', () => {
     });
   });
 
-  it('fails for valid and dangling symlinks using lstat semantics', () => {
+  it('treats valid and dangling symlinks as present for exists and notExists', () => {
     const workDir = createWorkDir();
     writeFileSync(join(workDir, 'target.txt'), 'ok');
     symlinkSync(join(workDir, 'target.txt'), join(workDir, 'valid-link'));
     symlinkSync(join(workDir, 'missing-target'), join(workDir, 'dangling'));
 
-    const valid = evaluateArtifactNotExists(
-      {
-        id: 'assertion.test.0',
-        type: 'artifact.notExists',
-        path: 'valid-link',
-      },
-      workDir,
-    );
-    const dangling = evaluateArtifactNotExists(
-      {id: 'assertion.test.1', type: 'artifact.notExists', path: 'dangling'},
-      workDir,
-    );
-
-    expect(valid.passed).toBe(false);
-    expect(valid.evidence).toEqual({
-      kind: 'exists',
-      path: join(workDir, 'valid-link'),
-    });
-    expect(dangling.passed).toBe(false);
-    expect(dangling.evidence).toEqual({
-      kind: 'exists',
-      path: join(workDir, 'dangling'),
-    });
+    for (const path of ['valid-link', 'dangling'] as const) {
+      const exists = evaluateArtifactExists(
+        {id: `assertion.exists.${path}`, type: 'artifact.exists', path},
+        workDir,
+      );
+      const notExists = evaluateArtifactNotExists(
+        {id: `assertion.not.${path}`, type: 'artifact.notExists', path},
+        workDir,
+      );
+      expect(exists.passed).toBe(true);
+      expect(exists.evidence).toEqual({
+        kind: 'exists',
+        path: join(workDir, path),
+      });
+      expect(notExists.passed).toBe(false);
+      expect(notExists.evidence).toEqual({
+        kind: 'exists',
+        path: join(workDir, path),
+      });
+    }
   });
 
   it('fails for invalid paths and includes resolved diagnostics', () => {
@@ -141,7 +139,11 @@ describe('artifact.unchanged baselines and evaluation', () => {
       baseline: {kind: 'file', size: 6},
       final: {kind: 'file', size: 6},
     });
-    expect(JSON.stringify(result.evidence)).not.toContain('\\u0000');
+    // Baselines store hash, not raw bytes; evidence never embeds file contents.
+    expect(baseline).toMatchObject({kind: 'file', size: 6});
+    expect(baseline).toHaveProperty('sha256');
+    expect(baseline).not.toHaveProperty('bytes');
+    expect(JSON.stringify(result.evidence)).not.toMatch(/"sha256"/);
   });
 
   it('passes byte-identical replacements of the same content', () => {

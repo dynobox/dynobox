@@ -49,6 +49,7 @@ export type {ArtifactInspection} from './inspection.js';
 export {
   extractSkillFiles,
   inspectArtifact,
+  pathPresence,
   stringsFromUnknown,
 } from './inspection.js';
 export {

@@ -24,15 +24,16 @@ export type VerifyCommandResult = {
 };
 
 /**
- * Post-setup baseline for `artifact.unchanged`. Raw bytes are retained only
- * for successful regular-file snapshots and never rendered in diagnostics.
+ * Post-setup baseline for `artifact.unchanged`. Successful regular-file
+ * snapshots keep size and a SHA-256 of the raw bytes (not the bytes themselves)
+ * so equality is still raw-byte exact without retaining full file buffers.
  */
 export type ArtifactBaseline =
   | {
       kind: 'file';
       path: string;
       size: number;
-      bytes: Uint8Array;
+      sha256: string;
     }
   | {
       kind: 'missing';

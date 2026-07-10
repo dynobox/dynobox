@@ -618,7 +618,7 @@ describe('renderAssertionDetails', () => {
                 passed: false,
                 message: 'Verification command "pnpm test" failed: exit code 1',
                 evidence: {
-                  assertionId: 'assertion.anyof.verify.branch.2',
+                  assertionId: 'assertion.anyof.verify#branch:2',
                   command: 'pnpm test',
                   exitCode: 1,
                   stdout: 'FAIL suite',

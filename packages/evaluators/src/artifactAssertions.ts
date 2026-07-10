@@ -1,8 +1,13 @@
-import {existsSync, lstatSync, readFileSync, type Stats} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {lstatSync, readFileSync, type Stats} from 'node:fs';
 
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
-import {type ArtifactInspection, resolveArtifactPath} from './inspection.js';
+import {
+  type ArtifactInspection,
+  pathPresence,
+  resolveArtifactPath,
+} from './inspection.js';
 import {failed, passed} from './results.js';
 import type {
   ArtifactBaseline,
@@ -23,7 +28,16 @@ export function evaluateArtifactExists(
     });
   }
 
-  if (existsSync(resolved.path)) {
+  // lstat presence so dangling symlinks count as existing (matches notExists).
+  const presence = pathPresence(resolved.path);
+  if (presence.kind === 'error') {
+    return failedWithEvidence(
+      assertion,
+      `Could not inspect artifact "${assertion.path}": ${presence.message}`,
+      {kind: 'invalid', message: presence.message},
+    );
+  }
+  if (presence.kind === 'exists') {
     return passed(assertion, `Artifact "${assertion.path}" exists.`, {
       kind: 'exists',
       path: resolved.path,
@@ -49,28 +63,27 @@ export function evaluateArtifactNotExists(
     });
   }
 
-  // Use lstat so dangling symlinks count as present paths.
-  try {
-    lstatSync(resolved.path);
+  // Same lstat presence as exists: notExists is the true complement.
+  const presence = pathPresence(resolved.path);
+  if (presence.kind === 'error') {
     return failedWithEvidence(
       assertion,
-      `Expected artifact "${assertion.path}" to be absent, but it exists at ${resolved.path}.`,
-      {kind: 'exists', path: resolved.path},
-    );
-  } catch (error) {
-    if (isEnoent(error)) {
-      return passed(assertion, `Artifact "${assertion.path}" is absent.`, {
-        kind: 'missing',
-        path: resolved.path,
-      });
-    }
-    const message = error instanceof Error ? error.message : String(error);
-    return failedWithEvidence(
-      assertion,
-      `Could not inspect artifact "${assertion.path}": ${message}`,
-      {kind: 'invalid', message},
+      `Could not inspect artifact "${assertion.path}": ${presence.message}`,
+      {kind: 'invalid', message: presence.message},
     );
   }
+  if (presence.kind === 'missing') {
+    return passed(assertion, `Artifact "${assertion.path}" is absent.`, {
+      kind: 'missing',
+      path: resolved.path,
+    });
+  }
+
+  return failedWithEvidence(
+    assertion,
+    `Expected artifact "${assertion.path}" to be absent, but it exists at ${resolved.path}.`,
+    {kind: 'exists', path: resolved.path},
+  );
 }
 
 export function evaluateArtifactContains(
@@ -102,10 +115,11 @@ export function evaluateArtifactContains(
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const presence = pathPresence(resolved.path);
     return failedWithEvidence(
       assertion,
       `Could not read artifact "${assertion.path}" as UTF-8: ${message}`,
-      existsSync(resolved.path)
+      presence.kind === 'exists'
         ? {kind: 'exists', path: resolved.path}
         : {kind: 'missing', path: resolved.path},
     );
@@ -115,6 +129,7 @@ export function evaluateArtifactContains(
 /**
  * Capture a post-setup baseline for `artifact.unchanged`. Snapshot failures are
  * returned as baseline values so they remain assertion-level later.
+ * Regular files store size + SHA-256 of raw bytes (not the bytes themselves).
  */
 export function captureArtifactBaseline(
   path: string,
@@ -149,12 +164,12 @@ export function captureArtifactBaseline(
       };
     }
 
-    const bytes = new Uint8Array(readFileSync(resolved.path));
+    const bytes = readFileSync(resolved.path);
     return {
       kind: 'file',
       path: resolved.path,
       size: bytes.byteLength,
-      bytes,
+      sha256: sha256Hex(bytes),
     };
   } catch (error) {
     if (isEnoent(error)) {
@@ -245,14 +260,18 @@ export function evaluateArtifactUnchanged(
       };
     }
 
-    const finalBytes = new Uint8Array(readFileSync(resolved.path));
+    const finalBytes = readFileSync(resolved.path);
     const finalWithSize = {
       kind: 'file' as const,
       path: resolved.path,
       size: finalBytes.byteLength,
     };
+    const finalHash = sha256Hex(finalBytes);
 
-    if (bytesEqual(baseline.bytes, finalBytes)) {
+    if (
+      baseline.size === finalBytes.byteLength &&
+      baseline.sha256 === finalHash
+    ) {
       return passed(
         assertion,
         `Artifact "${assertion.path}" is unchanged (${finalBytes.byteLength} bytes).`,
@@ -358,12 +377,8 @@ function baselineSummary(baseline: ArtifactBaseline): ArtifactPathState {
   return {kind: 'invalid', message: baseline.message};
 }
 
-function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
-  if (left.byteLength !== right.byteLength) return false;
-  for (let index = 0; index < left.byteLength; index += 1) {
-    if (left[index] !== right[index]) return false;
-  }
-  return true;
+function sha256Hex(bytes: Uint8Array | Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex');
 }
 
 function isEnoent(error: unknown): boolean {

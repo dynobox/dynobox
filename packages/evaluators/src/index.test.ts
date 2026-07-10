@@ -968,7 +968,7 @@ describe('evaluateAssertions', () => {
       {
         verifyCommandResults: [
           {
-            assertionId: 'assertion.test.0.branch.2',
+            assertionId: 'assertion.test.0#branch:2',
             command: 'pnpm test',
             exitCode: 0,
             stdout: 'ok',
@@ -1028,7 +1028,7 @@ describe('evaluateAssertions', () => {
       anyOfObservationBranches: observationCache,
       verifyCommandResults: [
         {
-          assertionId: 'assertion.test.0.branch.2',
+          assertionId: 'assertion.test.0#branch:2',
           command: 'touch created.txt',
           exitCode: 0,
           stdout: '',
@@ -1071,7 +1071,7 @@ describe('evaluateAssertions', () => {
         workDir,
         verifyCommandResults: [
           {
-            assertionId: 'assertion.test.0.branch.2',
+            assertionId: 'assertion.test.0#branch:2',
             command: 'true',
             exitCode: 0,
             stdout: '',

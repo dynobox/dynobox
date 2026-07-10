@@ -84,6 +84,17 @@ describe('collect helpers', () => {
     ]);
   });
 
+  it('uses synthetic branch ids that cannot collide with authored assertion ids', () => {
+    // Authored suffixes only allow [A-Za-z0-9._-]; # and : are reserved for
+    // nested branch keys so "flex.branch.1" cannot collide with branch 1.
+    expect(anyOfBranchId('assertion.demo.flex', 1)).toBe(
+      'assertion.demo.flex#branch:1',
+    );
+    expect(anyOfBranchId('assertion.demo.flex', 1)).not.toBe(
+      'assertion.demo.flex.branch.1',
+    );
+  });
+
   it('detects assertions that require verification results', () => {
     expect(
       assertionRequiresVerify({

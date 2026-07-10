@@ -1,15 +1,20 @@
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
-/** Synthetic branch id used for nested anyOf evaluation and diagnostics. */
+/**
+ * Synthetic branch id used for nested anyOf evaluation and diagnostics.
+ *
+ * Uses `#branch:` so the id cannot collide with compiled top-level assertion
+ * ids (`assertion.<slug>.<suffix>`), whose suffixes only allow `[A-Za-z0-9._-]`.
+ */
 export function anyOfBranchId(anyOfId: string, branchIndex: number): string {
-  return `${anyOfId}.branch.${branchIndex}`;
+  return `${anyOfId}#branch:${branchIndex}`;
 }
 
 type VerifyCommandAssertion = Extract<IrAssertion, {type: 'verify.command'}>;
 
 /**
  * Collect top-level and nested `verify.command` assertions in authored order.
- * Nested branches receive stable synthetic ids (`${anyOfId}.branch.${n}`).
+ * Nested branches receive stable synthetic ids (`${anyOfId}#branch:${n}`).
  */
 export function collectVerifyCommandAssertions(
   assertions: readonly IrAssertion[],
@@ -27,9 +32,10 @@ export function collectVerifyCommandAssertions(
     assertion.steps.forEach((step, index) => {
       if (step.type !== 'verify.command') return;
       // Branch nodes are authored without ids; attach a stable synthetic id.
+      // Spread step first so the synthetic id always wins.
       collected.push({
-        id: anyOfBranchId(assertion.id, index + 1),
         ...(step as Omit<VerifyCommandAssertion, 'id' | 'label'>),
+        id: anyOfBranchId(assertion.id, index + 1),
       } as VerifyCommandAssertion);
     });
   }
