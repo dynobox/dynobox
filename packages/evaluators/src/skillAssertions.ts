@@ -8,9 +8,10 @@ export function evaluateSkillReferenced(
   assertion: Extract<IrAssertion, {type: 'skill.referenced'}>,
   toolEvents: readonly ToolEvent[],
 ): AssertionResult {
-  const event = toolEvents.find((toolEvent) =>
-    toolEventMentionsSkillFile(toolEvent, assertion.skill) ||
-    toolEventInvokesSkill(toolEvent, assertion.skill),
+  const event = toolEvents.find(
+    (toolEvent) =>
+      toolEventMentionsSkillFile(toolEvent, assertion.skill) ||
+      toolEventInvokesSkill(toolEvent, assertion.skill),
   );
 
   if (event !== undefined) {
