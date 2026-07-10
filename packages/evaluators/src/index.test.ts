@@ -8,6 +8,7 @@ import {describe, expect, it} from 'vitest';
 import {
   type AssertionResult,
   evaluateAssertions,
+  preEvaluateAnyOfObservationBranches,
   type ToolEvent,
 } from './index.js';
 
@@ -948,6 +949,145 @@ describe('evaluateAssertions', () => {
     expect(result.message).toContain('Branch #1:');
     expect(result.message).toContain('Branch #2:');
   });
+
+  it('passes anyOf when a nested verification branch succeeds', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        type: 'anyOf',
+        steps: [
+          {type: 'tool.called', tool: 'read_file', path: 'missing.txt'},
+          {
+            type: 'verify.command',
+            command: 'pnpm test',
+            exitCode: 0,
+          },
+        ],
+      },
+      [],
+      {
+        verifyCommandResults: [
+          {
+            assertionId: 'assertion.test.0.branch.2',
+            command: 'pnpm test',
+            exitCode: 0,
+            stdout: 'ok',
+            stderr: '',
+            durationMs: 1,
+          },
+        ],
+      },
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      message: expect.stringContaining('Matched anyOf branch #2'),
+      evidence: {
+        kind: 'anyOf',
+        branchIndex: 2,
+        branches: [{passed: false}, {passed: true}],
+      },
+    });
+    expect(
+      (
+        result.evidence as {
+          branches: Array<{evidence?: {stdout?: string}}>;
+        }
+      ).branches[1]?.evidence,
+    ).toMatchObject({
+      exitCode: 0,
+      stdout: 'ok',
+      stderr: '',
+    });
+  });
+
+  it('uses cached observation branches so later workdir mutations cannot change them', () => {
+    const workDir = createWorkDir();
+    const assertion: IrAssertion = {
+      id: 'assertion.test.0',
+      type: 'anyOf',
+      steps: [
+        {type: 'artifact.notExists', path: 'created.txt'},
+        {
+          type: 'verify.command',
+          command: 'touch created.txt',
+          exitCode: 0,
+        },
+      ],
+    };
+
+    const observationCache = preEvaluateAnyOfObservationBranches([assertion], {
+      toolEvents: [],
+      workDir,
+    });
+
+    writeFileSync(join(workDir, 'created.txt'), 'created by verify');
+
+    const result = evaluateOne(assertion, [], {
+      workDir,
+      anyOfObservationBranches: observationCache,
+      verifyCommandResults: [
+        {
+          assertionId: 'assertion.test.0.branch.2',
+          command: 'touch created.txt',
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          durationMs: 1,
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      passed: true,
+      evidence: {
+        kind: 'anyOf',
+        branchIndex: 1,
+        branches: [{passed: true}, {passed: true}],
+      },
+    });
+    expect(result.message).toContain('Matched anyOf branch #1');
+  });
+
+  it('selects the first passing anyOf branch when observation and verify both pass', () => {
+    const workDir = createWorkDir();
+    writeFileSync(join(workDir, 'report.json'), '{}');
+
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        type: 'anyOf',
+        steps: [
+          {type: 'artifact.exists', path: 'report.json'},
+          {
+            type: 'verify.command',
+            command: 'true',
+            exitCode: 0,
+          },
+        ],
+      },
+      [],
+      {
+        workDir,
+        verifyCommandResults: [
+          {
+            assertionId: 'assertion.test.0.branch.2',
+            command: 'true',
+            exitCode: 0,
+            stdout: '',
+            stderr: '',
+            durationMs: 1,
+          },
+        ],
+      },
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      evidence: {kind: 'anyOf', branchIndex: 1},
+    });
+  });
+
 
   it('passes sequence.inOrder with ordered steps in one shell command', () => {
     const event: ToolEvent = {

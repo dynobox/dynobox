@@ -1,9 +1,18 @@
 import {type IrAssertion, irAssertionFromNode} from '@dynobox/sdk/ir';
 
 import {
+  captureArtifactBaseline,
   evaluateArtifactContains,
   evaluateArtifactExists,
+  evaluateArtifactNotExists,
+  evaluateArtifactUnchanged,
 } from './artifactAssertions.js';
+import {
+  anyOfBranchId,
+  assertionRequiresVerify,
+  collectArtifactUnchangedTargets,
+  collectVerifyCommandAssertions,
+} from './collect.js';
 import {
   evaluateCommandCalledAssertion,
   evaluateCommandNotCalledAssertion,
@@ -17,11 +26,30 @@ import {
   evaluateToolCalledAssertion,
   evaluateToolNotCalledAssertion,
 } from './toolAssertions.js';
-import type {AssertionResult, EvaluationInput} from './types.js';
+import type {
+  ArtifactBaseline,
+  AssertionResult,
+  EvaluationInput,
+} from './types.js';
 import {evaluateVerifyCommandAssertion} from './verifyAssertions.js';
 
 export type {ObservedCommand} from './commandAssertions.js';
 export {extractObservedCommands} from './commandAssertions.js';
+export type {ArtifactUnchangedTarget} from './collect.js';
+export {
+  anyOfBranchId,
+  anyOfHasVerifyBranch,
+  assertionRequiresVerify,
+  collectArtifactUnchangedTargets,
+  collectVerifyCommandAssertions,
+} from './collect.js';
+export {
+  captureArtifactBaseline,
+  evaluateArtifactContains,
+  evaluateArtifactExists,
+  evaluateArtifactNotExists,
+  evaluateArtifactUnchanged,
+} from './artifactAssertions.js';
 export type {ArtifactInspection} from './inspection.js';
 export {
   extractSkillFiles,
@@ -36,6 +64,9 @@ export {
   shellCommandMatcherEntry,
 } from './presentation.js';
 export type {
+  ArtifactBaseline,
+  ArtifactPathState,
+  ArtifactUnchangedEvidence,
   AssertionResult,
   EvaluationInput,
   HttpEvent,
@@ -48,6 +79,59 @@ export function evaluateAssertions(input: EvaluationInput): AssertionResult[] {
   return input.assertions.map((assertion) =>
     evaluateAssertion(assertion, input),
   );
+}
+
+/**
+ * Pre-evaluate non-verification `anyOf` branches so later verification commands
+ * cannot mutate the workdir and change observation branch outcomes.
+ */
+export function preEvaluateAnyOfObservationBranches(
+  assertions: readonly IrAssertion[],
+  input: Omit<
+    EvaluationInput,
+    'assertions' | 'verifyCommandResults' | 'anyOfObservationBranches'
+  >,
+): Map<string, (AssertionResult | undefined)[]> {
+  const cache = new Map<string, (AssertionResult | undefined)[]>();
+  const evaluationInput: EvaluationInput = {
+    ...input,
+    assertions: [],
+  };
+
+  for (const assertion of assertions) {
+    if (assertion.type !== 'anyOf') continue;
+
+    cache.set(
+      assertion.id,
+      assertion.steps.map((step, index) => {
+        if (step.type === 'verify.command') return undefined;
+        return evaluateAssertion(
+          irAssertionFromNode(anyOfBranchId(assertion.id, index + 1), step),
+          evaluationInput,
+        );
+      }),
+    );
+  }
+
+  return cache;
+}
+
+/**
+ * Capture baselines for every `artifact.unchanged` target, including nested
+ * anyOf branches. Snapshot failures stay in the map as assertion-level data.
+ */
+export function captureArtifactBaselines(
+  assertions: readonly IrAssertion[],
+  workDir: string | undefined,
+): Map<string, ArtifactBaseline> {
+  const baselines = new Map<string, ArtifactBaseline>();
+  for (const target of collectArtifactUnchangedTargets(assertions)) {
+    baselines.set(
+      target.assertionId,
+      captureArtifactBaseline(target.path, workDir),
+    );
+  }
+  return baselines;
 }
 
 function evaluateAssertion(
@@ -101,8 +185,20 @@ function evaluateAssertion(
     return evaluateArtifactExists(assertion, input.workDir);
   }
 
+  if (assertion.type === 'artifact.notExists') {
+    return evaluateArtifactNotExists(assertion, input.workDir);
+  }
+
   if (assertion.type === 'artifact.contains') {
     return evaluateArtifactContains(assertion, input.workDir);
+  }
+
+  if (assertion.type === 'artifact.unchanged') {
+    return evaluateArtifactUnchanged(
+      assertion,
+      input.workDir,
+      input.artifactBaselines,
+    );
   }
 
   if (assertion.type === 'transcript.contains') {
@@ -130,6 +226,8 @@ function evaluateAssertion(
 
 /**
  * Evaluate every `anyOf` branch, then report the lowest-index passing branch.
+ * Observation branches may be supplied from a pre-evaluation cache so nested
+ * verification commands cannot retroactively change artifact outcomes.
  * Branches are always fully evaluated; evaluation does not short-circuit after
  * the first match.
  */
@@ -137,12 +235,19 @@ function evaluateAnyOf(
   assertion: Extract<IrAssertion, {type: 'anyOf'}>,
   input: EvaluationInput,
 ): AssertionResult {
-  const branchResults = assertion.steps.map((step, index) =>
-    evaluateAssertion(
-      irAssertionFromNode(`${assertion.id}.branch.${index + 1}`, step),
-      input,
-    ),
-  );
+  const cached = input.anyOfObservationBranches?.get(assertion.id);
+  const branchResults = assertion.steps.map((step, index) => {
+    const branchAssertion = irAssertionFromNode(
+      anyOfBranchId(assertion.id, index + 1),
+      step,
+    );
+
+    if (step.type !== 'verify.command' && cached?.[index] !== undefined) {
+      return cached[index]!;
+    }
+
+    return evaluateAssertion(branchAssertion, input);
+  });
   const matchedIndex = branchResults.findIndex((result) => result.passed);
 
   if (matchedIndex !== -1) {
@@ -174,3 +279,4 @@ function evaluateAnyOf(
     },
   };
 }
+
