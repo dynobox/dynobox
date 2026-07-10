@@ -355,8 +355,7 @@ function formatArtifactExists(artifact: ArtifactInspection): string {
 }
 
 function formatArtifactNotExists(artifact: ArtifactInspection): string {
-  if (artifact.kind === 'missing')
-    return `artifact absent at ${artifact.path}`;
+  if (artifact.kind === 'missing') return `artifact absent at ${artifact.path}`;
   if (artifact.kind === 'exists')
     return `artifact still exists at ${artifact.path}`;
   return artifact.message;

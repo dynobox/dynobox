@@ -1088,7 +1088,6 @@ describe('evaluateAssertions', () => {
     });
   });
 
-
   it('passes sequence.inOrder with ordered steps in one shell command', () => {
     const event: ToolEvent = {
       kind: 'shell',

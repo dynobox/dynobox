@@ -7,12 +7,7 @@ import {
   evaluateArtifactNotExists,
   evaluateArtifactUnchanged,
 } from './artifactAssertions.js';
-import {
-  anyOfBranchId,
-  assertionRequiresVerify,
-  collectArtifactUnchangedTargets,
-  collectVerifyCommandAssertions,
-} from './collect.js';
+import {anyOfBranchId, collectArtifactUnchangedTargets} from './collect.js';
 import {
   evaluateCommandCalledAssertion,
   evaluateCommandNotCalledAssertion,
@@ -33,8 +28,13 @@ import type {
 } from './types.js';
 import {evaluateVerifyCommandAssertion} from './verifyAssertions.js';
 
-export type {ObservedCommand} from './commandAssertions.js';
-export {extractObservedCommands} from './commandAssertions.js';
+export {
+  captureArtifactBaseline,
+  evaluateArtifactContains,
+  evaluateArtifactExists,
+  evaluateArtifactNotExists,
+  evaluateArtifactUnchanged,
+} from './artifactAssertions.js';
 export type {ArtifactUnchangedTarget} from './collect.js';
 export {
   anyOfBranchId,
@@ -43,13 +43,8 @@ export {
   collectArtifactUnchangedTargets,
   collectVerifyCommandAssertions,
 } from './collect.js';
-export {
-  captureArtifactBaseline,
-  evaluateArtifactContains,
-  evaluateArtifactExists,
-  evaluateArtifactNotExists,
-  evaluateArtifactUnchanged,
-} from './artifactAssertions.js';
+export type {ObservedCommand} from './commandAssertions.js';
+export {extractObservedCommands} from './commandAssertions.js';
 export type {ArtifactInspection} from './inspection.js';
 export {
   extractSkillFiles,
@@ -279,4 +274,3 @@ function evaluateAnyOf(
     },
   };
 }
-

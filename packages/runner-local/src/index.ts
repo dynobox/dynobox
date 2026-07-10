@@ -3,8 +3,8 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
 import {
-  type AssertionResult,
   assertionRequiresVerify,
+  type AssertionResult,
   captureArtifactBaselines,
   evaluateAssertions,
   preEvaluateAnyOfObservationBranches,

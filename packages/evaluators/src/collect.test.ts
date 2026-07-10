@@ -1,6 +1,5 @@
-import {describe, expect, it} from 'vitest';
-
 import type {IrAssertion} from '@dynobox/sdk/ir';
+import {describe, expect, it} from 'vitest';
 
 import {
   anyOfBranchId,

@@ -71,9 +71,9 @@ export function collectArtifactUnchangedTargets(
   return targets;
 }
 
-function isArtifactUnchangedNode(
-  step: {type: string},
-): step is {type: 'artifact.unchanged'; path: string} {
+function isArtifactUnchangedNode(step: {
+  type: string;
+}): step is {type: 'artifact.unchanged'; path: string} {
   return (
     step.type === 'artifact.unchanged' &&
     'path' in step &&
