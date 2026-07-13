@@ -21,6 +21,7 @@ export const RUN_UPLOAD_LIMITS = {
   scenarioNameLength: 512,
   harnessIdLength: 64,
   modelLength: 128,
+  harnessVersionLength: 128,
   assertionIdLength: 512,
   assertionLabelLength: 512,
   assertionTypeLength: 64,
@@ -209,6 +210,7 @@ export const runUploadJobV2Schema = z
       .object({
         id: z.string().min(1).max(RUN_UPLOAD_LIMITS.harnessIdLength),
         model: optionalNullableString(RUN_UPLOAD_LIMITS.modelLength),
+        version: optionalNullableString(RUN_UPLOAD_LIMITS.harnessVersionLength),
       })
       .strict(),
     iteration: z.number().int().positive(),
@@ -339,6 +341,7 @@ export type RunJobDetail = {
   harness: {
     id: string;
     model: string | null;
+    version: string | null;
   };
   iteration: number;
   status: RunUploadJobStatus;

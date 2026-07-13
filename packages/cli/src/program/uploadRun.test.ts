@@ -32,6 +32,7 @@ describe('buildRunUploadPayload', () => {
       jobId: job.id,
       scenarioId: job.scenario.id,
       harness: 'claude-code',
+      harnessVersion: '2.1.4',
       iteration: 0,
       status: 'passed',
       passed: true,
@@ -74,6 +75,11 @@ describe('buildRunUploadPayload', () => {
     expect(payload.totals.durationMs).toBe(2);
     expect(payload.dynos[0]?.target).toBe('commit');
     expect(payload.dynos[0]?.jobs[0]?.durationMs).toBe(2);
+    expect(payload.dynos[0]?.jobs[0]?.harness).toEqual({
+      id: 'claude-code',
+      model: null,
+      version: '2.1.4',
+    });
   });
 
   it('throws when upload jobs and results are misaligned', () => {

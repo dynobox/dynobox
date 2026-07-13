@@ -230,6 +230,13 @@ function buildRunUploadJob(
         result.model === undefined
           ? null
           : truncate(result.model, RUN_UPLOAD_LIMITS.modelLength),
+      version:
+        result.harnessVersion === undefined || result.harnessVersion === null
+          ? null
+          : truncate(
+              result.harnessVersion,
+              RUN_UPLOAD_LIMITS.harnessVersionLength,
+            ),
     },
     iteration: result.iteration + 1,
     status: result.status,

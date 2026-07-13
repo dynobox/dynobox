@@ -68,7 +68,13 @@ class RecordingHarness implements Harness {
       durationMs: 100,
     },
     private readonly toolEvents: ToolEvent[] = [],
+    private readonly probeVersion: () => Promise<string | null> = async () =>
+      null,
   ) {}
+
+  version(): Promise<string | null> {
+    return this.probeVersion();
+  }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
     this.inputs.push(input);
@@ -187,6 +193,20 @@ describe('runJob', () => {
     expect(result.artifacts).toEqual([
       {kind: 'work_dir', path: result.workDir},
     ]);
+  });
+
+  it('records a harness version without failing the run when discovery fails', async () => {
+    const scratchRoot = createScratchRoot();
+    const harness = new RecordingHarness(undefined, [], async () => {
+      throw new Error('version unavailable');
+    });
+
+    const result = await runJob(createJob(), {
+      scratchRoot,
+      harnesses: [harness],
+    });
+
+    expect(result).toMatchObject({status: 'passed', harnessVersion: null});
   });
 
   it('runs setup before invoking the harness', async () => {

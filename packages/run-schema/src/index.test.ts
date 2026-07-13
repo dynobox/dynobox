@@ -45,6 +45,7 @@ function validPayload(): RunUploadCreateInputV2 {
             harness: {
               id: 'claude-code',
               model: 'sonnet',
+              version: '2.1.4',
             },
             iteration: 1,
             status: 'assertion_failed',
@@ -118,6 +119,24 @@ describe('RunUploadV2', () => {
     expect(
       parsed.dynos[0]?.jobs[0]?.assertions[0]?.display?.children[0]?.passed,
     ).toBe(false);
+  });
+
+  it('accepts a null harness version when discovery is unavailable', () => {
+    const payload = validPayload();
+    payload.dynos[0]!.jobs[0]!.harness.version = null;
+
+    expect(RunUploadV2.parse(payload).dynos[0]!.jobs[0]!.harness.version).toBe(
+      null,
+    );
+  });
+
+  it('accepts a payload without a harness version for older clients', () => {
+    const payload = validPayload();
+    delete payload.dynos[0]!.jobs[0]!.harness.version;
+
+    expect(
+      RunUploadV2.parse(payload).dynos[0]!.jobs[0]!.harness.version,
+    ).toBeUndefined();
   });
 
   it('accepts empty verify output matcher strings only', () => {

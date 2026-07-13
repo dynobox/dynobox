@@ -9,6 +9,7 @@ import {
   textFromContent,
 } from './parsing.js';
 import {runStreamingHarness} from './runStreamingHarness.js';
+import {createVersionProbe} from './version.js';
 import type {
   Harness,
   HarnessInput,
@@ -38,10 +39,16 @@ export class ClaudeCodeHarness implements Harness {
 
   private readonly executable: string;
   private readonly extraArgs: readonly string[];
+  private readonly probeVersion: () => Promise<string | null>;
 
   constructor(options: ClaudeCodeHarnessOptions = {}) {
     this.executable = options.executable ?? 'claude';
     this.extraArgs = options.extraArgs ?? [];
+    this.probeVersion = createVersionProbe(this.executable);
+  }
+
+  version(): Promise<string | null> {
+    return this.probeVersion();
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {

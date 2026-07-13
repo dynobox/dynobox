@@ -1,4 +1,4 @@
-import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -33,6 +33,29 @@ function jsonl(...events: unknown[]): string {
 describe('CodexHarness', () => {
   it('has the codex harness id', () => {
     expect(new CodexHarness().id).toBe('codex');
+  });
+
+  it('captures a custom executable version once', async () => {
+    const scratchRoot = createScratchRoot();
+    const executable = join(scratchRoot, 'fake-codex');
+    const probeLog = join(scratchRoot, 'version-probes.log');
+    writeFileSync(
+      executable,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  printf '%s\\n' 'codex-cli 0.87.0'
+  printf 'probe\\n' >> '${probeLog}'
+  exit 0
+fi
+`,
+      {mode: 0o755},
+    );
+    const harness = new CodexHarness({executable});
+
+    await expect(
+      Promise.all([harness.version(), harness.version()]),
+    ).resolves.toEqual(['0.87.0', '0.87.0']);
+    expect(readFileSync(probeLog, 'utf8')).toBe('probe\n');
   });
 
   it('builds non-interactive JSONL arguments', () => {
