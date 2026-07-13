@@ -10,7 +10,6 @@ import {
   textFromContent,
 } from './parsing.js';
 import {runStreamingHarness} from './runStreamingHarness.js';
-import {createVersionProbe} from './version.js';
 import type {
   Harness,
   HarnessInput,
@@ -18,6 +17,7 @@ import type {
   HarnessRunOutput,
   ToolEvent,
 } from './types.js';
+import {createVersionProbe} from './version.js';
 
 export type CodexHarnessOptions = {
   executable?: string;
