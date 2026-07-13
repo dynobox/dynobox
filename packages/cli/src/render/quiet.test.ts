@@ -70,6 +70,7 @@ function makeResult(
     jobId: job.id,
     scenarioId: job.scenario.id,
     harness: job.harness,
+    harnessVersion: null,
     iteration: job.iteration,
     status,
     passed: status === 'passed',
