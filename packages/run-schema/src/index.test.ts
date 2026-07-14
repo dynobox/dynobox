@@ -179,6 +179,22 @@ describe('RunUploadV2', () => {
     expect(RunUploadV2.safeParse(payload).success).toBe(true);
   });
 
+  it('accepts only positive matched anyOf branch indexes', () => {
+    const payload = validPayload();
+    const assertion = payload.dynos[0]!.jobs[0]!.assertions[0]!;
+
+    assertion.evidence = {matchedBranchIndex: 2};
+    expect(
+      RunUploadV2.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!.evidence,
+    ).toMatchObject({matchedBranchIndex: 2});
+
+    assertion.evidence = {matchedBranchIndex: 0};
+    expect(() => RunUploadV2.parse(payload)).toThrow();
+
+    assertion.evidence = {matchedBranchIndex: -1};
+    expect(() => RunUploadV2.parse(payload)).toThrow();
+  });
+
   it('rejects unknown fields at every payload level', () => {
     const payload = validPayload();
     const dyno = validDyno();

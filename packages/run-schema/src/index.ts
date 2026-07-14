@@ -164,6 +164,7 @@ export const runUploadAssertionEvidenceV2Schema = z
   .object({
     observedCount: countSchema.optional(),
     matchedCount: countSchema.optional(),
+    matchedBranchIndex: z.number().int().positive().optional(),
     observedKinds: z
       .array(z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionTypeLength))
       .max(RUN_UPLOAD_LIMITS.evidenceItems)

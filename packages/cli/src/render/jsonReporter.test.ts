@@ -68,6 +68,64 @@ describe('renderJsonRunOutput', () => {
     });
   });
 
+  it('includes only selected anyOf branch indexes in assertion output', () => {
+    const job = {
+      id: 'job.anyof',
+      scenario: {
+        id: 'scenario.anyof',
+        name: 'anyOf',
+        prompt: 'p',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        endpoints: [],
+        assertions: [],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const result = {
+      jobId: job.id,
+      scenarioId: job.scenario.id,
+      harness: 'claude-code',
+      iteration: 0,
+      status: 'assertion_failed',
+      passed: false,
+      setupResult: {success: true, logs: []},
+      httpEvents: [],
+      artifacts: [],
+      assertionResults: [
+        {
+          assertionId: 'assertion.anyof.passed',
+          type: 'anyOf',
+          passed: true,
+          message: 'Matched anyOf branch #1.',
+          evidence: {kind: 'anyOf', branchIndex: 1, branches: []},
+        },
+        {
+          assertionId: 'assertion.anyof.failed',
+          type: 'anyOf',
+          passed: false,
+          message: 'No anyOf branch matched.',
+          evidence: {kind: 'anyOf', branches: []},
+        },
+      ],
+      diagnostics: [],
+      warnings: [],
+      timing: {setupMs: 0, harnessMs: 0, assertionsMs: 0, totalMs: 0},
+    } as unknown as LocalRunnerResult;
+
+    const [record] = renderJsonRunOutput({jobs: [job], results: [result]})
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const assertions = (record as {assertions: Array<Record<string, unknown>>})
+      .assertions;
+
+    expect(assertions[0]).toMatchObject({matchedBranchIndex: 1});
+    expect(assertions[1]).not.toHaveProperty('matchedBranchIndex');
+  });
+
   it('includes aggregate matrix cells in the summary record', () => {
     const jobs = [0, 1].map(
       (iteration) =>

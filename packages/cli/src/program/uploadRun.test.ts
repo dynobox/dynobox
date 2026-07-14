@@ -431,6 +431,81 @@ describe('buildRunUploadPayload', () => {
       {passed: false, observed: 'Transcript did not include "uploaded".'},
       {passed: true, observed: 'Observed skill reference.'},
     ]);
+    expect(assertion.evidence).toMatchObject({matchedBranchIndex: 2});
+  });
+
+  it('omits matched branch evidence for unmatched anyOf assertions', () => {
+    const job = {
+      id: 'scenario.flexible.claude-code.iteration.0',
+      scenario: {
+        id: 'scenario.flexible',
+        name: 'flexible workflow',
+        prompt: 'p',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        endpoints: [],
+        assertions: [
+          {
+            id: 'assertion.flexible.anyof',
+            type: 'anyOf',
+            steps: [
+              {type: 'artifact.exists', path: 'report.json'},
+              {type: 'transcript.contains', text: 'uploaded'},
+            ],
+          },
+        ],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const result = {
+      jobId: job.id,
+      scenarioId: job.scenario.id,
+      harness: 'claude-code',
+      iteration: 0,
+      status: 'assertion_failed',
+      passed: false,
+      setupResult: {success: true, logs: []},
+      httpEvents: [],
+      artifacts: [],
+      assertionResults: [
+        {
+          assertionId: 'assertion.flexible.anyof',
+          type: 'anyOf',
+          passed: false,
+          message: 'No anyOf branch matched.',
+          evidence: {
+            kind: 'anyOf',
+            branches: [
+              {passed: false, message: 'Artifact was not found.'},
+              {passed: false, message: 'Transcript did not match.'},
+            ],
+          },
+        },
+      ],
+      diagnostics: [],
+      warnings: [],
+      timing: {setupMs: 0, harnessMs: 10, assertionsMs: 1, totalMs: 11},
+    } as unknown as LocalRunnerResult;
+
+    const payload = buildRunUploadPayload({
+      dynos: [
+        {
+          dynoPath: 'flexible.dyno.ts',
+          name: null,
+          target: 'flexible',
+          jobs: [job],
+        },
+      ],
+      results: [result],
+      inputPath: 'flexible.dyno.ts',
+      gitHash: null,
+    });
+    const assertion =
+      RunUploadV3.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+
+    expect(assertion.evidence).not.toHaveProperty('matchedBranchIndex');
   });
 
   it('does not count failed command.called observed evidence as matches', () => {
@@ -520,6 +595,7 @@ describe('buildRunUploadPayload', () => {
       observedCount: 1,
       observedKinds: ['shell'],
     });
+    expect(assertion.evidence).not.toHaveProperty('matchedBranchIndex');
     expect(assertion.evidence).not.toHaveProperty('matchedCount');
     expect(assertion.evidence).not.toHaveProperty('matches');
   });

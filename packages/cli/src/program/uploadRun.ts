@@ -513,10 +513,15 @@ function assertionEvidence(
     assertion?.type === 'command.called' && !passed
       ? []
       : evidenceMatches(evidence);
+  const matchedBranchIndex =
+    passed && assertion?.type === 'anyOf'
+      ? anyOfMatchedBranch(evidence)
+      : undefined;
   return {
     observedCount:
       (result.harnessResult?.toolEvents.length ?? 0) + result.httpEvents.length,
     ...(matches.length === 0 ? {} : {matchedCount: matches.length}),
+    ...(matchedBranchIndex === undefined ? {} : {matchedBranchIndex}),
     observedKinds: observedKinds(result),
     ...(matches.length === 0 ? {} : {matches}),
   };
