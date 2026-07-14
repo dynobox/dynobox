@@ -6,6 +6,7 @@
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 
 import {buildRunMatrix} from '../jobs.js';
+import {anyOfMatchedBranch} from '../util/assertionBranch.js';
 import type {DebugLogPaths} from '../util/transcript.js';
 
 const REPORT_SCHEMA = 'dynobox.report.v2';
@@ -83,12 +84,16 @@ function jobRecord(
     },
     assertions: result.assertionResults.map((assertion) => {
       const label = jobAssertionLabel(job, assertion.assertionId);
+      const matchedBranchIndex = assertion.passed
+        ? anyOfMatchedBranch(assertion.evidence)
+        : undefined;
       return {
         assertionId: assertion.assertionId,
         ...(label === undefined ? {} : {label}),
         type: assertion.type,
         passed: assertion.passed,
         message: assertion.message,
+        ...(matchedBranchIndex === undefined ? {} : {matchedBranchIndex}),
       };
     }),
   };
