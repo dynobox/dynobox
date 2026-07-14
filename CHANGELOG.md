@@ -13,12 +13,14 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Added the evaluator-selected `anyOf` branch index to saved-run evidence and
   local JSON reports when a branch matches.
 
+---
+
+## @dynobox/run-schema@0.3.0 — 2026-07-14
+
 ### `@dynobox/run-schema`
 
 - Added optional positive `matchedBranchIndex` assertion evidence for selected
   `anyOf` branches without changing the v3 upload protocol.
-
----
 
 ## dynobox@0.9.1 — 2026-07-14
 
