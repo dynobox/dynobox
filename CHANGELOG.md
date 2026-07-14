@@ -10,6 +10,13 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ---
 
+## @dynobox/run-schema@0.2.0 — 2026-07-14
+
+### `@dynobox/run-schema`
+
+- Added run upload schema v3 with nullable `harness.version` provenance.
+  Schema v2 remains strict and available for backward-compatible API handling.
+
 ## dynobox@0.9.0 — 2026-07-10
 
 ### `dynobox` (CLI)
