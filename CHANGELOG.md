@@ -10,6 +10,14 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ---
 
+## dynobox@0.9.1 — 2026-07-14
+
+### `dynobox` (CLI)
+
+- Added nullable Claude Code and Codex executable versions to local JSON reports
+  and schema v3 saved-run uploads. Save-run API failures now include structured
+  error details without changing the scenario result.
+
 ## @dynobox/run-schema@0.2.0 — 2026-07-14
 
 ### `@dynobox/run-schema`
