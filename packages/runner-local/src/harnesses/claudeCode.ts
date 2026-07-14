@@ -16,6 +16,7 @@ import type {
   HarnessRunOutput,
   ToolEvent,
 } from './types.js';
+import {createVersionProbe} from './version.js';
 
 export type ClaudeCodeHarnessOptions = {
   executable?: string;
@@ -38,10 +39,16 @@ export class ClaudeCodeHarness implements Harness {
 
   private readonly executable: string;
   private readonly extraArgs: readonly string[];
+  private readonly probeVersion: () => Promise<string | null>;
 
   constructor(options: ClaudeCodeHarnessOptions = {}) {
     this.executable = options.executable ?? 'claude';
     this.extraArgs = options.extraArgs ?? [];
+    this.probeVersion = createVersionProbe(this.executable);
+  }
+
+  version(): Promise<string | null> {
+    return this.probeVersion();
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {

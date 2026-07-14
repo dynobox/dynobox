@@ -3,13 +3,17 @@ import {describe, expect, it} from 'vitest';
 import {
   RUN_UPLOAD_LIMITS,
   RUN_UPLOAD_SCHEMA_VERSION,
+  RUN_UPLOAD_V2_SCHEMA_VERSION,
+  RunUpload,
   type RunUploadCreateInputV2,
+  type RunUploadCreateInputV3,
   RunUploadV2,
+  RunUploadV3,
 } from './index.js';
 
 function validPayload(): RunUploadCreateInputV2 {
   return {
-    schemaVersion: RUN_UPLOAD_SCHEMA_VERSION,
+    schemaVersion: RUN_UPLOAD_V2_SCHEMA_VERSION,
     createdAt: '2026-05-30T00:00:00.000Z',
     cliVersion: '0.3.0',
     gitHash: 'abc123',
@@ -96,6 +100,21 @@ function validPayload(): RunUploadCreateInputV2 {
         ],
       },
     ],
+  };
+}
+
+function validV3Payload(): RunUploadCreateInputV3 {
+  const payload = validPayload();
+  return {
+    ...payload,
+    schemaVersion: RUN_UPLOAD_SCHEMA_VERSION,
+    dynos: payload.dynos.map((dyno) => ({
+      ...dyno,
+      jobs: dyno.jobs.map((job) => ({
+        ...job,
+        harness: {...job.harness, version: '2.1.4'},
+      })),
+    })),
   };
 }
 
@@ -353,5 +372,42 @@ describe('RunUploadV2', () => {
         ],
       }),
     ).toThrow();
+  });
+});
+
+describe('RunUploadV3', () => {
+  it('accepts harness executable versions', () => {
+    const parsed = RunUploadV3.parse(validV3Payload());
+
+    expect(parsed.schemaVersion).toBe(3);
+    expect(parsed.dynos[0]?.jobs[0]?.harness.version).toBe('2.1.4');
+  });
+
+  it('accepts a null harness version when discovery is unavailable', () => {
+    const payload = validV3Payload();
+    payload.dynos[0]!.jobs[0]!.harness.version = null;
+
+    expect(RunUploadV3.parse(payload).dynos[0]!.jobs[0]!.harness.version).toBe(
+      null,
+    );
+  });
+
+  it('requires a harness version', () => {
+    const payload = validV3Payload();
+    const {version: _version, ...harness} = payload.dynos[0]!.jobs[0]!.harness;
+    const invalidPayload = {
+      ...payload,
+      dynos: payload.dynos.map((dyno) => ({
+        ...dyno,
+        jobs: dyno.jobs.map((job) => ({...job, harness})),
+      })),
+    };
+
+    expect(RunUploadV3.safeParse(invalidPayload).success).toBe(false);
+  });
+
+  it('parses v2 and v3 uploads', () => {
+    expect(RunUpload.parse(validPayload()).schemaVersion).toBe(2);
+    expect(RunUpload.parse(validV3Payload()).schemaVersion).toBe(3);
   });
 });

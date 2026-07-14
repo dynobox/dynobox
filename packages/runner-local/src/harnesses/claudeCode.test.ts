@@ -1,4 +1,4 @@
-import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -33,6 +33,58 @@ function jsonl(...events: unknown[]): string {
 describe('ClaudeCodeHarness', () => {
   it('has the claude-code harness id', () => {
     expect(new ClaudeCodeHarness().id).toBe('claude-code');
+  });
+
+  it('captures a custom executable version once', async () => {
+    const scratchRoot = createScratchRoot();
+    const executable = join(scratchRoot, 'fake-claude');
+    const probeLog = join(scratchRoot, 'version-probes.log');
+    writeFileSync(
+      executable,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  printf '%s\\n' '2.1.4 (Claude Code)'
+  printf 'probe\\n' >> '${probeLog}'
+  exit 0
+fi
+`,
+      {mode: 0o755},
+    );
+    const harness = new ClaudeCodeHarness({executable});
+
+    await expect(
+      Promise.all([harness.version(), harness.version()]),
+    ).resolves.toEqual(['2.1.4', '2.1.4']);
+    expect(readFileSync(probeLog, 'utf8')).toBe('probe\n');
+  });
+
+  it('returns null for an unparsable executable version', async () => {
+    const scratchRoot = createScratchRoot();
+    const executable = join(scratchRoot, 'fake-claude');
+    writeFileSync(
+      executable,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  printf '%s\\n' 'version unknown'
+  exit 0
+fi
+`,
+      {mode: 0o755},
+    );
+
+    await expect(new ClaudeCodeHarness({executable}).version()).resolves.toBe(
+      null,
+    );
+  });
+
+  it('returns null when the executable is unavailable', async () => {
+    const scratchRoot = createScratchRoot();
+
+    await expect(
+      new ClaudeCodeHarness({
+        executable: join(scratchRoot, 'missing-claude'),
+      }).version(),
+    ).resolves.toBe(null);
   });
 
   it('builds non-interactive stream-json arguments', () => {

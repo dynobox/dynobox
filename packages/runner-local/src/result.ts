@@ -15,6 +15,7 @@ export function buildResult(
     | 'jobId'
     | 'scenarioId'
     | 'harness'
+    | 'harnessVersion'
     | 'iteration'
     | 'passed'
     | 'httpEvents'
@@ -23,6 +24,7 @@ export function buildResult(
     | 'warnings'
     | 'timing'
   > & {
+    harnessVersion?: string | null;
     assertionResults?: AssertionResult[];
     diagnostics?: string[];
     warnings?: LocalRunnerWarning[];
@@ -38,6 +40,7 @@ export function buildResult(
     scenarioId: job.scenario.id,
     harness: job.harness,
     ...(job.model === undefined ? {} : {model: job.model}),
+    harnessVersion: result.harnessVersion ?? null,
     ...(job.permissionMode === undefined
       ? {}
       : {permissionMode: job.permissionMode}),

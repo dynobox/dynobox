@@ -119,6 +119,7 @@ export type LocalRunnerResult = {
   scenarioId: string;
   harness: HarnessId;
   model?: string;
+  harnessVersion: string | null;
   permissionMode?: PermissionMode;
   iteration: number;
   status: LocalRunnerStatus;

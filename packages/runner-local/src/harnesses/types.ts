@@ -55,6 +55,9 @@ export type HarnessResult = {
 export interface Harness {
   readonly id: HarnessId;
 
+  /** Best-effort installed executable version for run provenance. */
+  version?(): Promise<string | null>;
+
   /** Launch the agent and return raw output. */
   run(input: HarnessInput): Promise<HarnessRunOutput>;
 

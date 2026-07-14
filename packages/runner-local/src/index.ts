@@ -184,6 +184,10 @@ export async function runJob(
     });
   }
 
+  const harnessVersion = Promise.resolve()
+    .then(() => harness.version?.() ?? null)
+    .catch(() => null);
+
   let httpCapture: HttpCapture | undefined;
   try {
     httpCapture = await startHttpCapture(job.scenario);
@@ -200,6 +204,7 @@ export async function runJob(
       workDir,
       setupResult,
       artifacts,
+      harnessVersion: await harnessVersion,
       diagnostics: [`HTTP capture failed to start: ${errorMessage(error)}`],
       timing: buildTiming({setupMs}),
     });
@@ -248,6 +253,7 @@ export async function runJob(
       workDir,
       setupResult,
       artifacts,
+      harnessVersion: await harnessVersion,
       diagnostics: [
         `Harness "${harness.id}" failed to run: ${errorMessage(error)}`,
       ],
@@ -279,6 +285,7 @@ export async function runJob(
       workDir,
       setupResult,
       artifacts,
+      harnessVersion: await harnessVersion,
       harnessOutput,
       httpEvents,
       diagnostics: [
@@ -306,6 +313,7 @@ export async function runJob(
       workDir,
       setupResult,
       artifacts,
+      harnessVersion: await harnessVersion,
       harnessOutput,
       harnessResult,
       httpEvents,
@@ -403,6 +411,7 @@ export async function runJob(
     workDir,
     setupResult,
     artifacts,
+    harnessVersion: await harnessVersion,
     harnessOutput,
     harnessResult,
     httpEvents,

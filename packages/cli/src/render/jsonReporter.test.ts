@@ -31,6 +31,7 @@ describe('renderJsonRunOutput', () => {
       jobId: job.id,
       scenarioId: job.scenario.id,
       harness: 'claude-code',
+      harnessVersion: '2.1.4',
       iteration: 0,
       status: 'passed',
       passed: true,
@@ -56,8 +57,10 @@ describe('renderJsonRunOutput', () => {
       .map((line) => JSON.parse(line) as Record<string, unknown>);
     const jobRecord = records[0] as {
       assertions: Array<Record<string, unknown>>;
+      harness: Record<string, unknown>;
     };
 
+    expect(jobRecord.harness).toMatchObject({version: '2.1.4'});
     expect(jobRecord.assertions[0]).toMatchObject({
       assertionId: 'assertion.labels.reads-package',
       label: 'reads package.json',

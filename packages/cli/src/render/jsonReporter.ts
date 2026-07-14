@@ -49,6 +49,7 @@ function jobRecord(
     harness: {
       id: result.harness,
       ...(result.model === undefined ? {} : {model: result.model}),
+      version: result.harnessVersion ?? null,
       ...(result.permissionMode === undefined
         ? {}
         : {permissionMode: result.permissionMode}),

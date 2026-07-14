@@ -1,6 +1,7 @@
 import {z} from 'zod';
 
-export const RUN_UPLOAD_SCHEMA_VERSION = 2 as const;
+export const RUN_UPLOAD_V2_SCHEMA_VERSION = 2 as const;
+export const RUN_UPLOAD_SCHEMA_VERSION = 3 as const;
 
 export const RUN_UPLOAD_STATUS = ['passed', 'failed'] as const;
 export const RUN_UPLOAD_JOB_STATUS = [
@@ -21,6 +22,7 @@ export const RUN_UPLOAD_LIMITS = {
   scenarioNameLength: 512,
   harnessIdLength: 64,
   modelLength: 128,
+  harnessVersionLength: 128,
   assertionIdLength: 512,
   assertionLabelLength: 512,
   assertionTypeLength: 64,
@@ -227,6 +229,22 @@ export const runUploadJobV2Schema = z
   })
   .strict();
 
+export const runUploadJobV3Schema = runUploadJobV2Schema
+  .extend({
+    harness: z
+      .object({
+        id: z.string().min(1).max(RUN_UPLOAD_LIMITS.harnessIdLength),
+        model: optionalNullableString(RUN_UPLOAD_LIMITS.modelLength),
+        version: z
+          .string()
+          .min(1)
+          .max(RUN_UPLOAD_LIMITS.harnessVersionLength)
+          .nullable(),
+      })
+      .strict(),
+  })
+  .strict();
+
 /**
  * One authored `.dyno` test spec inside a run, grouped under the target it
  * tests. Jobs nest here so per-dyno totals stay self-describing.
@@ -242,9 +260,15 @@ export const runUploadDynoV2Schema = z
   })
   .strict();
 
+export const runUploadDynoV3Schema = runUploadDynoV2Schema
+  .extend({
+    jobs: z.array(runUploadJobV3Schema).max(RUN_UPLOAD_LIMITS.jobsPerDyno),
+  })
+  .strict();
+
 export const RunUploadV2 = z
   .object({
-    schemaVersion: z.literal(RUN_UPLOAD_SCHEMA_VERSION),
+    schemaVersion: z.literal(RUN_UPLOAD_V2_SCHEMA_VERSION),
     createdAt: z.iso.datetime(),
     cliVersion: z.string().min(1).max(RUN_UPLOAD_LIMITS.cliVersionLength),
     gitHash: optionalNullableString(RUN_UPLOAD_LIMITS.gitHashLength),
@@ -255,6 +279,16 @@ export const RunUploadV2 = z
     dynos: z.array(runUploadDynoV2Schema).max(RUN_UPLOAD_LIMITS.dynos),
   })
   .strict();
+
+export const RunUploadV3 = RunUploadV2.extend({
+  schemaVersion: z.literal(RUN_UPLOAD_SCHEMA_VERSION),
+  dynos: z.array(runUploadDynoV3Schema).max(RUN_UPLOAD_LIMITS.dynos),
+}).strict();
+
+export const RunUpload = z.discriminatedUnion('schemaVersion', [
+  RunUploadV2,
+  RunUploadV3,
+]);
 
 export const RunSharingUpdate = z
   .object({
@@ -281,8 +315,14 @@ export type RunUploadAssertionV2 = z.infer<typeof runUploadAssertionV2Schema>;
 export type RunUploadJobV2 = z.infer<typeof runUploadJobV2Schema>;
 export type RunUploadDynoV2 = z.infer<typeof runUploadDynoV2Schema>;
 export type RunUploadV2 = z.infer<typeof RunUploadV2>;
+export type RunUploadJobV3 = z.infer<typeof runUploadJobV3Schema>;
+export type RunUploadDynoV3 = z.infer<typeof runUploadDynoV3Schema>;
+export type RunUploadV3 = z.infer<typeof RunUploadV3>;
+export type RunUpload = z.infer<typeof RunUpload>;
+export type RunUploadSchemaVersion = RunUpload['schemaVersion'];
 
 export type RunUploadCreateInputV2 = z.input<typeof RunUploadV2>;
+export type RunUploadCreateInputV3 = z.input<typeof RunUploadV3>;
 
 export type RunSharingUpdate = z.infer<typeof RunSharingUpdate>;
 
@@ -291,7 +331,7 @@ export type RunSummary = {
   url: string;
   createdAt: string;
   cliVersion: string;
-  schemaVersion: typeof RUN_UPLOAD_SCHEMA_VERSION;
+  schemaVersion: RunUploadSchemaVersion;
   gitHash: string | null;
   /** The path the CLI was pointed at when the run was created. */
   inputPath: string | null;
@@ -339,6 +379,7 @@ export type RunJobDetail = {
   harness: {
     id: string;
     model: string | null;
+    version: string | null;
   };
   iteration: number;
   status: RunUploadJobStatus;
