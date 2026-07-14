@@ -1,4 +1,4 @@
-import {RunUploadV2} from '@dynobox/run-schema';
+import {RunUploadV3} from '@dynobox/run-schema';
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 import {describe, expect, it} from 'vitest';
 
@@ -71,7 +71,7 @@ describe('buildRunUploadPayload', () => {
       gitHash: null,
     });
 
-    expect(RunUploadV2.safeParse(payload).success).toBe(true);
+    expect(RunUploadV3.safeParse(payload).success).toBe(true);
     expect(payload.totals.durationMs).toBe(2);
     expect(payload.dynos[0]?.target).toBe('commit');
     expect(payload.dynos[0]?.jobs[0]?.durationMs).toBe(2);
@@ -188,7 +188,7 @@ describe('buildRunUploadPayload', () => {
       ],
     } as unknown as LocalRunnerResult;
 
-    const parsed = RunUploadV2.parse(
+    const parsed = RunUploadV3.parse(
       buildRunUploadPayload({
         dynos: [
           {
@@ -306,7 +306,7 @@ describe('buildRunUploadPayload', () => {
       inputPath: '.agents/skills/commit',
       gitHash: null,
     });
-    const parsed = RunUploadV2.parse(payload);
+    const parsed = RunUploadV3.parse(payload);
     const assertion = parsed.dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.definition?.steps).toHaveLength(3);
@@ -417,7 +417,7 @@ describe('buildRunUploadPayload', () => {
       gitHash: null,
     });
     const assertion =
-      RunUploadV2.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV3.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.definition?.steps?.map((step) => step.type)).toEqual([
       'artifact.exists',
@@ -511,7 +511,7 @@ describe('buildRunUploadPayload', () => {
       gitHash: null,
     });
     const assertion =
-      RunUploadV2.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV3.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.display?.observed).toBe(
       '1. git status 2. git add README.md',
@@ -598,7 +598,7 @@ describe('buildRunUploadPayload', () => {
       gitHash: null,
     });
     const assertion =
-      RunUploadV2.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV3.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.definition).toMatchObject({
       stdout: {equals: ''},
@@ -659,7 +659,7 @@ describe('buildRunUploadPayload', () => {
       gitHash: null,
     });
 
-    expect(RunUploadV2.safeParse(payload).success).toBe(true);
+    expect(RunUploadV3.safeParse(payload).success).toBe(true);
     const diagnostics = payload.dynos[0]!.jobs[0]!.diagnostics;
     expect(diagnostics[0]).toBe(
       'setup command `pnpm install` exited with code 1',

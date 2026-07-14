@@ -13,10 +13,10 @@ import {
   type RunUploadAssertionDisplayV2,
   type RunUploadAssertionEvidenceV2,
   type RunUploadAssertionV2,
-  type RunUploadDynoV2,
-  type RunUploadJobV2,
-  type RunUploadV2 as RunUploadPayloadV2,
-  RunUploadV2,
+  type RunUploadDynoV3,
+  type RunUploadJobV3,
+  type RunUploadV3 as RunUploadPayloadV3,
+  RunUploadV3,
 } from '@dynobox/run-schema';
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 import type {TextMatcher} from '@dynobox/sdk';
@@ -94,7 +94,7 @@ export async function uploadRun(input: UploadRunInput): Promise<void> {
     inputPath: input.inputPath,
     gitHash: await collectGitHash(),
   });
-  const payloadResult = RunUploadV2.safeParse(payload);
+  const payloadResult = RunUploadV3.safeParse(payload);
   if (!payloadResult.success) {
     input.writeStderr(
       `warning: could not save run; generated payload failed validation (${payloadResult.error.issues[0]?.path.join('.') || 'payload'}).\n`,
@@ -114,8 +114,9 @@ export async function uploadRun(input: UploadRunInput): Promise<void> {
     });
 
     if (!response.ok) {
+      const message = await readErrorMessage(response);
       input.writeStderr(
-        `warning: could not save run; API returned HTTP ${response.status}.\n`,
+        `warning: could not save run; API returned HTTP ${response.status}${message === null ? '' : ` (${message})`}.\n`,
       );
       return;
     }
@@ -134,7 +135,7 @@ export function buildRunUploadPayload(input: {
   runFailed?: boolean;
   inputPath: string;
   gitHash: string | null;
-}): RunUploadPayloadV2 {
+}): RunUploadPayloadV3 {
   const allJobs = input.dynos.flatMap((dyno) => dyno.jobs);
   if (input.results.length !== allJobs.length) {
     throw new Error(
@@ -173,7 +174,7 @@ export function buildRunUploadPayload(input: {
 function buildRunUploadDyno(
   dyno: UploadRunDynoInput,
   results: readonly LocalRunnerResult[],
-): RunUploadDynoV2 {
+): RunUploadDynoV3 {
   const jobs = dyno.jobs.map((job, index) => {
     const result = results[index]!;
     return buildRunUploadJob(job, result);
@@ -216,7 +217,7 @@ export async function collectGitHash(): Promise<string | null> {
 function buildRunUploadJob(
   job: LocalRunnerJob,
   result: LocalRunnerResult,
-): RunUploadJobV2 {
+): RunUploadJobV3 {
   const assertionById = assertionByIdForJobs([job]);
   return {
     jobId: truncate(result.jobId, RUN_UPLOAD_LIMITS.scenarioIdLength),
@@ -761,6 +762,31 @@ function readResponseUrl(body: unknown): string | null {
   }
   const url = body.url;
   return typeof url === 'string' && url.trim().length > 0 ? url : null;
+}
+
+async function readErrorMessage(response: Response): Promise<string | null> {
+  const body = await response.json().catch(() => null);
+  if (
+    typeof body !== 'object' ||
+    body === null ||
+    !('error' in body) ||
+    typeof body.error !== 'object' ||
+    body.error === null
+  ) {
+    return null;
+  }
+  const error = body.error;
+  if (
+    typeof error !== 'object' ||
+    error === null ||
+    !('code' in error) ||
+    !('message' in error)
+  ) {
+    return null;
+  }
+  const {code, message} = error;
+  if (typeof code !== 'string' || typeof message !== 'string') return null;
+  return `${code}: ${message}`;
 }
 
 function truncate(value: string, maxLength: number): string {

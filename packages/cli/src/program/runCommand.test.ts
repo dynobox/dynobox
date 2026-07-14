@@ -242,7 +242,7 @@ describe('dynobox run — upload', () => {
       }),
     );
     expect(payload).toMatchObject({
-      schemaVersion: 2,
+      schemaVersion: 3,
       inputPath: fixtures.validConfigPath,
       status: 'passed',
       totals: {jobs: 1, passed: 1, failed: 0, warnings: 0},
@@ -255,7 +255,7 @@ describe('dynobox run — upload', () => {
           jobs: [
             {
               scenario: {name: 'uses shell'},
-              harness: {id: 'claude-code', model: null},
+              harness: {id: 'claude-code', model: null, version: null},
               iteration: 1,
               status: 'passed',
               passed: true,
@@ -511,6 +511,37 @@ export default defineDyno({
     expect(result.exitCode).toBe(runFailureExitCode);
     expect(result.stderr).toContain(
       'warning: could not save run; upload request failed.',
+    );
+  });
+
+  it('reports API upload errors without changing a passing run result', async () => {
+    stubFetch(async (url) => {
+      if (String(url).endsWith('/auth/identity')) {
+        return Response.json({identity: {email: 'user@example.com'}});
+      }
+
+      return Response.json(
+        {
+          error: {
+            code: 'unsupported_schema_version',
+            message: 'Unsupported run payload schema version.',
+          },
+        },
+        {status: 400},
+      );
+    });
+
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--save-run'],
+      {
+        env: {DYNOBOX_TOKEN: 'token'},
+        harnesses: [createPassingHarness()],
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toContain(
+      'warning: could not save run; API returned HTTP 400 (unsupported_schema_version: Unsupported run payload schema version.).',
     );
   });
 });
