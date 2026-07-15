@@ -8,9 +8,22 @@ import SiteLayout from '../layouts/SiteLayout.astro';
       <div class="hero-copy">
         <h1>Agents deserve <span class="accent">test coverage</span> too.</h1>
         <p>
-          Write scenarios in TypeScript or YAML, run them against Claude Code
-          and Codex. Assert on real behavior — not just the final answer.
+          <strong>Don't grade agents with agents.</strong> Dynobox runs
+          deterministic assertions on what your agent actually did. The same
+          checks, every run.
         </p>
+        <ol class="hero-steps">
+          <li>Write tests in TypeScript or YAML</li>
+          <li>Run them against Claude Code, Codex, and more</li>
+          <li>
+            Assert on real behavior:
+            <ul class="hero-points">
+              <li>tools called</li>
+              <li>commands ran, with arguments</li>
+              <li>files modified</li>
+            </ul>
+          </li>
+        </ol>
 
         <div class="install">
           <code><span class="prompt">$</span> npm install -g dynobox</code>
@@ -188,13 +201,71 @@ import SiteLayout from '../layouts/SiteLayout.astro';
     }
   }
 
-  @media (min-width: 901px) {
+  .hero h1 .accent {
+    white-space: nowrap;
+  }
+
+  .hero-copy p strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .hero-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 18px 0 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: hero-step;
+    color: var(--text-soft);
+    font-size: clamp(15px, 1.4vw, 17px);
+    line-height: 1.6;
+  }
+
+  .hero-steps > li {
+    position: relative;
+    padding-left: 26px;
+    counter-increment: hero-step;
+  }
+
+  .hero-steps > li::before {
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+    content: counter(hero-step) '.';
+    font-family: var(--font-mono);
+  }
+
+  .hero-points {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+  }
+
+  .hero-points li {
+    display: flex;
+    gap: 10px;
+  }
+
+  .hero-points li::before {
+    color: var(--term-green);
+    content: '✓';
+    font-family: var(--font-mono);
+  }
+
+  @media (min-width: 1025px) {
     .hero {
-      grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+      grid-template-columns: minmax(340px, 500px) minmax(0, 1fr);
     }
 
     .hero-copy {
-      max-width: 420px;
+      max-width: 500px;
     }
   }
 </style>
@@ -235,6 +306,11 @@ import SiteLayout from '../layouts/SiteLayout.astro';
         name: 'claude-code/sonnet/default',
         assertions: '✓ 13 assertions',
         duration: '1m05s',
+        details: [
+          'artifact.exists out.dyno.ts',
+          'verify.succeeds dynobox validate out.dyno.ts',
+          'tool.notCalled web_fetch',
+        ],
       },
       {name: 'codex/gpt-5.4-mini/default', assertions: '✓ 13 assertions', duration: '1m58s'},
       {
@@ -244,6 +320,11 @@ import SiteLayout from '../layouts/SiteLayout.astro';
         name: 'claude-code/sonnet/default',
         assertions: '✓ 11 assertions',
         duration: '2m05s',
+        details: [
+          'command.called dynobox run --json',
+          'finalMessage.contains root cause',
+          'artifact.unchanged pnpm-lock.yaml',
+        ],
       },
       {name: 'codex/gpt-5.4-mini/default', assertions: '✓ 11 assertions', duration: '1m44s'},
       {
@@ -520,11 +601,28 @@ import SiteLayout from '../layouts/SiteLayout.astro';
 
         const idx = lines.length;
         lines.push('');
+        let spin = 0;
+        const spinFrame = () => {
+          lines[idx] = `      ${C.dim}${jobName(job)}${C.end} ${C.red}${SPIN[spin % SPIN.length]}${C.end}`;
+          spin += 1;
+        };
         for (let i = 0; i < 5; i += 1) {
           if (currentToken !== token) return;
-          lines[idx] = `      ${C.dim}${jobName(job)}${C.end} ${C.red}${SPIN[i % SPIN.length]}${C.end}`;
+          spinFrame();
           commit();
           await sleep(88);
+        }
+
+        if (job.details) {
+          for (const detail of job.details) {
+            if (currentToken !== token) return;
+            spinFrame();
+            lines.push(`        ${C.green}✓${C.end} ${C.dim}${detail}${C.end}`);
+            commit();
+            await sleep(190);
+          }
+          await sleep(340);
+          lines.length = idx + 1;
         }
 
         lines[idx] = `      ${C.dim}${jobName(job)}${C.end} ${jobResult(job)}`;
