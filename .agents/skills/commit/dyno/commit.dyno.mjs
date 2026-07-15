@@ -8,14 +8,14 @@ export default defineDyno({
       name: 'no push',
       harnesses: [
         {
-          id: "claude-code",
-          model: "sonnet",
-          permissionMode: "dangerous",
+          id: 'claude-code',
+          model: 'sonnet',
+          permissionMode: 'dangerous',
         },
         {
-          id: "codex",
-          model: "gpt-5.4-mini",
-          permissionMode: "dangerous",
+          id: 'codex',
+          model: 'gpt-5.4-mini',
+          permissionMode: 'dangerous',
         },
       ],
       prompt:
