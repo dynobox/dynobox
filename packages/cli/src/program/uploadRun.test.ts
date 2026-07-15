@@ -275,7 +275,13 @@ describe('buildRunUploadPayload', () => {
             'Expected ordered step #3 (tool.called(shell, includes: git commit)) to match an observed tool event, but none was observed after the previous step.',
           evidence: [
             {kind: 'shell', rawName: 'Bash', input: {}, command: 'git status'},
-            {kind: 'shell', rawName: 'Bash', input: {}, command: 'git diff'},
+            {
+              kind: 'shell',
+              rawName: 'Bash',
+              input: {},
+              command:
+                'git diff -- /private/tmp/dynobox-workspace/project/README.md',
+            },
           ],
         },
       ],
@@ -320,6 +326,10 @@ describe('buildRunUploadPayload', () => {
       matchedCount: 2,
       observedCount: 2,
       observedKinds: ['shell'],
+      matches: [
+        'Bash: git status',
+        'Bash: git diff -- /private/tmp/dynobox-workspace/project/README.md',
+      ],
     });
   });
 

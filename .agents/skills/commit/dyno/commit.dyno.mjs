@@ -6,6 +6,18 @@ export default defineDyno({
   scenarios: [
     {
       name: 'no push',
+      harnesses: [
+        {
+          id: "claude-code",
+          model: "sonnet",
+          permissionMode: "dangerous",
+        },
+        {
+          id: "codex",
+          model: "gpt-5.4-mini",
+          permissionMode: "dangerous",
+        },
+      ],
       prompt:
         'Use the commit skill to commit the README.md change in this scratch repository. Do not push. Do not amend any commit.',
       setup: [
