@@ -18,7 +18,11 @@ import {
   type RunUploadV3 as RunUploadPayloadV3,
   RunUploadV3,
 } from '@dynobox/run-schema';
-import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
+import type {
+  LocalRunnerJob,
+  LocalRunnerResult,
+  ToolEvent,
+} from '@dynobox/runner-local';
 import type {TextMatcher} from '@dynobox/sdk';
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
@@ -28,6 +32,7 @@ import {
   describeExpectation,
   describeToolEvent,
   isObservedCommand,
+  isShellToolEvent,
 } from '../render/describe.js';
 import {
   anyOfBranchResults,
@@ -530,7 +535,7 @@ function assertionEvidence(
 function evidenceMatches(evidence: unknown): string[] {
   const values = Array.isArray(evidence) ? evidence : [evidence];
   return values.flatMap((value) => {
-    if (isToolEvent(value)) return [truncateDetail(describeToolEvent(value))];
+    if (isToolEvent(value)) return [uploadedToolEvent(value)];
     if (isHttpEvent(value)) return [truncateDetail(formatHttpEvent(value))];
     if (isObservedCommand(value)) {
       return [truncateDetail([value.executable, ...value.argv].join(' '))];
@@ -540,6 +545,12 @@ function evidenceMatches(evidence: unknown): string[] {
     }
     return [];
   });
+}
+
+function uploadedToolEvent(event: ToolEvent): string {
+  if (!isShellToolEvent(event)) return truncateDetail(describeToolEvent(event));
+  const command = event.command.replace(/\s+/g, ' ').trim();
+  return truncateDetail(`${event.rawName}: ${command}`);
 }
 
 function observedKinds(result: LocalRunnerResult): string[] {
