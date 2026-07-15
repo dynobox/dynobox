@@ -14,6 +14,12 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ---
 
+## dynobox@0.9.3 — 2026-07-15
+
+### `dynobox` (CLI)
+
+- Fixed uploaded shell evidence to preserve the original tool name and command.
+
 ## dynobox@0.9.2 — 2026-07-14
 
 ### `dynobox` (CLI)
