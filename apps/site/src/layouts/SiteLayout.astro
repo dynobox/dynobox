@@ -7,8 +7,8 @@ type Props = {
 };
 
 const {
-  title = 'dynobox.xyz',
-  description = 'Test coverage for coding agents. Write tests in code, assert on real behavior.',
+  title = 'Dynobox | Deterministic agent verification',
+  description = 'Record what coding agents do and verify the evidence with deterministic assertions.',
 } = Astro.props;
 
 const canonicalUrl = new URL('/', Astro.site).toString();
@@ -44,15 +44,19 @@ const previewImageUrl = new URL('/link-preview.png', Astro.site).toString();
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="/" aria-label="Dynobox home">
-        <span class="brand-mark">dynobox</span>
-      </a>
-      <nav class="topnav" aria-label="Primary">
-        <a href="https://docs.dynobox.xyz">Docs</a>
-        <a href="https://github.com/dynobox/dynobox" target="_blank">GitHub</a>
-        <a href="https://www.skills.sh/dynobox/skills" target="_blank">Skills</a>
-        <a href="https://www.npmjs.com/package/dynobox" target="_blank">npm</a>
-      </nav>
+      <div class="topbar-inner">
+        <a class="brand" href="/" aria-label="Dynobox home">
+          <span class="brand-mark">dynobox</span>
+        </a>
+        <p class="topbar-context">Deterministic agent verification</p>
+        <nav class="topnav" aria-label="Primary">
+          <a href="https://docs.dynobox.xyz">Docs</a>
+          <a class="topnav-secondary" href="https://github.com/dynobox/dynobox" target="_blank" rel="noreferrer">GitHub</a>
+          <a class="topnav-secondary" href="https://www.skills.sh/dynobox/skills" target="_blank" rel="noreferrer">Skills</a>
+          <a class="topnav-secondary" href="https://www.npmjs.com/package/dynobox" target="_blank" rel="noreferrer">npm</a>
+          <a href="https://dash.dynobox.xyz">Dashboard <span aria-hidden="true">↗</span></a>
+        </nav>
+      </div>
     </header>
     <slot />
   </body>
