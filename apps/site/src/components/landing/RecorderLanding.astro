@@ -6,10 +6,14 @@ import RunComparisonMock from './RunComparisonMock.astro';
     <section class="recorder-hero recorder-wrap">
       <div class="recorder-copy">
         <p class="recorder-index">01 / VERIFY THE WORK</p>
-        <h1>Your agent said <em>done.</em><br />Verify the work.</h1>
+        <h1>Your agent said <em>done.</em><br />Now verify the work.</h1>
         <p>
-          Dynobox analyzes what coding agents actually do and evaluates that
-          evidence with deterministic assertions. Not just one model judging another model.
+          Use Dynobox to test that your SKILL.md and agent workflows follow the
+          defined steps and produce the expected results across models and runs.
+        </p>
+        <p>
+          Dynobox records what your agent does, then checks that work against
+          deterministic assertions rather than asking one model to judge another.
         </p>
         <div class="recorder-actions">
           <a href="https://docs.dynobox.xyz/getting-started">Start testing <span>→</span></a>
@@ -196,7 +200,7 @@ import RunComparisonMock from './RunComparisonMock.astro';
   }
 
   .recorder-copy h1 {
-    font-size: clamp(58px, 7vw, 104px);
+    font-size: clamp(48px, 5.6vw, 84px);
     line-height: 0.9;
   }
 
@@ -213,6 +217,10 @@ import RunComparisonMock from './RunComparisonMock.astro';
     font-family: var(--font-sans);
     font-size: clamp(16px, 1.5vw, 20px);
     line-height: 1.65;
+  }
+
+  .recorder-copy > p:not(.recorder-index) + p {
+    margin-top: 16px;
   }
 
   .recorder-actions {
@@ -748,7 +756,7 @@ import RunComparisonMock from './RunComparisonMock.astro';
     }
 
     .recorder-copy h1 {
-      font-size: clamp(54px, 15vw, 76px);
+      font-size: clamp(46px, 12.5vw, 64px);
     }
 
     .recorder-terminal-output {
