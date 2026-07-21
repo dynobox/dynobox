@@ -14,7 +14,23 @@ const here = dyno.here(import.meta.url);
 export default defineDyno({
   name: 'release-skill-smoke-test',
   target: 'release-skill',
-  harnesses: ['claude-code', {id: 'opencode', permissionMode: 'dangerous'}],
+  harnesses: [
+    {
+      id: 'claude-code',
+      model: 'sonnet',
+      permissionMode: 'dangerous',
+    },
+    {
+      id: 'codex',
+      model: 'gpt-5.4-mini',
+      permissionMode: 'dangerous',
+    },
+    {
+      id: 'opencode',
+      model: 'openai/gpt-5.4-mini',
+      permissionMode: 'dangerous',
+    },
+  ],
   scenarios: [
     {
       name: 'release skill dry run workflow',

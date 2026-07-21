@@ -19,6 +19,7 @@ export default defineDyno({
         },
         {
           id: 'opencode',
+          model: 'openai/gpt-5.4-mini',
           permissionMode: 'dangerous',
         },
       ],
