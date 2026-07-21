@@ -83,7 +83,7 @@ const PERMISSION_DENIED_PATTERNS = [
   /\bapproval denied\b/i,
   /\brejected permission\b/i,
   /\brequires approval\b/i,
-  /\brule\b.*\b(?:prevents?|prohibits?|blocks?)\b/i,
+  /\buser has specified a rule\b.*\b(?:prevents?|prohibits?|blocks?)\b/i,
   /\bdenied by policy\b/i,
   /\bblocked by sandbox\b/i,
   /\bsandbox denied\b/i,

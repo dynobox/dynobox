@@ -882,7 +882,7 @@ describe('runJob', () => {
       input: {command: 'pnpm test'},
       command: 'pnpm test',
       status: 'failure',
-      message: 'Tests failed',
+      message: 'A lint rule blocks this build.',
     };
 
     const result = await runJob(createJob(), {

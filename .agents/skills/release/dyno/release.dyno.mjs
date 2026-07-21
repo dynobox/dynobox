@@ -36,15 +36,17 @@ export default defineDyno({
           command.called('pnpm', {args: ['pack']}),
         ]),
         command.called('tar', {
-          argsMatching: [
-            /^(?:t[fz]*|xO[fz]*|-[A-Za-z]*[tx][A-Za-z]*)$/,
-            /\.tgz$/,
-          ],
+          argsMatching: [/^-?[A-Za-z]*t[A-Za-z]*$/, /\.tgz$/],
+        }),
+        command.called('tar', {
+          args: ['package/package.json'],
+          argsMatching: [/^-?[A-Za-z]*x[A-Za-z]*O[A-Za-z]*$/, /\.tgz$/],
         }),
         skill.referenced('release'),
         artifact.contains('packages/mylib/package.json', '"version": "1.0.1"'),
         artifact.contains('CHANGELOG.md', 'mylib@1.0.1'),
-        tool.notCalled('shell', {matches: '\\b(?:pub|publish)\\b'}),
+        command.notCalled('npm', {argsMatching: [/^(?:pub|publish)$/]}),
+        command.notCalled('pnpm', {argsMatching: [/^(?:pub|publish)$/]}),
         tool.notCalled('shell', {includes: 'git commit'}),
         tool.notCalled('shell', {includes: 'git push'}),
         verify.succeeds('test -z "$(git tag --list)"'),

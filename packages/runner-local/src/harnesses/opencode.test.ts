@@ -1,4 +1,10 @@
-import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -72,6 +78,60 @@ fi
       Promise.all([harness.version(), harness.version()]),
     ).resolves.toEqual(['1.18.3', '1.18.3']);
     expect(readFileSync(probeLog, 'utf8')).toBe('probe\n');
+  });
+
+  it('includes MCP discovery in the reported duration', async () => {
+    const scratchRoot = createScratchRoot();
+    const executable = join(scratchRoot, 'fake-opencode');
+    writeFileSync(
+      executable,
+      `#!/bin/sh
+if [ "$1" = "debug" ]; then
+  sleep 0.1
+  printf '%s\\n' '{}'
+  exit 0
+fi
+cat >/dev/null
+`,
+      {mode: 0o755},
+    );
+    const harness = new OpenCodeHarness({executable});
+
+    const output = await harness.run({
+      prompt: 'Finish immediately.',
+      workDir: scratchRoot,
+      env: {},
+    });
+
+    expect(output.durationMs).toBeGreaterThanOrEqual(80);
+  });
+
+  it('does not launch OpenCode when MCP discovery exhausts the timeout', async () => {
+    const scratchRoot = createScratchRoot();
+    const executable = join(scratchRoot, 'fake-opencode');
+    const runLog = join(scratchRoot, 'run.log');
+    writeFileSync(
+      executable,
+      `#!/bin/sh
+if [ "$1" = "debug" ]; then
+  sleep 1
+  exit 0
+fi
+printf 'run\\n' > '${runLog}'
+`,
+      {mode: 0o755},
+    );
+    const harness = new OpenCodeHarness({executable});
+
+    await expect(
+      harness.run({
+        prompt: 'Do not run.',
+        workDir: scratchRoot,
+        env: {},
+        timeoutMs: 50,
+      }),
+    ).rejects.toThrow('OpenCode invocation timed out after 50 milliseconds');
+    expect(existsSync(runLog)).toBe(false);
   });
 
   it('builds non-interactive JSONL arguments', () => {

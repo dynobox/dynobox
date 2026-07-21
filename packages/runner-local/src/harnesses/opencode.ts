@@ -62,12 +62,24 @@ export class OpenCodeHarness implements Harness {
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
+    const startedAt = Date.now();
     const workDir = realpathSync(input.workDir);
     const mcpPrefixes = await resolveOpenCodeMcpPrefixes(
       this.executable,
       workDir,
       input.env,
+      input.timeoutMs,
     );
+    const preflightMs = Date.now() - startedAt;
+    if (input.timeoutMs !== undefined && preflightMs >= input.timeoutMs) {
+      throw new Error(
+        `OpenCode invocation timed out after ${input.timeoutMs} milliseconds`,
+      );
+    }
+    const runInput =
+      input.timeoutMs === undefined
+        ? input
+        : {...input, timeoutMs: input.timeoutMs - preflightMs};
     const output = await runStreamingHarness({
       executable: this.executable,
       args: buildOpenCodeArgs(
@@ -76,7 +88,7 @@ export class OpenCodeHarness implements Harness {
         input.model,
         input.permissionMode,
       ),
-      input,
+      input: runInput,
       cwd: workDir,
       processInput: input.prompt,
       parseLine: (line, lineNumber) =>
@@ -85,6 +97,7 @@ export class OpenCodeHarness implements Harness {
     });
     return {
       ...output,
+      durationMs: Date.now() - startedAt,
       metadata: {[MCP_PREFIXES_METADATA_KEY]: mcpPrefixes},
     };
   }
@@ -309,6 +322,7 @@ async function resolveOpenCodeMcpPrefixes(
   executable: string,
   workDir: string,
   env: Record<string, string>,
+  timeoutMs?: number,
 ): Promise<string[]> {
   try {
     const result = await execa(executable, ['debug', 'config'], {
@@ -316,7 +330,7 @@ async function resolveOpenCodeMcpPrefixes(
       env: {...process.env, ...env},
       reject: false,
       stdin: 'ignore',
-      timeout: 10_000,
+      timeout: Math.min(timeoutMs ?? 10_000, 10_000),
     });
     if (result.exitCode !== 0) return [];
     const config: unknown = JSON.parse(result.stdout);
