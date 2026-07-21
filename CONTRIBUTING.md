@@ -7,7 +7,8 @@ Dynobox is a pnpm monorepo. Published packages live under `packages/`.
 - Node.js compatible with the package engines.
 - pnpm 10.33.0, as declared by the root `packageManager`.
 - At least one supported local harness installed and authenticated when running
-  real dynos: Claude Code via `claude`, Codex via `codex`, or both.
+  real dynos: Claude Code via `claude`, Codex via `codex`, or OpenCode via
+  `opencode`.
 
 ## Common Commands
 

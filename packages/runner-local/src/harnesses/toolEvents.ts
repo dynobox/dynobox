@@ -1,7 +1,12 @@
 import type {ToolKind} from './types.js';
 
 export function normalizeToolKind(rawName: string): ToolKind {
-  if (rawName.startsWith('mcp__')) {
+  if (
+    rawName.startsWith('mcp__') ||
+    rawName === 'list_mcp_resources' ||
+    rawName === 'list_mcp_resource_templates' ||
+    rawName === 'read_mcp_resource'
+  ) {
     return 'mcp';
   }
 
@@ -30,12 +35,15 @@ export function normalizeToolKind(rawName: string): ToolKind {
     case 'Grep':
     case 'glob':
     case 'grep':
+    case 'list':
     case 'search_files':
       return 'search_files';
     case 'WebFetch':
+    case 'webfetch':
     case 'web_fetch':
       return 'web_fetch';
     case 'WebSearch':
+    case 'websearch':
     case 'web_search':
       return 'web_search';
     case 'Task':

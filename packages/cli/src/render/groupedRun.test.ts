@@ -3,6 +3,7 @@ import type {
   LocalRunnerResult,
   LocalRunnerStatus,
 } from '@dynobox/runner-local';
+import type {HarnessId} from '@dynobox/sdk';
 import {describe, expect, it} from 'vitest';
 
 import {createRenderContext} from '../terminal/index.js';
@@ -15,7 +16,7 @@ const ctx = createRenderContext();
 type JobSpec = {
   scenarioId?: string;
   scenarioName?: string;
-  harness?: 'claude-code' | 'codex';
+  harness?: HarnessId;
   model?: string;
   iteration?: number;
   assertionCount?: number;

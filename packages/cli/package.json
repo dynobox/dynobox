@@ -8,6 +8,7 @@
     "llm",
     "claude-code",
     "codex",
+    "opencode",
     "evals"
   ],
   "homepage": "https://dynobox.xyz",

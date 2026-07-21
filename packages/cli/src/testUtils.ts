@@ -19,6 +19,7 @@ import {
   type HarnessRunOutput,
   type ShellToolEvent,
 } from '@dynobox/runner-local';
+import type {HarnessId} from '@dynobox/sdk';
 
 const ANSI_ESCAPE_PATTERN = /\x5B[0-9;]*m/g;
 
@@ -274,7 +275,7 @@ export class StreamingHarness implements Harness {
 
 /** Always-passing harness that doesn't stream tool events. */
 export class PassingHarness implements Harness {
-  constructor(readonly id: 'claude-code' | 'codex') {}
+  constructor(readonly id: HarnessId) {}
 
   async run(_input: HarnessInput): Promise<HarnessRunOutput> {
     return {exitCode: 0, stdout: 'fake output', stderr: '', durationMs: 100};

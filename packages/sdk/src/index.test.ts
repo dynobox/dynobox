@@ -519,6 +519,20 @@ export default defineDyno({
     expect(compile(config).scenarios[0]!.harnesses).toEqual([{id: 'codex'}]);
   });
 
+  it('accepts opencode as a scenario harnesses entry', () => {
+    const config = defineDyno({
+      scenarios: [
+        {
+          name: 'opencode path',
+          prompt: 'Run pnpm test.',
+          harnesses: ['opencode'],
+        },
+      ],
+    });
+
+    expect(compile(config).scenarios[0]!.harnesses).toEqual([{id: 'opencode'}]);
+  });
+
   it('accepts harness model config entries', () => {
     const config = defineDyno({
       harnesses: [{id: 'claude-code', model: 'sonnet'}],

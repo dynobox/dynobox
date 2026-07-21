@@ -16,9 +16,10 @@ export function harnessExitDiagnostic(
   harnessOutput: HarnessRunOutput,
 ): string {
   const stderr = harnessOutput.stderr.trim();
-  return stderr.length === 0
+  const detail = stderr || harnessResult.errorMessage?.trim();
+  return detail === undefined || detail.length === 0
     ? `Harness exited with code ${harnessResult.exitCode}.`
-    : `Harness exited with code ${harnessResult.exitCode}: ${stderr}`;
+    : `Harness exited with code ${harnessResult.exitCode}: ${detail}`;
 }
 
 export function errorMessage(error: unknown): string {

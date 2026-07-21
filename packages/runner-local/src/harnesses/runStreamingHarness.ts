@@ -12,6 +12,7 @@ export type RunStreamingHarnessOptions = {
   input: HarnessInput;
   cwd?: string;
   stdin?: 'ignore';
+  processInput?: string;
   parseLine: (line: string, lineNumber: number) => ParsedToolEventLine;
   shouldEmit?: (event: ToolEvent, line: string) => boolean;
 };
@@ -25,6 +26,9 @@ export async function runStreamingHarness(
     env: {...process.env, ...input.env},
     reject: false,
     ...(options.stdin === undefined ? {} : {stdin: options.stdin}),
+    ...(options.processInput === undefined
+      ? {}
+      : {input: options.processInput}),
     ...(input.timeoutMs === undefined ? {} : {timeout: input.timeoutMs}),
   };
 

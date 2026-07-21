@@ -1,10 +1,20 @@
-import {artifact, defineDyno, dyno, sequence, skill, tool} from '@dynobox/sdk';
+import {
+  artifact,
+  command,
+  defineDyno,
+  dyno,
+  sequence,
+  skill,
+  tool,
+  verify,
+} from '@dynobox/sdk';
 
 const here = dyno.here(import.meta.url);
 
 export default defineDyno({
   name: 'release-skill-smoke-test',
   target: 'release-skill',
+  harnesses: ['claude-code', {id: 'opencode', permissionMode: 'dangerous'}],
   scenarios: [
     {
       name: 'release skill dry run workflow',
@@ -21,17 +31,23 @@ export default defineDyno({
       ],
       assertions: [
         sequence.inOrder([
-          tool.called('shell', {includes: 'pnpm test'}),
+          command.called('pnpm', {args: ['test']}),
           tool.called('shell', {includes: 'npm version'}),
-          tool.called('shell', {includes: 'pack'}),
+          command.called('pnpm', {args: ['pack']}),
         ]),
+        command.called('tar', {
+          argsMatching: [
+            /^(?:t[fz]*|xO[fz]*|-[A-Za-z]*[tx][A-Za-z]*)$/,
+            /\.tgz$/,
+          ],
+        }),
         skill.referenced('release'),
         artifact.contains('packages/mylib/package.json', '"version": "1.0.1"'),
         artifact.contains('CHANGELOG.md', 'mylib@1.0.1'),
-        tool.notCalled('shell', {includes: 'npm publish'}),
+        tool.notCalled('shell', {matches: '\\b(?:pub|publish)\\b'}),
         tool.notCalled('shell', {includes: 'git commit'}),
-        tool.notCalled('shell', {includes: 'git tag'}),
         tool.notCalled('shell', {includes: 'git push'}),
+        verify.succeeds('test -z "$(git tag --list)"'),
       ],
     },
   ],

@@ -2,9 +2,9 @@
 
 Cross-harness testing for multi-step agent and skill workflows.
 
-Dynobox runs agent scenarios through local harnesses such as Claude Code and
-Codex, captures observable behavior, and evaluates assertions against what
-actually happened.
+Dynobox runs agent scenarios through local harnesses such as Claude Code, Codex,
+and OpenCode, captures observable behavior, and evaluates assertions against
+what actually happened.
 
 - Site: [dynobox.xyz](https://dynobox.xyz)
 - Docs: [docs.dynobox.xyz](https://docs.dynobox.xyz)
@@ -46,13 +46,14 @@ Pick a harness at runtime when needed:
 ```bash
 dynobox run --harness claude-code
 dynobox run --harness codex
-dynobox run --harness claude-code,codex
+dynobox run --harness opencode
+dynobox run --harness claude-code,codex,opencode
 ```
 
 Repeat each selected scenario/harness pair when you want a pass-rate signal:
 
 ```bash
-dynobox run --harness claude-code,codex --iterations 5
+dynobox run --harness claude-code,codex,opencode --iterations 5
 ```
 
 ## What You Can Assert

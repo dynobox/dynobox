@@ -195,15 +195,17 @@ validated config and a final summary record.
                            (requires a token; see Saving Runs below).
 ```
 
-Harness IDs are `claude-code` and `codex`.
+Harness IDs are `claude-code`, `codex`, and `opencode`.
 
 Examples:
 
 ```bash
 dynobox run --harness claude-code
 dynobox run --harness codex
-dynobox run --harness claude-code,codex
+dynobox run --harness opencode
+dynobox run --harness claude-code,codex,opencode
 dynobox run --harness codex --model gpt-5.5
+dynobox run --harness opencode --model openai/gpt-5.5
 dynobox run --harness claude-code,codex --model sonnet,gpt-5.5
 dynobox run --harness codex --permission-mode dangerous
 dynobox run --scenario "release*"
@@ -342,23 +344,27 @@ Dynobox exits with `1` for:
 
 ## Harness Requirements
 
-The CLI supports both real harnesses:
+The CLI supports these real harnesses:
 
 - `claude-code` invokes Claude Code with stream JSON output and hook events.
 - `codex` invokes Codex with JSON output, no color, and the git-repo check
   skipped.
+- `opencode` invokes OpenCode with JSON output and an explicit scenario work
+  directory.
 
 Make sure the selected harness executable is installed, authenticated, and
 available on `PATH`.
 
 Dynobox uses each harness's normal permission behavior by default. Use
 `--permission-mode dangerous` only for trusted local evals that intentionally
-need full access or non-interactive approval bypasses.
+need harness-specific access elevation or non-interactive approval bypasses.
 
 Dangerous mode maps to harness-specific flags:
 
 - `claude-code`: adds `--permission-mode bypassPermissions`.
 - `codex`: adds `--sandbox danger-full-access -c approval_policy="never"`.
+- `opencode`: adds `--auto`, which approves permission prompts but does not
+  override explicit deny rules.
 
 Permission warnings are advisory. They explain when a harness blocked a tool
 action, but they do not change job status, assertion results, or exit codes.

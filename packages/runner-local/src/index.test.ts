@@ -832,6 +832,48 @@ describe('runJob', () => {
     ]);
   });
 
+  it('recognizes OpenCode permission rejection warnings', async () => {
+    const scratchRoot = createScratchRoot();
+    const rejectedEdit: ToolEvent = {
+      kind: 'edit_file',
+      rawName: 'apply_patch',
+      input: {patchText: '*** Begin Patch'},
+      status: 'failure',
+      message: 'The user rejected permission to use this specific tool call.',
+    };
+
+    const result = await runJob(createJob(), {
+      scratchRoot,
+      harnesses: [new FakeHarness(undefined, {toolEvents: [rejectedEdit]})],
+    });
+
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toMatchObject({
+      kind: 'permission_denied',
+      tool: {kind: 'edit_file', rawName: 'apply_patch'},
+    });
+  });
+
+  it('recognizes explicit OpenCode deny-rule warnings', async () => {
+    const scratchRoot = createScratchRoot();
+    const deniedEdit: ToolEvent = {
+      kind: 'edit_file',
+      rawName: 'apply_patch',
+      input: {patchText: '*** Begin Patch'},
+      status: 'failure',
+      message:
+        'The user has specified a rule which prevents you from using this specific tool call.',
+    };
+
+    const result = await runJob(createJob(), {
+      scratchRoot,
+      harnesses: [new FakeHarness(undefined, {toolEvents: [deniedEdit]})],
+    });
+
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]?.kind).toBe('permission_denied');
+  });
+
   it('does not warn for ordinary failed tool events', async () => {
     const scratchRoot = createScratchRoot();
     const failedTestCommand: ShellToolEvent = {

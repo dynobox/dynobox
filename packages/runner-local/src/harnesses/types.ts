@@ -30,6 +30,8 @@ export type HarnessRunOutput = {
   stdout: string;
   stderr: string;
   durationMs: number;
+  /** Harness-specific invocation metadata used during result extraction. */
+  metadata?: Record<string, unknown>;
 };
 
 /** Structured result after extracting transcript and final message. */
@@ -42,6 +44,8 @@ export type HarnessResult = {
   finalMessage: string | undefined;
   /** Canonicalized harness tool events observed during the run. */
   toolEvents: SdkToolEvent[];
+  /** Structured harness error text when the process output exposes one. */
+  errorMessage?: string;
 };
 
 /**
