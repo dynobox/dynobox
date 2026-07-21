@@ -10,6 +10,7 @@ import {
   type ShellToolEvent,
   type ToolEvent,
 } from '@dynobox/runner-local';
+import type {HarnessId} from '@dynobox/sdk';
 import {afterAll, afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 
 import {
@@ -65,7 +66,7 @@ function expectStringArray(value: unknown): string[] {
 class CapturingHarness implements Harness {
   readonly inputs: HarnessInput[] = [];
 
-  constructor(readonly id: 'claude-code' | 'codex') {}
+  constructor(readonly id: HarnessId) {}
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
     this.inputs.push(input);

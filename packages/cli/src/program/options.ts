@@ -7,6 +7,7 @@
 import {
   ClaudeCodeHarness,
   CodexHarness,
+  OpenCodeHarness,
   type RunJobOptions,
 } from '@dynobox/runner-local';
 import {
@@ -148,7 +149,7 @@ export function validateScenarioFilters(
 
 /**
  * Translate the options passed to `executeCli` into the shape expected by
- * `runJob`. Defaults the harness list to the two real harnesses; tests
+ * `runJob`. Defaults the harness list to the real harnesses; tests
  * override with `FakeHarness`.
  */
 export function buildRunJobOptions(options: ExecuteCliOptions): RunJobOptions {
@@ -156,6 +157,7 @@ export function buildRunJobOptions(options: ExecuteCliOptions): RunJobOptions {
     harnesses: options.harnesses ?? [
       new ClaudeCodeHarness(),
       new CodexHarness(),
+      new OpenCodeHarness(),
     ],
   };
 

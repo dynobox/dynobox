@@ -4,6 +4,7 @@ import {createFixtureSet, PassingHarness} from '../testUtils.js';
 import {executeCli} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
 import {
+  buildRunJobOptions,
   validateIterations,
   validateModelOverrides,
   validateScenarioFilters,
@@ -15,15 +16,21 @@ describe('--harness override validation', () => {
   beforeAll(fixtures.setup);
   afterAll(fixtures.teardown);
 
+  it('registers all supported real harnesses by default', () => {
+    expect(
+      buildRunJobOptions({}).harnesses?.map((harness) => harness.id),
+    ).toEqual(['claude-code', 'codex', 'opencode']);
+  });
+
   it('accepts a valid harness id and runs in quiet mode', async () => {
     const result = await executeCli(
-      ['run', fixtures.validConfigPath, '--harness', 'codex', '--quiet'],
-      {harnesses: [new PassingHarness('codex')]},
+      ['run', fixtures.validConfigPath, '--harness', 'opencode', '--quiet'],
+      {harnesses: [new PassingHarness('opencode')]},
     );
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(
-      'dynobox  1 dyno · 1 scenario · harness: codex',
+      'dynobox  1 dyno · 1 scenario · harness: opencode',
     );
   });
 

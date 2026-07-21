@@ -41,7 +41,8 @@ function toolEventInvokesSkill(event: ToolEvent, skillName: string): boolean {
   if (event.rawName.toLowerCase() !== 'skill') return false;
   if (typeof event.input !== 'object' || event.input === null) return false;
 
-  const invokedSkill = (event.input as {skill?: unknown}).skill;
+  const input = event.input as {name?: unknown; skill?: unknown};
+  const invokedSkill = input.skill ?? input.name;
   return (
     typeof invokedSkill === 'string' &&
     invokedSkill.toLowerCase() === skillName.toLowerCase()

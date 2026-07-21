@@ -9,7 +9,11 @@ Cross-harness testing for multi-step agent and skill workflows.
 
 **Status:** Early access. Dynobox is ready for local skill and agent workflow testing while the CLI, SDK, and report formats continue to evolve before 1.0.
 
-Dynobox runs agent scenarios through local harnesses such as Claude Code and Codex, captures observable behavior, and evaluates assertions against what actually happened. It is designed for testing skills and agent flows where you care about tool usage, file effects, transcripts, final answers, and behavior across harnesses.
+Dynobox runs agent scenarios through local harnesses such as Claude Code, Codex,
+and OpenCode, captures observable behavior, and evaluates assertions against what
+actually happened. It is designed for testing skills and agent flows where you
+care about tool usage, file effects, transcripts, final answers, and behavior
+across harnesses.
 
 ## Why Use It
 
@@ -19,7 +23,7 @@ Use Dynobox when you want to answer questions like:
 - Does it avoid dangerous or unrelated commands?
 - Does it create or preserve the right files?
 - Does its final answer include required information?
-- Does the same task work under Claude Code and Codex?
+- Does the same task work under Claude Code, Codex, and OpenCode?
 
 ## Quick Start
 
@@ -48,13 +52,14 @@ default list):
 ```bash
 dynobox run --harness claude-code
 dynobox run --harness codex
-dynobox run --harness claude-code,codex
+dynobox run --harness opencode
+dynobox run --harness claude-code,codex,opencode
 ```
 
 Run each selected scenario/harness pair more than once to measure pass rates:
 
 ```bash
-dynobox run --harness claude-code,codex --iterations 5
+dynobox run --harness claude-code,codex,opencode --iterations 5
 ```
 
 The selected harness executable must already be installed, authenticated, and
@@ -151,16 +156,17 @@ reference.
 - Automatically copy adjacent `fixtures/` directories for JS/TS dynos authored
   with `defineDyno(...)`, and automatically copy `SKILL.md` for dynos authored
   under `.agents/skills/<name>/` or `.claude/skills/<name>/`.
-- Run locally against Claude Code, Codex, or both.
+- Run locally against Claude Code, Codex, OpenCode, or any combination.
 - Select harnesses at runtime with `--harness claude-code`, `--harness codex`,
-  or comma-separated values while preserving configured model metadata.
+  `--harness opencode`, or comma-separated values while preserving configured
+  model metadata.
 - Override selected harness models positionally with `--model`, such as
-  `--harness claude-code,codex --model sonnet,gpt-5.5`.
+  `--harness claude-code,opencode --model sonnet,openai/gpt-5.5`.
 - Filter scenarios at runtime with `--scenario <pattern>`.
 - Repeat each scenario/harness pair with `--iterations <count>` and view
   inline pass-rate sparklines such as `.F...`.
 - Configure harness permission behavior with `permissionMode` or
-  `--permission-mode`; dangerous full-access modes are opt-in.
+  `--permission-mode`; harness-specific access elevation is opt-in.
 - Emit newline-delimited JSON reports with `--reporter json`.
 - Upload compact dashboard summaries with `--save-run` when authenticated.
 - Assert tool calls with `tool.called(...)` and `tool.notCalled(...)`.

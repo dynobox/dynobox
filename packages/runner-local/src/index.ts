@@ -50,12 +50,14 @@ export type {
 export type {
   ClaudeCodeHarnessOptions,
   CodexHarnessOptions,
+  OpenCodeHarnessOptions,
 } from './harnesses/index.js';
 export {
   ClaudeCodeHarness,
   CodexHarness,
   FakeHarness,
   normalizeToolKind,
+  OpenCodeHarness,
 } from './harnesses/index.js';
 export {ensureDynoboxCA} from './http/ca.js';
 export {buildHttpRoutes, matchHttpEndpointId} from './http/events.js';

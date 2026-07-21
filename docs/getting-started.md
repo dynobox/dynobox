@@ -12,6 +12,7 @@ while completing the task.
 - At least one supported local harness:
   - `claude` for Claude Code.
   - `codex` for OpenAI Codex.
+  - `opencode` for OpenCode.
 
 The selected harness must be installed, authenticated, and available on `PATH`.
 
@@ -74,7 +75,8 @@ runtime:
 ```bash
 dynobox run --harness claude-code
 dynobox run --harness codex
-dynobox run --harness claude-code,codex
+dynobox run --harness opencode
+dynobox run --harness claude-code,codex,opencode
 ```
 
 If neither the config nor the CLI selects a harness, Dynobox defaults to
@@ -83,7 +85,7 @@ If neither the config nor the CLI selects a harness, Dynobox defaults to
 Repeat runs when you want a pass-rate signal instead of a single sample:
 
 ```bash
-dynobox run --harness claude-code,codex --iterations 5
+dynobox run --harness claude-code,codex,opencode --iterations 5
 ```
 
 Iterations are chosen at runtime. The dyno still only describes what to test;
@@ -229,12 +231,15 @@ directory and artifact paths, and writes debug logs when data is available:
 - `dynobox-stderr.log`
 
 Dynobox uses each harness's normal permission behavior by default. For trusted
-local evals that intentionally need full access, configure
-`permissionMode: 'dangerous'` in the dyno or pass:
+local evals that intentionally need elevated or automatically approved access,
+configure `permissionMode: 'dangerous'` in the dyno or pass:
 
 ```bash
 dynobox run --permission-mode dangerous
 ```
+
+The exact behavior is harness-specific. OpenCode's dangerous mode adds `--auto`
+but still enforces explicit deny rules.
 
 ## Next Steps
 

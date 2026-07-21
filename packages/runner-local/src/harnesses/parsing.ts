@@ -42,8 +42,9 @@ export function createToolEvent(
   input: unknown,
   status: ToolEvent['status'] | undefined = undefined,
   message: string | undefined = undefined,
+  kindOverride: ToolEvent['kind'] | undefined = undefined,
 ): ToolEvent {
-  const kind = normalizeToolKind(rawName);
+  const kind = kindOverride ?? normalizeToolKind(rawName);
   const base: ToolEvent = {
     kind,
     rawName,

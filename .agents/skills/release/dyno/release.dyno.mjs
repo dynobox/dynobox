@@ -1,10 +1,36 @@
-import {artifact, defineDyno, dyno, sequence, skill, tool} from '@dynobox/sdk';
+import {
+  artifact,
+  command,
+  defineDyno,
+  dyno,
+  sequence,
+  skill,
+  tool,
+  verify,
+} from '@dynobox/sdk';
 
 const here = dyno.here(import.meta.url);
 
 export default defineDyno({
   name: 'release-skill-smoke-test',
   target: 'release-skill',
+  harnesses: [
+    {
+      id: 'claude-code',
+      model: 'sonnet',
+      permissionMode: 'dangerous',
+    },
+    {
+      id: 'codex',
+      model: 'gpt-5.4-mini',
+      permissionMode: 'dangerous',
+    },
+    {
+      id: 'opencode',
+      model: 'openai/gpt-5.4-mini',
+      permissionMode: 'dangerous',
+    },
+  ],
   scenarios: [
     {
       name: 'release skill dry run workflow',
@@ -21,17 +47,25 @@ export default defineDyno({
       ],
       assertions: [
         sequence.inOrder([
-          tool.called('shell', {includes: 'pnpm test'}),
+          command.called('pnpm', {args: ['test']}),
           tool.called('shell', {includes: 'npm version'}),
-          tool.called('shell', {includes: 'pack'}),
+          command.called('pnpm', {args: ['pack']}),
         ]),
+        command.called('tar', {
+          argsMatching: [/^-?[A-Za-z]*t[A-Za-z]*$/, /\.tgz$/],
+        }),
+        command.called('tar', {
+          args: ['package/package.json'],
+          argsMatching: [/^-?[A-Za-z]*x[A-Za-z]*O[A-Za-z]*$/, /\.tgz$/],
+        }),
         skill.referenced('release'),
         artifact.contains('packages/mylib/package.json', '"version": "1.0.1"'),
         artifact.contains('CHANGELOG.md', 'mylib@1.0.1'),
-        tool.notCalled('shell', {includes: 'npm publish'}),
+        command.notCalled('npm', {argsMatching: [/^(?:pub|publish)$/]}),
+        command.notCalled('pnpm', {argsMatching: [/^(?:pub|publish)$/]}),
         tool.notCalled('shell', {includes: 'git commit'}),
-        tool.notCalled('shell', {includes: 'git tag'}),
         tool.notCalled('shell', {includes: 'git push'}),
+        verify.succeeds('test -z "$(git tag --list)"'),
       ],
     },
   ],

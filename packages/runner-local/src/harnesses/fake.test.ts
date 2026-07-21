@@ -186,4 +186,21 @@ describe('normalizeToolKind', () => {
     expect(normalizeToolKind('mcp__github__search')).toBe('mcp');
     expect(normalizeToolKind('UnexpectedTool')).toBe('unknown');
   });
+
+  it('normalizes representative OpenCode raw tool names', () => {
+    expect(normalizeToolKind('bash')).toBe('shell');
+    expect(normalizeToolKind('read')).toBe('read_file');
+    expect(normalizeToolKind('write')).toBe('write_file');
+    expect(normalizeToolKind('edit')).toBe('edit_file');
+    expect(normalizeToolKind('apply_patch')).toBe('edit_file');
+    expect(normalizeToolKind('glob')).toBe('search_files');
+    expect(normalizeToolKind('grep')).toBe('search_files');
+    expect(normalizeToolKind('list')).toBe('search_files');
+    expect(normalizeToolKind('webfetch')).toBe('web_fetch');
+    expect(normalizeToolKind('websearch')).toBe('web_search');
+    expect(normalizeToolKind('task')).toBe('task');
+    expect(normalizeToolKind('list_mcp_resources')).toBe('mcp');
+    expect(normalizeToolKind('list_mcp_resource_templates')).toBe('mcp');
+    expect(normalizeToolKind('read_mcp_resource')).toBe('mcp');
+  });
 });

@@ -1,6 +1,10 @@
 {
   "name": "mylib",
   "version": "1.0.0",
+  "private": true,
+  "publishConfig": {
+    "registry": "http://127.0.0.1:9"
+  },
   "scripts": {
     "test": "node -e \"console.log('ok')\""
   },

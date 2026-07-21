@@ -96,11 +96,12 @@ Supported harness IDs:
 
 - `claude-code`
 - `codex`
+- `opencode`
 
 Use strings when the default model and permission behavior are fine:
 
 ```ts
-harnesses: ['claude-code', 'codex'];
+harnesses: ['claude-code', 'codex', 'opencode'];
 ```
 
 Use objects to set a model or permission mode:
@@ -109,19 +110,22 @@ Use objects to set a model or permission mode:
 harnesses: [
   {id: 'claude-code', model: 'sonnet'},
   {id: 'codex', model: 'gpt-5.1', permissionMode: 'dangerous'},
+  {id: 'opencode', model: 'openai/gpt-5.1'},
 ];
 ```
 
 Permission modes:
 
 - `default`: use the harness's normal permission and sandbox behavior.
-- `dangerous`: opt into harness-specific full-access or permission-bypass flags
-  for trusted local evals.
+- `dangerous`: opt into harness-specific full-access or automatic permission
+  approval flags for trusted local evals.
 
 Dangerous mode maps to:
 
 - `claude-code`: `--permission-mode bypassPermissions`
 - `codex`: `--sandbox danger-full-access -c approval_policy="never"`
+- `opencode`: `--auto`, which approves permission prompts but does not override
+  explicit deny rules.
 
 The CLI can override authored harnesses with `--harness` and authored
 permission modes with `--permission-mode`.

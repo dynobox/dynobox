@@ -17,6 +17,11 @@ export default defineDyno({
           model: 'gpt-5.4-mini',
           permissionMode: 'dangerous',
         },
+        {
+          id: 'opencode',
+          model: 'openai/gpt-5.4-mini',
+          permissionMode: 'dangerous',
+        },
       ],
       prompt:
         'Use the commit skill to commit the README.md change in this scratch repository. Do not push. Do not amend any commit.',

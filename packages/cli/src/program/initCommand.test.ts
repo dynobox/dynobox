@@ -101,11 +101,11 @@ describe('dynobox init', () => {
     const dir = join(ROOT, 'harness');
     chTo(dir);
 
-    const result = await executeCli(['init', '--harness', 'codex']);
+    const result = await executeCli(['init', '--harness', 'opencode']);
     expect(result.exitCode).toBe(0);
 
     const body = readFileSync(join(dir, 'dynobox/example.dyno.mjs'), 'utf8');
-    expect(body).toContain("['codex']");
+    expect(body).toContain("['opencode']");
   });
 
   it('rejects an unknown --harness id before writing a starter', async () => {
