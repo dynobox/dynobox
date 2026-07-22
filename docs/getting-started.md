@@ -48,10 +48,12 @@ dynobox whoami
 ```
 
 After authenticating, you can save a run summary with `dynobox run --save-run`.
-Saved-run data is length-capped but not redacted. Failed-job diagnostics can
-include command or harness output, requested endpoint URLs, and tool commands.
-Do not use `--save-run` when those values may contain secrets. Local CLI output
-and `--reporter json` remain available without authentication.
+Saved-run data is length-capped but not redacted. All jobs can include authored
+assertion data and matched evidence such as requested endpoint URLs, tool
+commands, and verification output. Failed jobs can additionally include command
+or harness diagnostics. Do not use `--save-run` when those values may contain
+secrets. Local CLI output and `--reporter json` remain available without
+authentication.
 
 ## Create Your First Dyno
 

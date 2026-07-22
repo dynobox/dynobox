@@ -61,7 +61,10 @@ The workflow in `dynobox/skills` does the following:
 - Converts the final `summary` record and failed job diagnostics into
   `dynobox.md`.
 - Appends that Markdown to the GitHub step summary.
-- Can upsert a PR comment when explicitly enabled for a trusted pull request.
+- Automatically upserts a report comment for same-repository pull requests.
+  These runs execute checked-out PR dynos with model credentials, so
+  contributor-facing repositories must add an approval boundary before adopting
+  this trigger.
 - Uploads `dynobox.ndjson`, `dynobox.md`, and available debug logs as workflow
   artifacts.
 - Fails the job with Dynobox's original exit status after reporting finishes.

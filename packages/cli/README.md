@@ -104,9 +104,11 @@ Authenticated runs can upload a compact dashboard summary with
 `dynobox run --save-run`. You can also set `DYNOBOX_TOKEN` instead of using the
 saved local config.
 
-Saved-run data is length-capped but not redacted. Failed-job diagnostics can
-include command or harness output, requested endpoint URLs, and tool commands.
-Do not use `--save-run` when those values may contain secrets.
+Saved-run data is length-capped but not redacted. All jobs can include authored
+assertion data and matched evidence such as requested endpoint URLs, tool
+commands, and verification output. Failed jobs can additionally include command
+or harness diagnostics. Do not use `--save-run` when those values may contain
+secrets.
 
 ## Documentation
 

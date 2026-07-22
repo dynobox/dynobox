@@ -51,6 +51,24 @@ For local iteration, run the TypeScript entrypoint directly:
 pnpm dynolocal --help
 ```
 
+To exercise a real harness run with the compiled CLI without adding generated
+files to the checkout, create the starter in a temporary directory:
+
+```bash
+repo_root=$PWD
+smoke_dir=$(mktemp -d)
+(
+  cd "$smoke_dir"
+  node "$repo_root/packages/cli/dist/bin.js" init
+  node "$repo_root/packages/cli/dist/bin.js" run
+)
+rm -rf "$smoke_dir"
+```
+
+The starter defaults to Claude Code. Pass `--harness codex` or
+`--harness opencode` to `init` to use another authenticated harness. See
+[`dynobox/examples`](https://github.com/dynobox/examples) for larger scenarios.
+
 ## Package Scripts
 
 Package scripts should only build, typecheck, and test their own package. Use

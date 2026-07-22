@@ -33,9 +33,11 @@ Authenticated CLI runs can upload compact summaries with
 for reviewing or sharing the saved run. Run owners can compare compatible jobs
 across saved runs to inspect assertion outcome and evidence changes.
 
-Saved-run data is length-capped but not redacted. Failed-job diagnostics can
-include command or harness output, requested endpoint URLs, and tool commands.
-Do not use `--save-run` when those values may contain secrets.
+Saved-run data is length-capped but not redacted. All jobs can include authored
+assertion data and matched evidence such as requested endpoint URLs, tool
+commands, and verification output. Failed jobs can additionally include command
+or harness diagnostics. Do not use `--save-run` when those values may contain
+secrets.
 
 ## Agent Resources
 
