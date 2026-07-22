@@ -8,16 +8,20 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
-### `@dynobox/sdk`
+---
 
-- Added `opencode` as a supported harness ID.
+## dynobox@0.10.0 — 2026-07-21
 
 ### `dynobox` (CLI)
 
 - Added OpenCode harness execution with JSONL tool and final-message capture,
   model selection, and dangerous-mode permission auto-approval.
 
----
+## @dynobox/sdk@0.6.0 — 2026-07-21
+
+### `@dynobox/sdk`
+
+- Added `opencode` as a supported harness ID.
 
 ## dynobox@0.9.3 — 2026-07-15
 
