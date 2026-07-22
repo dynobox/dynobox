@@ -1,123 +1,75 @@
-# Dynobox
+<h1 align="center">
+  <a href="https://dynobox.xyz">
+    <img src="./assets/readme-wordmark.svg" alt="Dynobox" width="460">
+  </a>
+</h1>
 
-[![npm version](https://img.shields.io/npm/v/dynobox.svg)](https://www.npmjs.com/package/dynobox)
-[![License](https://img.shields.io/github/license/dynobox/dynobox.svg)](./LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/dynobox/dynobox/ci.yml?branch=main&label=ci)](https://github.com/dynobox/dynobox/actions)
-[![Node.js >=22](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+<p align="center">
+  <a href="https://www.npmjs.com/package/dynobox"><img src="https://img.shields.io/npm/v/dynobox.svg" alt="npm version"></a>
+  <a href="https://github.com/dynobox/dynobox/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/dynobox/dynobox/ci.yml?branch=main&label=CI&logo=github" alt="CI status"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/dynobox/dynobox.svg" alt="Apache-2.0 license"></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white" alt="Node.js 22 or later"></a>
+</p>
 
-Cross-harness testing for multi-step agent and skill workflows.
+## Deterministic agent verification.
 
-**Status:** Early access. Dynobox is ready for local skill and agent workflow testing while the CLI, SDK, and report formats continue to evolve before 1.0.
+Open-source test runner for coding agents and skills: run real workflows,
+capture evidence, assert on tools, commands, files, and answers.
 
-Dynobox runs agent scenarios through local harnesses such as Claude Code, Codex,
-and OpenCode, captures observable behavior, and evaluates assertions against what
-actually happened. It is designed for testing skills and agent flows where you
-care about tool usage, file effects, transcripts, final answers, and behavior
-across harnesses.
+<p align="center">
+  <a href="https://docs.dynobox.xyz/getting-started">Get started</a> ·
+  <a href="https://docs.dynobox.xyz">Documentation</a> ·
+  <a href="https://dash.dynobox.xyz">Dashboard</a> ·
+  <a href="https://www.skills.sh/dynobox/skills">Agent skills</a> ·
+  <a href="https://github.com/dynobox/examples">Examples</a>
+</p>
 
-## Why Use It
+---
 
-Use Dynobox when you want to answer questions like:
+- Assert on tool calls, commands, files, HTTP requests, transcripts, and final
+  answers without requiring one model to judge another.
+- Run the same scenario through Claude Code, OpenAI Codex, and OpenCode (with
+  more to come) to find behavior that varies between environments.
+- Test multi-step tasks in isolated work directories, repeat them to expose flaky
+  behavior, and keep the evidence when something fails.
 
-- Does this skill call the expected tools?
-- Does it avoid dangerous or unrelated commands?
-- Does it create or preserve the right files?
-- Does its final answer include required information?
-- Does the same task work under Claude Code, Codex, and OpenCode?
+## Quick start
 
-## Quick Start
-
-Requires Node.js 22 or later.
-
-Install the CLI and a starter dyno file, then run it:
-
-```bash
-npm install -g dynobox
-dynobox init        # writes dynobox/example.dyno.mjs
-dynobox discover    # prints the *.dyno.* files that run would load
-dynobox run         # discovers and runs every *.dyno.* file under the cwd
-```
-
-`dynobox run` with no argument discovers `*.dyno.{mjs,js,ts,mts,yaml,yml}` files
-recursively under the current directory. Pass a directory or a single file to scope it:
+Dynobox requires Node.js 22 or later and at least one supported agent harness
+installed, authenticated, and available on `PATH`.
 
 ```bash
-dynobox run examples/local-observability
-dynobox run my-skill.dyno.yaml
+npx dynobox init
+npx dynobox run
 ```
 
-Pick a harness at runtime when needed (each authored file declares its own
-default list):
+`dynobox init` creates a starter dyno in `dynobox/example.dyno.mjs`.
+`dynobox run` discovers every `*.dyno.*` file below the current directory and
+runs its scenarios against the configured harnesses.
 
-```bash
-dynobox run --harness claude-code
-dynobox run --harness codex
-dynobox run --harness opencode
-dynobox run --harness claude-code,codex,opencode
-```
+## Writing a dyno
 
-Run each selected scenario/harness pair more than once to measure pass rates:
-
-```bash
-dynobox run --harness claude-code,codex,opencode --iterations 5
-```
-
-The selected harness executable must already be installed, authenticated, and
-available on `PATH`.
-
-## Example: A Dyno File
-
-```ts
-// my-skill.dyno.mjs
-import {artifact, command, defineDyno, finalMessage, tool} from '@dynobox/sdk';
-
-export default defineDyno({
-  name: 'package-script-skill',
-  harnesses: [{id: 'claude-code', permissionMode: 'default'}],
-  scenarios: [
-    {
-      name: 'detects test script',
-      setup: [
-        `cat > package.json <<'JSON'
-{
-  "name": "fixture",
-  "scripts": {"test": "vitest run"}
-}
-JSON`,
-      ],
-      prompt:
-        'Use `cat package.json` and tell me whether this project has a test script.',
-      assertions: [
-        command.called('cat', {args: ['package.json']}),
-        tool.notCalled('edit_file'),
-        artifact.contains('package.json', 'vitest run'),
-        finalMessage.contains('test'),
-      ],
-    },
-  ],
-});
-```
-
-The same dyno authored in YAML:
+A dyno combines the prompt, fixture setup, harnesses, and acceptance criteria in
+one TypeScript, JavaScript, or YAML file:
 
 ```yaml
-# my-skill.dyno.yaml
-name: package-script-skill
+# package.dyno.yaml
+name: package-script
 harnesses:
-  - id: claude-code
-    permissionMode: default
+  - claude-code
+  - codex
+  - opencode
 scenarios:
-  - name: detects test script
-    prompt: >-
-      Use cat package.json and tell me whether this project has a test script.
+  - name: detects the test script
     setup:
       - |
         cat > package.json <<'JSON'
         {"scripts":{"test":"vitest run"}}
         JSON
+    prompt: >-
+      Use cat package.json and tell me whether this project has a test script.
     assertions:
-      - label: reads package.json
-        type: command.called
+      - type: command.called
         executable: cat
         command: {args: [package.json]}
       - type: tool.notCalled
@@ -129,96 +81,90 @@ scenarios:
         text: test
 ```
 
-See [Getting Started](./docs/getting-started.md) for the full walkthrough and
-[Config Authoring](./docs/config-authoring.md) for the YAML / TS assertion
-reference.
+Run the test:
 
-## Documentation
+```bash
+npx dynobox run package.dyno.yaml
+```
 
-- [Docs index](./docs/README.md)
-- [Getting Started](./docs/getting-started.md)
-- [Config Authoring](./docs/config-authoring.md)
-- [CLI Reference](./docs/cli.md)
+The same shape works in TypeScript and JavaScript via
+[`@dynobox/sdk`](https://www.npmjs.com/package/@dynobox/sdk)
+(`defineDyno`, `tool`, `command`, ...). See
+[Config Authoring](https://docs.dynobox.xyz/config-authoring).
 
-## Current Capabilities
+Dynobox launches the selected harnesses in isolated work directories, records the
+observable behavior, and evaluates each assertion against captured evidence.
+When a check fails, the output shows what was expected and what was observed.
 
-- Discover and run `*.dyno.{mjs,js,ts,mts,yaml,yml}` files with
-  `dynobox run [path]` — no arg = cwd, directory = recursive, file = single
-  run. Legacy explicit-file paths (e.g. `dynobox.config.ts`) keep working.
-- Scaffold a starter file with `dynobox init` (`--yaml` for YAML, `--harness`
-  to pin the starter harness).
-- Authenticate with `dynobox login`, verify with `dynobox whoami`, and remove
-  saved tokens with `dynobox logout`.
-- Author dynos in TypeScript / JavaScript with `@dynobox/sdk` helpers
-  (`defineDyno`, `defineScenario`, `tool`, `skill`, `artifact`, `transcript`,
-  `finalMessage`, `sequence`, `http`, `dyno`) or in YAML using the same shape
-  with `type`-discriminated assertion objects.
-- Automatically copy adjacent `fixtures/` directories for JS/TS dynos authored
-  with `defineDyno(...)`, and automatically copy `SKILL.md` for dynos authored
-  under `.agents/skills/<name>/` or `.claude/skills/<name>/`.
-- Run locally against Claude Code, Codex, OpenCode, or any combination.
-- Select harnesses at runtime with `--harness claude-code`, `--harness codex`,
-  `--harness opencode`, or comma-separated values while preserving configured
-  model metadata.
-- Override selected harness models positionally with `--model`, such as
-  `--harness claude-code,opencode --model sonnet,openai/gpt-5.5`.
-- Filter scenarios at runtime with `--scenario <pattern>`.
-- Repeat each scenario/harness pair with `--iterations <count>` and view
-  inline pass-rate sparklines such as `.F...`.
-- Configure harness permission behavior with `permissionMode` or
-  `--permission-mode`; harness-specific access elevation is opt-in.
-- Emit newline-delimited JSON reports with `--reporter json`.
-- Upload compact dashboard summaries with `--save-run` when authenticated.
-- Assert tool calls with `tool.called(...)` and `tool.notCalled(...)`.
-- Match file-oriented tool calls by path, such as
-  `tool.called('read_file', {path: 'package.json'})`.
-- Assert skill instruction file references with `skill.referenced(...)`.
-- Assert normalized shell commands with `command.called(...)` and
-  `command.notCalled(...)`; raw shell string matchers remain available as
-  escape hatches.
-- Assert HTTP requests to declared endpoints with `http.called(...)` and
-  `http.notCalled(...)`.
-- Express valid alternative behavior paths with `anyOf(...)`, including nested
-  `verify.command(...)` branches.
-- Assert ordered tool-call sequences with `sequence.inOrder(...)`.
-- Assert work-directory artifacts with `artifact.exists(...)`,
-  `artifact.notExists(...)`, `artifact.contains(...)`, and
-  `artifact.unchanged(...)`.
-- Assert harness transcript and final response text with
-  `transcript.contains(...)` and `finalMessage.contains(...)`.
-- Run post-harness checks with `verify.command(...)` for generated artifacts.
-- Stream live grouped progress and tool events in interactive terminals.
-- Use default grouped output, `--quiet` dots-and-failures output, `--verbose`
-  phase/assertion details, and `--debug` work-directory, artifact, transcript,
-  raw chat JSONL, and normalized tool-event paths.
+## Assertions
 
-HTTP endpoint declarations and HTTP assertions can evaluate local child-process
-traffic that honors proxy and CA environment variables. Harness-native web
-tools and binaries with their own trust stores may bypass local HTTPS capture.
+| Evidence     | Example checks                                               | What it answers                                             |
+| ------------ | ------------------------------------------------------------ | ----------------------------------------------------------- |
+| Tools        | `tool.called`, `tool.notCalled`                              | Did the agent use or avoid a tool?                          |
+| Commands     | `command.called`, `command.notCalled`                        | Did it execute the expected shell command?                  |
+| Files        | `artifact.exists`, `artifact.contains`, `artifact.unchanged` | Did it create, change, or preserve the right files?         |
+| Skills       | `skill.referenced`                                           | Did it reference the required skill instructions?           |
+| Network      | `http.called`, `http.notCalled`                              | Did a local child process call the expected endpoint?       |
+| Response     | `transcript.contains`, `finalMessage.contains`               | Did the interaction contain required information?           |
+| Logic        | `sequence.inOrder`, `anyOf`                                  | Did the observed behavior follow an accepted path or order? |
+| Verification | `verify.command`                                             | Does the completed work pass a custom executable check?     |
+
+See the [assertion reference](https://docs.dynobox.xyz/config-authoring/#assertions)
+for every matcher and authoring option.
+
+## Harnesses and iterations
+
+Override the configured harnesses from the command line:
+
+```bash
+npx dynobox run --harness claude-code
+npx dynobox run --harness codex
+npx dynobox run --harness opencode
+npx dynobox run --harness claude-code,codex,opencode
+```
+
+Repeat every scenario and harness pair to measure pass rates:
+
+```bash
+npx dynobox run \
+  --harness claude-code,codex,opencode \
+  --iterations 5
+```
+
+Repeated runs render compact pass-rate rows such as `.FF..` while retaining the
+failed iteration evidence for diagnosis.
+
+## Local runs and uploads
+
+Dynobox runs locally and works without an account. Use terminal output for
+development, `--reporter json` for automation, or authenticate with
+`dynobox login` and add `--save-run` to publish a compact run summary to the
+[Dynobox dashboard](https://dash.dynobox.xyz).
+
+## Learn more
+
+- [Getting Started](https://docs.dynobox.xyz/getting-started)
+- [Config Authoring](https://docs.dynobox.xyz/config-authoring)
+- [CLI Reference](https://docs.dynobox.xyz/cli)
+- [CI Integration](https://docs.dynobox.xyz/ci)
+- [Agent Skills](https://docs.dynobox.xyz/agent-skills)
+- [Example dyno tests](https://github.com/dynobox/examples)
 
 ## Packages
 
-This repository is a pnpm monorepo. Published packages live under `packages/`.
+| Package                                                      | Description                           |
+| ------------------------------------------------------------ | ------------------------------------- |
+| [`dynobox`](https://www.npmjs.com/package/dynobox)           | CLI for discovering and running dynos |
+| [`@dynobox/sdk`](https://www.npmjs.com/package/@dynobox/sdk) | Type-safe helpers for authoring dynos |
 
-| Package                                            | Registry                                                     | Description                                            |
-| -------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------ |
-| [`dynobox`](./packages/cli)                        | [`dynobox`](https://www.npmjs.com/package/dynobox)           | CLI for loading configs and running local scenarios    |
-| [`@dynobox/sdk`](./packages/sdk)                   | [`@dynobox/sdk`](https://www.npmjs.com/package/@dynobox/sdk) | SDK for authoring configs and compiling canonical IR   |
-| [`@dynobox/run-schema`](./packages/run-schema)     | [GitHub Packages](./packages/run-schema#registry)            | Shared run upload schema and API response types        |
-| [`@dynobox/runner-local`](./packages/runner-local) | Unpublished                                                  | Local runner for harness execution and tool assertions |
-| [`@dynobox/evaluators`](./packages/evaluators)     | Unpublished                                                  | Assertion evaluators shared by runner code             |
-
-`@dynobox/run-schema` is published to GitHub Packages under the `@dynobox` scope. `@dynobox/runner-local` and `@dynobox/evaluators` are private workspace packages bundled into the published `dynobox` CLI instead of exposed as public dependencies.
-
-## Project Site
-
-[dynobox.xyz](https://dynobox.xyz)
+Dynobox is early-access software. The CLI, SDK, and report formats may evolve
+before 1.0.
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for local development commands and
-checkout workflows.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) to run the monorepo locally and propose
+a change.
 
 ## License
 
-Apache-2.0 for all code in this repository. See [LICENSE](./LICENSE).
+Dynobox is [Apache-2.0 licensed](./LICENSE).
