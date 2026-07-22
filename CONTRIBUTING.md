@@ -4,7 +4,8 @@ Dynobox is a pnpm monorepo. Published packages live under `packages/`.
 
 ## Requirements
 
-- Node.js compatible with the package engines.
+- Node.js 22.12 or newer for monorepo development. Published packages may
+  support an earlier Node.js 22 release according to their package engines.
 - pnpm 10.33.0, as declared by the root `packageManager`.
 - At least one supported local harness installed and authenticated when running
   real dynos: Claude Code via `claude`, Codex via `codex`, or OpenCode via

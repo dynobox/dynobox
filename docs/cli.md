@@ -125,6 +125,11 @@ files are parsed as YAML, and JavaScript or TypeScript files such as `.mjs`,
 `.js`, `.ts`, and `.mts` are imported through the CLI loader. `.cjs` and `.cts`
 configs are not supported because `@dynobox/sdk` is ESM-only.
 
+Only run dynos you trust. JavaScript and TypeScript configs are imported, and
+setup and verification commands execute on your machine. Temporary work
+directories separate job files, but they are not security sandboxes; processes
+can access the host according to their permissions.
+
 A load error in one discovered file does not stop other files from running.
 Each bad file prints a `config:` error block on stderr, and the process exits
 non-zero if any file failed to load or any job failed.

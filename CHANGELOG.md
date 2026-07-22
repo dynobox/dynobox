@@ -10,8 +10,9 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
-- Updated runtime dependencies to patched versions and included license notices
-  for bundled third-party code.
+- Updated the shipped `tsx` dependency and bundled `shell-quote` parser to
+  patched versions.
+- Included license notices for bundled third-party code.
 
 ### `@dynobox/run-schema`
 

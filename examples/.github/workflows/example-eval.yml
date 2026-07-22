@@ -36,6 +36,8 @@ jobs:
         with:
           node-version: 22
 
+      # Reviewed snapshot versions. Update these when adopting the template;
+      # dynobox/skills is the living CI reference.
       - name: Install Dynobox
         run: npm install -g dynobox@0.10.0
 
