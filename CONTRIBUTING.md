@@ -42,13 +42,13 @@ Build first, then run the compiled CLI:
 
 ```bash
 pnpm --filter dynobox... build
-node packages/cli/dist/bin.js run examples/local-observability
+node packages/cli/dist/bin.js --help
 ```
 
 For local iteration, run the TypeScript entrypoint directly:
 
 ```bash
-pnpm dynolocal run examples/local-observability
+pnpm dynolocal --help
 ```
 
 ## Package Scripts
@@ -56,8 +56,3 @@ pnpm dynolocal run examples/local-observability
 Package scripts should only build, typecheck, and test their own package. Use
 root-level pnpm filters for dependency ordering instead of calling another
 workspace package's script from inside a package script.
-
-## Examples
-
-Examples are user-facing only. Do not use files in `examples/` as test fixtures
-or production code inputs.

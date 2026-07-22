@@ -419,10 +419,6 @@ function rewriteHref(href: string, file: DocFile): string {
     return hash ? `${route}#${hash}` : route;
   }
 
-  if (resolvedPath.startsWith('examples/')) {
-    return `${githubSourceBase}/${resolvedPath}`;
-  }
-
   return href;
 }
 

@@ -10,7 +10,7 @@
  * Discovery globs `**\/*.dyno.{mjs,js,ts,mts,yaml,yml}` and skips a default
  * set of generated directories that should never contain authored tests.
  * Existing config files passed by absolute or relative path (the legacy
- * `dynobox run examples/.../dynobox.config.ts` form) keep working — file
+ * `dynobox run skills/.../dynobox.config.ts` form) keep working — file
  * inputs are returned verbatim regardless of the `.dyno.*` suffix so that
  * authored config paths remain valid during the transition.
  */

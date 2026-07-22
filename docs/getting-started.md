@@ -191,7 +191,7 @@ Examples:
 
 ```bash
 dynobox run
-dynobox run examples/local-observability
+dynobox run dynobox
 dynobox run my-skill.dyno.yaml
 dynobox run dynobox.config.ts
 ```

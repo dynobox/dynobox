@@ -85,7 +85,7 @@ Discover and run dyno files.
 
 ```bash
 dynobox run
-dynobox run examples
+dynobox run dynobox
 dynobox run my-skill.dyno.yaml
 dynobox run dynobox.config.ts
 dynobox run --config dyno.config.json
@@ -141,7 +141,7 @@ without loading configs or running harnesses.
 
 ```bash
 dynobox discover
-dynobox discover examples
+dynobox discover dynobox
 dynobox discover my-skill.dyno.yaml
 dynobox discover --config dyno.config.json
 ```
@@ -325,7 +325,7 @@ The summary record includes:
 Example:
 
 ```bash
-dynobox run --reporter json examples/local-observability
+dynobox run --reporter json dynobox
 ```
 
 In CI, redirect stdout to an artifact file:
