@@ -1,0 +1,13 @@
+<svg width="460" height="148" viewBox="0 0 460 148" xmlns="http://www.w3.org/2000/svg">
+  <rect width="460" height="148" rx="10" fill="#0b0c0f"/>
+  <rect x="24" y="24" width="100" height="100" fill="#ec402d"/>
+  <text
+    x="158"
+    y="101"
+    fill="#f4f0e9"
+    font-family="IBM Plex Mono, SFMono-Regular, Consolas, Liberation Mono, Menlo, ui-monospace, monospace"
+    font-size="68"
+    font-weight="600"
+    letter-spacing="-3"
+  >dynobox</text>
+</svg>
