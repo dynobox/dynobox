@@ -44,14 +44,17 @@ Identify the package name, package directory, and requested bump:
 pnpm --filter <package-name> exec node -p "require('./package.json').version"
 ```
 
-Use these package names for public releases:
+Use these package names for releases:
 
 - `dynobox` for `packages/cli`
 - `@dynobox/sdk` for `packages/sdk`
+- `@dynobox/run-schema` for `packages/run-schema`
 
 Current package policy:
 
 - Publish `dynobox` and `@dynobox/sdk` to npm.
+- Publish `@dynobox/run-schema` as a restricted GitHub Package using its
+  `publishConfig`.
 - Keep `@dynobox/runner-local` and `@dynobox/evaluators` private.
 - The `dynobox` CLI bundles private runtime workspace packages instead of
   exposing them as public npm dependencies.
@@ -76,17 +79,12 @@ Read the new version:
 pnpm --filter <package-name> exec node -p "require('./package.json').version"
 ```
 
-When releasing `dynobox`, update the hardcoded CLI display version in
-`packages/cli/src/index.ts`:
-
-```ts
-const CLI_VERSION = '<version>';
-```
-
-Search for stale references to the previous version before committing:
+The CLI reads its display version from `packages/cli/package.json`; there is no
+second version constant to update. Search for stale user-facing references to
+the previous version before committing:
 
 ```bash
-rg '<previous-version>' packages/cli/src packages/cli/package.json CHANGELOG.md
+rg '<previous-version>' packages/cli apps/site docs README.md CHANGELOG.md
 ```
 
 ## Update CHANGELOG.md
@@ -143,10 +141,16 @@ git push && git push --tags
 After all preparation is complete, present the publish commands for the user to
 run manually. Never run these commands yourself.
 
-For a single package:
+For a public npm package:
 
 ```bash
 pnpm --filter <package-name> publish --access public --no-git-checks
+```
+
+For the restricted run-schema package:
+
+```bash
+pnpm --filter @dynobox/run-schema publish --no-git-checks
 ```
 
 For multiple packages, present them in dependency order:
@@ -156,10 +160,16 @@ pnpm --filter @dynobox/sdk publish --access public --no-git-checks
 pnpm --filter dynobox publish --access public --no-git-checks
 ```
 
-Then tell the user to verify after publishing:
+Then tell the user to verify a public npm package after publishing:
 
 ```bash
 npm view <package-name>@<version>
+```
+
+Verify the restricted run-schema package against GitHub Packages:
+
+```bash
+npm view @dynobox/run-schema@<version> --registry=https://npm.pkg.github.com
 ```
 
 ## Multi-package releases

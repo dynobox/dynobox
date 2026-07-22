@@ -30,8 +30,8 @@ capture evidence, assert on tools, commands, files, and answers.
   answers without requiring one model to judge another.
 - Run the same scenario through Claude Code, OpenAI Codex, and OpenCode (with
   more to come) to find behavior that varies between environments.
-- Test multi-step tasks in isolated work directories, repeat them to expose flaky
-  behavior, and keep the evidence when something fails.
+- Test multi-step tasks in fresh temporary work directories, repeat them to
+  expose flaky behavior, and keep the evidence when something fails.
 
 ## Quick start
 
@@ -39,13 +39,23 @@ Dynobox requires Node.js 22 or later and at least one supported agent harness
 installed, authenticated, and available on `PATH`.
 
 ```bash
-npx dynobox init
+npx dynobox init                         # Claude Code (default)
+npx dynobox init --harness codex         # OpenAI Codex
+npx dynobox init --harness opencode      # OpenCode
 npx dynobox run
 ```
 
+Run one `init` command for a harness that is installed and authenticated, then
+run the generated dyno.
+
 `dynobox init` creates a starter dyno in `dynobox/example.dyno.mjs`.
-`dynobox run` discovers every `*.dyno.*` file below the current directory and
-runs its scenarios against the configured harnesses.
+`dynobox run` discovers `*.dyno.{mjs,js,ts,mts,yaml,yml}` files below the current
+directory and runs their scenarios against the configured harnesses.
+
+Only run dynos you trust. JavaScript and TypeScript configs are imported, and
+setup and verification commands execute on your machine. Temporary work
+directories separate job files, but they are not security sandboxes; processes
+can access the host according to their permissions.
 
 ## Writing a dyno
 
@@ -92,8 +102,9 @@ The same shape works in TypeScript and JavaScript via
 (`defineDyno`, `tool`, `command`, ...). See
 [Config Authoring](https://docs.dynobox.xyz/config-authoring).
 
-Dynobox launches the selected harnesses in isolated work directories, records the
-observable behavior, and evaluates each assertion against captured evidence.
+Dynobox launches the selected harnesses in fresh temporary work directories,
+records the observable behavior, and evaluates each assertion against captured
+evidence.
 When a check fails, the output shows what was expected and what was observed.
 
 ## Assertions
@@ -140,6 +151,10 @@ Dynobox runs locally and works without an account. Use terminal output for
 development, `--reporter json` for automation, or authenticate with
 `dynobox login` and add `--save-run` to publish a compact run summary to the
 [Dynobox dashboard](https://dash.dynobox.xyz).
+
+Saved-run data is length-capped but not redacted. Failed-job diagnostics can
+include command or harness output, requested endpoint URLs, and tool commands.
+Do not use `--save-run` when those values may contain secrets.
 
 ## Learn more
 

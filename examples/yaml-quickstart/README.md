@@ -1,19 +1,20 @@
 # YAML Quickstart Example
 
-The same scenario as `local-observability`, authored in YAML instead of
-TypeScript. Use this layout when you'd rather not pull in a Node
-toolchain to author tests.
+A variation of the `local-observability` scenario, authored in YAML instead of
+TypeScript. Use this layout when you prefer declarative config without SDK
+imports. Running Dynobox still requires Node.js 22 or later.
 
 ## Run
 
 ```bash
-node packages/cli/dist/bin.js run examples/yaml-quickstart
+npx dynobox run examples/yaml-quickstart
 ```
 
-Or with the published CLI:
+From a development checkout, build the CLI and run the compiled entrypoint:
 
 ```bash
-dynobox run examples/yaml-quickstart
+pnpm --filter dynobox... build
+node packages/cli/dist/bin.js run examples/yaml-quickstart
 ```
 
 ## YAML Schema
@@ -37,7 +38,7 @@ Examples used in this file:
 
 ## Why YAML
 
-- Lower friction for skill or prompt authors who don't run Node locally.
+- No JavaScript module or SDK import to maintain.
 - Easier to diff in code review when you only want to tweak setup or
   prompts.
 - Compiles through the same Zod schema and IR as the TypeScript form, so

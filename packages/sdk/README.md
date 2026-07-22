@@ -1,12 +1,42 @@
 # @dynobox/sdk
 
-TypeScript SDK for authoring Dynobox scenario configs.
+JavaScript and TypeScript SDK for authoring Dynobox scenario configs.
 
 This package provides the authoring contract, helper functions, config module
 resolver, and canonical IR compiler used by the CLI and local runner.
 
 - Site: [dynobox.xyz](https://dynobox.xyz)
 - GitHub: [github.com/dynobox/dynobox](https://github.com/dynobox/dynobox)
+
+## Install
+
+```bash
+npm install --save-dev @dynobox/sdk
+```
+
+## Example
+
+```js
+import {command, defineDyno, finalMessage} from '@dynobox/sdk';
+
+export default defineDyno({
+  name: 'package-check',
+  harnesses: ['claude-code'],
+  scenarios: [
+    {
+      name: 'finds the test script',
+      prompt: 'Use cat package.json and tell me whether it has a test script.',
+      assertions: [
+        command.called('cat', {args: ['package.json']}),
+        finalMessage.contains('test'),
+      ],
+    },
+  ],
+});
+```
+
+See the [Config Authoring reference](https://docs.dynobox.xyz/config-authoring)
+for setup, fixtures, harness options, YAML, and every assertion type.
 
 ## Current exports
 

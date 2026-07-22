@@ -19,6 +19,6 @@ effect:
   not requested.
 
 ```bash
-node packages/cli/dist/bin.js run examples/http-assertion/http-assertion.dyno.mjs
-node packages/cli/dist/bin.js run examples/http-assertion/http-assertion.dyno.yaml
+npx dynobox run examples/http-assertion/http-assertion.dyno.mjs
+npx dynobox run examples/http-assertion/http-assertion.dyno.yaml
 ```

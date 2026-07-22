@@ -30,10 +30,11 @@ Check that it is available:
 dynobox --help
 ```
 
-## Connect The CLI
+## Connect The CLI (Optional)
 
 Dynobox has a web dashboard at [dash.dynobox.xyz](https://dash.dynobox.xyz).
-Use it to create short-lived CLI tokens. Run:
+Local runs do not require an account. Connect the CLI only when you want to save
+runs to the dashboard:
 
 ```bash
 dynobox login
@@ -46,19 +47,25 @@ terminal. You can verify the saved identity with:
 dynobox whoami
 ```
 
-After authenticating, you can save a compact run summary with
-`dynobox run --save-run`. Local CLI output and `--reporter json` remain useful
-for CI logs and artifacts.
+After authenticating, you can save a run summary with `dynobox run --save-run`.
+Saved-run data is length-capped but not redacted. Failed-job diagnostics can
+include command or harness output, requested endpoint URLs, and tool commands.
+Do not use `--save-run` when those values may contain secrets. Local CLI output
+and `--reporter json` remain available without authentication.
 
 ## Create Your First Dyno
 
-Use `dynobox init` to scaffold a starter scenario:
+Choose a starter harness that is installed and authenticated. Omitting
+`--harness` selects Claude Code:
 
 ```bash
-dynobox init
+dynobox init                         # Claude Code (default)
+dynobox init --harness codex         # OpenAI Codex
+dynobox init --harness opencode      # OpenCode
 ```
 
-This writes `dynobox/example.dyno.mjs`. Run it with:
+Run one of the commands above. It writes `dynobox/example.dyno.mjs`, which you
+can run with:
 
 ```bash
 dynobox run
@@ -66,6 +73,11 @@ dynobox run
 
 By default, `dynobox run` discovers every `*.dyno.{mjs,js,ts,mts,yaml,yml}`
 file under the current directory.
+
+Only run dynos you trust. JavaScript and TypeScript configs are imported, and
+setup and verification commands execute on your machine. Each job receives a
+fresh temporary work directory for file separation, but that directory is not a
+security sandbox; processes can access the host according to their permissions.
 
 ## Choose A Harness
 
@@ -94,8 +106,8 @@ the CLI decides how many times to execute each selected scenario/harness pair.
 ## Author A Minimal Dyno
 
 The example below asks the harness to inspect `package.json` with `cat`, checks
-that the command was observed, verifies no files were edited, and confirms the
-final answer mentioned the test script.
+that the command was observed, verifies `package.json` was unchanged, and
+confirms the final answer mentioned the test script.
 
 ```ts
 import {artifact, command, defineDyno, finalMessage, tool} from '@dynobox/sdk';
@@ -119,7 +131,7 @@ JSON`,
       assertions: [
         command.called('cat', {args: ['package.json']}),
         tool.notCalled('edit_file'),
-        artifact.contains('package.json', 'vitest run'),
+        artifact.unchanged('package.json'),
         finalMessage.contains('test'),
       ],
     },
@@ -154,9 +166,8 @@ scenarios:
             - package.json
       - type: tool.notCalled
         tool: edit_file
-      - type: artifact.contains
+      - type: artifact.unchanged
         path: package.json
-        text: vitest run
       - type: finalMessage.contains
         text: test
 ```

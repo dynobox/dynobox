@@ -10,7 +10,7 @@ flow through the proxy.
 ## Run
 
 ```bash
-node packages/cli/dist/bin.js run examples/npm-package-research/npm-research.dyno.mjs
+npx dynobox run examples/npm-package-research/npm-research.dyno.mjs
 ```
 
 The CLI compiles the file, runs the scenarios, captures matching HTTP

@@ -1,13 +1,17 @@
 name: Dynobox evals
 
 on:
-  pull_request:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   dynobox:
+    if: github.ref == 'refs/heads/main'
     name: dynobox (${{ matrix.harness }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -19,13 +23,13 @@ jobs:
           - codex
 
     env:
-      DYNOBOX_TARGET: dynobox
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      DYNOBOX_TARGET: examples/local-observability/inspect-package.dyno.mjs
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -33,15 +37,15 @@ jobs:
           node-version: 22
 
       - name: Install Dynobox
-        run: npm install -g dynobox
+        run: npm install -g dynobox@0.10.0
 
       - name: Install Claude Code
         if: matrix.harness == 'claude-code'
-        run: npm install -g @anthropic-ai/claude-code
+        run: npm install -g @anthropic-ai/claude-code@2.1.217
 
       - name: Install Codex
         if: matrix.harness == 'codex'
-        run: npm install -g @openai/codex
+        run: npm install -g @openai/codex@0.145.0
 
       - name: Run Dynobox
         run: |
@@ -87,6 +91,8 @@ jobs:
 
           exit "$status"
         env:
+          ANTHROPIC_API_KEY: ${{ matrix.harness == 'claude-code' && secrets.ANTHROPIC_API_KEY || '' }}
+          CODEX_API_KEY: ${{ matrix.harness == 'codex' && secrets.OPENAI_API_KEY || '' }}
           MATRIX_HARNESS: ${{ matrix.harness }}
 
       - name: Upload Dynobox report

@@ -15,6 +15,7 @@ Dynobox is a pnpm monorepo. Published packages live under `packages/`.
 Run from the repository root:
 
 ```bash
+pnpm install --frozen-lockfile
 pnpm build
 pnpm test
 pnpm typecheck

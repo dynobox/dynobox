@@ -5,7 +5,7 @@
   "description": "dynobox monorepo — cross-harness testing for multi-step agent flows",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   },
   "packageManager": "pnpm@10.33.0",
   "scripts": {
@@ -30,10 +30,19 @@
     "globals": "^17.5.0",
     "prettier": "^3.8.3",
     "tsup": "^8.5.0",
-    "tsx": "^4.21.0",
+    "tsx": "^4.23.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.0",
     "vitest": "^4.1.5",
     "zod": "^4.1.12"
+  },
+  "pnpm": {
+    "overrides": {
+      "ws": "8.21.1",
+      "body-parser": "2.3.0",
+      "brace-expansion": "5.0.7",
+      "fast-uri": "3.1.4",
+      "yaml": "2.8.4"
+    }
   }
 }

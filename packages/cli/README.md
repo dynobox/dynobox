@@ -16,23 +16,31 @@ what actually happened.
 npm install -g dynobox
 ```
 
-The selected harness executable must already be installed, authenticated, and
-available on `PATH`.
+Dynobox requires Node.js 22 or later. The selected harness executable must
+already be installed, authenticated, and available on `PATH`.
 
 ## Quick Start
 
 Create a starter dyno file, then run it:
 
 ```bash
-dynobox init
+dynobox init                         # Claude Code (default)
+dynobox init --harness codex         # OpenAI Codex
+dynobox init --harness opencode      # OpenCode
 dynobox discover
 dynobox run
 ```
 
+Run one `init` command for a harness that is installed and authenticated.
 `dynobox init` writes `dynobox/example.dyno.mjs` by default. `dynobox run` with
 no argument discovers `*.dyno.{mjs,js,ts,mts,yaml,yml}` files recursively under
 the current directory. `dynobox discover` prints the same file list without
 loading configs or running harnesses.
+
+Only run dynos you trust. JavaScript and TypeScript configs are imported, and
+setup and verification commands execute on your machine. Temporary work
+directories separate job files, but they are not security sandboxes; processes
+can access the host according to their permissions.
 
 Scope a run to a directory or file:
 
@@ -61,15 +69,17 @@ dynobox run --harness claude-code,codex,opencode --iterations 5
 Dynobox supports assertions for:
 
 - Tool calls with `tool.called(...)` and `tool.notCalled(...)`.
-- Shell command matchers with `equals`, `includes`, `startsWith`, or `matches`.
+- Normalized commands with `command.called(...)` and `command.notCalled(...)`.
 - File tool path matchers such as
   `tool.called('read_file', {path: 'package.json'})`.
-- Ordered tool-call sequences.
+- Ordered behavior with `sequence.inOrder(...)` and alternatives with
+  `anyOf(...)`.
 - Skill instruction file references.
-- Work-directory artifacts.
+- Work-directory artifacts, including unchanged and absent files.
 - Harness transcript and final response text.
 - HTTP requests from local child-process tools that honor proxy environment
   variables.
+- Post-run executable checks with `verify.command(...)`.
 
 ## Common Run Flags
 
@@ -93,6 +103,10 @@ saved token. CLI tokens expire after 24 hours; when a token expires, run
 Authenticated runs can upload a compact dashboard summary with
 `dynobox run --save-run`. You can also set `DYNOBOX_TOKEN` instead of using the
 saved local config.
+
+Saved-run data is length-capped but not redacted. Failed-job diagnostics can
+include command or harness output, requested endpoint URLs, and tool commands.
+Do not use `--save-run` when those values may contain secrets.
 
 ## Documentation
 

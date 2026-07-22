@@ -16,7 +16,7 @@ See these files in [`dynobox/skills`](https://github.com/dynobox/skills):
 
 - [`.github/workflows/dynobox.yml`](https://github.com/dynobox/skills/blob/main/.github/workflows/dynobox.yml)
 - [`.github/actions/run-dynobox/action.yml`](https://github.com/dynobox/skills/blob/main/.github/actions/run-dynobox/action.yml)
-- [`.agents/skills/commit/dyno/commit.dyno.mjs`](https://github.com/dynobox/skills/blob/main/.agents/skills/commit/dyno/commit.dyno.mjs)
+- [`skills/dyno-from-skill/dyno/dyno-from-skill.dyno.mjs`](https://github.com/dynobox/skills/blob/main/skills/dyno-from-skill/dyno/dyno-from-skill.dyno.mjs)
 
 ## Pattern
 
@@ -24,26 +24,46 @@ The current example uses one GitHub Actions job and lets Dynobox expand the
 matrix defined by the dyno files:
 
 ```bash
-npx dynobox run .agents/skills --reporter json > dynobox.ndjson
+npx dynobox run skills --debug --reporter json > dynobox.ndjson
 ```
 
 This shape is useful for skill repositories because each skill can own its tests
-under `.agents/skills/<skill-name>/dyno`, while CI only needs to point Dynobox at
-`.agents/skills`.
+under `skills/<skill-name>/dyno`, while CI only needs to point Dynobox at
+`skills`.
+
+## Trust Boundary
+
+Dynos and their setup or verification commands execute as trusted code. Do not
+make model credentials available to a job that checks out and runs untrusted
+pull-request content. Fork pull requests do not receive repository secrets by
+default, but same-repository pull requests can still expose secrets to code in
+the branch.
+
+Run secret-bearing evals only from trusted refs such as protected branch pushes,
+manual workflows with environment approval, or a base-revision checkout that
+does not execute pull-request-authored dynos. Use `permissions: contents: read`
+unless the reporting steps require additional access, and set
+`persist-credentials: false` on checkout.
+
+Treat JSON reports and `--debug` artifacts as sensitive. Transcripts, chat
+history, tool events, stderr, prompts, source content, and command output are not
+redacted. Limit artifact access and retention, and do not upload them from runs
+that may contain secrets.
 
 The workflow in `dynobox/skills` does the following:
 
 - Checks out the repository with persisted Git credentials disabled.
 - Installs Node.js dependencies and the local agent harness CLIs.
 - Verifies `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are available.
-- Logs Codex in with `codex login --with-api-key`.
-- Runs `dynobox run .agents/skills --reporter json` once.
+- Passes `ANTHROPIC_API_KEY` to Claude Code and `CODEX_API_KEY` to Codex.
+- Runs `dynobox run skills --debug --reporter json` once.
 - Writes the NDJSON report to `dynobox.ndjson`.
 - Converts the final `summary` record and failed job diagnostics into
   `dynobox.md`.
 - Appends that Markdown to the GitHub step summary.
-- Optionally upserts a PR comment for same-repository pull requests.
-- Uploads `dynobox.ndjson` and `dynobox.md` as workflow artifacts.
+- Can upsert a PR comment when explicitly enabled for a trusted pull request.
+- Uploads `dynobox.ndjson`, `dynobox.md`, and available debug logs as workflow
+  artifacts.
 - Fails the job with Dynobox's original exit status after reporting finishes.
 
 ## Harness Matrix
@@ -73,9 +93,8 @@ export default defineDyno({
 });
 ```
 
-This keeps local and CI runs aligned. The same `dynobox run .agents/skills`
-command discovers every skill dyno and executes the configured scenario/harness
-pairs.
+This keeps local and CI runs aligned. The same `dynobox run skills` command
+discovers every skill dyno and executes the configured scenario/harness pairs.
 
 ## Required Secrets
 
@@ -94,6 +113,9 @@ the harnesses you actually run.
 ## Status
 
 This pattern is a practical starting point for teams that want Dynobox in CI
-today. Future Dynobox releases may provide a smaller packaged action or a
-different hosted reporting path, so treat the skills repo workflow as an example
-rather than a stable final interface.
+today. Adapt its triggers and permissions to your repository's trust model;
+copying the same-repository pull-request trigger into a contributor-facing repo
+without an approval boundary can expose model credentials. Future Dynobox
+releases may provide a smaller packaged action or a different hosted reporting
+path, so treat the skills repo workflow as an example rather than a stable final
+interface.
