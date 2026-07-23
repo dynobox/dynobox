@@ -40,7 +40,7 @@ import RunComparisonMock from './RunComparisonMock.astro';
             <p class="is-job"><span>claude-code/sonnet/da...</span><b><i>✓</i> 13 assertions</b><time>1m27s</time></p>
             <div class="recorder-terminal-details">
               <p class="is-check"><i>✓</i><code>skill.referenced(dyno-from-skill)</code></p>
-              <p class="is-check"><i>✓</i><code>artifact.exists(wordcount.dyno.mjs)</code></p>
+              <p class="is-check"><i>✓</i><code>artifact.exists(example.dyno.mjs)</code></p>
               <p class="is-check"><i>✓</i><code>verify.command(dynobox validate)</code></p>
               <p class="is-more">…</p>
             </div>
@@ -94,7 +94,7 @@ import RunComparisonMock from './RunComparisonMock.astro';
             <col class="is-status" />
           </colgroup>
           <thead>
-            <tr><th scope="col">CHECK</th><th scope="col">WHAT IT CHECKS</th><th scope="col">OBSERVED EVIDENCE</th><th scope="col">STATUS</th></tr>
+            <tr><th scope="col">CHECK</th><th scope="col">WHAT IT ASSERTS</th><th scope="col">OBSERVED EVIDENCE</th><th scope="col">STATUS</th></tr>
           </thead>
           <tbody>
             <tr><td><code>skill.referenced</code></td><td>Observe a dyno authoring skill reference</td><td>dyno-from-skill / SKILL.md</td><td>PASS</td></tr>
@@ -112,7 +112,7 @@ import RunComparisonMock from './RunComparisonMock.astro';
       <div class="recorder-wrap">
         <header class="recorder-history-copy">
           <p class="recorder-index">04 / BUILD A RECORD</p>
-          <h2>See when an assertion outcome changed.</h2>
+          <h2>See when an run behavior changed.</h2>
           <p>
             Compare compatible jobs across saved runs and inspect assertion
             outcome and evidence changes.

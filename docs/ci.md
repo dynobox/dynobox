@@ -96,8 +96,9 @@ export default defineDyno({
 });
 ```
 
-This keeps local and CI runs aligned. The same `dynobox run skills` command
-discovers every skill dyno and executes the configured scenario/harness pairs.
+This keeps local and CI runs aligned. The same `dynobox run .agents/skills` command
+discovers every project scoped skill dyno and executes the configured scenario/harness
+pairs.
 
 ## Required Secrets
 

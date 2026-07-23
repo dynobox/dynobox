@@ -45,7 +45,7 @@ can access the host according to their permissions.
 Scope a run to a directory or file:
 
 ```bash
-dynobox run dynobox
+dynobox run .agents/skills/
 dynobox run my-skill.dyno.yaml
 ```
 

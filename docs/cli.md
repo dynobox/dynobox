@@ -85,7 +85,7 @@ Discover and run dyno files.
 
 ```bash
 dynobox run
-dynobox run dynobox
+dynobox run .agents/skills/
 dynobox run my-skill.dyno.yaml
 dynobox run dynobox.config.ts
 dynobox run --config dyno.config.json
@@ -331,7 +331,7 @@ dynobox run --reporter json dynobox
 In CI, redirect stdout to an artifact file:
 
 ```bash
-dynobox run --reporter json dynobox > dynobox-report.ndjson
+dynobox run --reporter json examples/local-observability > dynobox-report.ndjson
 ```
 
 ## Exit Codes

@@ -193,7 +193,7 @@ Examples:
 
 ```bash
 dynobox run
-dynobox run dynobox
+dynobox run .agents/skills/
 dynobox run my-skill.dyno.yaml
 dynobox run dynobox.config.ts
 ```
