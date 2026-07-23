@@ -8,17 +8,21 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.10.1 — 2026-07-22
+
 ### `dynobox` (CLI)
 
 - Updated the shipped `tsx` dependency and bundled `shell-quote` parser to
   patched versions.
 - Included license notices for bundled third-party code.
 
+## @dynobox/run-schema@0.3.1 — 2026-07-22
+
 ### `@dynobox/run-schema`
 
 - Added a prepack build and included the Apache-2.0 license in package tarballs.
-
----
 
 ## dynobox@0.10.0 — 2026-07-21
 
