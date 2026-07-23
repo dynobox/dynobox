@@ -9,12 +9,13 @@ import RunComparisonMock from './RunComparisonMock.astro';
         <h1>Catch broken agent workflows <em>before they ship.</em></h1>
         <p>
           Dynobox is the open-source test runner for SKILL.md and agent
-          workflows. Test across models and verify every tool call, command,
-          and artifact with deterministic assertions.
+          workflows. Run them across supported harnesses and check observed
+          tool calls, commands, and work-directory artifacts with explicit
+          assertions.
         </p>
         <p>
-          Find skipped steps, bad outputs, and behavior regressions before they
-          reach users, with evidence showing exactly what failed.
+          Find skipped steps, bad outputs, and behavior regressions, with
+          captured evidence for failed assertions.
         </p>
         <div class="recorder-actions">
           <a href="https://docs.dynobox.xyz/getting-started">View docs <span>→</span></a>
@@ -30,7 +31,7 @@ import RunComparisonMock from './RunComparisonMock.astro';
         <div class="recorder-terminal-output">
           <p><span class="is-prompt">❯</span> <b>npx dynobox run dyno/dyno-from-skill.dyno.mjs</b></p>
           <div class="recorder-terminal-header">
-            <p><span class="is-brand">■ dynobox</span>&nbsp; <span class="is-muted">0.9.3</span></p>
+            <p><span class="is-brand">■ dynobox</span>&nbsp; <span class="is-muted">0.10.0</span></p>
             <p class="is-muted">discovered 1 dyno · 1 scenario · harnesses: 2</p>
           </div>
           <div class="recorder-terminal-results">
@@ -60,7 +61,7 @@ import RunComparisonMock from './RunComparisonMock.astro';
           <h2>Behavior is the contract.</h2>
           <p>
             Agents are non-deterministic. Your acceptance criteria shouldn't
-            be. Define what must happen, then evaluate the same evidence every run.
+            be. Define what must happen, then evaluate captured evidence on each run.
           </p>
         </div>
         <div class="recorder-contract">
@@ -68,7 +69,7 @@ import RunComparisonMock from './RunComparisonMock.astro';
           <i>→</i>
           <article><span>ASSERT</span><h3>What the test requires</h3><p>Explicit matchers authored in TypeScript or YAML and compiled before the harness runs.</p></article>
           <i>→</i>
-          <article><span>EXPLAIN</span><h3>Why it passed or failed</h3><p>Evaluator-recorded evidence attached to every result, ready for inspection and comparison.</p></article>
+          <article><span>EXPLAIN</span><h3>Why it passed or failed</h3><p>Evaluator-recorded evidence attached to assertion results for inspection and comparison.</p></article>
         </div>
       </div>
     </section>
@@ -93,15 +94,15 @@ import RunComparisonMock from './RunComparisonMock.astro';
             <col class="is-status" />
           </colgroup>
           <thead>
-            <tr><th scope="col">CHECK</th><th scope="col">WHAT IT PROVES</th><th scope="col">OBSERVED EVIDENCE</th><th scope="col">STATUS</th></tr>
+            <tr><th scope="col">CHECK</th><th scope="col">WHAT IT ASSERTS</th><th scope="col">OBSERVED EVIDENCE</th><th scope="col">STATUS</th></tr>
           </thead>
           <tbody>
-            <tr><td><code>skill.referenced</code></td><td>Consult the dyno authoring skill</td><td>dyno-from-skill / SKILL.md</td><td>PASS</td></tr>
-            <tr><td><code>http.called</code></td><td>Fetch the current authoring reference</td><td>config-authoring.md · status 200</td><td>PASS</td></tr>
-            <tr><td><code>artifact.exists</code></td><td>Create the example dyno</td><td>dyno / example.dyno.mjs</td><td>PASS</td></tr>
-            <tr><td><code>artifact.contains</code></td><td>Use the Dynobox SDK</td><td>defineDyno · @dynobox/sdk</td><td>PASS</td></tr>
-            <tr><td><code>command.notCalled</code></td><td>Do not run the generated dyno</td><td>no dynobox run observed</td><td>PASS</td></tr>
-            <tr><td><code>verify.command</code></td><td>Validate the generated dyno</td><td>dynobox validate · exit 0</td><td>PASS</td></tr>
+            <tr><td><code>skill.referenced</code></td><td>Observe a dyno authoring skill reference</td><td>dyno-from-skill / SKILL.md</td><td>PASS</td></tr>
+            <tr><td><code>http.called</code></td><td>Observe the authoring reference request</td><td>config-authoring.md · status 200</td><td>PASS</td></tr>
+            <tr><td><code>artifact.exists</code></td><td>Find the generated dyno in the work directory</td><td>dyno / wordcount.dyno.mjs</td><td>PASS</td></tr>
+            <tr><td><code>artifact.contains</code></td><td>Find the Dynobox SDK import</td><td>defineDyno · @dynobox/sdk</td><td>PASS</td></tr>
+            <tr><td><code>command.notCalled</code></td><td>Observe no command that runs the dyno</td><td>no dynobox run observed</td><td>PASS</td></tr>
+            <tr><td><code>verify.command</code></td><td>Check that validation exits successfully</td><td>dynobox validate · exit 0</td><td>PASS</td></tr>
           </tbody>
         </table>
       </div>
@@ -111,10 +112,10 @@ import RunComparisonMock from './RunComparisonMock.astro';
       <div class="recorder-wrap">
         <header class="recorder-history-copy">
           <p class="recorder-index">04 / BUILD A RECORD</p>
-          <h2>Find the run where behavior changed.</h2>
+          <h2>See when an run behavior changed.</h2>
           <p>
-            Saved runs preserve the evidence. Compare a baseline against another
-            run and see exactly which assertion changed.
+            Compare compatible jobs across saved runs and inspect assertion
+            outcome and evidence changes.
           </p>
           <a class="recorder-text-link" href="https://dash.dynobox.xyz">Open the dashboard <span>↗</span></a>
         </header>

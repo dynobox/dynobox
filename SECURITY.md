@@ -5,8 +5,9 @@
 Please do not report suspected vulnerabilities in public issues.
 
 Use GitHub's private vulnerability reporting for this repository when available.
-If private reporting is not available, contact a maintainer directly with a brief
-description and reproduction details before sharing the issue publicly.
+If private reporting is not available, email
+[inbox@dynobox.xyz](mailto:inbox@dynobox.xyz) with a brief description and
+reproduction details before sharing the issue publicly.
 
 Helpful reports include:
 

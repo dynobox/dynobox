@@ -385,7 +385,7 @@ function dynoDisplayPath(filePath: string): string {
 /**
  * Resolve the dyno's target — the thing being tested. Prefers the authored
  * `target` field; falls back to the dyno file's parent directory name (e.g.
- * `examples/github-pr-agent/review.dyno.ts` -> `github-pr-agent`).
+ * `skills/github-pr-agent/review.dyno.ts` -> `github-pr-agent`).
  */
 function dynoTarget(entry: DynoCompileSuccess): string {
   if (entry.ir.target !== undefined) return entry.ir.target;

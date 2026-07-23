@@ -85,7 +85,7 @@ Discover and run dyno files.
 
 ```bash
 dynobox run
-dynobox run examples
+dynobox run .agents/skills/
 dynobox run my-skill.dyno.yaml
 dynobox run dynobox.config.ts
 dynobox run --config dyno.config.json
@@ -125,6 +125,11 @@ files are parsed as YAML, and JavaScript or TypeScript files such as `.mjs`,
 `.js`, `.ts`, and `.mts` are imported through the CLI loader. `.cjs` and `.cts`
 configs are not supported because `@dynobox/sdk` is ESM-only.
 
+Only run dynos you trust. JavaScript and TypeScript configs are imported, and
+setup and verification commands execute on your machine. Temporary work
+directories separate job files, but they are not security sandboxes; processes
+can access the host according to their permissions.
+
 A load error in one discovered file does not stop other files from running.
 Each bad file prints a `config:` error block on stderr, and the process exits
 non-zero if any file failed to load or any job failed.
@@ -136,7 +141,7 @@ without loading configs or running harnesses.
 
 ```bash
 dynobox discover
-dynobox discover examples
+dynobox discover dynobox
 dynobox discover my-skill.dyno.yaml
 dynobox discover --config dyno.config.json
 ```
@@ -320,13 +325,13 @@ The summary record includes:
 Example:
 
 ```bash
-dynobox run --reporter json examples/local-observability
+dynobox run --reporter json dynobox
 ```
 
 In CI, redirect stdout to an artifact file:
 
 ```bash
-dynobox run --reporter json dynobox > dynobox-report.ndjson
+dynobox run --reporter json examples/local-observability > dynobox-report.ndjson
 ```
 
 ## Exit Codes
@@ -380,14 +385,14 @@ execution and retries transient verification failures before asking you to try
 failed upload prints a warning and never changes job status, assertion results,
 or the exit code.
 
-The uploaded summary includes scenario and assertion details. Assertion records
-include the authored definition, display-ready expectation/observed text, and
-compact evidence metadata when available; this is richer than the local
-`--reporter json` output. For failing jobs, uploads also include **diagnostics
-(command and harness error output), the URLs of requested HTTP endpoints, and
-tool commands**. These values are length-capped but are **not redacted**, so
-avoid `--save-run` for runs whose command output or request URLs may contain
-secrets.
+The uploaded summary includes scenario and assertion details. For all jobs,
+assertion records include the authored definition, display-ready
+expectation/observed text, and compact matched evidence when available, including
+requested HTTP endpoint URLs, tool commands, and verification output. This is
+richer than the local `--reporter json` output. Failed jobs additionally include
+diagnostics such as command and harness error output. These values are
+length-capped but are **not redacted**, so avoid `--save-run` for runs whose
+assertion data, evidence, or diagnostics may contain secrets.
 
 ## Dashboard
 

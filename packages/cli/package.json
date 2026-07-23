@@ -38,7 +38,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "THIRD_PARTY_LICENSES"
   ],
   "dependencies": {
     "@dynobox/sdk": "workspace:*",
@@ -46,7 +47,7 @@
     "execa": "^9.6.1",
     "mockttp": "^4.4.1",
     "tinyglobby": "^0.2.16",
-    "tsx": "^4.21.0",
+    "tsx": "^4.23.1",
     "yaml": "^2.8.4"
   },
   "devDependencies": {

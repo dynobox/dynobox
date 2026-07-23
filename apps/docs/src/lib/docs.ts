@@ -84,7 +84,7 @@ const docMetadata: Record<
   },
   'getting-started.md': {
     agentSummary:
-      'Install the Dynobox CLI, connect it to the dashboard, scaffold a first dyno, choose harnesses, run targets, and debug local agent evals.',
+      'Install Dynobox, select an installed harness, run trusted dynos locally, optionally save runs, and debug agent evals.',
     description:
       'Install Dynobox, create a first dyno, choose a harness, and run local agent workflow tests.',
     topics: [
@@ -99,15 +99,16 @@ const docMetadata: Record<
   },
   'agent-skills.md': {
     agentSummary:
-      'Install and use the dynobox/skills AI agent skills from skills.sh to create dynos and debug failed or flaky Dynobox runs.',
+      'Install Dynobox skills from skills.sh to assess test fit, create dynos from skills, and diagnose failed runs.',
     description:
-      'Install Dynobox AI agent skills for creating dynos and debugging failed Dynobox runs.',
+      'Install Dynobox skills for assessing test fit, creating dynos from skills, and debugging failed runs.',
     topics: [
       'agent skills',
       'skills.sh',
       'dynobox/skills',
-      'dyno-create',
-      'dyno-debug',
+      'dyno-from-skill',
+      'dyno-run-debug',
+      'dyno-skill-fit',
       'debug',
     ],
   },
@@ -127,7 +128,7 @@ const docMetadata: Record<
   },
   'cli.md': {
     agentSummary:
-      'Reference for dynobox init, login, whoami, and run commands, flags, output modes, JSON reports, exit codes, and harness requirements.',
+      'Reference for Dynobox commands, trusted-code execution, reporters, exit codes, harnesses, and unredacted saved-run data.',
     description:
       'Dynobox CLI command reference, including init, run, reporters, exit codes, and harness requirements.',
     topics: [
@@ -139,12 +140,14 @@ const docMetadata: Record<
       'dynobox whoami',
       'dynobox run',
       'JSON reporter',
+      '--save-run',
+      'trusted code',
       'exit codes',
     ],
   },
   'ci.md': {
     agentSummary:
-      'Temporary Dynobox CI pattern from the dynobox/skills repo, including GitHub Actions setup, JSON reports, summaries, PR comments, artifacts, secrets, and fork safety.',
+      'Dynobox CI reference for trusted refs, the skills target, JSON and debug artifacts, model credentials, and pull-request safety.',
     description:
       'Example GitHub Actions pattern for running Dynobox in CI, based on the dynobox/skills repo.',
     topics: [
@@ -154,6 +157,8 @@ const docMetadata: Record<
       'JSON reporter',
       'PR comments',
       'artifacts',
+      'trusted refs',
+      'secrets',
     ],
   },
 };
@@ -412,10 +417,6 @@ function rewriteHref(href: string, file: DocFile): string {
     const targetFile = path.basename(resolvedPath);
     const route = getDocRoute(targetFile);
     return hash ? `${route}#${hash}` : route;
-  }
-
-  if (resolvedPath.startsWith('examples/')) {
-    return `${githubSourceBase}/${resolvedPath}`;
   }
 
   return href;

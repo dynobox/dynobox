@@ -2,8 +2,8 @@
 
 Dynobox is a local test runner for agent and skill workflows. You describe a
 task, choose one or more local agent harnesses, and assert on observable
-behavior such as tool calls, shell commands, files in the sandbox, transcripts,
-HTTP requests, and final messages.
+behavior such as tool calls, shell commands, files in the scenario work
+directory, transcripts, HTTP requests, and final messages.
 
 Dynobox is useful when you want repeatable checks for agent behavior before
 shipping a prompt, skill, or workflow change.
@@ -30,7 +30,14 @@ token back into the CLI.
 
 Authenticated CLI runs can upload compact summaries with
 `dynobox run --save-run`. When an upload succeeds, the CLI prints a dashboard URL
-for reviewing or sharing the saved run.
+for reviewing or sharing the saved run. Run owners can compare compatible jobs
+across saved runs to inspect assertion outcome and evidence changes.
+
+Saved-run data is length-capped but not redacted. All jobs can include authored
+assertion data and matched evidence such as requested endpoint URLs, tool
+commands, and verification output. Failed jobs can additionally include command
+or harness diagnostics. Do not use `--save-run` when those values may contain
+secrets.
 
 ## Agent Resources
 
@@ -48,9 +55,14 @@ The docs site publishes agent-oriented entry points for retrieval and indexing:
 
 ## What Dynobox Tests
 
-Dynobox runs each scenario in an isolated temporary work directory. Setup
-commands create the fixture, the selected harness performs the task, and
-assertions evaluate what happened.
+Dynobox runs each scenario in a fresh temporary work directory. Setup commands
+create the fixture, the selected harness performs the task, and assertions
+evaluate what happened.
+
+Work directories separate job files but are not security sandboxes. Dynos are
+trusted code: JavaScript and TypeScript configs are imported, and setup,
+verification, and harness processes may access the host according to their
+permissions.
 
 You can assert:
 
@@ -112,4 +124,3 @@ execution. These areas are not complete yet:
 - HTTP capture for harness-native web tools and binaries that ignore proxy/CA
   environment variables.
 - Hosted or remote runner execution.
-- Richer hosted run comparison and reporting flows.

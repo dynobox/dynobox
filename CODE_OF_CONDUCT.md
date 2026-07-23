@@ -22,5 +22,5 @@ Maintainers may edit, hide, or remove comments and issues that violate this code
 Maintainers may also limit participation for contributors who repeatedly act in
 ways that make the project less safe or productive.
 
-If you see a problem, contact a maintainer with a short description and any
-relevant links or screenshots.
+If you see a problem, email [inbox@dynobox.xyz](mailto:inbox@dynobox.xyz) with a
+short description and any relevant links or screenshots.
