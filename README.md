@@ -18,6 +18,7 @@ capture evidence, assert on tools, commands, files, and answers.
 
 <p align="center">
   <a href="https://docs.dynobox.xyz/getting-started">Get started</a> ·
+  <a href="https://docs.dynobox.xyz/how-it-works">How it works</a> ·
   <a href="https://docs.dynobox.xyz">Documentation</a> ·
   <a href="https://dash.dynobox.xyz">Dashboard</a> ·
   <a href="https://www.skills.sh/dynobox/skills">Agent skills</a> ·
@@ -161,6 +162,7 @@ secrets.
 ## Learn more
 
 - [Getting Started](https://docs.dynobox.xyz/getting-started)
+- [How It Works](https://docs.dynobox.xyz/how-it-works)
 - [Config Authoring](https://docs.dynobox.xyz/config-authoring)
 - [CLI Reference](https://docs.dynobox.xyz/cli)
 - [CI Integration](https://docs.dynobox.xyz/ci)
