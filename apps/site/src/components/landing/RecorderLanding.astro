@@ -124,6 +124,75 @@ import RunComparisonMock from './RunComparisonMock.astro';
       </div>
     </section>
 
+    <section class="recorder-faq">
+      <div class="recorder-wrap">
+        <header>
+          <p class="recorder-index">05 / COMMON QUESTIONS</p>
+          <h2>Before you<br />run.</h2>
+          <p>
+            How Dynobox works, what it measures, and where it fits in your
+            workflow.
+          </p>
+          <a class="recorder-text-link" href="https://docs.dynobox.xyz/how-it-works">Read the docs <span>→</span></a>
+        </header>
+
+        <div class="recorder-faq-list">
+          <details open>
+            <summary><span>01</span><h3>How is this different from other agent-eval tools?</h3><i></i></summary>
+            <p>
+              Most eval tools grade output quality by asking one model to score
+              another model's answer. Dynobox looks at behavior instead. It
+              records what your agent does inside the harness, including tool
+              calls, shell commands, files, eligible HTTP requests, and its final
+              message, then checks that evidence against assertions you wrote.
+              Your assertions are the only criteria, so a pass means the same
+              thing every run.
+            </p>
+          </details>
+          <details>
+            <summary><span>02</span><h3>Agent runs are non-deterministic. How can the tests be?</h3><i></i></summary>
+            <p>
+              The assertion is the fixed part, not the run. You write down what
+              has to be true, like "committed but never pushed" or "read the file
+              without editing it," and Dynobox checks each run's evidence against
+              it. When you want to know how stable the behavior is,
+              <code>--iterations</code> repeats a scenario and reports how many
+              runs passed.
+            </p>
+          </details>
+          <details>
+            <summary><span>03</span><h3>Do I need an account?</h3><i></i></summary>
+            <p>
+              No. Dynobox runs on your machine and uses the agent harnesses you
+              already have installed. The one exception is
+              <code>--save-run</code>, which publishes a compact run summary to
+              the dashboard and needs you to log in.
+            </p>
+          </details>
+          <details>
+            <summary><span>04</span><h3>Should I run dynos locally or in CI?</h3><i></i></summary>
+            <p>
+              Both, at different points. Author and debug locally where you can
+              iterate quickly, then run targeted suites in CI when skills,
+              prompts, or agent workflows change. Every scenario invokes a real
+              agent harness and jobs run serially, so suite duration is roughly
+              the combined runtime of every scenario, harness, and iteration.
+              See the <a href="https://docs.dynobox.xyz/ci/">GitHub Actions pattern</a> in the docs.
+            </p>
+          </details>
+          <details>
+            <summary><span>05</span><h3>Which agents and models does it support?</h3><i></i></summary>
+            <p>
+              Claude Code, Codex CLI, and OpenCode, each through its own
+              executable on your <code>PATH</code>. Model and permission mode are
+              configurable per harness, so you can run the same scenario across
+              all three and see where they behave differently.
+            </p>
+          </details>
+        </div>
+      </div>
+    </section>
+
     <section class="recorder-close">
       <div><span></span><p>READY TO VERIFY</p></div>
       <h2>Trust the agent.<br /><em>Verify the work.</em></h2>
@@ -194,6 +263,7 @@ import RunComparisonMock from './RunComparisonMock.astro';
   .recorder-principle h2,
   .recorder-assertions h2,
   .recorder-history-copy h2,
+  .recorder-faq h2,
   .recorder-close h2 {
     margin: 0;
     font-family: var(--font-display);
@@ -452,7 +522,8 @@ import RunComparisonMock from './RunComparisonMock.astro';
 
   .recorder-principle h2,
   .recorder-assertions h2,
-  .recorder-history-copy h2 {
+  .recorder-history-copy h2,
+  .recorder-faq h2 {
     font-size: clamp(44px, 6vw, 82px);
     line-height: 0.95;
   }
@@ -655,12 +726,138 @@ import RunComparisonMock from './RunComparisonMock.astro';
     line-height: 1.7;
   }
 
+  .recorder-faq {
+    padding-block: 130px 150px;
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  .recorder-faq > .recorder-wrap {
+    display: grid;
+    grid-template-columns: minmax(290px, 0.55fr) minmax(600px, 1.45fr);
+    gap: clamp(60px, 9vw, 130px);
+    align-items: start;
+  }
+
+  .recorder-faq header {
+    position: sticky;
+    top: 140px;
+  }
+
+  .recorder-faq header > p:not(.recorder-index) {
+    max-width: 420px;
+    margin: 28px 0 0;
+    color: #555;
+    font-size: 15px;
+    line-height: 1.7;
+  }
+
+  .recorder-faq-list {
+    border-top: 1px solid var(--paper-line);
+  }
+
+  .recorder-faq-list details {
+    border-bottom: 1px solid var(--paper-line);
+  }
+
+  .recorder-faq-list summary {
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) 18px;
+    gap: 14px;
+    align-items: center;
+    padding: 22px 0;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .recorder-faq-list summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .recorder-faq-list summary > span {
+    color: var(--signal);
+    font-family: var(--font-mono);
+    font-size: 10px;
+  }
+
+  .recorder-faq-list h3 {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: clamp(16px, 1.5vw, 20px);
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    line-height: 1.35;
+  }
+
+  .recorder-faq-list summary > i {
+    position: relative;
+    width: 14px;
+    height: 14px;
+  }
+
+  .recorder-faq-list summary > i::before,
+  .recorder-faq-list summary > i::after {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    width: 14px;
+    height: 1px;
+    background: currentColor;
+    content: '';
+    transition: transform 160ms ease;
+  }
+
+  .recorder-faq-list summary > i::after {
+    transform: rotate(90deg);
+  }
+
+  .recorder-faq-list details[open] summary > i::after {
+    transform: rotate(0);
+  }
+
+  .recorder-faq-list summary:hover h3,
+  .recorder-faq-list summary:focus-visible h3 {
+    color: var(--signal);
+  }
+
+  .recorder-faq-list summary:focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: 4px;
+  }
+
+  .recorder-faq-list details > p {
+    max-width: 680px;
+    margin: 0 32px 25px 46px;
+    color: #555;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .recorder-faq-list details > p code {
+    padding: 1px 4px;
+    background: #f2f2f2;
+    color: #333;
+    font-size: 0.86em;
+  }
+
+  .recorder-faq-list details > p a {
+    text-decoration-color: var(--signal);
+    text-underline-offset: 3px;
+  }
+
+  .recorder-faq-list details > p a:hover,
+  .recorder-faq-list details > p a:focus-visible {
+    color: var(--signal);
+  }
+
   .recorder-close {
     display: grid;
     min-height: 700px;
     place-items: center;
     align-content: center;
     padding: 100px 38px 0;
+    background: var(--dark);
+    color: #fff;
     text-align: center;
   }
 
@@ -668,7 +865,7 @@ import RunComparisonMock from './RunComparisonMock.astro';
     display: flex;
     align-items: center;
     gap: 9px;
-    color: var(--paper-muted);
+    color: #888;
     font-family: var(--font-mono);
     font-size: 10px;
   }
@@ -681,6 +878,12 @@ import RunComparisonMock from './RunComparisonMock.astro';
 
   .recorder-close > a {
     margin-top: 42px;
+    background: #fff;
+    color: var(--ink);
+  }
+
+  .recorder-close > a:hover {
+    background: #e8e8e8;
   }
 
   .recorder-close footer {
@@ -689,8 +892,8 @@ import RunComparisonMock from './RunComparisonMock.astro';
     width: min(1000px, 100%);
     margin-top: 100px;
     padding: 20px 0;
-    border-top: 1px solid var(--paper-line);
-    color: var(--paper-muted);
+    border-top: 1px solid var(--dark-line);
+    color: #888;
     font-family: var(--font-mono);
     font-size: 10px;
   }
@@ -727,17 +930,20 @@ import RunComparisonMock from './RunComparisonMock.astro';
   @media (max-width: 1080px) {
     .recorder-hero,
     .recorder-assertions,
+    .recorder-faq > .recorder-wrap,
     .recorder-history > .recorder-wrap {
       grid-template-columns: minmax(0, 1fr);
     }
 
     .recorder-hero > *,
     .recorder-assertions > *,
+    .recorder-faq > .recorder-wrap > *,
     .recorder-history > .recorder-wrap > * {
       min-width: 0;
     }
 
-    .recorder-assertions > header {
+    .recorder-assertions > header,
+    .recorder-faq header {
       position: static;
       max-width: 700px;
     }
@@ -831,6 +1037,21 @@ import RunComparisonMock from './RunComparisonMock.astro';
 
     .recorder-history {
       padding-block: 90px 100px;
+    }
+
+    .recorder-faq {
+      padding-block: 90px 100px;
+    }
+
+    .recorder-faq-list summary {
+      grid-template-columns: 26px minmax(0, 1fr) 16px;
+      gap: 10px;
+      padding-block: 20px;
+    }
+
+    .recorder-faq-list details > p {
+      margin: 0 26px 22px 36px;
+      font-size: 14px;
     }
 
     .recorder-close footer {
