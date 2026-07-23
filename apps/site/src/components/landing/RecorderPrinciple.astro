@@ -1,0 +1,123 @@
+---
+/** Dark "Behavior is the contract" section: observe → assert → explain. */
+---
+
+<section class="recorder-principle">
+  <div class="recorder-wrap">
+    <p class="recorder-index">02 / EVIDENCE OVER OPINION</p>
+    <div class="recorder-principle-head">
+      <h2 class="recorder-display">Behavior is the contract.</h2>
+      <p>
+        Agents are non-deterministic. Your acceptance criteria shouldn't be.
+        Define what must happen, then evaluate captured evidence on each run.
+      </p>
+    </div>
+    <div class="recorder-contract">
+      <article><span>OBSERVE</span><h3>What the agent did</h3><p>Tool calls, normalized commands, work-directory artifacts, skills, transcript, and final response.</p></article>
+      <i>→</i>
+      <article><span>ASSERT</span><h3>What the test requires</h3><p>Explicit matchers authored in TypeScript or YAML and compiled before the harness runs.</p></article>
+      <i>→</i>
+      <article><span>EXPLAIN</span><h3>Why it passed or failed</h3><p>Evaluator-recorded evidence attached to assertion results for inspection and comparison.</p></article>
+    </div>
+  </div>
+</section>
+
+<style>
+  .recorder-principle {
+    padding-block: 120px 130px;
+    background: var(--dark);
+    color: #fff;
+  }
+
+  .recorder-principle-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+    gap: 80px;
+    align-items: end;
+  }
+
+  .recorder-principle-head > p {
+    margin: 0;
+    color: #aaa;
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.7;
+  }
+
+  .recorder-contract {
+    display: grid;
+    grid-template-columns: 1fr 36px 1fr 36px 1fr;
+    gap: 14px;
+    align-items: stretch;
+    margin-top: 80px;
+    border-block: 1px solid var(--dark-line);
+  }
+
+  .recorder-contract article {
+    padding: 28px 10px;
+  }
+
+  .recorder-contract article span {
+    color: var(--signal);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
+
+  .recorder-contract h3 {
+    margin: 42px 0 10px;
+    font-size: 16px;
+    font-weight: 400;
+  }
+
+  .recorder-contract p {
+    margin: 0;
+    color: #929292;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 1.65;
+  }
+
+  .recorder-contract > i {
+    display: grid;
+    place-items: center;
+    color: #777;
+    font-style: normal;
+  }
+
+  @media (max-width: 700px) {
+    .recorder-principle {
+      padding-block: 85px 95px;
+    }
+
+    .recorder-principle-head {
+      grid-template-columns: 1fr;
+      gap: 26px;
+    }
+
+    .recorder-contract {
+      grid-template-columns: 1fr;
+      margin-top: 50px;
+    }
+
+    .recorder-contract > i {
+      height: 28px;
+      justify-content: start;
+      font-size: 0;
+      transform: none;
+    }
+
+    .recorder-contract > i::after {
+      content: '↓';
+      font-size: 16px;
+    }
+
+    .recorder-contract article {
+      padding-block: 20px;
+    }
+
+    .recorder-contract h3 {
+      margin-top: 24px;
+    }
+  }
+</style>
