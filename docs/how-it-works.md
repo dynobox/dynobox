@@ -45,7 +45,7 @@ options.
 ## 3. Run The Harness Under Observation
 
 Dynobox launches the configured harness executable with the scenario prompt and
-temporary work directory. The harness still uses its own installed version, 
+temporary work directory. The harness still uses its own installed version,
 authentication, model configuration, permission rules, and sandbox behavior.
 Dynobox controls the test lifecycle around it rather than replacing the harness
 runtime.
