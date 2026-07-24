@@ -18,6 +18,7 @@ capture evidence, assert on tools, commands, files, and answers.
 
 <p align="center">
   <a href="https://docs.dynobox.xyz/getting-started">Get started</a> ·
+  <a href="https://docs.dynobox.xyz/how-it-works">How it works</a> ·
   <a href="https://docs.dynobox.xyz">Documentation</a> ·
   <a href="https://dash.dynobox.xyz">Dashboard</a> ·
   <a href="https://www.skills.sh/dynobox/skills">Agent skills</a> ·
@@ -115,10 +116,15 @@ When a check fails, the output shows what was expected and what was observed.
 | Commands     | `command.called`, `command.notCalled`                        | Did it execute the expected shell command?                  |
 | Files        | `artifact.exists`, `artifact.contains`, `artifact.unchanged` | Did it create, change, or preserve the right files?         |
 | Skills       | `skill.referenced`                                           | Did it reference the required skill instructions?           |
-| Network      | `http.called`, `http.notCalled`                              | Did a local child process call the expected endpoint?       |
+| Network*     | `http.called`, `http.notCalled`                              | Did a proxy-aware child process call the expected endpoint? |
 | Response     | `transcript.contains`, `finalMessage.contains`               | Did the interaction contain required information?           |
 | Logic        | `sequence.inOrder`, `anyOf`                                  | Did the observed behavior follow an accepted path or order? |
 | Verification | `verify.command`                                             | Does the completed work pass a custom executable check?     |
+
+\* HTTP capture observes child-process traffic that honors Dynobox's proxy and
+CA settings. Harness-native web tools and clients with independent networking
+may not be captured. [Learn how HTTP capture
+works](https://docs.dynobox.xyz/how-it-works#4-capture-observable-evidence).
 
 See the [assertion reference](https://docs.dynobox.xyz/config-authoring/#assertions)
 for every matcher and authoring option.
@@ -161,6 +167,7 @@ secrets.
 ## Learn more
 
 - [Getting Started](https://docs.dynobox.xyz/getting-started)
+- [How It Works](https://docs.dynobox.xyz/how-it-works)
 - [Config Authoring](https://docs.dynobox.xyz/config-authoring)
 - [CLI Reference](https://docs.dynobox.xyz/cli)
 - [CI Integration](https://docs.dynobox.xyz/ci)

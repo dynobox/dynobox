@@ -1,0 +1,128 @@
+---
+/** Closing call to action and site footer. */
+---
+
+<section class="recorder-close">
+  <div><span></span><p>READY TO VERIFY</p></div>
+  <h2 class="recorder-display">Trust the agent.<br /><em>Verify the work.</em></h2>
+  <a class="recorder-btn" href="https://docs.dynobox.xyz/getting-started">Get started <span>→</span></a>
+  <footer>
+    <code>npm install -g dynobox</code>
+    <nav aria-label="Footer">
+      <a href="https://x.com/dynoboxdotxyz">@dynoboxdotxyz</a>
+      <a href="mailto:inbox@dynobox.xyz">inbox@dynobox.xyz</a>
+      <a class="recorder-mobile-resource" href="https://github.com/dynobox/dynobox" target="_blank" rel="noreferrer">GitHub</a>
+      <a class="recorder-mobile-resource" href="https://www.skills.sh/dynobox/skills" target="_blank" rel="noreferrer">Skills</a>
+      <a class="recorder-mobile-resource" href="https://www.npmjs.com/package/dynobox" target="_blank" rel="noreferrer">npm</a>
+    </nav>
+    <p>OPEN SOURCE · BUILT FOR DEVELOPERS</p>
+  </footer>
+</section>
+
+<style>
+  .recorder-close {
+    display: grid;
+    min-height: 700px;
+    place-items: center;
+    align-content: center;
+    padding: 100px 38px 0;
+    background: var(--dark);
+    color: #fff;
+    text-align: center;
+  }
+
+  .recorder-close > div {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: #888;
+    font-family: var(--font-mono);
+    font-size: 10px;
+  }
+
+  .recorder-close > div > span {
+    width: 11px;
+    height: 11px;
+    background: var(--signal);
+  }
+
+  .recorder-close h2 {
+    margin-top: 28px;
+    font-size: clamp(58px, 8vw, 112px);
+    line-height: 0.88;
+  }
+
+  .recorder-close > a {
+    margin-top: 42px;
+    background: #fff;
+    color: var(--ink);
+  }
+
+  .recorder-close > a:hover {
+    background: #e8e8e8;
+  }
+
+  .recorder-close footer {
+    display: flex;
+    justify-content: space-between;
+    width: min(1000px, 100%);
+    margin-top: 100px;
+    padding: 20px 0;
+    border-top: 1px solid var(--dark-line);
+    color: #888;
+    font-family: var(--font-mono);
+    font-size: 10px;
+  }
+
+  .recorder-close footer p {
+    margin: 0;
+  }
+
+  .recorder-close footer nav {
+    display: flex;
+    gap: 22px;
+  }
+
+  .recorder-close footer a {
+    color: inherit;
+    text-decoration: none;
+    transition: color 160ms ease;
+  }
+
+  .recorder-close footer a:hover,
+  .recorder-close footer a:focus-visible {
+    color: var(--signal);
+  }
+
+  .recorder-close footer a:focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: 4px;
+  }
+
+  /* Header nav links that are only surfaced in the footer on narrow screens. */
+  .recorder-mobile-resource {
+    display: none;
+  }
+
+  @media (max-width: 700px) {
+    .recorder-close footer {
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .recorder-close footer p {
+      display: none;
+    }
+
+    .recorder-close footer nav {
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .recorder-mobile-resource {
+      display: inline;
+    }
+  }
+</style>

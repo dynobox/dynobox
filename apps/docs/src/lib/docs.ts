@@ -12,6 +12,7 @@ export const docsSite = 'https://docs.dynobox.xyz';
 const docFiles = [
   'README.md',
   'getting-started.md',
+  'how-it-works.md',
   'agent-skills.md',
   'config-authoring.md',
   'cli.md',
@@ -95,6 +96,24 @@ const docMetadata: Record<
       'run',
       'harnesses',
       'debug',
+    ],
+  },
+  'how-it-works.md': {
+    agentSummary:
+      'How Dynobox creates fresh work directories, prepares fixtures, observes harnesses, captures evidence, evaluates assertions, and reports results.',
+    description:
+      'Understand the Dynobox execution lifecycle, evidence capture, assertion evaluation, and observation boundaries.',
+    topics: [
+      'execution lifecycle',
+      'work directories',
+      'fixtures',
+      'tool events',
+      'command normalization',
+      'artifacts',
+      'transcripts',
+      'HTTP capture',
+      'assertions',
+      'evidence',
     ],
   },
   'agent-skills.md': {

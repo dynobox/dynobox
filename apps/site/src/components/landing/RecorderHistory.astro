@@ -1,0 +1,58 @@
+---
+import RunComparisonMock from './RunComparisonMock.astro';
+---
+
+<section class="recorder-history">
+  <div class="recorder-wrap">
+    <header class="recorder-history-copy">
+      <p class="recorder-index">04 / BUILD A RECORD</p>
+      <h2 class="recorder-display">See when an run behavior changed.</h2>
+      <p>
+        Compare compatible jobs across saved runs and inspect assertion outcome
+        and evidence changes.
+      </p>
+      <a class="recorder-text-link" href="https://dash.dynobox.xyz">Open the dashboard <span>↗</span></a>
+    </header>
+
+    <RunComparisonMock />
+  </div>
+</section>
+
+<style>
+  .recorder-history {
+    padding-block: 130px 150px;
+    background: var(--dark);
+    color: #fff;
+  }
+
+  .recorder-history > .recorder-wrap {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.58fr) minmax(620px, 1.42fr);
+    gap: clamp(60px, 9vw, 130px);
+    align-items: center;
+  }
+
+  .recorder-history-copy > p:not(.recorder-index) {
+    margin: 28px 0 0;
+    color: #aaa;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.7;
+  }
+
+  @media (max-width: 1080px) {
+    .recorder-history > .recorder-wrap {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .recorder-history > .recorder-wrap > * {
+      min-width: 0;
+    }
+  }
+
+  @media (max-width: 700px) {
+    .recorder-history {
+      padding-block: 90px 100px;
+    }
+  }
+</style>

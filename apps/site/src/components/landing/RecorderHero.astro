@@ -1,0 +1,99 @@
+---
+import RecorderTerminal from './RecorderTerminal.astro';
+---
+
+<section class="recorder-hero recorder-wrap">
+  <div class="recorder-copy">
+    <p class="recorder-index">01 / VERIFY THE WORK</p>
+    <h1 class="recorder-display">Catch broken agent workflows <em>before they ship.</em></h1>
+    <p>
+      Dynobox is the open-source test runner for SKILL.md and agent workflows.
+      Run them across supported harnesses and check observed tool calls,
+      commands, and work-directory artifacts with explicit assertions.
+    </p>
+    <p>
+      Find skipped steps, bad outputs, and behavior regressions, with captured
+      evidence for failed assertions.
+    </p>
+    <div class="recorder-actions">
+      <a class="recorder-btn" href="https://docs.dynobox.xyz/getting-started">View docs <span>→</span></a>
+      <code><span>$</span> npx dynobox init</code>
+    </div>
+  </div>
+
+  <RecorderTerminal />
+</section>
+
+<style>
+  .recorder-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 0.92fr) minmax(500px, 1.08fr);
+    gap: clamp(60px, 9vw, 140px);
+    align-items: center;
+    min-height: calc(100vh - 72px);
+    padding-block: 108px 128px;
+  }
+
+  .recorder-copy h1 {
+    font-size: clamp(48px, 5.6vw, 84px);
+    line-height: 0.9;
+  }
+
+  .recorder-copy > p:not(.recorder-index) {
+    max-width: 610px;
+    margin: 34px 0 0;
+    color: #414141;
+    font-family: var(--font-sans);
+    font-size: clamp(16px, 1.5vw, 20px);
+    line-height: 1.65;
+  }
+
+  .recorder-copy > p:not(.recorder-index) + p {
+    margin-top: 16px;
+  }
+
+  .recorder-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 22px 28px;
+    margin-top: 36px;
+  }
+
+  .recorder-actions code {
+    display: flex;
+    align-items: center;
+    min-height: 43px;
+    padding: 11px 14px;
+    border: 1px solid var(--paper-line);
+    background: #f7f7f7;
+    color: var(--paper-muted);
+    font-size: 12px;
+  }
+
+  .recorder-actions code span {
+    margin-right: 9px;
+    color: var(--signal);
+  }
+
+  @media (max-width: 1080px) {
+    .recorder-hero {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .recorder-hero > * {
+      min-width: 0;
+    }
+  }
+
+  @media (max-width: 700px) {
+    .recorder-hero {
+      min-height: auto;
+      padding-block: 68px 90px;
+    }
+
+    .recorder-copy h1 {
+      font-size: clamp(46px, 12.5vw, 64px);
+    }
+  }
+</style>

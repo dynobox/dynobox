@@ -9,6 +9,7 @@ const LINK_HEADER = [
 const MARKDOWN_ROUTES = new Map([
   ['/', '/README.md'],
   ['/getting-started/', '/getting-started.md'],
+  ['/how-it-works/', '/how-it-works.md'],
   ['/config-authoring/', '/config-authoring.md'],
   ['/cli/', '/cli.md'],
   ['/ci/', '/ci.md'],

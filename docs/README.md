@@ -12,6 +12,8 @@ shipping a prompt, skill, or workflow change.
 
 - [Getting Started](./getting-started.md): install the CLI, scaffold a dyno,
   and run your first scenario.
+- [How It Works](./how-it-works.md): follow a job from its fresh work directory
+  through evidence capture, assertion evaluation, and the recorded result.
 - [Agent Skills](./agent-skills.md): install AI agent skills for creating dynos
   and debugging failed runs.
 - [Config Authoring](./config-authoring.md): write JavaScript, TypeScript, or

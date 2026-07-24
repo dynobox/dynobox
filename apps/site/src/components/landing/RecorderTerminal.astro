@@ -1,0 +1,226 @@
+---
+/** Mocked `dynobox run` output shown beside the hero copy. */
+---
+
+<figure class="recorder-terminal" aria-label="Dynobox run output for the dyno-from-skill skill">
+  <figcaption>
+    <div><i></i><i></i><i></i></div>
+    <span>~/skills/dyno-from-skill</span>
+  </figcaption>
+  <div class="recorder-terminal-output">
+    <p><span class="is-prompt">❯</span> <b>npx dynobox run dyno/dyno-from-skill.dyno.mjs</b></p>
+    <div class="recorder-terminal-header">
+      <p><span class="is-brand">■ dynobox</span>&nbsp; <span class="is-muted">0.10.1</span></p>
+      <p class="is-muted">discovered 1 dyno · 1 scenario · harnesses: 2</p>
+    </div>
+    <div class="recorder-terminal-results">
+      <p class="is-suite">[dyno-from-skill] generates test dyno</p>
+      <p class="is-scenario">create dyno from skill</p>
+      <p class="is-job"><span>claude-code/sonnet/da...</span><b><i>✓</i> 13 assertions</b><time>1m27s</time></p>
+      <div class="recorder-terminal-details">
+        <p class="is-check"><i>✓</i><code>skill.referenced(dyno-from-skill)</code></p>
+        <p class="is-check"><i>✓</i><code>artifact.exists(example.dyno.mjs)</code></p>
+        <p class="is-check"><i>✓</i><code>verify.command(dynobox validate)</code></p>
+        <p class="is-more">…</p>
+      </div>
+      <p class="is-job"><span>codex/gpt-5.4-mini/da...</span><b><i>✓</i> 13 assertions</b><time>1m58s</time></p>
+    </div>
+    <div class="recorder-terminal-summary">
+      <hr />
+      <strong><i>✓ 2 jobs passed</i> · 26 assertions · <span>3m25s</span></strong>
+    </div>
+  </div>
+</figure>
+
+<style>
+  .recorder-terminal {
+    margin: 0;
+    overflow: hidden;
+    border: 1px solid #292929;
+    background: var(--dark);
+    color: #f5f5f5;
+    box-shadow: 18px 20px 0 rgba(0, 0, 0, 0.12);
+    font-family: var(--font-mono);
+  }
+
+  .recorder-terminal figcaption {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 43px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--dark-line);
+    background: #111;
+    color: #777;
+    font-size: 10px;
+  }
+
+  .recorder-terminal figcaption div {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .recorder-terminal figcaption i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #3c3c3c;
+  }
+
+  .recorder-terminal figcaption i:first-child {
+    background: var(--signal);
+  }
+
+  .recorder-terminal-output {
+    min-height: 365px;
+    padding: 24px 20px 22px;
+    overflow-x: auto;
+    font-size: clamp(11px, 0.9vw, 13px);
+    line-height: 1.65;
+  }
+
+  .recorder-terminal-output p {
+    margin: 0;
+  }
+
+  .recorder-terminal-output .is-prompt,
+  .recorder-terminal-output .is-brand {
+    color: var(--signal);
+  }
+
+  .recorder-terminal-output b {
+    font-weight: 500;
+  }
+
+  .recorder-terminal-output .is-muted,
+  .recorder-terminal-output time,
+  .recorder-terminal-summary span {
+    color: #777;
+  }
+
+  .recorder-terminal-header {
+    margin-top: 17px;
+  }
+
+  .recorder-terminal-header p {
+    padding-left: 2ch;
+  }
+
+  .recorder-terminal-results {
+    margin-top: 24px;
+  }
+
+  .recorder-terminal-results .is-suite {
+    color: #ff5746;
+    padding-left: 2ch;
+  }
+
+  .recorder-terminal-results .is-scenario {
+    padding-left: 4ch;
+  }
+
+  .recorder-terminal-results .is-job {
+    display: grid;
+    grid-template-columns: 24ch 1fr auto;
+    gap: 14px;
+    min-width: 57ch;
+    padding-left: 6ch;
+    white-space: nowrap;
+  }
+
+  .recorder-terminal-results .is-job > span {
+    color: #888;
+  }
+
+  .recorder-terminal-details {
+    margin-block: 3px 6px;
+    min-width: 57ch;
+    padding-left: 8ch;
+    color: #aaa;
+  }
+
+  .recorder-terminal-details .is-check {
+    display: grid;
+    grid-template-columns: 1.5ch minmax(0, 1fr);
+    gap: 1ch;
+  }
+
+  .recorder-terminal-details .is-check code {
+    overflow: hidden;
+    color: #a4a4a4;
+    font: inherit;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .recorder-terminal-details .is-more {
+    padding-left: 2.5ch;
+    color: #666;
+  }
+
+  .recorder-terminal-output i {
+    color: #65c782;
+    font-style: normal;
+  }
+
+  .recorder-terminal-summary {
+    margin-top: 28px;
+  }
+
+  .recorder-terminal-summary hr {
+    margin: 0;
+    border: 0;
+    border-top: 1px solid #343434;
+  }
+
+  .recorder-terminal-summary strong {
+    display: block;
+    margin-top: 8px;
+    padding-left: 2ch;
+    font-weight: 400;
+  }
+
+  .recorder-terminal-summary strong i {
+    color: #65c782;
+  }
+
+  @media (max-width: 1080px) {
+    /* Lets the figure shrink inside the hero grid once it stacks. */
+    .recorder-terminal {
+      min-width: 0;
+    }
+  }
+
+  @media (max-width: 700px) {
+    .recorder-terminal-output {
+      min-height: 330px;
+      padding: 20px 14px;
+      overflow-x: hidden;
+      font-size: 10.5px;
+    }
+
+    .recorder-terminal-results .is-job {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      min-width: 0;
+      padding-left: 2ch;
+    }
+
+    .recorder-terminal-results .is-job > span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .recorder-terminal-results .is-job time {
+      /* Durations are supplementary and intentionally omitted on narrow job rows. */
+      display: none;
+    }
+
+    .recorder-terminal-details {
+      min-width: 0;
+      padding-left: 4ch;
+    }
+  }
+</style>
