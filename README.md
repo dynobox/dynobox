@@ -25,6 +25,10 @@ capture evidence, assert on tools, commands, files, and answers.
   <a href="https://github.com/dynobox/examples">Examples</a>
 </p>
 
+<p align="center">
+  <img src="./assets/demo.gif" alt="Dynobox CLI demo" width="900">
+</p>
+
 ---
 
 - Assert on tool calls, commands, files, HTTP requests, transcripts, and final
