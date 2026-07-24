@@ -34,10 +34,12 @@ capture evidence, assert on tools, commands, files, and answers.
 - Test multi-step tasks in fresh temporary work directories, repeat them to
   expose flaky behavior, and keep the evidence when something fails.
 
-## Quick start
+## Requirements
 
-Dynobox requires Node.js 22 or later and at least one supported agent harness
+Node.js 22+ and at least one supported harness (Claude Code, Codex, or OpenCode)
 installed, authenticated, and available on `PATH`.
+
+## Quick start
 
 ```bash
 npx dynobox init                         # Claude Code (default)
@@ -163,6 +165,16 @@ assertion data and matched evidence such as requested endpoint URLs, tool
 commands, and verification output. Failed jobs can additionally include command
 or harness diagnostics. Do not use `--save-run` when those values may contain
 secrets.
+
+## How Dynobox differs
+
+Dynobox is closer to unit testing than model-graded evals. It evaluates captured
+behavior—tool calls, shell commands, files, and HTTP requests—using explicit,
+repeatable assertions.
+
+Compared with one-off scripts, Dynobox provides normalized assertions, fresh
+temporary work directories, captured failure evidence, and iteration pass rates
+for measuring flaky behavior.
 
 ## Learn more
 
