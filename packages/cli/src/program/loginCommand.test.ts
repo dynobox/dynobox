@@ -82,6 +82,29 @@ describe('masked token input', () => {
     expect(output.join('')).toBe('***\b \b*');
     expect(stdin.setRawMode.mock.calls).toEqual([[true], [false]]);
   });
+
+  it('restores terminal state when mask output fails', async () => {
+    const stdin = Object.assign(new PassThrough(), {
+      isTTY: true,
+      isRaw: false,
+      setRawMode: vi.fn(),
+    });
+    const pause = vi.spyOn(stdin, 'pause');
+    const outputError = new Error('stdout unavailable');
+    const result = readProcessStdin(
+      () => {
+        throw outputError;
+      },
+      stdin as unknown as typeof process.stdin,
+    );
+
+    stdin.write('a');
+
+    await expect(result).rejects.toBe(outputError);
+    expect(stdin.setRawMode.mock.calls).toEqual([[true], [false]]);
+    expect(pause).toHaveBeenCalledOnce();
+    expect(stdin.listenerCount('data')).toBe(0);
+  });
 });
 
 describe('dynobox login', () => {
