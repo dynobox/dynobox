@@ -7,6 +7,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import {join} from 'node:path';
+import {PassThrough} from 'node:stream';
 
 import {
   afterAll,
@@ -22,6 +23,7 @@ import {
 import {authConfigPath, DYNOBOX_CONFIG_MODE, resolveAuthToken} from './auth.js';
 import {executeCli} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
+import {readProcessStdin} from './loginCommand.js';
 
 const ROOT = join(process.cwd(), '.tmp-dynobox-cli-tests-login');
 
@@ -60,6 +62,50 @@ function stubExpiredFetch(): typeof fetch {
     ),
   );
 }
+
+describe('masked token input', () => {
+  it('masks pasted characters and erases the mask on backspace', async () => {
+    const stdin = Object.assign(new PassThrough(), {
+      isTTY: true,
+      isRaw: false,
+      setRawMode: vi.fn(),
+    });
+    const output: string[] = [];
+    const result = readProcessStdin(
+      (value) => output.push(value),
+      stdin as unknown as typeof process.stdin,
+    );
+
+    stdin.write('\x7fabc\x7fd\r');
+
+    await expect(result).resolves.toBe('abd');
+    expect(output.join('')).toBe('***\b \b*');
+    expect(stdin.setRawMode.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('restores terminal state when mask output fails', async () => {
+    const stdin = Object.assign(new PassThrough(), {
+      isTTY: true,
+      isRaw: false,
+      setRawMode: vi.fn(),
+    });
+    const pause = vi.spyOn(stdin, 'pause');
+    const outputError = new Error('stdout unavailable');
+    const result = readProcessStdin(
+      () => {
+        throw outputError;
+      },
+      stdin as unknown as typeof process.stdin,
+    );
+
+    stdin.write('a');
+
+    await expect(result).rejects.toBe(outputError);
+    expect(stdin.setRawMode.mock.calls).toEqual([[true], [false]]);
+    expect(pause).toHaveBeenCalledOnce();
+    expect(stdin.listenerCount('data')).toBe(0);
+  });
+});
 
 describe('dynobox login', () => {
   beforeAll(() => {

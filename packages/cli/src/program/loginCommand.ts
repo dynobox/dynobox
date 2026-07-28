@@ -42,10 +42,13 @@ export async function loginCommandAction(
   const apiUrl = resolveApiUrl(env);
 
   input.writeStdout(
-    `Open this URL to create a Dynobox CLI token:\n${dashboardUrl}/cli-auth\n\nPaste your Dynobox token:\n`,
+    `Open this URL to create a Dynobox CLI token:\n${dashboardUrl}/cli-auth\n\nPaste your Dynobox token: `,
   );
 
-  const rawToken = await (input.readStdin ?? readProcessStdin)();
+  const rawToken = await (
+    input.readStdin ?? (() => readProcessStdin(input.writeStdout))
+  )();
+  input.writeStdout('\n');
   const token = rawToken.trim();
   if (token.length === 0) {
     input.writeStderr('error: token cannot be empty\n');
@@ -109,14 +112,18 @@ async function validateLoginToken(input: {
 }
 
 /**
- * Read a single line from stdin. On a TTY we suppress echo so the pasted token
- * never lands on screen or in scrollback; piped/non-TTY input (e.g. CI doing
+ * Read a single line from stdin. On a TTY we suppress echo and send masked
+ * character and backspace feedback to writeStdout so the pasted token never
+ * lands on screen or in scrollback. Piped/non-TTY input (e.g. CI doing
  * `echo "$TOKEN" | dynobox login`) falls back to a plain line read.
  */
-async function readProcessStdin(): Promise<string> {
-  if (process.stdin.isTTY) return readSecretFromTty();
+export async function readProcessStdin(
+  writeStdout: OutputWriter,
+  stdin = process.stdin,
+): Promise<string> {
+  if (stdin.isTTY) return readSecretFromTty({stdin, writeStdout});
 
-  const reader = createInterface({input: process.stdin, crlfDelay: Infinity});
+  const reader = createInterface({input: stdin, crlfDelay: Infinity});
   try {
     for await (const line of reader) return line;
     return '';
@@ -126,45 +133,86 @@ async function readProcessStdin(): Promise<string> {
 }
 
 /**
- * Read one line from a TTY without echoing keystrokes. Raw mode disables the
- * terminal's own echo and signal handling, so we accumulate bytes ourselves:
- * Enter and Ctrl-D submit, Ctrl-C cancels (surfacing as an empty token), and
- * Backspace/Delete edits the buffer.
+ * Read one line from a TTY with masked input. Raw mode disables the terminal's
+ * own echo and signal handling, so we accumulate bytes ourselves: Enter and
+ * Ctrl-D submit, Ctrl-C cancels (surfacing as an empty token), and
+ * Backspace/Delete edits the buffer and mask.
  */
-function readSecretFromTty(): Promise<string> {
-  return new Promise((resolve) => {
-    const stdin = process.stdin;
+function readSecretFromTty(input: {
+  stdin?: typeof process.stdin;
+  writeStdout: OutputWriter;
+}): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const stdin = input.stdin ?? process.stdin;
+    const writeStdout = input.writeStdout;
     const wasRaw = stdin.isRaw ?? false;
-    stdin.setRawMode(true);
-    stdin.resume();
-    stdin.setEncoding('utf8');
 
     let token = '';
-    const finish = (value: string): void => {
+    let settled = false;
+    let rawModeEnabled = false;
+    const cleanup = (): void => {
       stdin.removeListener('data', onData);
-      stdin.setRawMode(wasRaw);
-      stdin.pause();
-      process.stdout.write('\n');
-      resolve(value);
-    };
-    const onData = (chunk: string): void => {
-      for (const char of chunk) {
-        const code = char.charCodeAt(0);
-        if (char === '\n' || char === '\r' || code === CTRL_D) {
-          finish(token);
-          return;
-        }
-        if (code === CTRL_C) {
-          finish('');
-          return;
-        }
-        if (code === BACKSPACE || code === DELETE) {
-          token = token.slice(0, -1);
-          continue;
-        }
-        token += char;
+      try {
+        if (rawModeEnabled) stdin.setRawMode(wasRaw);
+      } finally {
+        stdin.pause();
       }
     };
-    stdin.on('data', onData);
+    const finish = (value: string): void => {
+      if (settled) return;
+      settled = true;
+      try {
+        cleanup();
+        resolve(value);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    const fail = (error: unknown): void => {
+      if (settled) return;
+      settled = true;
+      try {
+        cleanup();
+      } catch {
+        // Preserve the error that interrupted secret input.
+      }
+      reject(error);
+    };
+    const onData = (chunk: string): void => {
+      try {
+        for (const char of chunk) {
+          const code = char.charCodeAt(0);
+          if (char === '\n' || char === '\r' || code === CTRL_D) {
+            finish(token);
+            return;
+          }
+          if (code === CTRL_C) {
+            finish('');
+            return;
+          }
+          if (code === BACKSPACE || code === DELETE) {
+            if (token.length > 0) {
+              token = token.slice(0, -1);
+              writeStdout('\b \b');
+            }
+            continue;
+          }
+          token += char;
+          writeStdout('*');
+        }
+      } catch (error) {
+        fail(error);
+      }
+    };
+
+    try {
+      rawModeEnabled = true;
+      stdin.setRawMode(true);
+      stdin.resume();
+      stdin.setEncoding('utf8');
+      stdin.on('data', onData);
+    } catch (error) {
+      fail(error);
+    }
   });
 }
