@@ -42,10 +42,11 @@ export async function loginCommandAction(
   const apiUrl = resolveApiUrl(env);
 
   input.writeStdout(
-    `Open this URL to create a Dynobox CLI token:\n${dashboardUrl}/cli-auth\n\nPaste your Dynobox token:\n`,
+    `Open this URL to create a Dynobox CLI token:\n${dashboardUrl}/cli-auth\n\nPaste your Dynobox token: `,
   );
 
   const rawToken = await (input.readStdin ?? readProcessStdin)();
+  input.writeStdout('\n');
   const token = rawToken.trim();
   if (token.length === 0) {
     input.writeStderr('error: token cannot be empty\n');
@@ -126,14 +127,21 @@ async function readProcessStdin(): Promise<string> {
 }
 
 /**
- * Read one line from a TTY without echoing keystrokes. Raw mode disables the
- * terminal's own echo and signal handling, so we accumulate bytes ourselves:
- * Enter and Ctrl-D submit, Ctrl-C cancels (surfacing as an empty token), and
- * Backspace/Delete edits the buffer.
+ * Read one line from a TTY with masked input. Raw mode disables the terminal's
+ * own echo and signal handling, so we accumulate bytes ourselves: Enter and
+ * Ctrl-D submit, Ctrl-C cancels (surfacing as an empty token), and
+ * Backspace/Delete edits the buffer and mask.
  */
-function readSecretFromTty(): Promise<string> {
+export function readSecretFromTty(
+  input: {
+    stdin?: typeof process.stdin;
+    writeStdout?: OutputWriter;
+  } = {},
+): Promise<string> {
   return new Promise((resolve) => {
-    const stdin = process.stdin;
+    const stdin = input.stdin ?? process.stdin;
+    const writeStdout =
+      input.writeStdout ?? ((value: string) => process.stdout.write(value));
     const wasRaw = stdin.isRaw ?? false;
     stdin.setRawMode(true);
     stdin.resume();
@@ -144,7 +152,6 @@ function readSecretFromTty(): Promise<string> {
       stdin.removeListener('data', onData);
       stdin.setRawMode(wasRaw);
       stdin.pause();
-      process.stdout.write('\n');
       resolve(value);
     };
     const onData = (chunk: string): void => {
@@ -159,10 +166,14 @@ function readSecretFromTty(): Promise<string> {
           return;
         }
         if (code === BACKSPACE || code === DELETE) {
-          token = token.slice(0, -1);
+          if (token.length > 0) {
+            token = token.slice(0, -1);
+            writeStdout('\b \b');
+          }
           continue;
         }
         token += char;
+        writeStdout('*');
       }
     };
     stdin.on('data', onData);

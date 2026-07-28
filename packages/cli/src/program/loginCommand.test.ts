@@ -7,6 +7,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import {join} from 'node:path';
+import {PassThrough} from 'node:stream';
 
 import {
   afterAll,
@@ -22,6 +23,7 @@ import {
 import {authConfigPath, DYNOBOX_CONFIG_MODE, resolveAuthToken} from './auth.js';
 import {executeCli} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
+import {readSecretFromTty} from './loginCommand.js';
 
 const ROOT = join(process.cwd(), '.tmp-dynobox-cli-tests-login');
 
@@ -60,6 +62,26 @@ function stubExpiredFetch(): typeof fetch {
     ),
   );
 }
+
+describe('masked token input', () => {
+  it('masks pasted characters and erases the mask on backspace', async () => {
+    const stdin = Object.assign(new PassThrough(), {
+      isRaw: false,
+      setRawMode: vi.fn(),
+    });
+    const output: string[] = [];
+    const result = readSecretFromTty({
+      stdin: stdin as unknown as typeof process.stdin,
+      writeStdout: (value) => output.push(value),
+    });
+
+    stdin.write('\x7fabc\x7fd\r');
+
+    await expect(result).resolves.toBe('abd');
+    expect(output.join('')).toBe('***\b \b*');
+    expect(stdin.setRawMode.mock.calls).toEqual([[true], [false]]);
+  });
+});
 
 describe('dynobox login', () => {
   beforeAll(() => {
