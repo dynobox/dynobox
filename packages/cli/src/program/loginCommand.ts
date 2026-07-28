@@ -138,12 +138,10 @@ export async function readProcessStdin(
  * Ctrl-D submit, Ctrl-C cancels (surfacing as an empty token), and
  * Backspace/Delete edits the buffer and mask.
  */
-function readSecretFromTty(
-  input: {
-    stdin?: typeof process.stdin;
-    writeStdout: OutputWriter;
-  },
-): Promise<string> {
+function readSecretFromTty(input: {
+  stdin?: typeof process.stdin;
+  writeStdout: OutputWriter;
+}): Promise<string> {
   return new Promise((resolve, reject) => {
     const stdin = input.stdin ?? process.stdin;
     const writeStdout = input.writeStdout;
