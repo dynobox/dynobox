@@ -8,11 +8,13 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.10.2 — 2026-07-28
+
 ### `dynobox` (CLI)
 
 - Added masked token feedback to the interactive `dynobox login` prompt.
-
----
 
 ## dynobox@0.10.1 — 2026-07-22
 
