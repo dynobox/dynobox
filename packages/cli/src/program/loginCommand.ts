@@ -45,7 +45,9 @@ export async function loginCommandAction(
     `Open this URL to create a Dynobox CLI token:\n${dashboardUrl}/cli-auth\n\nPaste your Dynobox token: `,
   );
 
-  const rawToken = await (input.readStdin ?? readProcessStdin)();
+  const rawToken = await (
+    input.readStdin ?? (() => readProcessStdin(input.writeStdout))
+  )();
   input.writeStdout('\n');
   const token = rawToken.trim();
   if (token.length === 0) {
@@ -114,10 +116,13 @@ async function validateLoginToken(input: {
  * never lands on screen or in scrollback; piped/non-TTY input (e.g. CI doing
  * `echo "$TOKEN" | dynobox login`) falls back to a plain line read.
  */
-async function readProcessStdin(): Promise<string> {
-  if (process.stdin.isTTY) return readSecretFromTty();
+export async function readProcessStdin(
+  writeStdout: OutputWriter,
+  stdin = process.stdin,
+): Promise<string> {
+  if (stdin.isTTY) return readSecretFromTty({stdin, writeStdout});
 
-  const reader = createInterface({input: process.stdin, crlfDelay: Infinity});
+  const reader = createInterface({input: stdin, crlfDelay: Infinity});
   try {
     for await (const line of reader) return line;
     return '';
@@ -132,16 +137,15 @@ async function readProcessStdin(): Promise<string> {
  * Ctrl-D submit, Ctrl-C cancels (surfacing as an empty token), and
  * Backspace/Delete edits the buffer and mask.
  */
-export function readSecretFromTty(
+function readSecretFromTty(
   input: {
     stdin?: typeof process.stdin;
-    writeStdout?: OutputWriter;
-  } = {},
+    writeStdout: OutputWriter;
+  },
 ): Promise<string> {
   return new Promise((resolve) => {
     const stdin = input.stdin ?? process.stdin;
-    const writeStdout =
-      input.writeStdout ?? ((value: string) => process.stdout.write(value));
+    const writeStdout = input.writeStdout;
     const wasRaw = stdin.isRaw ?? false;
     stdin.setRawMode(true);
     stdin.resume();

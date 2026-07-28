@@ -23,7 +23,7 @@ import {
 import {authConfigPath, DYNOBOX_CONFIG_MODE, resolveAuthToken} from './auth.js';
 import {executeCli} from './execute.js';
 import {configErrorExitCode} from './exitCodes.js';
-import {readSecretFromTty} from './loginCommand.js';
+import {readProcessStdin} from './loginCommand.js';
 
 const ROOT = join(process.cwd(), '.tmp-dynobox-cli-tests-login');
 
@@ -66,14 +66,15 @@ function stubExpiredFetch(): typeof fetch {
 describe('masked token input', () => {
   it('masks pasted characters and erases the mask on backspace', async () => {
     const stdin = Object.assign(new PassThrough(), {
+      isTTY: true,
       isRaw: false,
       setRawMode: vi.fn(),
     });
     const output: string[] = [];
-    const result = readSecretFromTty({
-      stdin: stdin as unknown as typeof process.stdin,
-      writeStdout: (value) => output.push(value),
-    });
+    const result = readProcessStdin(
+      (value) => output.push(value),
+      stdin as unknown as typeof process.stdin,
+    );
 
     stdin.write('\x7fabc\x7fd\r');
 
