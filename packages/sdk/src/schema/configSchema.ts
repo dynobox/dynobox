@@ -6,6 +6,7 @@ import {
   type ShellCommandMatcher,
   TOOL_KINDS,
 } from '../types/brands.js';
+import type {CliMockHandlerContext, CliMockResponse} from '../types/config.js';
 import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/httpMethod.js';
 import {
@@ -29,6 +30,58 @@ const authoredIdSchema = z
     /^[A-Za-z0-9._-]+$/,
     'IDs may only contain letters, numbers, dots, underscores, and hyphens.',
   );
+
+const cliMockExecutableSchema = z
+  .string()
+  .min(1, 'CLI mock executable names may not be empty.')
+  .refine(
+    (value) =>
+      value !== '.' &&
+      value !== '..' &&
+      !value.includes('/') &&
+      !value.includes('\\') &&
+      !value.includes('\0'),
+    'CLI mock executable names must be bare executable names without path separators or null bytes.',
+  );
+
+const cliMockResponseSchema = z
+  .object({
+    exitCode: z.number().int(),
+    stdout: z.string().default(''),
+    stderr: z.string().default(''),
+  })
+  .strict();
+
+const cliMockHandlerSchema = z.custom<
+  (context: CliMockHandlerContext) => CliMockResponse | Promise<CliMockResponse>
+>((value) => typeof value === 'function', {
+  message: 'CLI mock handlers must be functions.',
+});
+
+const cliMockConfigSchema = z.union([
+  z
+    .object({
+      response: cliMockResponseSchema,
+    })
+    .strict(),
+  z
+    .object({
+      responses: z.array(cliMockResponseSchema).min(1),
+      onExhausted: z
+        .union([
+          z.literal('error'),
+          z.literal('repeat-last'),
+          cliMockResponseSchema,
+        ])
+        .default('error'),
+    })
+    .strict(),
+  z
+    .object({
+      handler: cliMockHandlerSchema,
+    })
+    .strict(),
+]);
 
 const assertionBaseSchema = z.object({
   id: authoredIdSchema.optional(),
@@ -366,6 +419,7 @@ export const scenarioSchema = z.object({
   harnesses: z.array(harnessRunConfigSchema).min(1).optional(),
   setup: z.array(z.string().min(1)).optional(),
   fixtures: z.union([z.string().min(1), z.array(z.string().min(1))]).optional(),
+  cliMocks: z.record(cliMockExecutableSchema, cliMockConfigSchema).optional(),
   endpoints: z.record(endpointKeySchema, endpointSchema).optional(),
   assertions: z.array(assertionSchema).optional(),
 });

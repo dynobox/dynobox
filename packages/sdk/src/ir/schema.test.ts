@@ -1,7 +1,7 @@
 import {describe, expect, it} from 'vitest';
 
 import {TOOL_MATCHER_MESSAGES} from '../schema/toolMatcherValidation.js';
-import {irAssertionSchema} from './schema.js';
+import {irAssertionSchema, irScenarioSchema} from './schema.js';
 
 describe('irAssertionSchema tool matcher validation', () => {
   it('rejects shell command matchers on non-shell tool assertions', () => {
@@ -153,5 +153,63 @@ describe('irAssertionSchema tool matcher validation', () => {
           'Verify command assertions must specify exitCode, stdout, or stderr.',
       }),
     );
+  });
+});
+
+describe('irScenarioSchema cliMocks validation', () => {
+  const scenario = {
+    id: 'scenario.cli-mocks',
+    name: 'CLI mocks',
+    prompt: 'Run the mocked command.',
+    harnesses: [{id: 'claude-code' as const}],
+    setup: [],
+    fixtures: [],
+    endpoints: [],
+    assertions: [],
+  };
+
+  it('accepts normalized response strategies and handlers', () => {
+    const handler = () => ({exitCode: 0});
+    const result = irScenarioSchema.parse({
+      ...scenario,
+      cliMocks: {
+        vitest: {
+          response: {exitCode: 0, stdout: 'passed', stderr: ''},
+        },
+        vercel: {
+          responses: [{exitCode: 1, stdout: '', stderr: 'not ready'}],
+          onExhausted: {exitCode: 0, stdout: 'deployed', stderr: ''},
+        },
+        custom: {handler},
+      },
+    });
+
+    expect(result.cliMocks.custom).toEqual({handler});
+  });
+
+  it.each([
+    {response: {exitCode: 0, stdout: 'missing stderr'}},
+    {
+      responses: [{exitCode: 0, stdout: '', stderr: ''}],
+    },
+    {
+      responses: [],
+      onExhausted: 'error',
+    },
+    {
+      response: {exitCode: 0, stdout: '', stderr: ''},
+      handler: () => ({exitCode: 0}),
+    },
+  ])('rejects non-canonical mock config %#', (config) => {
+    expect(
+      irScenarioSchema.safeParse({
+        ...scenario,
+        cliMocks: {vitest: config},
+      }).success,
+    ).toBe(false);
+  });
+
+  it('requires the canonical CLI mock map', () => {
+    expect(irScenarioSchema.safeParse(scenario).success).toBe(false);
   });
 });
