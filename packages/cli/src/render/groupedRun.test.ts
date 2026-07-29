@@ -22,6 +22,7 @@ type JobSpec = {
   assertionCount?: number;
   assertionLabel?: string;
   assertionTool?: 'shell' | 'edit_file';
+  cliMockNames?: string[];
 };
 
 function makeJob(spec: JobSpec = {}): LocalRunnerJob {
@@ -38,7 +39,12 @@ function makeJob(spec: JobSpec = {}): LocalRunnerJob {
       harnesses: [{id: harness}],
       setup: [],
       fixtures: [],
-      cliMocks: {},
+      cliMocks: Object.fromEntries(
+        (spec.cliMockNames ?? []).map((name) => [
+          name,
+          {response: {exitCode: 0, stdout: '', stderr: ''}},
+        ]),
+      ),
       endpoints: [],
       assertions: Array.from({length: assertionCount}, (_, index) => ({
         id: `${scenarioId}.assert.${index}`,
@@ -59,6 +65,7 @@ type ResultSpec = {
   status?: LocalRunnerStatus;
   failedAssertionIndexes?: number[];
   totalMs?: number;
+  cliMockCalls?: LocalRunnerResult['cliMockCalls'];
 };
 
 function makeResult(
@@ -87,7 +94,7 @@ function makeResult(
     workDir: '/tmp/work',
     setupResult: {success: status !== 'setup_failed', logs: []},
     httpEvents: [],
-    cliMockCalls: [],
+    cliMockCalls: spec.cliMockCalls ?? [],
     artifacts: [],
     assertionResults,
     diagnostics:
@@ -346,7 +353,13 @@ describe('renderGroupedRun', () => {
     const jobA = makeJob();
     const jobB = makeJob();
     const debugLogPaths = new Map([
-      [jobA, {transcript: '/tmp/alpha/dynobox-transcript.log'}],
+      [
+        jobA,
+        {
+          transcript: '/tmp/alpha/dynobox-transcript.log',
+          cliMocks: '/tmp/alpha/dynobox-cli-mocks.json',
+        },
+      ],
       [jobB, {transcript: '/tmp/beta/dynobox-transcript.log'}],
     ]);
     const output = renderGroupedRun({
@@ -364,6 +377,9 @@ describe('renderGroupedRun', () => {
     );
     expect(output).toContain(
       'log       transcript /tmp/beta/dynobox-transcript.log',
+    );
+    expect(output).toContain(
+      'log       cli_mocks /tmp/alpha/dynobox-cli-mocks.json',
     );
   });
 
@@ -397,6 +413,42 @@ describe('renderGroupedRun', () => {
     expect(output).toContain('setup');
     expect(output).toContain('assertions');
     expect(output).toContain('✓ tool.called(shell)');
+  });
+
+  it('lists configured CLI mocks and ordered calls in verbose mode', () => {
+    const jobs = [makeJob({cliMockNames: ['vitest', 'vercel']})];
+    const output = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results: [
+        makeResult(jobs[0]!, {
+          cliMockCalls: [
+            {
+              executable: 'vitest',
+              argv: ['run'],
+              cwd: '/tmp/work',
+              timestamp: 1,
+              exitCode: 1,
+              stdout: '',
+              stderr: 'failed',
+            },
+            {
+              executable: 'vitest',
+              argv: ['run'],
+              cwd: '/tmp/work',
+              timestamp: 2,
+              exitCode: 0,
+              stdout: 'passed',
+              stderr: '',
+            },
+          ],
+        }),
+      ],
+      ctx: createRenderContext({mode: 'verbose'}),
+    });
+
+    expect(output).toContain('cli mocks: vitest, vercel');
+    expect(output).toContain('cli mock: vitest run -> exit 1');
+    expect(output).toContain('cli mock: vitest run -> exit 0');
   });
 
   it('expands every iteration in verbose multi-iteration mode', () => {

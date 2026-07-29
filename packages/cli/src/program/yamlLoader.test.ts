@@ -18,6 +18,17 @@ scenarios:
     prompt: Read package.json and report scripts.
     setup:
       - "echo '{}' > package.json"
+    cliMocks:
+      vitest:
+        response:
+          exitCode: 0
+          stdout: passed
+      vercel:
+        responses:
+          - exitCode: 1
+            stderr: retry
+          - exitCode: 0
+        onExhausted: repeat-last
     assertions:
       - id: reads-package
         label: reads package.json
@@ -101,6 +112,18 @@ describe('loadYamlDyno', () => {
     if (scenario === undefined) throw new Error('expected scenario');
     expect(scenario.name).toBe('inspect package scripts');
     expect(scenario.id).toBe('scenario.inspect-package');
+    expect(scenario.cliMocks).toEqual({
+      vitest: {
+        response: {exitCode: 0, stdout: 'passed', stderr: ''},
+      },
+      vercel: {
+        responses: [
+          {exitCode: 1, stdout: '', stderr: 'retry'},
+          {exitCode: 0, stdout: '', stderr: ''},
+        ],
+        onExhausted: 'repeat-last',
+      },
+    });
     expect(scenario.assertions[0]).toMatchObject({
       id: 'assertion.inspect-package.reads-package',
       label: 'reads package.json',

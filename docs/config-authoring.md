@@ -70,6 +70,7 @@ type ScenarioInput = {
   harnesses?: HarnessRunConfig[];
   setup?: string[];
   fixtures?: string | string[];
+  cliMocks?: ScenarioCliMocks;
   endpoints?: Record<string, Endpoint>;
   assertions?: Assertion[];
 };
@@ -89,6 +90,68 @@ filters with or without the `scenario.` prefix.
 
 Scenario and assertion `id` values must be non-empty and may only contain
 letters, numbers, dots, underscores, and hyphens.
+
+## CLI Mocks
+
+Use scenario `cliMocks` to replace bare executable calls made by the harness or
+verification commands. Mocks are scoped to one scenario job and support static
+responses, ordered responses, and JavaScript or TypeScript handlers.
+
+```ts
+import {command, defineDyno} from '@dynobox/sdk';
+
+export default defineDyno({
+  scenarios: [
+    {
+      name: 'retries tests before deploying',
+      prompt: 'Run the tests, fix failures, and deploy when they pass.',
+      cliMocks: {
+        vitest: {
+          responses: [
+            {exitCode: 1, stderr: 'one test failed'},
+            {exitCode: 0, stdout: 'all tests passed'},
+          ],
+          onExhausted: 'repeat-last',
+        },
+        vercel: {
+          response: {exitCode: 0, stdout: 'https://example.vercel.app'},
+        },
+        'custom-cli': {
+          handler: async ({argv, cwd, env}) => ({
+            exitCode: argv.includes('--fail') ? 1 : 0,
+            stdout: `${cwd}:${env.NODE_ENV ?? 'development'}`,
+          }),
+        },
+      },
+      assertions: [
+        command.called('vitest', {args: ['run']}),
+        command.called('vercel'),
+      ],
+    },
+  ],
+});
+```
+
+Every response requires an integer `exitCode`. Omitted `stdout` and `stderr`
+default to empty strings. Sequential mocks require at least one response and
+default to an exhaustion error. Set `onExhausted` to `repeat-last` or to a
+fallback response to choose different behavior.
+
+Handlers receive the invoked arguments, working directory, and child process
+environment. Dynobox records the executable, arguments, working directory,
+timestamp, exit code, stdout, and stderr, but does not retain environment
+values.
+
+Setup commands and harness version detection use the real PATH. The harness and
+post-harness verification commands use a PATH with generated mock shims
+prepended. This intercepts bare names such as `vitest run`, including calls from
+nested subprocesses. Explicit paths such as `/usr/bin/vitest run` bypass the
+mock. A mock may not use the selected harness executable name.
+
+Recorded calls integrate with `command.called`, `command.notCalled`, and
+`sequence.inOrder`. Mock-only sequences use invocation order. Calls from nested
+subprocesses cannot always be ordered relative to unrelated harness tool events.
+CLI mocks currently require macOS or Linux.
 
 ## Harnesses
 
@@ -627,6 +690,14 @@ scenarios:
         cat > package.json <<'JSON'
         {"scripts":{"test":"vitest run"}}
         JSON
+    cliMocks:
+      vitest:
+        responses:
+          - exitCode: 1
+            stderr: one test failed
+          - exitCode: 0
+            stdout: all tests passed
+        onExhausted: repeat-last
     assertions:
       - label: reads package.json
         type: command.called
@@ -644,7 +715,8 @@ scenarios:
 ```
 
 YAML configs flow through the same schema and IR compiler as JavaScript and
-TypeScript configs.
+TypeScript configs. YAML supports static and sequential CLI mocks. Function
+handlers require a JavaScript or TypeScript config.
 
 ## Authoring Assertion Contract
 

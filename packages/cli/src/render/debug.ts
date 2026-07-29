@@ -37,5 +37,6 @@ function debugLogEntries(
     ['chat_jsonl', paths.chatHistory],
     ['stderr', paths.stderr],
     ['tool_events', paths.toolEvents],
+    ['cli_mocks', paths.cliMocks],
   ].filter((entry): entry is [string, string] => entry[1] !== undefined);
 }
