@@ -15,6 +15,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -38,6 +39,7 @@ describe('buildRunUploadPayload', () => {
       passed: true,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      cliMockCalls: [],
       artifacts: [],
       assertionResults: [
         {
@@ -92,6 +94,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [],
       },
@@ -126,6 +129,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -162,6 +166,7 @@ describe('buildRunUploadPayload', () => {
       passed: true,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      cliMockCalls: [],
       artifacts: [],
       assertionResults: [
         {
@@ -228,6 +233,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -265,6 +271,7 @@ describe('buildRunUploadPayload', () => {
       passed: false,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      cliMockCalls: [],
       artifacts: [],
       assertionResults: [
         {
@@ -343,6 +350,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -369,6 +377,7 @@ describe('buildRunUploadPayload', () => {
       passed: true,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      cliMockCalls: [],
       artifacts: [],
       assertionResults: [
         {
@@ -454,6 +463,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -478,6 +488,7 @@ describe('buildRunUploadPayload', () => {
       passed: false,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      cliMockCalls: [],
       artifacts: [],
       assertionResults: [
         {
@@ -528,6 +539,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -550,6 +562,7 @@ describe('buildRunUploadPayload', () => {
       passed: false,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      cliMockCalls: [],
       artifacts: [],
       assertionResults: [
         {
@@ -620,6 +633,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -644,6 +658,7 @@ describe('buildRunUploadPayload', () => {
       passed: true,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      cliMockCalls: [],
       artifacts: [],
       assertionResults: [
         {
@@ -702,6 +717,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [],
       },
@@ -718,6 +734,7 @@ describe('buildRunUploadPayload', () => {
       passed: false,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      cliMockCalls: [],
       artifacts: [],
       assertionResults: [],
       diagnostics: [

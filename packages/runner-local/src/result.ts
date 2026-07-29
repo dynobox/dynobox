@@ -1,6 +1,7 @@
 import type {AssertionResult, HttpEvent} from '@dynobox/evaluators';
 
 import type {
+  CliMockCall,
   LocalRunnerJob,
   LocalRunnerResult,
   LocalRunnerTiming,
@@ -19,6 +20,7 @@ export function buildResult(
     | 'iteration'
     | 'passed'
     | 'httpEvents'
+    | 'cliMockCalls'
     | 'assertionResults'
     | 'diagnostics'
     | 'warnings'
@@ -29,6 +31,7 @@ export function buildResult(
     diagnostics?: string[];
     warnings?: LocalRunnerWarning[];
     httpEvents?: readonly HttpEvent[];
+    cliMockCalls?: readonly CliMockCall[];
     timing: LocalRunnerTiming;
   },
 ): LocalRunnerResult {
@@ -56,6 +59,7 @@ export function buildResult(
       ? {}
       : {harnessResult: result.harnessResult}),
     httpEvents: result.httpEvents ?? [],
+    cliMockCalls: result.cliMockCalls ?? [],
     artifacts: result.artifacts,
     assertionResults,
     diagnostics,

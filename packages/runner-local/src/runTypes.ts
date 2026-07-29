@@ -113,6 +113,16 @@ export type LocalRunnerWarning = {
   };
 };
 
+export type CliMockCall = {
+  executable: string;
+  argv: string[];
+  cwd: string;
+  timestamp: number;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+};
+
 /** Structured result returned by `runJob` for rendering and summaries. */
 export type LocalRunnerResult = {
   jobId: string;
@@ -129,6 +139,7 @@ export type LocalRunnerResult = {
   harnessOutput?: HarnessRunOutput;
   harnessResult?: HarnessResult;
   httpEvents: readonly HttpEvent[];
+  cliMockCalls: readonly CliMockCall[];
   artifacts: LocalArtifact[];
   assertionResults: AssertionResult[];
   diagnostics: string[];

@@ -37,7 +37,7 @@ export type CodexParsedLine = {
 export class CodexHarness implements Harness {
   readonly id = 'codex' as const;
 
-  private readonly executable: string;
+  readonly executable: string;
   private readonly extraArgs: readonly string[];
   private readonly probeVersion: () => Promise<string | null>;
 

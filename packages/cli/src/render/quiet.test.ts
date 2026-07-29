@@ -35,6 +35,7 @@ function makeJob(spec: JobSpec = {}): LocalRunnerJob {
       harnesses: [{id: harness}],
       setup: [],
       fixtures: [],
+      cliMocks: {},
       endpoints: [],
       assertions: Array.from({length: assertionCount}, (_, index) => ({
         id: `${scenarioId}.assert.${index}`,
@@ -78,6 +79,7 @@ function makeResult(
     workDir: '/tmp/work',
     setupResult: {success: status !== 'setup_failed', logs: []},
     httpEvents: [],
+    cliMockCalls: [],
     artifacts: [],
     assertionResults,
     diagnostics:

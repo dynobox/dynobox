@@ -1,9 +1,17 @@
-import {existsSync, mkdtempSync, rmSync} from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import {createServer, request as httpRequest, type Server} from 'node:http';
 import {tmpdir} from 'node:os';
-import {join, relative} from 'node:path';
+import {delimiter, join, relative} from 'node:path';
 
 import type {IrScenario} from '@dynobox/sdk/ir';
+import {execaCommand} from 'execa';
 import {afterEach, describe, expect, it} from 'vitest';
 
 import {FakeHarness} from './harnesses/fake.js';
@@ -47,6 +55,7 @@ function createJob(scenario: Partial<IrScenario> = {}): LocalRunnerJob {
       harnesses: [{id: 'claude-code'}],
       setup: [],
       fixtures: [],
+      cliMocks: {},
       endpoints: [],
       assertions: [],
       ...scenario,
@@ -173,6 +182,44 @@ class ProxyRequestHarness implements Harness {
   }
 }
 
+class CommandHarness implements Harness {
+  readonly id = 'claude-code' as const;
+  readonly inputs: HarnessInput[] = [];
+
+  constructor(
+    private readonly command: string,
+    readonly executable = 'claude',
+  ) {}
+
+  async run(input: HarnessInput): Promise<HarnessRunOutput> {
+    this.inputs.push(input);
+    const startedAt = Date.now();
+    const result = await execaCommand(this.command, {
+      cwd: input.workDir,
+      env: {...process.env, ...input.env},
+      reject: false,
+      shell: true,
+      ...(input.timeoutMs === undefined ? {} : {timeout: input.timeoutMs}),
+    });
+    return {
+      exitCode: result.exitCode ?? 1,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      durationMs: Date.now() - startedAt,
+    };
+  }
+
+  extractResult(raw: HarnessRunOutput): HarnessResult {
+    return {
+      exitCode: raw.exitCode,
+      durationMs: raw.durationMs,
+      transcript: raw.stdout,
+      finalMessage: raw.stdout || undefined,
+      toolEvents: [],
+    };
+  }
+}
+
 describe('runJob', () => {
   it('creates a work directory under scratchRoot and returns it as an artifact', async () => {
     const scratchRoot = createScratchRoot();
@@ -227,6 +274,168 @@ describe('runJob', () => {
     expect(result.setupResult.logs).toHaveLength(1);
     expect(harness.inputs).toHaveLength(1);
     expect(harness.setupMarkerExistsAtRun).toBe(true);
+  });
+
+  it('uses the real PATH for setup and the mocked PATH for the harness', async () => {
+    const scratchRoot = createScratchRoot();
+    const realBin = join(scratchRoot, 'real-bin');
+    const executable = join(realBin, 'mocked-cli');
+    mkdirSync(realBin, {recursive: true});
+    writeFileSync(executable, '#!/bin/sh\nprintf real', {
+      mode: 0o755,
+    });
+    const harness = new CommandHarness('mocked-cli harness');
+    const originalPath = process.env.PATH;
+
+    const result = await runJob(
+      createJob({
+        setup: ['mocked-cli > setup.txt'],
+        cliMocks: {
+          'mocked-cli': {
+            response: {exitCode: 0, stdout: 'mocked', stderr: ''},
+          },
+        },
+        assertions: [
+          {
+            id: 'assertion.shims.0',
+            type: 'artifact.unchanged',
+            path: '.dynobox/cli-mocks/client.mjs',
+          },
+        ],
+      }),
+      {
+        scratchRoot,
+        harnesses: [harness],
+        env: {PATH: `${realBin}${delimiter}${process.env.PATH ?? ''}`},
+      },
+    );
+
+    expect(result.status).toBe('passed');
+    expect(readFileSync(join(result.workDir, 'setup.txt'), 'utf8')).toBe(
+      'real',
+    );
+    expect(result.harnessOutput?.stdout).toBe('mocked');
+    expect(result.cliMockCalls).toEqual([
+      expect.objectContaining({
+        executable: 'mocked-cli',
+        argv: ['harness'],
+        stdout: 'mocked',
+      }),
+    ]);
+    expect(process.env.PATH).toBe(originalPath);
+  });
+
+  it('provides CLI mocks to verification commands', async () => {
+    const scratchRoot = createScratchRoot();
+    const result = await runJob(
+      createJob({
+        cliMocks: {
+          'mocked-cli': {
+            response: {exitCode: 0, stdout: 'verified', stderr: ''},
+          },
+        },
+        assertions: [
+          {
+            id: 'assertion.verify.0',
+            type: 'verify.command',
+            command: 'mocked-cli verify',
+            exitCode: 0,
+            stdout: {equals: 'verified'},
+          },
+        ],
+      }),
+      {scratchRoot, harnesses: [new RecordingHarness()]},
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.cliMockCalls).toEqual([
+      expect.objectContaining({
+        executable: 'mocked-cli',
+        argv: ['verify'],
+      }),
+    ]);
+  });
+
+  it('rejects a CLI mock that collides with the harness executable', async () => {
+    const scratchRoot = createScratchRoot();
+    const harness = new CommandHarness('mocked-cli', 'mocked-cli');
+
+    const result = await runJob(
+      createJob({
+        cliMocks: {
+          'mocked-cli': {
+            response: {exitCode: 0, stdout: '', stderr: ''},
+          },
+        },
+      }),
+      {scratchRoot, harnesses: [harness]},
+    );
+
+    expect(result.status).toBe('setup_failed');
+    expect(result.diagnostics[0]).toContain('conflicts with harness');
+    expect(harness.inputs).toEqual([]);
+  });
+
+  it('fails the harness when it ignores CLI mock exhaustion', async () => {
+    const scratchRoot = createScratchRoot();
+    const result = await runJob(
+      createJob({
+        cliMocks: {
+          'mocked-cli': {
+            responses: [{exitCode: 0, stdout: '', stderr: ''}],
+            onExhausted: 'error',
+          },
+        },
+      }),
+      {
+        scratchRoot,
+        harnesses: [
+          new CommandHarness(
+            'mocked-cli first; mocked-cli second >/dev/null 2>&1 || true',
+          ),
+        ],
+      },
+    );
+
+    expect(result.harnessOutput?.exitCode).toBe(0);
+    expect(result.status).toBe('harness_failed');
+    expect(result.cliMockCalls).toHaveLength(2);
+    expect(result.diagnostics[0]).toContain('exhausted');
+  });
+
+  it('preserves verification mock failures even when assertions accept the exit code', async () => {
+    const scratchRoot = createScratchRoot();
+    const result = await runJob(
+      createJob({
+        cliMocks: {
+          'mocked-cli': {
+            responses: [{exitCode: 0, stdout: '', stderr: ''}],
+            onExhausted: 'error',
+          },
+        },
+        assertions: [
+          {
+            id: 'assertion.verify.0',
+            type: 'verify.command',
+            command: 'mocked-cli first',
+            exitCode: 0,
+          },
+          {
+            id: 'assertion.verify.1',
+            type: 'verify.command',
+            command: 'mocked-cli second',
+            exitCode: 1,
+          },
+        ],
+      }),
+      {scratchRoot, harnesses: [new RecordingHarness()]},
+    );
+
+    expect(result.assertionResults.every((assertion) => assertion.passed)).toBe(
+      true,
+    );
+    expect(result.status).toBe('assertion_failed');
+    expect(result.diagnostics[0]).toContain('exhausted');
   });
 
   it('passes prompt, workDir, env, and timeout to the harness', async () => {

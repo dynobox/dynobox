@@ -10,6 +10,7 @@ import {
   preEvaluateAnyOfObservationBranches,
 } from '@dynobox/evaluators';
 
+import {type CliMockController, startCliMockController} from './cliMocks.js';
 import {
   errorMessage,
   harnessExitDiagnostic,
@@ -62,6 +63,7 @@ export {
 export {ensureDynoboxCA} from './http/ca.js';
 export {buildHttpRoutes, matchHttpEndpointId} from './http/events.js';
 export type {
+  CliMockCall,
   LocalArtifact,
   LocalRunnerJob,
   LocalRunnerResult,
@@ -151,13 +153,6 @@ export async function runJob(
     });
   }
 
-  // Capture unchanged baselines after fixtures/setup succeed and before the
-  // harness can mutate the workdir. Snapshot failures stay assertion-level.
-  const artifactBaselines = captureArtifactBaselines(
-    job.scenario.assertions,
-    workDir,
-  );
-
   emitProgress(options, {
     type: 'harness.started',
     job,
@@ -186,14 +181,14 @@ export async function runJob(
     });
   }
 
-  const harnessVersion = Promise.resolve()
+  const harnessVersion = await Promise.resolve()
     .then(() => harness.version?.() ?? null)
     .catch(() => null);
 
-  let httpCapture: HttpCapture | undefined;
-  try {
-    httpCapture = await startHttpCapture(job.scenario);
-  } catch (error) {
+  if (
+    harness.executable !== undefined &&
+    Object.hasOwn(job.scenario.cliMocks, harness.executable)
+  ) {
     emitProgress(options, {
       type: 'harness.completed',
       job,
@@ -202,229 +197,337 @@ export async function runJob(
       toolCount: 0,
     });
     return buildResult(job, {
-      status: 'harness_failed',
+      status: 'setup_failed',
       workDir,
       setupResult,
       artifacts,
-      harnessVersion: await harnessVersion,
-      diagnostics: [`HTTP capture failed to start: ${errorMessage(error)}`],
+      harnessVersion,
+      diagnostics: [
+        `CLI mock "${harness.executable}" conflicts with harness "${harness.id}".`,
+      ],
       timing: buildTiming({setupMs}),
     });
   }
 
-  let harnessOutput: HarnessRunOutput;
-  const harnessStartedAt = Date.now();
-  let liveToolCount = 0;
+  let cliMockController: CliMockController | undefined;
   try {
-    const harnessEnv = {...(options.env ?? {}), ...(httpCapture?.env ?? {})};
-    const harnessInput = {
-      prompt: job.scenario.prompt,
-      workDir,
-      env: harnessEnv,
-      ...(job.model === undefined ? {} : {model: job.model}),
-      ...(job.permissionMode === undefined
-        ? {}
-        : {permissionMode: job.permissionMode}),
-      onToolEvent: (toolEvent: ToolEvent) => {
-        liveToolCount += 1;
-        emitProgress(options, {
-          type: 'harness.tool',
-          job,
-          harnessId: harness.id,
-          toolEvent,
-          toolCount: liveToolCount,
-        });
-      },
-    };
-    harnessOutput = await harness.run(
-      options.timeoutMs === undefined
-        ? harnessInput
-        : {...harnessInput, timeoutMs: options.timeoutMs},
-    );
+    if (Object.keys(job.scenario.cliMocks).length > 0) {
+      cliMockController = await startCliMockController(job.scenario.cliMocks);
+      await cliMockController.install(workDir);
+    }
   } catch (error) {
+    await cliMockController?.stop();
+    emitProgress(options, {
+      type: 'harness.completed',
+      job,
+      harnessId: harness.id,
+      success: false,
+      toolCount: 0,
+    });
+    return buildResult(job, {
+      status: 'setup_failed',
+      workDir,
+      setupResult,
+      artifacts,
+      harnessVersion,
+      diagnostics: [`CLI mocks failed to initialize: ${errorMessage(error)}`],
+      timing: buildTiming({setupMs}),
+    });
+  }
+
+  const cliMockEnv =
+    cliMockController?.env(options.env?.PATH ?? process.env.PATH ?? '') ?? {};
+  // Install static shims before capturing unchanged baselines so generated
+  // files do not appear as harness changes.
+  const artifactBaselines = captureArtifactBaselines(
+    job.scenario.assertions,
+    workDir,
+  );
+
+  let httpCapture: HttpCapture | undefined;
+  try {
+    try {
+      httpCapture = await startHttpCapture(job.scenario);
+    } catch (error) {
+      emitProgress(options, {
+        type: 'harness.completed',
+        job,
+        harnessId: harness.id,
+        success: false,
+        toolCount: 0,
+      });
+      return buildResult(job, {
+        status: 'harness_failed',
+        workDir,
+        setupResult,
+        artifacts,
+        harnessVersion,
+        diagnostics: [`HTTP capture failed to start: ${errorMessage(error)}`],
+        timing: buildTiming({setupMs}),
+      });
+    }
+
+    let harnessOutput: HarnessRunOutput;
+    const harnessStartedAt = Date.now();
+    let liveToolCount = 0;
+    try {
+      const harnessEnv = {
+        ...(options.env ?? {}),
+        ...(httpCapture?.env ?? {}),
+        ...cliMockEnv,
+      };
+      const harnessInput = {
+        prompt: job.scenario.prompt,
+        workDir,
+        env: harnessEnv,
+        ...(job.model === undefined ? {} : {model: job.model}),
+        ...(job.permissionMode === undefined
+          ? {}
+          : {permissionMode: job.permissionMode}),
+        onToolEvent: (toolEvent: ToolEvent) => {
+          liveToolCount += 1;
+          emitProgress(options, {
+            type: 'harness.tool',
+            job,
+            harnessId: harness.id,
+            toolEvent,
+            toolCount: liveToolCount,
+          });
+        },
+      };
+      harnessOutput = await harness.run(
+        options.timeoutMs === undefined
+          ? harnessInput
+          : {...harnessInput, timeoutMs: options.timeoutMs},
+      );
+    } catch (error) {
+      emitProgress(options, {
+        type: 'harness.completed',
+        job,
+        harnessId: harness.id,
+        success: false,
+        toolCount: liveToolCount,
+      });
+      return buildResult(job, {
+        status: 'harness_failed',
+        workDir,
+        setupResult,
+        artifacts,
+        harnessVersion,
+        diagnostics: [
+          `Harness "${harness.id}" failed to run: ${errorMessage(error)}`,
+        ],
+        httpEvents: httpCapture?.events ?? [],
+        cliMockCalls: cliMockController?.calls() ?? [],
+        timing: buildTiming({
+          setupMs,
+          harnessMs: Date.now() - harnessStartedAt,
+        }),
+      });
+    }
+    const httpEvents = httpCapture?.events ?? [];
     await stopHttpCapture(httpCapture);
-    emitProgress(options, {
-      type: 'harness.completed',
-      job,
-      harnessId: harness.id,
-      success: false,
-      toolCount: liveToolCount,
-    });
-    return buildResult(job, {
-      status: 'harness_failed',
-      workDir,
-      setupResult,
-      artifacts,
-      harnessVersion: await harnessVersion,
-      diagnostics: [
-        `Harness "${harness.id}" failed to run: ${errorMessage(error)}`,
-      ],
-      httpEvents: httpCapture?.events ?? [],
-      timing: buildTiming({
-        setupMs,
-        harnessMs: Date.now() - harnessStartedAt,
-      }),
-    });
-  }
-  await stopHttpCapture(httpCapture);
-  const httpEvents = httpCapture?.events ?? [];
+    httpCapture = undefined;
 
-  let harnessResult: HarnessResult;
-  try {
-    harnessResult = harness.extractResult(harnessOutput);
-  } catch (error) {
-    emitProgress(options, {
-      type: 'harness.completed',
-      job,
-      harnessId: harness.id,
-      success: false,
-      toolCount: liveToolCount,
-      exitCode: harnessOutput.exitCode,
-      durationMs: harnessOutput.durationMs,
-    });
-    return buildResult(job, {
-      status: 'harness_failed',
-      workDir,
-      setupResult,
-      artifacts,
-      harnessVersion: await harnessVersion,
-      harnessOutput,
-      httpEvents,
-      diagnostics: [
-        `Harness "${harness.id}" failed to extract result: ${errorMessage(error)}`,
-      ],
-      timing: buildTiming({
-        setupMs,
-        harnessMs: harnessOutput.durationMs,
-      }),
-    });
-  }
+    const harnessCliMockFailures = cliMockController?.failures() ?? [];
+    if (harnessCliMockFailures.length > 0) {
+      emitProgress(options, {
+        type: 'harness.completed',
+        job,
+        harnessId: harness.id,
+        success: false,
+        toolCount: liveToolCount,
+        exitCode: harnessOutput.exitCode,
+        durationMs: harnessOutput.durationMs,
+      });
+      return buildResult(job, {
+        status: 'harness_failed',
+        workDir,
+        setupResult,
+        artifacts,
+        harnessVersion,
+        harnessOutput,
+        httpEvents,
+        cliMockCalls: cliMockController?.calls() ?? [],
+        diagnostics: harnessCliMockFailures.map((failure) => failure.message),
+        timing: buildTiming({
+          setupMs,
+          harnessMs: harnessOutput.durationMs,
+        }),
+      });
+    }
 
-  if (harnessResult.exitCode !== 0) {
+    let harnessResult: HarnessResult;
+    try {
+      harnessResult = harness.extractResult(harnessOutput);
+    } catch (error) {
+      emitProgress(options, {
+        type: 'harness.completed',
+        job,
+        harnessId: harness.id,
+        success: false,
+        toolCount: liveToolCount,
+        exitCode: harnessOutput.exitCode,
+        durationMs: harnessOutput.durationMs,
+      });
+      return buildResult(job, {
+        status: 'harness_failed',
+        workDir,
+        setupResult,
+        artifacts,
+        harnessVersion,
+        harnessOutput,
+        httpEvents,
+        cliMockCalls: cliMockController?.calls() ?? [],
+        diagnostics: [
+          `Harness "${harness.id}" failed to extract result: ${errorMessage(error)}`,
+        ],
+        timing: buildTiming({
+          setupMs,
+          harnessMs: harnessOutput.durationMs,
+        }),
+      });
+    }
+
+    if (harnessResult.exitCode !== 0) {
+      emitProgress(options, {
+        type: 'harness.completed',
+        job,
+        harnessId: harness.id,
+        success: false,
+        toolCount: liveToolCount,
+        exitCode: harnessResult.exitCode,
+        durationMs: harnessResult.durationMs,
+      });
+      return buildResult(job, {
+        status: 'harness_failed',
+        workDir,
+        setupResult,
+        artifacts,
+        harnessVersion,
+        harnessOutput,
+        harnessResult,
+        httpEvents,
+        cliMockCalls: cliMockController?.calls() ?? [],
+        diagnostics: [harnessExitDiagnostic(harnessResult, harnessOutput)],
+        warnings: [
+          ...permissionWarningsFromToolEvents(harnessResult.toolEvents),
+          ...permissionWarningsFromHarnessFailure(harnessOutput, harnessResult),
+        ],
+        timing: buildTiming({
+          setupMs,
+          harnessMs: harnessResult.durationMs,
+        }),
+      });
+    }
+
     emitProgress(options, {
       type: 'harness.completed',
       job,
       harnessId: harness.id,
-      success: false,
-      toolCount: liveToolCount,
+      success: true,
+      toolCount: harnessResult.toolEvents.length,
       exitCode: harnessResult.exitCode,
       durationMs: harnessResult.durationMs,
     });
+    emitProgress(options, {
+      type: 'assertions.started',
+      job,
+      assertionCount: job.scenario.assertions.length,
+    });
+    const assertionsStartedAt = Date.now();
+    const observationInput = {
+      toolEvents: harnessResult.toolEvents,
+      httpEvents,
+      workDir,
+      transcript: harnessResult.transcript,
+      finalMessage: harnessResult.finalMessage,
+      artifactBaselines,
+    };
+    // Cache observation branches before verification commands can mutate the
+    // workdir (including nested anyOf verify branches).
+    const anyOfObservationBranches = preEvaluateAnyOfObservationBranches(
+      job.scenario.assertions,
+      observationInput,
+    );
+    const preVerifyAssertions = job.scenario.assertions.filter(
+      (assertion) => !assertionRequiresVerify(assertion),
+    );
+    const postVerifyAssertions = job.scenario.assertions.filter(
+      assertionRequiresVerify,
+    );
+    const nonVerifyAssertionResults = evaluateAssertions({
+      assertions: preVerifyAssertions,
+      ...observationInput,
+      anyOfObservationBranches,
+    });
+    const verifyOptions: Parameters<typeof runVerifyCommands>[0] = {
+      scenario: job.scenario,
+      workDir,
+    };
+    if (options.env !== undefined || cliMockController !== undefined) {
+      verifyOptions.env = {...(options.env ?? {}), ...cliMockEnv};
+    }
+    const verifyCommandResults = await runVerifyCommands(verifyOptions);
+    const verifyAssertionResults = evaluateAssertions({
+      assertions: postVerifyAssertions,
+      ...observationInput,
+      verifyCommandResults,
+      anyOfObservationBranches,
+    });
+    const resultsByAssertionId = new Map<string, AssertionResult[]>();
+    for (const result of [
+      ...nonVerifyAssertionResults,
+      ...verifyAssertionResults,
+    ]) {
+      const results = resultsByAssertionId.get(result.assertionId) ?? [];
+      results.push(result);
+      resultsByAssertionId.set(result.assertionId, results);
+    }
+    const assertionResults = job.scenario.assertions.map((assertion) => {
+      const result = resultsByAssertionId.get(assertion.id)?.shift();
+      if (result === undefined) {
+        throw new Error(`Missing assertion result for ${assertion.id}.`);
+      }
+      return result;
+    });
+    const assertionsMs = Date.now() - assertionsStartedAt;
+    emitProgress(options, {
+      type: 'assertions.completed',
+      job,
+      assertionResults,
+    });
+    const cliMockFailures = cliMockController?.failures() ?? [];
+    const passed =
+      cliMockFailures.length === 0 &&
+      assertionResults.every((result) => result.passed);
+    const warnings = permissionWarningsFromToolEvents(harnessResult.toolEvents);
+
     return buildResult(job, {
-      status: 'harness_failed',
+      status: passed ? 'passed' : 'assertion_failed',
       workDir,
       setupResult,
       artifacts,
-      harnessVersion: await harnessVersion,
+      harnessVersion,
       harnessOutput,
       harnessResult,
       httpEvents,
-      diagnostics: [harnessExitDiagnostic(harnessResult, harnessOutput)],
-      warnings: [
-        ...permissionWarningsFromToolEvents(harnessResult.toolEvents),
-        ...permissionWarningsFromHarnessFailure(harnessOutput, harnessResult),
-      ],
+      cliMockCalls: cliMockController?.calls() ?? [],
+      assertionResults,
+      diagnostics: cliMockFailures.map((failure) => failure.message),
+      warnings,
       timing: buildTiming({
         setupMs,
         harnessMs: harnessResult.durationMs,
+        assertionsMs,
       }),
     });
+  } finally {
+    await Promise.allSettled([
+      stopHttpCapture(httpCapture),
+      cliMockController?.stop(),
+    ]);
   }
-
-  emitProgress(options, {
-    type: 'harness.completed',
-    job,
-    harnessId: harness.id,
-    success: true,
-    toolCount: harnessResult.toolEvents.length,
-    exitCode: harnessResult.exitCode,
-    durationMs: harnessResult.durationMs,
-  });
-  emitProgress(options, {
-    type: 'assertions.started',
-    job,
-    assertionCount: job.scenario.assertions.length,
-  });
-  const assertionsStartedAt = Date.now();
-  const observationInput = {
-    toolEvents: harnessResult.toolEvents,
-    httpEvents,
-    workDir,
-    transcript: harnessResult.transcript,
-    finalMessage: harnessResult.finalMessage,
-    artifactBaselines,
-  };
-  // Cache observation branches before verification commands can mutate the
-  // workdir (including nested anyOf verify branches).
-  const anyOfObservationBranches = preEvaluateAnyOfObservationBranches(
-    job.scenario.assertions,
-    observationInput,
-  );
-  const preVerifyAssertions = job.scenario.assertions.filter(
-    (assertion) => !assertionRequiresVerify(assertion),
-  );
-  const postVerifyAssertions = job.scenario.assertions.filter(
-    assertionRequiresVerify,
-  );
-  const nonVerifyAssertionResults = evaluateAssertions({
-    assertions: preVerifyAssertions,
-    ...observationInput,
-    anyOfObservationBranches,
-  });
-  const verifyOptions: Parameters<typeof runVerifyCommands>[0] = {
-    scenario: job.scenario,
-    workDir,
-  };
-  if (options.env !== undefined) verifyOptions.env = options.env;
-  const verifyCommandResults = await runVerifyCommands(verifyOptions);
-  const verifyAssertionResults = evaluateAssertions({
-    assertions: postVerifyAssertions,
-    ...observationInput,
-    verifyCommandResults,
-    anyOfObservationBranches,
-  });
-  const resultsByAssertionId = new Map<string, AssertionResult[]>();
-  for (const result of [
-    ...nonVerifyAssertionResults,
-    ...verifyAssertionResults,
-  ]) {
-    const results = resultsByAssertionId.get(result.assertionId) ?? [];
-    results.push(result);
-    resultsByAssertionId.set(result.assertionId, results);
-  }
-  const assertionResults = job.scenario.assertions.map((assertion) => {
-    const result = resultsByAssertionId.get(assertion.id)?.shift();
-    if (result === undefined) {
-      throw new Error(`Missing assertion result for ${assertion.id}.`);
-    }
-    return result;
-  });
-  const assertionsMs = Date.now() - assertionsStartedAt;
-  emitProgress(options, {
-    type: 'assertions.completed',
-    job,
-    assertionResults,
-  });
-  const passed = assertionResults.every((result) => result.passed);
-  const warnings = permissionWarningsFromToolEvents(harnessResult.toolEvents);
-
-  return buildResult(job, {
-    status: passed ? 'passed' : 'assertion_failed',
-    workDir,
-    setupResult,
-    artifacts,
-    harnessVersion: await harnessVersion,
-    harnessOutput,
-    harnessResult,
-    httpEvents,
-    assertionResults,
-    warnings,
-    timing: buildTiming({
-      setupMs,
-      harnessMs: harnessResult.durationMs,
-      assertionsMs,
-    }),
-  });
 }
 
 async function createWorkDir(scratchRoot: string | undefined): Promise<string> {

@@ -37,7 +37,7 @@ export type ClaudeCodeParsedLine = {
 export class ClaudeCodeHarness implements Harness {
   readonly id = 'claude-code' as const;
 
-  private readonly executable: string;
+  readonly executable: string;
   private readonly extraArgs: readonly string[];
   private readonly probeVersion: () => Promise<string | null>;
 

@@ -43,6 +43,7 @@ function expectedPassingRunHeader(configPath: string): string {
             harnesses: [{id: 'claude-code'}],
             setup: [],
             fixtures: [],
+            cliMocks: {},
             endpoints: [],
             assertions: [],
           },

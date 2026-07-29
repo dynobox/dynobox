@@ -15,6 +15,7 @@ const scenario: IrScenario = {
   harnesses: [{id: 'claude-code'}],
   setup: [],
   fixtures: [],
+  cliMocks: {},
   endpoints: [
     {
       id: 'endpoint.http.getUser',
