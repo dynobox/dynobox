@@ -132,10 +132,10 @@ export default defineDyno({
 });
 ```
 
-Every response requires an integer `exitCode`. Omitted `stdout` and `stderr`
-default to empty strings. Sequential mocks require at least one response and
-default to an exhaustion error. Set `onExhausted` to `repeat-last` or to a
-fallback response to choose different behavior.
+Every response requires an integer `exitCode` from 0 through 255. Omitted
+`stdout` and `stderr` default to empty strings. Sequential mocks require at
+least one response and default to an exhaustion error. Set `onExhausted` to
+`repeat-last` or to a fallback response to choose different behavior.
 
 Handlers receive the invoked arguments, working directory, and child process
 environment. Dynobox records the executable, arguments, working directory,

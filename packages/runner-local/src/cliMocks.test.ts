@@ -1,4 +1,11 @@
-import {mkdtempSync, realpathSync, rmSync, statSync} from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 
@@ -119,6 +126,34 @@ describe('CLI mock controller', () => {
     expect(controller.calls()[0]).toMatchObject({stdout: result.stdout});
   });
 
+  it('keeps mocks ahead of local binaries in package scripts', async () => {
+    const {controller, workDir} = await createController({
+      vitest: {
+        response: {exitCode: 0, stdout: 'mocked', stderr: ''},
+      },
+    });
+    const localBin = join(workDir, 'node_modules', '.bin');
+    mkdirSync(localBin, {recursive: true});
+    writeFileSync(
+      join(workDir, 'package.json'),
+      JSON.stringify({scripts: {test: 'vitest run'}}),
+    );
+    writeFileSync(join(localBin, 'vitest'), '#!/bin/sh\nprintf real', {
+      mode: 0o700,
+    });
+
+    const result = await execa('npm', ['run', 'test', '--silent'], {
+      cwd: workDir,
+      env: {...process.env, ...controller.env(process.env.PATH ?? '')},
+      reject: false,
+    });
+
+    expect(result).toMatchObject({exitCode: 0, stdout: 'mocked'});
+    expect(controller.calls()).toEqual([
+      expect.objectContaining({executable: 'vitest', argv: ['run']}),
+    ]);
+  });
+
   it('records handler failures and preserves invocation order', async () => {
     let slowStarted: (() => void) | undefined;
     const started = new Promise<void>((resolve) => {
@@ -142,6 +177,9 @@ describe('CLI mock controller', () => {
       invalid: {
         handler: () => ({exitCode: 0, stdout: 42}) as never,
       },
+      invalidExitCode: {
+        handler: () => ({exitCode: 256}),
+      },
     });
 
     const slow = runMock(controller, workDir, 'ordered', ['slow']);
@@ -163,8 +201,33 @@ describe('CLI mock controller', () => {
       exitCode: 1,
       stderr: expect.stringContaining('stdout must be a string'),
     });
-    expect(controller.failures()).toHaveLength(2);
+    expect(await runMock(controller, workDir, 'invalidExitCode')).toMatchObject(
+      {
+        exitCode: 1,
+        stderr: expect.stringContaining('between 0 and 255'),
+      },
+    );
+    expect(controller.failures()).toHaveLength(3);
   });
+
+  it.each([
+    {response: {exitCode: -1, stdout: '', stderr: ''}},
+    {
+      responses: [{exitCode: 256, stdout: '', stderr: ''}],
+      onExhausted: 'error' as const,
+    },
+    {
+      responses: [{exitCode: 0, stdout: '', stderr: ''}],
+      onExhausted: {exitCode: 256, stdout: '', stderr: ''},
+    },
+  ])(
+    'rejects configured exit codes outside the process range',
+    async (config) => {
+      await expect(
+        startCliMockController({invalid: config} as IrScenario['cliMocks']),
+      ).rejects.toThrow('between 0 and 255');
+    },
+  );
 
   it('installs private executable shims and cleans up the socket', async () => {
     const {controller, workDir} = await createController({

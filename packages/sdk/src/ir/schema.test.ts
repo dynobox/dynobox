@@ -189,6 +189,8 @@ describe('irScenarioSchema cliMocks validation', () => {
 
   it.each([
     {response: {exitCode: 0, stdout: 'missing stderr'}},
+    {response: {exitCode: -1, stdout: '', stderr: ''}},
+    {response: {exitCode: 256, stdout: '', stderr: ''}},
     {
       responses: [{exitCode: 0, stdout: '', stderr: ''}],
     },

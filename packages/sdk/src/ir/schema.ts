@@ -47,7 +47,7 @@ const cliMockExecutableSchema = z
 
 const irCliMockResponseSchema = z
   .object({
-    exitCode: z.number().int(),
+    exitCode: z.number().int().min(0).max(255),
     stdout: z.string(),
     stderr: z.string(),
   })

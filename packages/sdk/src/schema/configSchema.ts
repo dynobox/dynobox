@@ -46,7 +46,7 @@ const cliMockExecutableSchema = z
 
 const cliMockResponseSchema = z
   .object({
-    exitCode: z.number().int(),
+    exitCode: z.number().int().min(0).max(255),
     stdout: z.string().default(''),
     stderr: z.string().default(''),
   })

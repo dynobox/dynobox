@@ -140,6 +140,8 @@ describe('scenarioSchema cliMocks validation', () => {
     {},
     {responses: []},
     {response: {stdout: 'missing exit code'}},
+    {response: {exitCode: -1}},
+    {response: {exitCode: 256}},
     {response: {exitCode: 0}, responses: [{exitCode: 1}]},
     {response: {exitCode: 0}, handler: () => ({exitCode: 0})},
     {responses: [{exitCode: 0}], handler: () => ({exitCode: 0})},

@@ -13,6 +13,7 @@ const SOCKET_ENV = 'DYNOBOX_CLI_MOCK_SOCKET';
 const TOKEN_ENV = 'DYNOBOX_CLI_MOCK_TOKEN';
 const NODE_ENV = 'DYNOBOX_CLI_MOCK_NODE';
 const CLIENT_ENV = 'DYNOBOX_CLI_MOCK_CLIENT';
+const BIN_ENV = 'DYNOBOX_CLI_MOCK_BIN';
 
 type CliMockConfig = IrScenario['cliMocks'][string];
 
@@ -58,7 +59,10 @@ export async function startCliMockController(
   mocks: IrScenario['cliMocks'],
 ): Promise<CliMockController> {
   const executableNames = Object.keys(mocks);
-  for (const executable of executableNames) validateExecutableName(executable);
+  for (const [executable, config] of Object.entries(mocks)) {
+    validateExecutableName(executable);
+    validateConfiguredResponses(executable, config);
+  }
 
   const socketDir = await mkdtemp(join(tmpdir(), 'dxb-mock-'));
   await chmod(socketDir, 0o700);
@@ -72,6 +76,7 @@ export async function startCliMockController(
   let nextSequence = 0;
   let binDir: string | undefined;
   let clientPath: string | undefined;
+  let scriptShellPath: string | undefined;
   let stopped = false;
 
   const server = createServer((socket) => {
@@ -156,8 +161,10 @@ export async function startCliMockController(
       const rootDir = join(workDir, '.dynobox', 'cli-mocks');
       const nextBinDir = join(rootDir, 'bin');
       const nextClientPath = join(rootDir, 'client.mjs');
+      const nextScriptShellPath = join(rootDir, 'script-shell');
       await mkdir(nextBinDir, {recursive: true});
       await writeFile(nextClientPath, CLIENT_SOURCE, {mode: 0o600});
+      await writeFile(nextScriptShellPath, SCRIPT_SHELL_SOURCE, {mode: 0o700});
       for (const executable of executableNames) {
         await writeFile(join(nextBinDir, executable), LAUNCHER_SOURCE, {
           mode: 0o700,
@@ -165,9 +172,14 @@ export async function startCliMockController(
       }
       binDir = nextBinDir;
       clientPath = nextClientPath;
+      scriptShellPath = nextScriptShellPath;
     },
     env(basePath) {
-      if (binDir === undefined || clientPath === undefined) {
+      if (
+        binDir === undefined ||
+        clientPath === undefined ||
+        scriptShellPath === undefined
+      ) {
         throw new Error('CLI mock shims have not been installed.');
       }
       return {
@@ -176,6 +188,8 @@ export async function startCliMockController(
         [TOKEN_ENV]: token,
         [NODE_ENV]: process.execPath,
         [CLIENT_ENV]: clientPath,
+        [BIN_ENV]: binDir,
+        npm_config_script_shell: scriptShellPath,
       };
     },
     calls() {
@@ -311,11 +325,7 @@ function normalizeHandlerResponse(value: unknown): CliMockResponse {
   if (!isRecord(value)) {
     throw new Error('returned an invalid response');
   }
-  if (!Number.isInteger(value.exitCode)) {
-    throw new Error(
-      'returned an invalid response: exitCode must be an integer',
-    );
-  }
+  assertProcessExitCode(value.exitCode, 'returned an invalid response');
   if (value.stdout !== undefined && typeof value.stdout !== 'string') {
     throw new Error('returned an invalid response: stdout must be a string');
   }
@@ -327,6 +337,44 @@ function normalizeHandlerResponse(value: unknown): CliMockResponse {
     stdout: (value.stdout as string | undefined) ?? '',
     stderr: (value.stderr as string | undefined) ?? '',
   };
+}
+
+function validateConfiguredResponses(
+  executable: string,
+  config: CliMockConfig,
+): void {
+  if ('handler' in config) return;
+  const responses =
+    'response' in config
+      ? [config.response]
+      : [
+          ...config.responses,
+          ...(typeof config.onExhausted === 'object'
+            ? [config.onExhausted]
+            : []),
+        ];
+  for (const response of responses) {
+    assertProcessExitCode(
+      response.exitCode,
+      `Invalid CLI mock response for ${JSON.stringify(executable)}`,
+    );
+  }
+}
+
+function assertProcessExitCode(
+  value: unknown,
+  context: string,
+): asserts value is number {
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > 255
+  ) {
+    throw new Error(
+      `${context}: exitCode must be an integer between 0 and 255`,
+    );
+  }
 }
 
 function validateExecutableName(executable: string): void {
@@ -404,6 +452,11 @@ function closeServer(server: Server): Promise<void> {
 
 const LAUNCHER_SOURCE = `#!/bin/sh
 exec "$${NODE_ENV}" "$${CLIENT_ENV}" "$0" "$@"
+`;
+
+const SCRIPT_SHELL_SOURCE = `#!/bin/sh
+export PATH="$${BIN_ENV}:$PATH"
+exec /bin/sh "$@"
 `;
 
 const CLIENT_SOURCE = `import net from 'node:net';
