@@ -1,4 +1,8 @@
-import type {AssertionResult, HttpEvent} from '@dynobox/evaluators';
+import type {
+  AssertionResult,
+  CliMockCall,
+  HttpEvent,
+} from '@dynobox/evaluators';
 import type {HarnessId, PermissionMode} from '@dynobox/sdk';
 import type {IrScenario} from '@dynobox/sdk/ir';
 
@@ -9,6 +13,8 @@ import type {
   ToolEvent,
 } from './harnesses/index.js';
 import type {SetupResult} from './setup.js';
+
+export type {CliMockCall} from '@dynobox/evaluators';
 
 /** One compiled scenario/harness/iteration unit scheduled by the CLI. */
 export type LocalRunnerJob = {
@@ -111,16 +117,6 @@ export type LocalRunnerWarning = {
     rawName: string;
     command?: string;
   };
-};
-
-export type CliMockCall = {
-  executable: string;
-  argv: string[];
-  cwd: string;
-  timestamp: number;
-  exitCode: number;
-  stdout: string;
-  stderr: string;
 };
 
 /** Structured result returned by `runJob` for rendering and summaries. */

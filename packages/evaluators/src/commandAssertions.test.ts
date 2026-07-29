@@ -2,9 +2,10 @@ import {describe, expect, it} from 'vitest';
 
 import {
   evaluateCommandCalledAssertion,
+  evaluateCommandNotCalledAssertion,
   extractObservedCommands,
 } from './commandAssertions.js';
-import type {ToolEvent} from './types.js';
+import type {CliMockCall, ToolEvent} from './types.js';
 
 function shellEvent(command: string): ToolEvent {
   return {
@@ -22,6 +23,22 @@ function observedSummary(
     executable: command.executable,
     argv: command.argv,
   }));
+}
+
+function cliMockCall(
+  executable: string,
+  argv: string[],
+  cwd = '/workdir',
+): CliMockCall {
+  return {
+    executable,
+    argv,
+    cwd,
+    timestamp: 1,
+    exitCode: 0,
+    stdout: '',
+    stderr: '',
+  };
 }
 
 describe('extractObservedCommands shell grouping', () => {
@@ -203,5 +220,135 @@ describe('evaluateCommandCalledAssertion grouping and diagnostics', () => {
     expect(result.message).toContain(`- ${raw}`);
     // Evidence stays ObservedCommand[] for CLI/upload Array.isArray consumers.
     expect(Array.isArray(result.evidence)).toBe(true);
+  });
+});
+
+describe('CLI mock command observations', () => {
+  it('creates exact command observations from call records', () => {
+    const observed = extractObservedCommands([], {
+      cliMockCalls: [cliMockCall('vitest', ['run', '--ui'])],
+      cliMockExecutableNames: ['vitest'],
+    });
+
+    expect(observed).toEqual([
+      expect.objectContaining({
+        toolCallId: 'cli-mock:0',
+        executable: 'vitest',
+        argv: ['run', '--ui'],
+        cwd: '/workdir',
+        cliMockCallIndex: 0,
+      }),
+    ]);
+  });
+
+  it('pairs shell commands with records without duplicate observations', () => {
+    const observed = extractObservedCommands([shellEvent('vitest run')], {
+      cliMockCalls: [cliMockCall('vitest', ['run'], '/actual')],
+      cliMockExecutableNames: ['vitest'],
+    });
+
+    expect(observed).toHaveLength(1);
+    expect(observed[0]).toMatchObject({
+      executable: 'vitest',
+      argv: ['run'],
+      cwd: '/actual',
+      original: 'vitest run',
+      eventIndex: 0,
+      cliMockCallIndex: 0,
+    });
+  });
+
+  it('suppresses unrecorded bare mocks but preserves explicit paths', () => {
+    const observed = extractObservedCommands(
+      [
+        shellEvent(
+          'vitest run; /usr/bin/vitest real; ./vitest local; git status',
+        ),
+      ],
+      {cliMockExecutableNames: ['vitest']},
+    );
+
+    expect(
+      observed.map(({executable, executablePath, argv}) => ({
+        executable,
+        executablePath,
+        argv,
+      })),
+    ).toEqual([
+      {
+        executable: 'vitest',
+        executablePath: '/usr/bin/vitest',
+        argv: ['real'],
+      },
+      {
+        executable: 'vitest',
+        executablePath: './vitest',
+        argv: ['local'],
+      },
+      {executable: 'git', executablePath: undefined, argv: ['status']},
+    ]);
+  });
+
+  it('pairs only exact argv and appends unmatched calls in invocation order', () => {
+    const observed = extractObservedCommands(
+      [shellEvent('vitest run; vitest watch')],
+      {
+        cliMockCalls: [
+          cliMockCall('vitest', ['watch']),
+          cliMockCall('vitest', ['nested']),
+        ],
+        cliMockExecutableNames: ['vitest'],
+      },
+    );
+
+    expect(observed.map((command) => command.argv)).toEqual([
+      ['watch'],
+      ['nested'],
+    ]);
+    expect(observed.map((command) => command.cliMockCallIndex)).toEqual([0, 1]);
+  });
+
+  it('uses records for called and notCalled assertions', () => {
+    const options = {
+      cliMockCalls: [cliMockCall('vitest', ['run'])],
+      cliMockExecutableNames: ['vitest'],
+    };
+    const called = evaluateCommandCalledAssertion(
+      {
+        id: 'assertion.test.0',
+        type: 'command.called',
+        executable: 'vitest',
+        command: {args: ['run']},
+      },
+      [],
+      options,
+    );
+    const notCalled = evaluateCommandNotCalledAssertion(
+      {
+        id: 'assertion.test.1',
+        type: 'command.notCalled',
+        executable: 'vitest',
+      },
+      [],
+      options,
+    );
+
+    expect(called.passed).toBe(true);
+    expect(notCalled.passed).toBe(false);
+  });
+
+  it('does not report a normalization gap for an unrecorded configured mock', () => {
+    const result = evaluateCommandCalledAssertion(
+      {
+        id: 'assertion.test.0',
+        type: 'command.called',
+        executable: 'vitest',
+      },
+      [shellEvent('vitest run')],
+      {cliMockCalls: [], cliMockExecutableNames: ['vitest']},
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.message).not.toContain('normalization may not support');
   });
 });

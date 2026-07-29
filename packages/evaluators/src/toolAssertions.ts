@@ -2,6 +2,7 @@ import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {
   commandMatchesAssertion,
+  type CommandObservationOptions,
   describeCommandStep,
   extractObservedCommands,
   type ObservedCommand,
@@ -32,6 +33,8 @@ type SequenceCursor = {
   eventIndex: number;
   shellOffset: number;
   commandOffset: number;
+  mockCallOffset: number;
+  lastMatchWasMock: boolean;
 };
 
 export function evaluateToolCalledAssertion(
@@ -92,13 +95,16 @@ export function evaluateToolNotCalledAssertion(
 export function evaluateSequenceInOrder(
   assertion: Extract<IrAssertion, {type: 'sequence.inOrder'}>,
   toolEvents: readonly ToolEvent[],
+  options?: CommandObservationOptions,
 ): AssertionResult {
-  const observedCommands = extractObservedCommands(toolEvents);
+  const observedCommands = extractObservedCommands(toolEvents, options);
   const matchedEvents: (ToolEvent | ObservedCommand)[] = [];
   let cursor: SequenceCursor = {
     eventIndex: 0,
     shellOffset: 0,
     commandOffset: 0,
+    mockCallOffset: 0,
+    lastMatchWasMock: false,
   };
 
   for (const [stepIndex, step] of assertion.steps.entries()) {
@@ -149,15 +155,33 @@ function findMatchingSequenceStep(
   error?: string;
 } {
   if (step.type === 'command.called') {
+    const mockMatch = observedCommands
+      .filter(
+        (command) =>
+          command.cliMockCallIndex !== undefined &&
+          command.cliMockCallIndex >= cursor.mockCallOffset &&
+          (cursor.lastMatchWasMock || commandAfterCursor(command, cursor)) &&
+          commandMatchesAssertion(command, step),
+      )
+      .sort(
+        (left, right) => left.cliMockCallIndex! - right.cliMockCallIndex!,
+      )[0];
+    if (mockMatch !== undefined) {
+      return {
+        event: mockMatch,
+        nextCursor: {
+          eventIndex: mockMatch.eventIndex,
+          shellOffset: mockMatch.end,
+          commandOffset: mockMatch.segmentIndex + 1,
+          mockCallOffset: mockMatch.cliMockCallIndex! + 1,
+          lastMatchWasMock: true,
+        },
+      };
+    }
+
     for (const command of observedCommands) {
-      if (command.eventIndex < cursor.eventIndex) continue;
-      if (
-        command.eventIndex === cursor.eventIndex &&
-        (command.segmentIndex < cursor.commandOffset ||
-          command.end <= cursor.shellOffset)
-      ) {
-        continue;
-      }
+      if (command.cliMockCallIndex !== undefined) continue;
+      if (!commandAfterCursor(command, cursor)) continue;
       if (!commandMatchesAssertion(command, step)) continue;
       return {
         event: command,
@@ -165,6 +189,8 @@ function findMatchingSequenceStep(
           eventIndex: command.eventIndex,
           shellOffset: command.end,
           commandOffset: command.segmentIndex + 1,
+          mockCallOffset: cursor.mockCallOffset,
+          lastMatchWasMock: false,
         },
       };
     }
@@ -194,7 +220,13 @@ function findMatchingSequenceStep(
       }
       return {
         event,
-        nextCursor: {eventIndex: index + 1, shellOffset: 0, commandOffset: 0},
+        nextCursor: {
+          eventIndex: index + 1,
+          shellOffset: 0,
+          commandOffset: 0,
+          mockCallOffset: cursor.mockCallOffset,
+          lastMatchWasMock: false,
+        },
       };
     }
 
@@ -217,11 +249,25 @@ function findMatchingSequenceStep(
         eventIndex: index,
         shellOffset: match.end,
         commandOffset: index === cursor.eventIndex ? cursor.commandOffset : 0,
+        mockCallOffset: cursor.mockCallOffset,
+        lastMatchWasMock: false,
       },
     };
   }
 
   return {};
+}
+
+function commandAfterCursor(
+  command: ObservedCommand,
+  cursor: SequenceCursor,
+): boolean {
+  if (command.eventIndex < cursor.eventIndex) return false;
+  if (command.eventIndex > cursor.eventIndex) return true;
+  return (
+    command.segmentIndex >= cursor.commandOffset &&
+    command.end > cursor.shellOffset
+  );
 }
 
 function findMatchingToolEvent(

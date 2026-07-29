@@ -436,9 +436,14 @@ export async function runJob(
       assertionCount: job.scenario.assertions.length,
     });
     const assertionsStartedAt = Date.now();
+    const harnessCliMockCalls = cliMockController?.calls() ?? [];
     const observationInput = {
       toolEvents: harnessResult.toolEvents,
       httpEvents,
+      cliMockCalls: harnessCliMockCalls,
+      cliMockExecutableNames:
+        cliMockController?.executableNames ??
+        Object.keys(job.scenario.cliMocks),
       workDir,
       transcript: harnessResult.transcript,
       finalMessage: harnessResult.finalMessage,

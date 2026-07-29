@@ -7,6 +7,7 @@ import {describe, expect, it} from 'vitest';
 
 import {
   type AssertionResult,
+  type CliMockCall,
   evaluateAssertions,
   preEvaluateAnyOfObservationBranches,
   type ToolEvent,
@@ -18,6 +19,18 @@ const shellEvent: ToolEvent = {
   input: {command: 'pnpm test -- --runInBand'},
   command: 'pnpm test -- --runInBand',
 };
+
+function cliMockCall(executable: string, argv: string[]): CliMockCall {
+  return {
+    executable,
+    argv,
+    cwd: '/workdir',
+    timestamp: 1,
+    exitCode: 0,
+    stdout: '',
+    stderr: '',
+  };
+}
 
 function toolAssertion(
   assertion: Omit<Extract<IrAssertion, {type: 'tool.called'}>, 'id'>,
@@ -855,6 +868,108 @@ describe('evaluateAssertions', () => {
       message: 'Observed 2 ordered tool steps.',
       evidence: [first, second],
     });
+  });
+
+  it('evaluates command assertions from CLI mock calls', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        type: 'command.called',
+        executable: 'vitest',
+        command: {args: ['run']},
+      },
+      [],
+      {
+        cliMockCalls: [cliMockCall('vitest', ['run'])],
+        cliMockExecutableNames: ['vitest'],
+      },
+    );
+
+    expect(result).toMatchObject({
+      passed: true,
+      evidence: {executable: 'vitest', argv: ['run'], cwd: '/workdir'},
+    });
+  });
+
+  it('pre-evaluates anyOf command branches from CLI mock calls', () => {
+    const assertion: IrAssertion = {
+      id: 'assertion.test.0',
+      type: 'anyOf',
+      steps: [{type: 'command.called', executable: 'vitest'}],
+    };
+    const cache = preEvaluateAnyOfObservationBranches([assertion], {
+      toolEvents: [],
+      cliMockCalls: [cliMockCall('vitest', ['run'])],
+      cliMockExecutableNames: ['vitest'],
+    });
+
+    expect(cache.get(assertion.id)?.[0]).toMatchObject({passed: true});
+  });
+
+  it('orders mock-only sequences by invocation rather than shell position', () => {
+    const assertion: IrAssertion = {
+      id: 'assertion.test.0',
+      type: 'sequence.inOrder',
+      steps: [
+        {
+          type: 'command.called',
+          executable: 'vitest',
+          command: {args: ['first']},
+        },
+        {
+          type: 'command.called',
+          executable: 'vitest',
+          command: {args: ['second']},
+        },
+      ],
+    };
+    const options = {
+      cliMockCalls: [
+        cliMockCall('vitest', ['first']),
+        cliMockCall('vitest', ['second']),
+      ],
+      cliMockExecutableNames: ['vitest'],
+    };
+    const pairedSecondAppearsFirst: ToolEvent = {
+      kind: 'shell',
+      rawName: 'Bash',
+      input: {command: 'vitest second'},
+      command: 'vitest second',
+    };
+
+    expect(
+      evaluateOne(assertion, [pairedSecondAppearsFirst], options).passed,
+    ).toBe(true);
+    expect(
+      evaluateOne(
+        {
+          ...assertion,
+          steps: [...assertion.steps].reverse(),
+        },
+        [pairedSecondAppearsFirst],
+        options,
+      ).passed,
+    ).toBe(false);
+  });
+
+  it('does not reuse one CLI mock call for repeated sequence steps', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        type: 'sequence.inOrder',
+        steps: [
+          {type: 'command.called', executable: 'vitest'},
+          {type: 'command.called', executable: 'vitest'},
+        ],
+      },
+      [],
+      {
+        cliMockCalls: [cliMockCall('vitest', ['run'])],
+        cliMockExecutableNames: ['vitest'],
+      },
+    );
+
+    expect(result.passed).toBe(false);
   });
 
   it('passes anyOf with the first matching branch and reports it', () => {

@@ -356,6 +356,52 @@ describe('runJob', () => {
     ]);
   });
 
+  it('uses only harness-phase CLI mock calls for observation assertions', async () => {
+    const scratchRoot = createScratchRoot();
+    const result = await runJob(
+      createJob({
+        cliMocks: {
+          'mocked-cli': {
+            response: {exitCode: 0, stdout: '', stderr: ''},
+          },
+        },
+        assertions: [
+          {
+            id: 'assertion.command.0',
+            type: 'command.called',
+            executable: 'mocked-cli',
+            command: {args: ['harness']},
+          },
+          {
+            id: 'assertion.command.1',
+            type: 'command.notCalled',
+            executable: 'mocked-cli',
+            command: {args: ['verify']},
+          },
+          {
+            id: 'assertion.verify.0',
+            type: 'verify.command',
+            command: 'mocked-cli verify',
+            exitCode: 0,
+          },
+        ],
+      }),
+      {
+        scratchRoot,
+        harnesses: [new CommandHarness('mocked-cli harness')],
+      },
+    );
+
+    expect(result.status).toBe('passed');
+    expect(
+      result.assertionResults.map((assertion) => assertion.passed),
+    ).toEqual([true, true, true]);
+    expect(result.cliMockCalls.map((call) => call.argv)).toEqual([
+      ['harness'],
+      ['verify'],
+    ]);
+  });
+
   it('rejects a CLI mock that collides with the harness executable', async () => {
     const scratchRoot = createScratchRoot();
     const harness = new CommandHarness('mocked-cli', 'mocked-cli');
