@@ -308,6 +308,27 @@ describe('CLI mock command observations', () => {
     expect(observed.map((command) => command.cliMockCallIndex)).toEqual([0, 1]);
   });
 
+  it('leaves calls unpaired when a shell event contains multiple commands', () => {
+    const observed = extractObservedCommands(
+      [shellEvent('false && vitest run')],
+      {
+        cliMockCalls: [cliMockCall('vitest', ['run'])],
+        cliMockExecutableNames: ['vitest'],
+      },
+    );
+
+    expect(observed).toEqual([
+      expect.objectContaining({
+        executable: 'false',
+      }),
+      expect.objectContaining({
+        executable: 'vitest',
+        cliMockCallIndex: 0,
+        cliMockEventPaired: false,
+      }),
+    ]);
+  });
+
   it('uses records for called and notCalled assertions', () => {
     const options = {
       cliMockCalls: [cliMockCall('vitest', ['run'])],

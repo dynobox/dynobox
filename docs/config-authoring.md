@@ -138,20 +138,23 @@ least one response and default to an exhaustion error. Set `onExhausted` to
 `repeat-last` or to a fallback response to choose different behavior.
 
 Handlers receive the invoked arguments, working directory, and child process
-environment. Dynobox records the executable, arguments, working directory,
-timestamp, exit code, stdout, and stderr, but does not retain environment
-values.
+environment and must return a response within 30 seconds. Dynobox records the
+executable, arguments, working directory, timestamp, exit code, stdout, and
+stderr, but does not retain environment values.
 
 Setup commands and harness version detection use the real PATH. The harness and
 post-harness verification commands use a PATH with generated mock shims
 prepended. This intercepts bare names such as `vitest run`, including calls from
-nested subprocesses. Explicit paths such as `/usr/bin/vitest run` bypass the
-mock. A mock may not use the selected harness executable name.
+nested subprocesses. npm and pnpm package scripts also keep mock shims ahead of
+local `node_modules/.bin` entries. Yarn package scripts do not currently provide
+this guarantee. Explicit paths such as `/usr/bin/vitest run` bypass the mock. A
+mock may not use the selected harness executable name.
 
 Recorded calls integrate with `command.called`, `command.notCalled`, and
-`sequence.inOrder`. Mock-only sequences use invocation order. Calls from nested
-subprocesses cannot always be ordered relative to unrelated harness tool events.
-CLI mocks currently require macOS or Linux.
+`sequence.inOrder`. Mock-only sequences use invocation order. A nested mock call
+without a matching shell tool event cannot be ordered relative to unrelated
+harness tool events, so mixed sequence assertions that require that comparison
+fail with an explicit diagnostic. CLI mocks currently require macOS or Linux.
 
 ## Harnesses
 

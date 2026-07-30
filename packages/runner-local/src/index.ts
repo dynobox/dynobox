@@ -181,7 +181,7 @@ export async function runJob(
     });
   }
 
-  const harnessVersion = await Promise.resolve()
+  const harnessVersion = Promise.resolve()
     .then(() => harness.version?.() ?? null)
     .catch(() => null);
 
@@ -197,11 +197,11 @@ export async function runJob(
       toolCount: 0,
     });
     return buildResult(job, {
-      status: 'setup_failed',
+      status: 'harness_failed',
       workDir,
       setupResult,
       artifacts,
-      harnessVersion,
+      harnessVersion: await harnessVersion,
       diagnostics: [
         `CLI mock "${harness.executable}" conflicts with harness "${harness.id}".`,
       ],
@@ -225,18 +225,24 @@ export async function runJob(
       toolCount: 0,
     });
     return buildResult(job, {
-      status: 'setup_failed',
+      status: 'harness_failed',
       workDir,
       setupResult,
       artifacts,
-      harnessVersion,
+      harnessVersion: await harnessVersion,
       diagnostics: [`CLI mocks failed to initialize: ${errorMessage(error)}`],
       timing: buildTiming({setupMs}),
     });
   }
 
   const cliMockEnv =
-    cliMockController?.env(options.env?.PATH ?? process.env.PATH ?? '') ?? {};
+    cliMockController?.env(
+      options.env?.PATH ?? process.env.PATH ?? '',
+      options.env?.npm_config_script_shell ??
+        options.env?.NPM_CONFIG_SCRIPT_SHELL ??
+        process.env.npm_config_script_shell ??
+        process.env.NPM_CONFIG_SCRIPT_SHELL,
+    ) ?? {};
   // Install static shims before capturing unchanged baselines so generated
   // files do not appear as harness changes.
   const artifactBaselines = captureArtifactBaselines(
@@ -261,7 +267,7 @@ export async function runJob(
         workDir,
         setupResult,
         artifacts,
-        harnessVersion,
+        harnessVersion: await harnessVersion,
         diagnostics: [`HTTP capture failed to start: ${errorMessage(error)}`],
         timing: buildTiming({setupMs}),
       });
@@ -313,7 +319,7 @@ export async function runJob(
         workDir,
         setupResult,
         artifacts,
-        harnessVersion,
+        harnessVersion: await harnessVersion,
         diagnostics: [
           `Harness "${harness.id}" failed to run: ${errorMessage(error)}`,
         ],
@@ -345,7 +351,7 @@ export async function runJob(
         workDir,
         setupResult,
         artifacts,
-        harnessVersion,
+        harnessVersion: await harnessVersion,
         harnessOutput,
         httpEvents,
         cliMockCalls: cliMockController?.calls() ?? [],
@@ -375,7 +381,7 @@ export async function runJob(
         workDir,
         setupResult,
         artifacts,
-        harnessVersion,
+        harnessVersion: await harnessVersion,
         harnessOutput,
         httpEvents,
         cliMockCalls: cliMockController?.calls() ?? [],
@@ -404,7 +410,7 @@ export async function runJob(
         workDir,
         setupResult,
         artifacts,
-        harnessVersion,
+        harnessVersion: await harnessVersion,
         harnessOutput,
         harnessResult,
         httpEvents,
@@ -513,7 +519,7 @@ export async function runJob(
       workDir,
       setupResult,
       artifacts,
-      harnessVersion,
+      harnessVersion: await harnessVersion,
       harnessOutput,
       harnessResult,
       httpEvents,

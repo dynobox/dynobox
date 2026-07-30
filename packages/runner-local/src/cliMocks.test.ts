@@ -1,17 +1,19 @@
 import {
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
+import {createConnection} from 'node:net';
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 
 import type {IrScenario} from '@dynobox/sdk/ir';
 import {execa} from 'execa';
-import {afterEach, describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {type CliMockController, startCliMockController} from './cliMocks.js';
 
@@ -19,6 +21,7 @@ const workDirs: string[] = [];
 const controllers: CliMockController[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     controllers.splice(0).map((controller) => controller.stop()),
   );
@@ -126,13 +129,49 @@ describe('CLI mock controller', () => {
     expect(controller.calls()[0]).toMatchObject({stdout: result.stdout});
   });
 
-  it('keeps mocks ahead of local binaries in package scripts', async () => {
+  it.each([
+    {packageManager: 'npm', args: ['run', 'test', '--silent']},
+    {packageManager: 'pnpm', args: ['--silent', 'run', 'test']},
+  ])(
+    'keeps mocks ahead of local binaries in $packageManager scripts',
+    async ({packageManager, args}) => {
+      const {controller, workDir} = await createController({
+        vitest: {
+          response: {exitCode: 0, stdout: 'mocked', stderr: ''},
+        },
+      });
+      const localBin = join(workDir, 'node_modules', '.bin');
+      mkdirSync(localBin, {recursive: true});
+      writeFileSync(
+        join(workDir, 'package.json'),
+        JSON.stringify({scripts: {test: 'vitest run'}}),
+      );
+      writeFileSync(join(localBin, 'vitest'), '#!/bin/sh\nprintf real', {
+        mode: 0o700,
+      });
+
+      const result = await execa(packageManager, args, {
+        cwd: workDir,
+        env: {...process.env, ...controller.env(process.env.PATH ?? '')},
+        reject: false,
+      });
+
+      expect(result).toMatchObject({exitCode: 0, stdout: 'mocked'});
+      expect(controller.calls()).toEqual([
+        expect.objectContaining({executable: 'vitest', argv: ['run']}),
+      ]);
+    },
+  );
+
+  it('preserves a configured package script shell', async () => {
     const {controller, workDir} = await createController({
       vitest: {
         response: {exitCode: 0, stdout: 'mocked', stderr: ''},
       },
     });
     const localBin = join(workDir, 'node_modules', '.bin');
+    const scriptShell = join(workDir, 'custom-shell');
+    const marker = join(workDir, 'custom-shell-used');
     mkdirSync(localBin, {recursive: true});
     writeFileSync(
       join(workDir, 'package.json'),
@@ -141,17 +180,24 @@ describe('CLI mock controller', () => {
     writeFileSync(join(localBin, 'vitest'), '#!/bin/sh\nprintf real', {
       mode: 0o700,
     });
+    writeFileSync(
+      scriptShell,
+      '#!/bin/sh\nprintf used > "$CUSTOM_SHELL_MARKER"\nexec /bin/sh "$@"',
+      {mode: 0o700},
+    );
 
     const result = await execa('npm', ['run', 'test', '--silent'], {
       cwd: workDir,
-      env: {...process.env, ...controller.env(process.env.PATH ?? '')},
+      env: {
+        ...process.env,
+        ...controller.env(process.env.PATH ?? '', scriptShell),
+        CUSTOM_SHELL_MARKER: marker,
+      },
       reject: false,
     });
 
     expect(result).toMatchObject({exitCode: 0, stdout: 'mocked'});
-    expect(controller.calls()).toEqual([
-      expect.objectContaining({executable: 'vitest', argv: ['run']}),
-    ]);
+    expect(readFileSync(marker, 'utf8')).toBe('used');
   });
 
   it('records handler failures and preserves invocation order', async () => {
@@ -251,6 +297,81 @@ describe('CLI mock controller', () => {
     });
   });
 
+  it('rejects unsupported platforms with an actionable diagnostic', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+
+    await expect(
+      startCliMockController({
+        vitest: {response: {exitCode: 0, stdout: '', stderr: ''}},
+      }),
+    ).rejects.toThrow('CLI mocks currently require macOS or Linux');
+  });
+
+  it('times out handlers that do not return a response', async () => {
+    const {controller, workDir} = await createController(
+      {
+        hanging: {
+          handler: async () => {
+            await new Promise(() => undefined);
+            return {exitCode: 0};
+          },
+        },
+      },
+      {requestTimeoutMs: 20},
+    );
+
+    const result = await runMock(controller, workDir, 'hanging');
+
+    expect(result).toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining('timed out after 20 milliseconds'),
+    });
+    expect(controller.failures()).toEqual([
+      expect.objectContaining({message: expect.stringContaining('timed out')}),
+    ]);
+  });
+
+  it('survives clients disconnecting before a response is ready', async () => {
+    let markHandlerStarted: (() => void) | undefined;
+    const handlerStarted = new Promise<void>((resolve) => {
+      markHandlerStarted = resolve;
+    });
+    let releaseHandler: (() => void) | undefined;
+    const {controller, workDir} = await createController({
+      delayed: {
+        handler: async () => {
+          markHandlerStarted?.();
+          await new Promise<void>((resolve) => {
+            releaseHandler = resolve;
+          });
+          return {exitCode: 0};
+        },
+      },
+    });
+    const env = controller.env(process.env.PATH ?? '');
+    const client = createConnection(env.DYNOBOX_CLI_MOCK_SOCKET!);
+    client.on('error', () => undefined);
+    await new Promise<void>((resolve) => client.once('connect', resolve));
+    client.write(
+      `${JSON.stringify({
+        token: env.DYNOBOX_CLI_MOCK_TOKEN,
+        executable: 'delayed',
+        argv: [],
+        cwd: workDir,
+        env: {},
+      })}\n`,
+    );
+    await handlerStarted;
+
+    client.destroy();
+    releaseHandler?.();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(controller.calls()).toEqual([
+      expect.objectContaining({executable: 'delayed', exitCode: 0}),
+    ]);
+  });
+
   it('stops without waiting for a hanging handler', async () => {
     let handlerStarted: (() => void) | undefined;
     const started = new Promise<void>((resolve) => {
@@ -274,13 +395,16 @@ describe('CLI mock controller', () => {
   });
 });
 
-async function createController(mocks: IrScenario['cliMocks']): Promise<{
+async function createController(
+  mocks: IrScenario['cliMocks'],
+  options?: Parameters<typeof startCliMockController>[1],
+): Promise<{
   controller: CliMockController;
   workDir: string;
 }> {
   const workDir = mkdtempSync(join(tmpdir(), 'dynobox-cli-mocks-'));
   workDirs.push(workDir);
-  const controller = await startCliMockController(mocks);
+  const controller = await startCliMockController(mocks, options);
   controllers.push(controller);
   await controller.install(workDir);
   return {controller, workDir};

@@ -19,6 +19,7 @@ export type ObservedCommand = {
   start: number;
   end: number;
   cliMockCallIndex?: number;
+  cliMockEventPaired?: boolean;
 };
 
 export type CommandObservationOptions = {
@@ -121,15 +122,25 @@ export function extractObservedCommands(
 
   const pairedShellIndexes = new Set<number>();
   const shellPairByCallIndex = new Map<number, number>();
-  cliMockCalls.forEach((call, callIndex) => {
-    const shellIndex = shellCommands.findIndex(
-      (command, index) =>
-        !pairedShellIndexes.has(index) &&
-        command.executablePath === undefined &&
-        command.executable === call.executable &&
-        arraysEqual(command.argv, call.argv),
+  const shellCommandCounts = new Map<number, number>();
+  for (const command of shellCommands) {
+    shellCommandCounts.set(
+      command.eventIndex,
+      (shellCommandCounts.get(command.eventIndex) ?? 0) + 1,
     );
-    if (shellIndex === -1) return;
+  }
+  cliMockCalls.forEach((call, callIndex) => {
+    const matchingShellIndexes = shellCommands.flatMap((command, index) =>
+      !pairedShellIndexes.has(index) &&
+      shellCommandCounts.get(command.eventIndex) === 1 &&
+      command.executablePath === undefined &&
+      command.executable === call.executable &&
+      arraysEqual(command.argv, call.argv)
+        ? [index]
+        : [],
+    );
+    if (matchingShellIndexes.length !== 1) return;
+    const shellIndex = matchingShellIndexes[0]!;
     pairedShellIndexes.add(shellIndex);
     shellPairByCallIndex.set(callIndex, shellIndex);
   });
@@ -151,6 +162,7 @@ export function extractObservedCommands(
         argv: [...call.argv],
         cwd: call.cwd,
         cliMockCallIndex: callIndex,
+        cliMockEventPaired: true,
       });
       return;
     }
@@ -178,6 +190,7 @@ export function extractObservedCommands(
       start: 0,
       end: original.length,
       cliMockCallIndex: callIndex,
+      cliMockEventPaired: false,
     });
   });
 

@@ -79,6 +79,7 @@ class RecordingHarness implements Harness {
     private readonly toolEvents: ToolEvent[] = [],
     private readonly probeVersion: () => Promise<string | null> = async () =>
       null,
+    private readonly onRun: () => void = () => undefined,
   ) {}
 
   version(): Promise<string | null> {
@@ -86,6 +87,7 @@ class RecordingHarness implements Harness {
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
+    this.onRun();
     this.inputs.push(input);
     this.setupMarkerExistsAtRun = existsSync(join(input.workDir, 'setup.txt'));
     return this.response;
@@ -256,6 +258,35 @@ describe('runJob', () => {
     expect(result).toMatchObject({status: 'passed', harnessVersion: null});
   });
 
+  it('probes the harness version without delaying harness execution', async () => {
+    const scratchRoot = createScratchRoot();
+    let releaseVersion: ((version: string) => void) | undefined;
+    const version = new Promise<string>((resolve) => {
+      releaseVersion = resolve;
+    });
+    let markRunStarted: (() => void) | undefined;
+    const runStarted = new Promise<void>((resolve) => {
+      markRunStarted = resolve;
+    });
+    const harness = new RecordingHarness(
+      undefined,
+      [],
+      () => version,
+      () => markRunStarted?.(),
+    );
+
+    const run = runJob(createJob(), {scratchRoot, harnesses: [harness]});
+    const startedBeforeVersion = await Promise.race([
+      runStarted.then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 250)),
+    ]);
+    releaseVersion?.('1.2.3');
+    const result = await run;
+
+    expect(startedBeforeVersion).toBe(true);
+    expect(result.harnessVersion).toBe('1.2.3');
+  });
+
   it('runs setup before invoking the harness', async () => {
     const scratchRoot = createScratchRoot();
     const harness = new RecordingHarness();
@@ -405,6 +436,7 @@ describe('runJob', () => {
   it('rejects a CLI mock that collides with the harness executable', async () => {
     const scratchRoot = createScratchRoot();
     const harness = new CommandHarness('mocked-cli', 'mocked-cli');
+    const events: RunJobProgressEvent[] = [];
 
     const result = await runJob(
       createJob({
@@ -414,11 +446,41 @@ describe('runJob', () => {
           },
         },
       }),
+      {
+        scratchRoot,
+        harnesses: [harness],
+        onProgress: (event) => events.push(event),
+      },
+    );
+
+    expect(result.status).toBe('harness_failed');
+    expect(result.diagnostics[0]).toContain('conflicts with harness');
+    expect(harness.inputs).toEqual([]);
+    expect(
+      events.filter((event) => event.type.startsWith('harness.')),
+    ).toMatchObject([
+      {type: 'harness.started'},
+      {type: 'harness.completed', success: false},
+    ]);
+  });
+
+  it('reports CLI mock initialization errors as harness failures', async () => {
+    const scratchRoot = createScratchRoot();
+    const harness = new RecordingHarness();
+
+    const result = await runJob(
+      createJob({
+        cliMocks: {
+          'invalid/name': {
+            response: {exitCode: 0, stdout: '', stderr: ''},
+          },
+        },
+      }),
       {scratchRoot, harnesses: [harness]},
     );
 
-    expect(result.status).toBe('setup_failed');
-    expect(result.diagnostics[0]).toContain('conflicts with harness');
+    expect(result.status).toBe('harness_failed');
+    expect(result.diagnostics[0]).toContain('CLI mocks failed to initialize');
     expect(harness.inputs).toEqual([]);
   });
 

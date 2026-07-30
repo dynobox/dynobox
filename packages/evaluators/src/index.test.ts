@@ -952,6 +952,220 @@ describe('evaluateAssertions', () => {
     ).toBe(false);
   });
 
+  it.each([
+    [
+      {type: 'command.called' as const, executable: 'vitest'},
+      {type: 'tool.called' as const, tool: 'read_file' as const},
+    ],
+    [
+      {type: 'tool.called' as const, tool: 'read_file' as const},
+      {type: 'command.called' as const, executable: 'vitest'},
+    ],
+  ])(
+    'fails mixed sequences when an unpaired mock cannot be ordered',
+    (first, second) => {
+      const result = evaluateOne(
+        {
+          id: 'assertion.test.0',
+          type: 'sequence.inOrder',
+          steps: [first, second],
+        },
+        [
+          {
+            kind: 'read_file',
+            rawName: 'Read',
+            input: {filePath: 'package.json'},
+          },
+        ],
+        {
+          cliMockCalls: [cliMockCall('vitest', ['run'])],
+          cliMockExecutableNames: ['vitest'],
+        },
+      );
+
+      expect(result).toMatchObject({
+        passed: false,
+        message: expect.stringContaining(
+          'Cannot determine order for an unpaired CLI mock call',
+        ),
+      });
+    },
+  );
+
+  it('orders a paired CLI mock relative to later tool events', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        type: 'sequence.inOrder',
+        steps: [
+          {type: 'command.called', executable: 'vitest'},
+          {type: 'tool.called', tool: 'read_file'},
+        ],
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'vitest run'},
+          command: 'vitest run',
+        },
+        {
+          kind: 'read_file',
+          rawName: 'Read',
+          input: {filePath: 'package.json'},
+        },
+      ],
+      {
+        cliMockCalls: [cliMockCall('vitest', ['run'])],
+        cliMockExecutableNames: ['vitest'],
+      },
+    );
+
+    expect(result.passed).toBe(true);
+  });
+
+  it('uses a paired mock when an earlier unpaired call also matches', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        type: 'sequence.inOrder',
+        steps: [
+          {type: 'command.called', executable: 'vitest'},
+          {type: 'tool.called', tool: 'read_file'},
+        ],
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'vitest run'},
+          command: 'vitest run',
+        },
+        {
+          kind: 'read_file',
+          rawName: 'Read',
+          input: {filePath: 'package.json'},
+        },
+      ],
+      {
+        cliMockCalls: [
+          cliMockCall('vitest', ['nested']),
+          cliMockCall('vitest', ['run']),
+        ],
+        cliMockExecutableNames: ['vitest'],
+      },
+    );
+
+    expect(result.passed).toBe(true);
+  });
+
+  it('does not infer sequence order from a skipped shell segment', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        type: 'sequence.inOrder',
+        steps: [
+          {type: 'command.called', executable: 'vitest'},
+          {type: 'tool.called', tool: 'read_file'},
+        ],
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'false && vitest run'},
+          command: 'false && vitest run',
+        },
+        {
+          kind: 'read_file',
+          rawName: 'Read',
+          input: {filePath: 'package.json'},
+        },
+      ],
+      {
+        cliMockCalls: [cliMockCall('vitest', ['run'])],
+        cliMockExecutableNames: ['vitest'],
+      },
+    );
+
+    expect(result).toMatchObject({
+      passed: false,
+      message: expect.stringContaining(
+        'Cannot determine order for an unpaired CLI mock call',
+      ),
+    });
+  });
+
+  it('uses an orderable explicit command before reporting an unpaired mock', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        type: 'sequence.inOrder',
+        steps: [
+          {type: 'tool.called', tool: 'read_file'},
+          {type: 'command.called', executable: 'vitest'},
+        ],
+      },
+      [
+        {
+          kind: 'read_file',
+          rawName: 'Read',
+          input: {filePath: 'package.json'},
+        },
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: '/usr/bin/vitest run'},
+          command: '/usr/bin/vitest run',
+        },
+      ],
+      {
+        cliMockCalls: [cliMockCall('vitest', ['nested'])],
+        cliMockExecutableNames: ['vitest'],
+      },
+    );
+
+    expect(result.passed).toBe(true);
+  });
+
+  it('uses the earliest orderable command across explicit and paired mocks', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        type: 'sequence.inOrder',
+        steps: [
+          {type: 'command.called', executable: 'vitest'},
+          {type: 'tool.called', tool: 'read_file'},
+        ],
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: '/usr/bin/vitest run'},
+          command: '/usr/bin/vitest run',
+        },
+        {
+          kind: 'read_file',
+          rawName: 'Read',
+          input: {filePath: 'package.json'},
+        },
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'vitest run'},
+          command: 'vitest run',
+        },
+      ],
+      {
+        cliMockCalls: [cliMockCall('vitest', ['run'])],
+        cliMockExecutableNames: ['vitest'],
+      },
+    );
+
+    expect(result.passed).toBe(true);
+  });
+
   it('does not reuse one CLI mock call for repeated sequence steps', () => {
     const result = evaluateOne(
       {

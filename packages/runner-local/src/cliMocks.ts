@@ -14,6 +14,10 @@ const TOKEN_ENV = 'DYNOBOX_CLI_MOCK_TOKEN';
 const NODE_ENV = 'DYNOBOX_CLI_MOCK_NODE';
 const CLIENT_ENV = 'DYNOBOX_CLI_MOCK_CLIENT';
 const BIN_ENV = 'DYNOBOX_CLI_MOCK_BIN';
+const TIMEOUT_ENV = 'DYNOBOX_CLI_MOCK_TIMEOUT_MS';
+const SCRIPT_SHELL_ENV = 'DYNOBOX_CLI_MOCK_SCRIPT_SHELL';
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const CLIENT_TIMEOUT_GRACE_MS = 1_000;
 
 type CliMockConfig = IrScenario['cliMocks'][string];
 
@@ -26,7 +30,7 @@ export type CliMockFailure = {
 export type CliMockController = {
   readonly executableNames: readonly string[];
   install(workDir: string): Promise<void>;
-  env(basePath: string): Record<string, string>;
+  env(basePath: string, baseScriptShell?: string): Record<string, string>;
   calls(): CliMockCall[];
   failures(): CliMockFailure[];
   stop(): Promise<void>;
@@ -57,7 +61,16 @@ type PendingCall = {
 
 export async function startCliMockController(
   mocks: IrScenario['cliMocks'],
+  options: {requestTimeoutMs?: number} = {},
 ): Promise<CliMockController> {
+  if (process.platform !== 'darwin' && process.platform !== 'linux') {
+    throw new Error('CLI mocks currently require macOS or Linux.');
+  }
+  const requestTimeoutMs =
+    options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  if (!Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs <= 0) {
+    throw new Error('CLI mock request timeout must be a positive integer.');
+  }
   const executableNames = Object.keys(mocks);
   for (const [executable, config] of Object.entries(mocks)) {
     validateExecutableName(executable);
@@ -81,6 +94,7 @@ export async function startCliMockController(
 
   const server = createServer((socket) => {
     sockets.add(socket);
+    socket.on('error', () => socket.destroy());
     socket.once('close', () => sockets.delete(socket));
     receiveRequest(
       socket,
@@ -113,11 +127,16 @@ export async function startCliMockController(
         } else {
           try {
             response = normalizeHandlerResponse(
-              await assignment.handler({
-                argv: [...request.argv],
-                cwd: request.cwd,
-                env: {...request.env},
-              }),
+              await withTimeout(
+                Promise.resolve(
+                  assignment.handler({
+                    argv: [...request.argv],
+                    cwd: request.cwd,
+                    env: {...request.env},
+                  }),
+                ),
+                requestTimeoutMs,
+              ),
             );
           } catch (error) {
             const reason =
@@ -174,7 +193,7 @@ export async function startCliMockController(
       clientPath = nextClientPath;
       scriptShellPath = nextScriptShellPath;
     },
-    env(basePath) {
+    env(basePath, baseScriptShell = '/bin/sh') {
       if (
         binDir === undefined ||
         clientPath === undefined ||
@@ -189,6 +208,8 @@ export async function startCliMockController(
         [NODE_ENV]: process.execPath,
         [CLIENT_ENV]: clientPath,
         [BIN_ENV]: binDir,
+        [TIMEOUT_ENV]: String(requestTimeoutMs + CLIENT_TIMEOUT_GRACE_MS),
+        [SCRIPT_SHELL_ENV]: baseScriptShell,
         npm_config_script_shell: scriptShellPath,
       };
     },
@@ -246,7 +267,9 @@ function receiveRequest(
 
     try {
       const request = parseRequest(buffer.slice(0, newlineIndex), token, mocks);
-      void onRequest(request);
+      void Promise.resolve(onRequest(request)).catch((error) => {
+        sendResponse(socket, internalError(errorMessage(error)));
+      });
     } catch (error) {
       sendResponse(socket, internalError(errorMessage(error)));
     }
@@ -413,7 +436,11 @@ function internalError(message: string): CliMockResponse {
 
 function sendResponse(socket: Socket, response: CliMockResponse): void {
   if (socket.destroyed) return;
-  socket.end(`${JSON.stringify(response)}\n`);
+  try {
+    socket.end(`${JSON.stringify(response)}\n`);
+  } catch {
+    socket.destroy();
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -423,6 +450,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.length > 0) return error.message;
   return String(error);
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`timed out after ${timeoutMs} milliseconds`)),
+      timeoutMs,
+    );
+    timer.unref();
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 function listen(server: Server, socketPath: string): Promise<void> {
@@ -456,7 +502,7 @@ exec "$${NODE_ENV}" "$${CLIENT_ENV}" "$0" "$@"
 
 const SCRIPT_SHELL_SOURCE = `#!/bin/sh
 export PATH="$${BIN_ENV}:$PATH"
-exec /bin/sh "$@"
+exec "$${SCRIPT_SHELL_ENV}" "$@"
 `;
 
 const CLIENT_SOURCE = `import net from 'node:net';
@@ -464,6 +510,7 @@ import {basename} from 'node:path';
 
 const socketPath = process.env.${SOCKET_ENV};
 const token = process.env.${TOKEN_ENV};
+const requestTimeoutMs = Number.parseInt(process.env.${TIMEOUT_ENV} ?? '', 10);
 const executable = basename(process.argv[2] ?? '');
 const argv = process.argv.slice(3);
 
@@ -472,7 +519,13 @@ function fail(message) {
   process.exitCode = 1;
 }
 
-if (!socketPath || !token || !executable) {
+if (
+  !socketPath ||
+  !token ||
+  !Number.isSafeInteger(requestTimeoutMs) ||
+  requestTimeoutMs <= 0 ||
+  !executable
+) {
   fail('missing internal configuration.');
 } else {
   await new Promise((resolve) => {
@@ -488,6 +541,11 @@ if (!socketPath || !token || !executable) {
     }
 
     socket.setEncoding('utf8');
+    socket.setTimeout(requestTimeoutMs);
+    socket.once('timeout', () => {
+      fail('request timed out after ' + requestTimeoutMs + ' milliseconds.');
+      finish();
+    });
     socket.once('connect', () => {
       socket.write(JSON.stringify({
         token,
