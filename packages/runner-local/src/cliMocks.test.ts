@@ -210,6 +210,35 @@ describe('CLI mock controller', () => {
     expect(env.NPM_CONFIG_SCRIPT_SHELL).toBe(env.npm_config_script_shell);
   });
 
+  it('fails closed when the script shell has no mock bin path', async () => {
+    const {controller, workDir} = await createController({
+      vitest: {response: {exitCode: 0, stdout: 'mocked', stderr: ''}},
+    });
+    const localBin = join(workDir, 'node_modules', '.bin');
+    mkdirSync(localBin, {recursive: true});
+    writeFileSync(
+      join(workDir, 'package.json'),
+      JSON.stringify({scripts: {test: 'vitest run'}}),
+    );
+    writeFileSync(join(localBin, 'vitest'), '#!/bin/sh\nprintf real', {
+      mode: 0o700,
+    });
+
+    const result = await execa('npm', ['run', 'test', '--silent'], {
+      cwd: workDir,
+      env: {
+        ...process.env,
+        ...controller.env(process.env.PATH ?? ''),
+        DYNOBOX_CLI_MOCK_BIN: '',
+      },
+      reject: false,
+    });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).not.toContain('real');
+    expect(controller.calls()).toEqual([]);
+  });
+
   it('records handler failures and preserves invocation order', async () => {
     let slowStarted: (() => void) | undefined;
     const started = new Promise<void>((resolve) => {
@@ -284,6 +313,26 @@ describe('CLI mock controller', () => {
       ).rejects.toThrow('between 0 and 255');
     },
   );
+
+  it('defaults missing sequential exhaustion behavior to an error', async () => {
+    const {controller, workDir} = await createController({
+      invalid: {
+        responses: [{exitCode: 0, stdout: 'first', stderr: ''}],
+      },
+    } as unknown as IrScenario['cliMocks']);
+
+    expect(await runMock(controller, workDir, 'invalid')).toMatchObject({
+      exitCode: 0,
+      stdout: 'first',
+    });
+    expect(await runMock(controller, workDir, 'invalid')).toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining('exhausted its configured responses'),
+    });
+    expect(controller.failures()).toEqual([
+      expect.objectContaining({executable: 'invalid'}),
+    ]);
+  });
 
   it('installs private executable shims outside the workdir and cleans them up', async () => {
     const {controller, workDir} = await createController({

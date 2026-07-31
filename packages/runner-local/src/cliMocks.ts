@@ -382,7 +382,7 @@ function reserveResponse(
   if (config.onExhausted === 'repeat-last') {
     return {response: config.responses.at(-1)!};
   }
-  if (config.onExhausted !== 'error') {
+  if (config.onExhausted !== undefined && config.onExhausted !== 'error') {
     return {response: config.onExhausted};
   }
 
@@ -552,7 +552,7 @@ exec "$${NODE_EXECUTABLE_ENV}" "$${CLIENT_ENV}" "$0" "$@"
 `;
 
 const SCRIPT_SHELL_SOURCE = `#!/bin/sh
-export PATH="$${BIN_ENV}:$PATH"
+export PATH="\${${BIN_ENV}:?missing internal configuration}:$PATH"
 exec "$${SCRIPT_SHELL_ENV}" "$@"
 `;
 
