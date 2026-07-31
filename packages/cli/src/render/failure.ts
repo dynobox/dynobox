@@ -1,6 +1,6 @@
 /**
  * Detail blocks rendered when a job fails outside its assertions:
- * setup-command failures and harness invocation failures.
+ * setup-command, harness invocation, and verification failures.
  */
 
 import type {LocalRunnerResult} from '@dynobox/runner-local';
@@ -35,10 +35,8 @@ export function renderSetupFailureDetails(
   return lines.join('');
 }
 
-/**
- * Render runner-supplied diagnostics for a harness failure.
- */
-export function renderHarnessFailureDetails(
+/** Render runner-supplied diagnostics for a failed job. */
+export function renderFailureDiagnostics(
   result: LocalRunnerResult,
   ctx: RenderContext,
 ): string {
@@ -47,3 +45,5 @@ export function renderHarnessFailureDetails(
     .map((diagnostic) => `        ${colorStatus(ctx, diagnostic, 'fail')}\n`)
     .join('');
 }
+
+export const renderHarnessFailureDetails = renderFailureDiagnostics;

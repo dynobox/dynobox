@@ -66,6 +66,7 @@ type ResultSpec = {
   failedAssertionIndexes?: number[];
   totalMs?: number;
   cliMockCalls?: LocalRunnerResult['cliMockCalls'];
+  diagnostics?: string[];
 };
 
 function makeResult(
@@ -98,7 +99,8 @@ function makeResult(
     artifacts: [],
     assertionResults,
     diagnostics:
-      status === 'harness_failed' ? ['codex exited with code 1'] : [],
+      spec.diagnostics ??
+      (status === 'harness_failed' ? ['codex exited with code 1'] : []),
     warnings: [],
     timing: {
       setupMs: 0,
@@ -305,6 +307,49 @@ describe('renderGroupedRun', () => {
 
     expect(output).toContain('✗ harness failed');
     expect(output).toContain('codex exited with code 1');
+  });
+
+  it('renders diagnostics-backed assertion failures as verification failures', () => {
+    const jobs = [makeJob()];
+    const results = [
+      makeResult(jobs[0]!, {
+        status: 'assertion_failed',
+        diagnostics: ['CLI mock exhausted its configured responses.'],
+      }),
+    ];
+    const output = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results,
+      ctx,
+    });
+    const verboseOutput = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results,
+      ctx: createRenderContext({mode: 'verbose'}),
+    });
+
+    expect(output).toContain('✗ verification failed');
+    expect(output).toContain('CLI mock exhausted its configured responses.');
+    expect(output).not.toContain('0 of 2 failed');
+    expect(verboseOutput).toContain('2 of 2 passed; verification failed');
+    expect(verboseOutput).toContain(
+      'CLI mock exhausted its configured responses.',
+    );
+  });
+
+  it('renders verification diagnostics for failed iterations', () => {
+    const jobs = [makeJob({iteration: 0}), makeJob({iteration: 1})];
+    const results = [
+      makeResult(jobs[0]!),
+      makeResult(jobs[1]!, {
+        status: 'assertion_failed',
+        diagnostics: ['CLI mock handler failed.'],
+      }),
+    ];
+    const output = renderGroupedRun({dynos: [dynoOf(jobs)], results, ctx});
+
+    expect(output).toContain('iter 2 ✗ verification failed');
+    expect(output).toContain('CLI mock handler failed.');
   });
 
   it('marks passing zero-assertion jobs explicitly', () => {

@@ -4,7 +4,7 @@ import type {IrAssertion} from '@dynobox/sdk/ir';
 import {renderAssertionDetails} from '../render/assertions.js';
 import {renderDebugDetails} from '../render/debug.js';
 import {
-  renderHarnessFailureDetails,
+  renderFailureDiagnostics,
   renderSetupFailureDetails,
 } from '../render/failure.js';
 import {renderCliMockDetails} from '../render/jobDetails.js';
@@ -30,8 +30,8 @@ export function renderLiveJobCompletion(
   const lines: string[] = [];
   if (result.status === 'setup_failed') {
     lines.push(renderSetupFailureDetails(result, ctx));
-  } else if (result.status === 'harness_failed') {
-    lines.push(renderHarnessFailureDetails(result, ctx));
+  } else if (!result.passed && result.diagnostics.length > 0) {
+    lines.push(renderFailureDiagnostics(result, ctx));
   }
   lines.push(
     renderCliMockDetails(result, options.configuredCliMockNames ?? [], ctx),

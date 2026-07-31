@@ -14,7 +14,7 @@ import type {DebugLogPaths} from '../util/transcript.js';
 import {renderAssertionDetails} from './assertions.js';
 import {renderDebugDetails} from './debug.js';
 import {
-  renderHarnessFailureDetails,
+  renderFailureDiagnostics,
   renderSetupFailureDetails,
 } from './failure.js';
 import {
@@ -47,8 +47,8 @@ export function renderJobDetails(
 
   if (result.status === 'setup_failed') {
     lines.push(renderSetupFailureDetails(result, ctx));
-  } else if (result.status === 'harness_failed') {
-    lines.push(renderHarnessFailureDetails(result, ctx));
+  } else if (!result.passed && result.diagnostics.length > 0) {
+    lines.push(renderFailureDiagnostics(result, ctx));
   }
   lines.push(renderWarningDetails(result, ctx));
 

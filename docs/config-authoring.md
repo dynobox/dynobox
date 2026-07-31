@@ -140,7 +140,9 @@ least one response and default to an exhaustion error. Set `onExhausted` to
 Handlers receive the invoked arguments, working directory, and child process
 environment and must return a response within 30 seconds. Dynobox records the
 executable, arguments, working directory, timestamp, exit code, stdout, and
-stderr, but does not retain environment values.
+stderr, but does not retain environment values. A timeout stops waiting and
+fails the mock call; it does not forcibly cancel handler code. Keep handler
+operations bounded and clean up any timers or other resources they create.
 
 Setup commands and harness version detection use the real PATH. The harness and
 post-harness verification commands use a PATH with generated mock shims
@@ -148,13 +150,17 @@ prepended. This intercepts bare names such as `vitest run`, including calls from
 nested subprocesses. npm and pnpm package scripts also keep mock shims ahead of
 local `node_modules/.bin` entries. Yarn package scripts do not currently provide
 this guarantee. Explicit paths such as `/usr/bin/vitest run` bypass the mock. A
-mock may not use the selected harness executable name.
+mock may not use the selected harness executable when the harness is invoked by
+that same bare name. A harness configured with an explicit executable path also
+bypasses bare-name mocks.
 
 Recorded calls integrate with `command.called`, `command.notCalled`, and
-`sequence.inOrder`. Mock-only sequences use invocation order. A nested mock call
-without a matching shell tool event cannot be ordered relative to unrelated
-harness tool events, so mixed sequence assertions that require that comparison
-fail with an explicit diagnostic. CLI mocks currently require macOS or Linux.
+`sequence.inOrder`. Mock-only sequences use invocation order. Calls that cannot
+be safely associated with one standalone shell tool event, including nested
+calls and calls from compound shell events, cannot be ordered relative to
+unrelated harness tool events. Mixed sequence assertions that require that
+comparison fail with an explicit diagnostic. CLI mocks currently require macOS
+or Linux.
 
 ## Harnesses
 
