@@ -240,18 +240,18 @@ export async function runJob(
     });
   }
 
-  const cliMockEnv =
-    cliMockController?.env(
-      options.env?.PATH ?? process.env.PATH ?? '',
-      baseScriptShell,
-    ) ?? {};
-  const artifactBaselines = captureArtifactBaselines(
-    job.scenario.assertions,
-    workDir,
-  );
-
   let httpCapture: HttpCapture | undefined;
   try {
+    const cliMockEnv =
+      cliMockController?.env(
+        options.env?.PATH ?? process.env.PATH ?? '',
+        baseScriptShell,
+      ) ?? {};
+    const artifactBaselines = captureArtifactBaselines(
+      job.scenario.assertions,
+      workDir,
+    );
+
     try {
       httpCapture = await startHttpCapture(job.scenario);
     } catch (error) {
@@ -308,6 +308,7 @@ export async function runJob(
       );
     } catch (error) {
       await cliMockController?.finalizePendingCalls();
+      const cliMockFailures = cliMockController?.failures() ?? [];
       emitProgress(options, {
         type: 'harness.completed',
         job,
@@ -323,6 +324,7 @@ export async function runJob(
         harnessVersion: await harnessVersion,
         diagnostics: [
           `Harness "${harness.id}" failed to run: ${errorMessage(error)}`,
+          ...cliMockFailures.map((failure) => failure.message),
         ],
         httpEvents: httpCapture?.events ?? [],
         cliMockCalls: cliMockController?.calls() ?? [],

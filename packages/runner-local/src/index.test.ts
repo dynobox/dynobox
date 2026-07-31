@@ -589,6 +589,51 @@ describe('runJob', () => {
     expect(result.diagnostics[0]).toContain('did not complete');
   });
 
+  it('includes pending mock failures when the harness throws', async () => {
+    const scratchRoot = createScratchRoot();
+    const harness: Harness = {
+      id: 'claude-code',
+      async run(input) {
+        await execaCommand(
+          'mocked-cli pending >/dev/null 2>&1 & while [ ! -f handler-started ]; do sleep 0.01; done',
+          {
+            cwd: input.workDir,
+            env: {...process.env, ...input.env},
+            reject: false,
+            shell: true,
+          },
+        );
+        throw new Error('agent crashed');
+      },
+      extractResult() {
+        throw new Error('unreachable');
+      },
+    };
+
+    const result = await runJob(
+      createJob({
+        cliMocks: {
+          'mocked-cli': {
+            handler: ({cwd}) => {
+              writeFileSync(join(cwd, 'handler-started'), '');
+              return new Promise<never>(() => undefined);
+            },
+          },
+        },
+      }),
+      {scratchRoot, harnesses: [harness]},
+    );
+
+    expect(result.status).toBe('harness_failed');
+    expect(result.cliMockCalls).toEqual([
+      expect.objectContaining({executable: 'mocked-cli', exitCode: 1}),
+    ]);
+    expect(result.diagnostics).toEqual([
+      'Harness "claude-code" failed to run: agent crashed',
+      expect.stringContaining('did not complete'),
+    ]);
+  });
+
   it('preserves verification mock failures even when assertions accept the exit code', async () => {
     const scratchRoot = createScratchRoot();
     const result = await runJob(
