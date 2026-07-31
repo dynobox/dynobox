@@ -135,10 +135,14 @@ export default defineDyno({
 Every response requires an integer `exitCode` from 0 through 255. Omitted
 `stdout` and `stderr` default to empty strings. Sequential mocks require at
 least one response and default to an exhaustion error. Set `onExhausted` to
-`repeat-last` or to a fallback response to choose different behavior.
+`repeat-last` or to a fallback response to choose different behavior. Response
+positions are scoped to one scenario/harness/iteration job; harness and
+post-harness verification calls consume the same sequence.
 
 Handlers receive the invoked arguments, working directory, and child process
-environment and must return a response within 30 seconds. Dynobox records the
+environment visible to the mock shim, which can include credentials or other
+secrets inherited from the harness or nested caller. Handlers must therefore be
+trusted code and must return a response within 30 seconds. Dynobox records the
 executable, arguments, working directory, timestamp, exit code, stdout, and
 stderr, but does not retain environment values. A timeout stops waiting and
 fails the mock call; it does not forcibly cancel handler code. Keep handler
@@ -149,10 +153,12 @@ post-harness verification commands use a PATH with generated mock shims
 prepended. This intercepts bare names such as `vitest run`, including calls from
 nested subprocesses. npm and pnpm package scripts also keep mock shims ahead of
 local `node_modules/.bin` entries. Yarn package scripts do not currently provide
-this guarantee. Explicit paths such as `/usr/bin/vitest run` bypass the mock. A
-mock may not use the selected harness executable when the harness is invoked by
-that same bare name. A harness configured with an explicit executable path also
-bypasses bare-name mocks.
+this guarantee. Explicit paths such as `/usr/bin/vitest run` bypass the mock.
+Shell builtins, functions, aliases, and keywords can also bypass PATH lookup and
+therefore the mock shim. CLI mocks are behavioral test doubles, not a command
+sandbox or security boundary. A mock may not use the selected harness executable
+when the harness is invoked by that same bare name. A harness configured with an
+explicit executable path also bypasses bare-name mocks.
 
 Recorded calls integrate with `command.called`, `command.notCalled`, and
 `sequence.inOrder`. Mock-only sequences use invocation order. Calls that cannot
