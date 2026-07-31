@@ -211,7 +211,7 @@ describe('irScenarioSchema cliMocks validation', () => {
     ).toBe(false);
   });
 
-  it('requires the canonical CLI mock map', () => {
-    expect(irScenarioSchema.safeParse(scenario).success).toBe(false);
+  it('defaults an omitted CLI mock map for IR 0.3 compatibility', () => {
+    expect(irScenarioSchema.parse(scenario).cliMocks).toEqual({});
   });
 });

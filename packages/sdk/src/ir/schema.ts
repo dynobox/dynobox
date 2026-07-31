@@ -381,7 +381,9 @@ export const irScenarioSchema = z.object({
   harnesses: z.array(irHarnessConfigSchema).min(1),
   setup: z.array(z.string().min(1)),
   fixtures: z.array(z.string().min(1)),
-  cliMocks: z.record(cliMockExecutableSchema, irCliMockConfigSchema),
+  cliMocks: z
+    .record(cliMockExecutableSchema, irCliMockConfigSchema)
+    .default({}),
   endpoints: z.array(irEndpointSchema),
   assertions: z.array(irAssertionSchema),
 });
