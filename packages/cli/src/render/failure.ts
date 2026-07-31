@@ -45,5 +45,3 @@ export function renderFailureDiagnostics(
     .map((diagnostic) => `        ${colorStatus(ctx, diagnostic, 'fail')}\n`)
     .join('');
 }
-
-export const renderHarnessFailureDetails = renderFailureDiagnostics;
