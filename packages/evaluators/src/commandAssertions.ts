@@ -57,11 +57,9 @@ export function evaluateCommandCalledAssertion(
   const sameExecutable = observed.some(
     (command) => command.executable === assertion.executable,
   );
-  const rawShellMatches =
-    sameExecutable ||
-    options?.cliMockExecutableNames?.includes(assertion.executable)
-      ? []
-      : rawShellCommandsMatching(toolEvents, assertion.executable);
+  const rawShellMatches = sameExecutable
+    ? []
+    : rawShellCommandsMatching(toolEvents, assertion.executable);
 
   return {
     assertionId: assertion.id,
@@ -199,7 +197,10 @@ export function extractObservedCommands(
 
     if (
       command.executablePath === undefined &&
-      mockExecutableNames.has(command.executable)
+      mockExecutableNames.has(command.executable) &&
+      callSignatureCounts.has(
+        commandSignature(command.executable, command.argv),
+      )
     ) {
       return;
     }

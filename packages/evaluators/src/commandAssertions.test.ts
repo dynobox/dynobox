@@ -221,6 +221,25 @@ describe('evaluateCommandCalledAssertion grouping and diagnostics', () => {
     // Evidence stays ObservedCommand[] for CLI/upload Array.isArray consumers.
     expect(Array.isArray(result.evidence)).toBe(true);
   });
+
+  it('reports raw shell matches for configured mocks when normalization cannot surface them', () => {
+    const raw = 'eval "$(echo vitest run)"';
+    const result = evaluateCommandCalledAssertion(
+      {
+        id: 'assertion.test.0',
+        type: 'command.called',
+        executable: 'vitest',
+      },
+      [shellEvent(raw)],
+      {cliMockExecutableNames: ['vitest']},
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.message).toContain(
+      'Raw shell events included text matching "vitest"; command normalization may not support this shell shape.',
+    );
+    expect(result.message).toContain(`- ${raw}`);
+  });
 });
 
 describe('CLI mock command observations', () => {
@@ -336,7 +355,7 @@ describe('CLI mock command observations', () => {
     ]);
   });
 
-  it('suppresses unrecorded bare mocks but preserves explicit paths', () => {
+  it('preserves unrecorded bare mocks and explicit paths', () => {
     const observed = extractObservedCommands(
       [
         shellEvent(
@@ -353,6 +372,11 @@ describe('CLI mock command observations', () => {
         argv,
       })),
     ).toEqual([
+      {
+        executable: 'vitest',
+        executablePath: undefined,
+        argv: ['run'],
+      },
       {
         executable: 'vitest',
         executablePath: '/usr/bin/vitest',
@@ -380,10 +404,15 @@ describe('CLI mock command observations', () => {
     );
 
     expect(observed.map((command) => command.argv)).toEqual([
+      ['run'],
       ['watch'],
       ['nested'],
     ]);
-    expect(observed.map((command) => command.cliMockCallIndex)).toEqual([0, 1]);
+    expect(observed.map((command) => command.cliMockCallIndex)).toEqual([
+      undefined,
+      0,
+      1,
+    ]);
   });
 
   it('leaves calls unpaired when a shell event contains multiple commands', () => {
@@ -436,8 +465,8 @@ describe('CLI mock command observations', () => {
     expect(notCalled.passed).toBe(false);
   });
 
-  it('does not report a normalization gap for an unrecorded configured mock', () => {
-    const result = evaluateCommandCalledAssertion(
+  it('uses unrecorded bare mocks as command assertion evidence', () => {
+    const called = evaluateCommandCalledAssertion(
       {
         id: 'assertion.test.0',
         type: 'command.called',
@@ -446,8 +475,17 @@ describe('CLI mock command observations', () => {
       [shellEvent('vitest run')],
       {cliMockCalls: [], cliMockExecutableNames: ['vitest']},
     );
+    const notCalled = evaluateCommandNotCalledAssertion(
+      {
+        id: 'assertion.test.1',
+        type: 'command.notCalled',
+        executable: 'vitest',
+      },
+      [shellEvent('vitest run')],
+      {cliMockCalls: [], cliMockExecutableNames: ['vitest']},
+    );
 
-    expect(result.passed).toBe(false);
-    expect(result.message).not.toContain('normalization may not support');
+    expect(called.passed).toBe(true);
+    expect(notCalled.passed).toBe(false);
   });
 });
