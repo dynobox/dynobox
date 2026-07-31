@@ -11,7 +11,7 @@ import type {CliMockCall} from './runTypes.js';
 const MAX_REQUEST_BYTES = 10 * 1024 * 1024;
 const SOCKET_ENV = 'DYNOBOX_CLI_MOCK_SOCKET';
 const TOKEN_ENV = 'DYNOBOX_CLI_MOCK_TOKEN';
-const NODE_ENV = 'DYNOBOX_CLI_MOCK_NODE';
+const NODE_EXECUTABLE_ENV = 'DYNOBOX_CLI_MOCK_NODE';
 const CLIENT_ENV = 'DYNOBOX_CLI_MOCK_CLIENT';
 const BIN_ENV = 'DYNOBOX_CLI_MOCK_BIN';
 const TIMEOUT_ENV = 'DYNOBOX_CLI_MOCK_TIMEOUT_MS';
@@ -29,10 +29,12 @@ export type CliMockFailure = {
 
 export type CliMockController = {
   readonly executableNames: readonly string[];
-  install(workDir: string): Promise<void>;
+  install(): Promise<void>;
+  beginPhase(): void;
   env(basePath: string, baseScriptShell?: string): Record<string, string>;
   calls(): CliMockCall[];
   failures(): CliMockFailure[];
+  finalizePendingCalls(): Promise<void>;
   stop(): Promise<void>;
 };
 
@@ -56,6 +58,7 @@ type PendingCall = {
   argv: string[];
   cwd: string;
   timestamp: number;
+  socket: Socket;
   response?: CliMockResponse;
 };
 
@@ -80,7 +83,7 @@ export async function startCliMockController(
   const socketDir = await mkdtemp(join(tmpdir(), 'dxb-mock-'));
   await chmod(socketDir, 0o700);
   const socketPath = join(socketDir, 'mock.sock');
-  const token = randomBytes(32).toString('hex');
+  let activeToken: string | undefined = randomBytes(32).toString('hex');
   const mockByExecutable = new Map(Object.entries(mocks));
   const responseIndexes = new Map<string, number>();
   const pendingCalls: PendingCall[] = [];
@@ -111,6 +114,7 @@ export async function startCliMockController(
           argv: [...request.argv],
           cwd: request.cwd,
           timestamp: Date.now(),
+          socket,
         };
         pendingCalls.push(call);
 
@@ -139,6 +143,7 @@ export async function startCliMockController(
               ),
             );
           } catch (error) {
+            if (call.response !== undefined) return;
             const reason =
               error instanceof Error && error.message.length > 0
                 ? error.message
@@ -157,10 +162,12 @@ export async function startCliMockController(
           }
         }
 
-        call.response = response;
-        sendResponse(socket, response);
+        if (call.response === undefined) {
+          call.response = response;
+          sendResponse(socket, response);
+        }
       },
-      token,
+      () => activeToken,
       mockByExecutable,
     );
   });
@@ -172,12 +179,34 @@ export async function startCliMockController(
     throw error;
   }
 
+  const finalizePendingCalls = async () => {
+    if (activeToken !== undefined) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      activeToken = undefined;
+    }
+    for (const call of pendingCalls) {
+      if (call.response !== undefined) continue;
+      const message = mockFailureMessage(
+        call.executable,
+        call.argv,
+        'did not complete before the execution phase ended',
+      );
+      failures.push({
+        executable: call.executable,
+        argv: [...call.argv],
+        message,
+      });
+      call.response = internalError(message);
+      sendResponse(call.socket, call.response);
+    }
+  };
+
   return {
     executableNames,
-    async install(workDir) {
+    async install() {
       if (stopped) throw new Error('CLI mock controller is already stopped.');
 
-      const rootDir = join(workDir, '.dynobox', 'cli-mocks');
+      const rootDir = join(socketDir, 'support');
       const nextBinDir = join(rootDir, 'bin');
       const nextClientPath = join(rootDir, 'client.mjs');
       const nextScriptShellPath = join(rootDir, 'script-shell');
@@ -193,6 +222,13 @@ export async function startCliMockController(
       clientPath = nextClientPath;
       scriptShellPath = nextScriptShellPath;
     },
+    beginPhase() {
+      if (stopped) throw new Error('CLI mock controller is already stopped.');
+      if (activeToken !== undefined) {
+        throw new Error('CLI mock execution phase is already active.');
+      }
+      activeToken = randomBytes(32).toString('hex');
+    },
     env(basePath, baseScriptShell = '/bin/sh') {
       if (
         binDir === undefined ||
@@ -201,16 +237,20 @@ export async function startCliMockController(
       ) {
         throw new Error('CLI mock shims have not been installed.');
       }
+      if (activeToken === undefined) {
+        throw new Error('CLI mock execution phase is not active.');
+      }
       return {
         PATH: `${binDir}${delimiter}${basePath}`,
         [SOCKET_ENV]: socketPath,
-        [TOKEN_ENV]: token,
-        [NODE_ENV]: process.execPath,
+        [TOKEN_ENV]: activeToken,
+        [NODE_EXECUTABLE_ENV]: process.execPath,
         [CLIENT_ENV]: clientPath,
         [BIN_ENV]: binDir,
         [TIMEOUT_ENV]: String(requestTimeoutMs + CLIENT_TIMEOUT_GRACE_MS),
         [SCRIPT_SHELL_ENV]: baseScriptShell,
         npm_config_script_shell: scriptShellPath,
+        NPM_CONFIG_SCRIPT_SHELL: scriptShellPath,
       };
     },
     calls() {
@@ -234,9 +274,11 @@ export async function startCliMockController(
         argv: [...failure.argv],
       }));
     },
+    finalizePendingCalls,
     async stop() {
       if (stopped) return;
       stopped = true;
+      await finalizePendingCalls();
       for (const socket of sockets) socket.destroy();
       await closeServer(server);
       await rm(socketDir, {force: true, recursive: true});
@@ -247,7 +289,7 @@ export async function startCliMockController(
 function receiveRequest(
   socket: Socket,
   onRequest: (request: CliMockRequest) => void | Promise<void>,
-  token: string,
+  activeToken: () => string | undefined,
   mocks: ReadonlyMap<string, CliMockConfig>,
 ): void {
   let buffer = '';
@@ -266,7 +308,11 @@ function receiveRequest(
     handled = true;
 
     try {
-      const request = parseRequest(buffer.slice(0, newlineIndex), token, mocks);
+      const request = parseRequest(
+        buffer.slice(0, newlineIndex),
+        activeToken(),
+        mocks,
+      );
       void Promise.resolve(onRequest(request)).catch((error) => {
         sendResponse(socket, internalError(errorMessage(error)));
       });
@@ -278,12 +324,17 @@ function receiveRequest(
 
 function parseRequest(
   payload: string,
-  token: string,
+  activeToken: string | undefined,
   mocks: ReadonlyMap<string, CliMockConfig>,
 ): CliMockRequest {
   const value: unknown = JSON.parse(payload);
   if (!isRecord(value)) throw new Error('Malformed CLI mock request.');
-  if (value.token !== token) throw new Error('Invalid CLI mock token.');
+  if (typeof value.token !== 'string') {
+    throw new Error('Invalid CLI mock token.');
+  }
+  if (activeToken === undefined || value.token !== activeToken) {
+    throw new Error('Invalid CLI mock token.');
+  }
   if (typeof value.executable !== 'string' || !mocks.has(value.executable)) {
     throw new Error('Unknown CLI mock executable.');
   }
@@ -497,7 +548,7 @@ function closeServer(server: Server): Promise<void> {
 }
 
 const LAUNCHER_SOURCE = `#!/bin/sh
-exec "$${NODE_ENV}" "$${CLIENT_ENV}" "$0" "$@"
+exec "$${NODE_EXECUTABLE_ENV}" "$${CLIENT_ENV}" "$0" "$@"
 `;
 
 const SCRIPT_SHELL_SOURCE = `#!/bin/sh

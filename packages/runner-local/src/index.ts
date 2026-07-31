@@ -9,6 +9,7 @@ import {
   evaluateAssertions,
   preEvaluateAnyOfObservationBranches,
 } from '@dynobox/evaluators';
+import {execa} from 'execa';
 
 import {type CliMockController, startCliMockController} from './cliMocks.js';
 import {
@@ -209,11 +210,15 @@ export async function runJob(
     });
   }
 
+  const hasCliMocks = Object.keys(job.scenario.cliMocks).length > 0;
+  const baseScriptShell = hasCliMocks
+    ? await resolvePackageScriptShell(workDir, options.env)
+    : undefined;
   let cliMockController: CliMockController | undefined;
   try {
-    if (Object.keys(job.scenario.cliMocks).length > 0) {
+    if (hasCliMocks) {
       cliMockController = await startCliMockController(job.scenario.cliMocks);
-      await cliMockController.install(workDir);
+      await cliMockController.install();
     }
   } catch (error) {
     await cliMockController?.stop();
@@ -238,13 +243,8 @@ export async function runJob(
   const cliMockEnv =
     cliMockController?.env(
       options.env?.PATH ?? process.env.PATH ?? '',
-      options.env?.npm_config_script_shell ??
-        options.env?.NPM_CONFIG_SCRIPT_SHELL ??
-        process.env.npm_config_script_shell ??
-        process.env.NPM_CONFIG_SCRIPT_SHELL,
+      baseScriptShell,
     ) ?? {};
-  // Install static shims before capturing unchanged baselines so generated
-  // files do not appear as harness changes.
   const artifactBaselines = captureArtifactBaselines(
     job.scenario.assertions,
     workDir,
@@ -307,6 +307,7 @@ export async function runJob(
           : {...harnessInput, timeoutMs: options.timeoutMs},
       );
     } catch (error) {
+      await cliMockController?.finalizePendingCalls();
       emitProgress(options, {
         type: 'harness.completed',
         job,
@@ -331,6 +332,7 @@ export async function runJob(
         }),
       });
     }
+    await cliMockController?.finalizePendingCalls();
     const httpEvents = httpCapture?.events ?? [];
     await stopHttpCapture(httpCapture);
     httpCapture = undefined;
@@ -476,10 +478,17 @@ export async function runJob(
       scenario: job.scenario,
       workDir,
     };
+    cliMockController?.beginPhase();
+    const verifyCliMockEnv =
+      cliMockController?.env(
+        options.env?.PATH ?? process.env.PATH ?? '',
+        baseScriptShell,
+      ) ?? {};
     if (options.env !== undefined || cliMockController !== undefined) {
-      verifyOptions.env = {...(options.env ?? {}), ...cliMockEnv};
+      verifyOptions.env = {...(options.env ?? {}), ...verifyCliMockEnv};
     }
     const verifyCommandResults = await runVerifyCommands(verifyOptions);
+    await cliMockController?.finalizePendingCalls();
     const verifyAssertionResults = evaluateAssertions({
       assertions: postVerifyAssertions,
       ...observationInput,
@@ -543,6 +552,50 @@ export async function runJob(
 
 async function createWorkDir(scratchRoot: string | undefined): Promise<string> {
   return mkdtemp(join(scratchRoot ?? tmpdir(), 'dynobox-job-'));
+}
+
+async function resolvePackageScriptShell(
+  workDir: string,
+  envOverrides: Record<string, string> | undefined,
+): Promise<string> {
+  const configured =
+    normalizePackageScriptShell(envOverrides?.npm_config_script_shell) ??
+    normalizePackageScriptShell(envOverrides?.NPM_CONFIG_SCRIPT_SHELL) ??
+    normalizePackageScriptShell(process.env.npm_config_script_shell) ??
+    normalizePackageScriptShell(process.env.NPM_CONFIG_SCRIPT_SHELL);
+  if (configured !== undefined) return configured;
+
+  try {
+    const result = await execa('npm', ['config', 'get', 'script-shell'], {
+      cwd: workDir,
+      env: {...process.env, ...(envOverrides ?? {})},
+      reject: false,
+      stdin: 'ignore',
+      timeout: 5_000,
+    });
+    const scriptShell = normalizePackageScriptShell(result.stdout);
+    if (result.exitCode === 0 && scriptShell !== undefined) {
+      return scriptShell;
+    }
+  } catch {
+    // Fall back to the platform shell when npm config cannot be resolved.
+  }
+  return '/bin/sh';
+}
+
+function normalizePackageScriptShell(
+  value: string | undefined,
+): string | undefined {
+  const normalized = value?.trim();
+  if (
+    normalized === undefined ||
+    normalized.length === 0 ||
+    normalized === 'null' ||
+    normalized === 'undefined'
+  ) {
+    return undefined;
+  }
+  return normalized;
 }
 
 function emitProgress(

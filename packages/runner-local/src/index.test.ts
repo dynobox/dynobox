@@ -326,13 +326,6 @@ describe('runJob', () => {
             response: {exitCode: 0, stdout: 'mocked', stderr: ''},
           },
         },
-        assertions: [
-          {
-            id: 'assertion.shims.0',
-            type: 'artifact.unchanged',
-            path: '.dynobox/cli-mocks/client.mjs',
-          },
-        ],
       }),
       {
         scratchRoot,
@@ -353,7 +346,58 @@ describe('runJob', () => {
         stdout: 'mocked',
       }),
     ]);
+    expect(existsSync(join(result.workDir, '.dynobox'))).toBe(false);
     expect(process.env.PATH).toBe(originalPath);
+  });
+
+  it('preserves a package script shell configured by project npmrc', async () => {
+    const scratchRoot = createScratchRoot();
+    const setupProject = `node -e 'const fs=require("node:fs");const path=require("node:path");fs.writeFileSync("package.json",JSON.stringify({scripts:{test:"mocked-cli package"}}));fs.writeFileSync("custom-shell","#!/bin/sh\\nprintf configured > shell-marker\\nexec /bin/sh \\"$@\\"\\n",{mode:0o755});fs.writeFileSync(".npmrc","script-shell="+path.join(process.cwd(),"custom-shell")+"\\n")'`;
+
+    const result = await runJob(
+      createJob({
+        setup: [setupProject],
+        cliMocks: {
+          'mocked-cli': {
+            response: {exitCode: 0, stdout: 'mocked', stderr: ''},
+          },
+        },
+      }),
+      {
+        scratchRoot,
+        harnesses: [new CommandHarness('npm run test --silent')],
+      },
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.harnessOutput?.stdout).toBe('mocked');
+    expect(readFileSync(join(result.workDir, 'shell-marker'), 'utf8')).toBe(
+      'configured',
+    );
+  });
+
+  it('ignores empty npm script-shell sentinel values', async () => {
+    const scratchRoot = createScratchRoot();
+    const result = await runJob(
+      createJob({
+        setup: [
+          `node -e 'require("node:fs").writeFileSync("package.json",JSON.stringify({scripts:{test:"mocked-cli package"}}))'`,
+        ],
+        cliMocks: {
+          'mocked-cli': {
+            response: {exitCode: 0, stdout: 'mocked', stderr: ''},
+          },
+        },
+      }),
+      {
+        scratchRoot,
+        harnesses: [new CommandHarness('npm run test --silent')],
+        env: {NPM_CONFIG_SCRIPT_SHELL: 'null'},
+      },
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.harnessOutput?.stdout).toBe('mocked');
   });
 
   it('provides CLI mocks to verification commands', async () => {
@@ -509,6 +553,40 @@ describe('runJob', () => {
     expect(result.status).toBe('harness_failed');
     expect(result.cliMockCalls).toHaveLength(2);
     expect(result.diagnostics[0]).toContain('exhausted');
+  });
+
+  it('fails and records a CLI mock still pending when the harness exits', async () => {
+    const scratchRoot = createScratchRoot();
+    const result = await runJob(
+      createJob({
+        cliMocks: {
+          'mocked-cli': {
+            handler: async ({cwd}) => {
+              writeFileSync(join(cwd, 'handler-started'), '');
+              return new Promise<never>(() => undefined);
+            },
+          },
+        },
+      }),
+      {
+        scratchRoot,
+        harnesses: [
+          new CommandHarness(
+            'mocked-cli pending >/dev/null 2>&1 & while [ ! -f handler-started ]; do sleep 0.01; done',
+          ),
+        ],
+      },
+    );
+
+    expect(result.status).toBe('harness_failed');
+    expect(result.cliMockCalls).toEqual([
+      expect.objectContaining({
+        executable: 'mocked-cli',
+        argv: ['pending'],
+        exitCode: 1,
+      }),
+    ]);
+    expect(result.diagnostics[0]).toContain('did not complete');
   });
 
   it('preserves verification mock failures even when assertions accept the exit code', async () => {

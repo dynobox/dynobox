@@ -200,6 +200,16 @@ describe('CLI mock controller', () => {
     expect(readFileSync(marker, 'utf8')).toBe('used');
   });
 
+  it('sets both npm script-shell environment casings', async () => {
+    const {controller} = await createController({
+      vitest: {response: {exitCode: 0, stdout: '', stderr: ''}},
+    });
+
+    const env = controller.env(process.env.PATH ?? '');
+
+    expect(env.NPM_CONFIG_SCRIPT_SHELL).toBe(env.npm_config_script_shell);
+  });
+
   it('records handler failures and preserves invocation order', async () => {
     let slowStarted: (() => void) | undefined;
     const started = new Promise<void>((resolve) => {
@@ -275,26 +285,21 @@ describe('CLI mock controller', () => {
     },
   );
 
-  it('installs private executable shims and cleans up the socket', async () => {
+  it('installs private executable shims outside the workdir and cleans them up', async () => {
     const {controller, workDir} = await createController({
       vitest: {response: {exitCode: 0, stdout: '', stderr: ''}},
     });
     const env = controller.env(process.env.PATH ?? '');
     const socketPath = env.DYNOBOX_CLI_MOCK_SOCKET!;
+    const binDir = env.DYNOBOX_CLI_MOCK_BIN!;
 
     expect(statSync(dirname(socketPath)).mode & 0o777).toBe(0o700);
-    expect(
-      statSync(join(workDir, '.dynobox', 'cli-mocks', 'bin', 'vitest')).mode &
-        0o777,
-    ).toBe(0o700);
+    expect(statSync(join(binDir, 'vitest')).mode & 0o777).toBe(0o700);
+    expect(() => statSync(join(workDir, '.dynobox'))).toThrow();
 
     await controller.stop();
     expect(() => statSync(socketPath)).toThrow();
-    const unavailable = await runMock(controller, workDir, 'vitest');
-    expect(unavailable).toMatchObject({
-      exitCode: 1,
-      stderr: expect.stringContaining('controller unavailable'),
-    });
+    expect(() => statSync(binDir)).toThrow();
   });
 
   it('rejects unsupported platforms with an actionable diagnostic', async () => {
@@ -372,6 +377,71 @@ describe('CLI mock controller', () => {
     ]);
   });
 
+  it('finalizes pending calls as failed evidence', async () => {
+    let handlerStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      handlerStarted = resolve;
+    });
+    let releaseHandler: (() => void) | undefined;
+    const {controller, workDir} = await createController({
+      delayed: {
+        handler: async () => {
+          handlerStarted?.();
+          await new Promise<void>((resolve) => {
+            releaseHandler = resolve;
+          });
+          throw new Error('late handler failure');
+        },
+      },
+    });
+
+    const invocation = runMock(controller, workDir, 'delayed');
+    await started;
+    expect(controller.calls()).toEqual([]);
+
+    await controller.finalizePendingCalls();
+    await expect(invocation).resolves.toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining('did not complete'),
+    });
+    expect(controller.calls()).toEqual([
+      expect.objectContaining({executable: 'delayed', exitCode: 1}),
+    ]);
+    expect(controller.failures()).toEqual([
+      expect.objectContaining({
+        message: expect.stringContaining('did not complete'),
+      }),
+    ]);
+
+    releaseHandler?.();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(controller.failures()).toHaveLength(1);
+  });
+
+  it('rejects retired phase tokens without mutating finalized evidence', async () => {
+    const {controller, workDir} = await createController({
+      delayed: {response: {exitCode: 0, stdout: 'unexpected', stderr: ''}},
+    });
+    const retiredEnv = controller.env(process.env.PATH ?? '');
+    await controller.finalizePendingCalls();
+    controller.beginPhase();
+
+    const result = await runMock(
+      controller,
+      workDir,
+      'delayed',
+      [],
+      retiredEnv,
+    );
+
+    expect(result).toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining('Invalid CLI mock token'),
+    });
+    expect(controller.calls()).toEqual([]);
+    expect(controller.failures()).toEqual([]);
+  });
+
   it('stops without waiting for a hanging handler', async () => {
     let handlerStarted: (() => void) | undefined;
     const started = new Promise<void>((resolve) => {
@@ -406,7 +476,7 @@ async function createController(
   workDirs.push(workDir);
   const controller = await startCliMockController(mocks, options);
   controllers.push(controller);
-  await controller.install(workDir);
+  await controller.install();
   return {controller, workDir};
 }
 
