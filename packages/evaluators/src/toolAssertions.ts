@@ -220,7 +220,7 @@ function findMatchingSequenceStep(
       return commandSequenceMatch(nonMockMatch, cursor);
     }
     if (
-      (!allowUnpairedMocks || cursor.lastMatch === 'event') &&
+      cursor.lastMatch === 'event' &&
       mockMatches.some((command) => command.cliMockEventPaired === false)
     ) {
       return {error: UNPAIRED_MOCK_ORDER_ERROR};

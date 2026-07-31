@@ -1059,6 +1059,48 @@ describe('evaluateAssertions', () => {
     expect(result.passed).toBe(true);
   });
 
+  it('orders repeated mock calls around unrelated tool events', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        type: 'sequence.inOrder',
+        steps: [
+          {type: 'command.called', executable: 'vitest'},
+          {type: 'tool.called', tool: 'read_file'},
+          {type: 'command.called', executable: 'vitest'},
+        ],
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'vitest run'},
+          command: 'vitest run',
+        },
+        {
+          kind: 'read_file',
+          rawName: 'Read',
+          input: {filePath: 'package.json'},
+        },
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: 'vitest run'},
+          command: 'vitest run',
+        },
+      ],
+      {
+        cliMockCalls: [
+          cliMockCall('vitest', ['run']),
+          cliMockCall('vitest', ['run']),
+        ],
+        cliMockExecutableNames: ['vitest'],
+      },
+    );
+
+    expect(result.passed).toBe(true);
+  });
+
   it('does not infer sequence order from a skipped shell segment', () => {
     const result = evaluateOne(
       {

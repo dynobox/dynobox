@@ -258,6 +258,84 @@ describe('CLI mock command observations', () => {
     });
   });
 
+  it('pairs repeated standalone shell commands with calls in FIFO order', () => {
+    const observed = extractObservedCommands(
+      [shellEvent('vitest run'), shellEvent('vitest run')],
+      {
+        cliMockCalls: [
+          cliMockCall('vitest', ['run'], '/first'),
+          cliMockCall('vitest', ['run'], '/second'),
+        ],
+        cliMockExecutableNames: ['vitest'],
+      },
+    );
+
+    expect(observed).toHaveLength(2);
+    expect(
+      observed.map(
+        ({eventIndex, cwd, cliMockCallIndex, cliMockEventPaired}) => ({
+          eventIndex,
+          cwd,
+          cliMockCallIndex,
+          cliMockEventPaired,
+        }),
+      ),
+    ).toEqual([
+      {
+        eventIndex: 0,
+        cwd: '/first',
+        cliMockCallIndex: 0,
+        cliMockEventPaired: true,
+      },
+      {
+        eventIndex: 1,
+        cwd: '/second',
+        cliMockCallIndex: 1,
+        cliMockEventPaired: true,
+      },
+    ]);
+  });
+
+  it('leaves duplicate signatures unpaired when call and shell counts differ', () => {
+    const observed = extractObservedCommands([shellEvent('vitest run')], {
+      cliMockCalls: [
+        cliMockCall('vitest', ['run'], '/nested'),
+        cliMockCall('vitest', ['run'], '/shell'),
+      ],
+      cliMockExecutableNames: ['vitest'],
+    });
+
+    expect(observed).toHaveLength(2);
+    expect(observed.map((command) => command.cliMockEventPaired)).toEqual([
+      false,
+      false,
+    ]);
+  });
+
+  it('does not pair calls backward through shell history', () => {
+    const observed = extractObservedCommands(
+      [shellEvent('second'), shellEvent('first')],
+      {
+        cliMockCalls: [cliMockCall('first', []), cliMockCall('second', [])],
+        cliMockExecutableNames: ['first', 'second'],
+      },
+    );
+
+    expect(observed).toEqual([
+      expect.objectContaining({
+        executable: 'first',
+        eventIndex: 1,
+        cliMockCallIndex: 0,
+        cliMockEventPaired: true,
+      }),
+      expect.objectContaining({
+        executable: 'second',
+        cliMockCallIndex: 1,
+        cliMockEventPaired: false,
+      }),
+    ]);
+  });
+
   it('suppresses unrecorded bare mocks but preserves explicit paths', () => {
     const observed = extractObservedCommands(
       [

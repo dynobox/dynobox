@@ -123,26 +123,56 @@ export function extractObservedCommands(
   const pairedShellIndexes = new Set<number>();
   const shellPairByCallIndex = new Map<number, number>();
   const shellCommandCounts = new Map<number, number>();
+  let lastPairedShellIndex = -1;
   for (const command of shellCommands) {
     shellCommandCounts.set(
       command.eventIndex,
       (shellCommandCounts.get(command.eventIndex) ?? 0) + 1,
     );
   }
-  cliMockCalls.forEach((call, callIndex) => {
-    const matchingShellIndexes = shellCommands.flatMap((command, index) =>
-      !pairedShellIndexes.has(index) &&
-      shellCommandCounts.get(command.eventIndex) === 1 &&
-      command.executablePath === undefined &&
-      command.executable === call.executable &&
-      arraysEqual(command.argv, call.argv)
-        ? [index]
-        : [],
+  const eligibleShellSignatureCounts = new Map<string, number>();
+  for (const command of shellCommands) {
+    if (
+      shellCommandCounts.get(command.eventIndex) !== 1 ||
+      command.executablePath !== undefined
+    ) {
+      continue;
+    }
+    const signature = commandSignature(command.executable, command.argv);
+    eligibleShellSignatureCounts.set(
+      signature,
+      (eligibleShellSignatureCounts.get(signature) ?? 0) + 1,
     );
-    if (matchingShellIndexes.length !== 1) return;
-    const shellIndex = matchingShellIndexes[0]!;
+  }
+  const callSignatureCounts = new Map<string, number>();
+  for (const call of cliMockCalls) {
+    const signature = commandSignature(call.executable, call.argv);
+    callSignatureCounts.set(
+      signature,
+      (callSignatureCounts.get(signature) ?? 0) + 1,
+    );
+  }
+  cliMockCalls.forEach((call, callIndex) => {
+    const signature = commandSignature(call.executable, call.argv);
+    if (
+      eligibleShellSignatureCounts.get(signature) !==
+      callSignatureCounts.get(signature)
+    ) {
+      return;
+    }
+    const shellIndex = shellCommands.findIndex(
+      (command, index) =>
+        index > lastPairedShellIndex &&
+        !pairedShellIndexes.has(index) &&
+        shellCommandCounts.get(command.eventIndex) === 1 &&
+        command.executablePath === undefined &&
+        command.executable === call.executable &&
+        arraysEqual(command.argv, call.argv),
+    );
+    if (shellIndex === -1) return;
     pairedShellIndexes.add(shellIndex);
     shellPairByCallIndex.set(callIndex, shellIndex);
+    lastPairedShellIndex = shellIndex;
   });
 
   const callPairByShellIndex = new Map(
@@ -195,6 +225,10 @@ export function extractObservedCommands(
   });
 
   return observed;
+}
+
+function commandSignature(executable: string, argv: readonly string[]): string {
+  return JSON.stringify([executable, argv]);
 }
 
 function arraysEqual(
