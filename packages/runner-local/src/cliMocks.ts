@@ -1,31 +1,26 @@
 import {randomBytes} from 'node:crypto';
-import {chmod, mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {chmod, mkdtemp, rm} from 'node:fs/promises';
 import {createServer, type Server, type Socket} from 'node:net';
 import {tmpdir} from 'node:os';
-import {delimiter, join} from 'node:path';
+import {join} from 'node:path';
 
 import type {IrScenario} from '@dynobox/sdk/ir';
 
+import {
+  type CliMockConfig,
+  type CliMockFailure,
+  type CliMockResponse,
+  createCliMockResponseResolver,
+  internalError,
+  mockFailureMessage,
+  normalizeHandlerResponse,
+} from './cliMocks/responses.js';
+import {type CliMockShims, installCliMockShims} from './cliMocks/shims.js';
 import type {CliMockCall} from './runTypes.js';
 
 const MAX_REQUEST_BYTES = 10 * 1024 * 1024;
-const SOCKET_ENV = 'DYNOBOX_CLI_MOCK_SOCKET';
-const TOKEN_ENV = 'DYNOBOX_CLI_MOCK_TOKEN';
-const NODE_EXECUTABLE_ENV = 'DYNOBOX_CLI_MOCK_NODE';
-const CLIENT_ENV = 'DYNOBOX_CLI_MOCK_CLIENT';
-const BIN_ENV = 'DYNOBOX_CLI_MOCK_BIN';
-const TIMEOUT_ENV = 'DYNOBOX_CLI_MOCK_TIMEOUT_MS';
-const SCRIPT_SHELL_ENV = 'DYNOBOX_CLI_MOCK_SCRIPT_SHELL';
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
-const CLIENT_TIMEOUT_GRACE_MS = 1_000;
-
-type CliMockConfig = IrScenario['cliMocks'][string];
-
-export type CliMockFailure = {
-  executable: string;
-  argv: string[];
-  message: string;
-};
+export type {CliMockFailure} from './cliMocks/responses.js';
 
 export type CliMockController = {
   readonly executableNames: readonly string[];
@@ -44,12 +39,6 @@ type CliMockRequest = {
   argv: string[];
   cwd: string;
   env: Record<string, string>;
-};
-
-type CliMockResponse = {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
 };
 
 type PendingCall = {
@@ -75,9 +64,8 @@ export async function startCliMockController(
     throw new Error('CLI mock request timeout must be a positive integer.');
   }
   const executableNames = Object.keys(mocks);
-  for (const [executable, config] of Object.entries(mocks)) {
+  for (const executable of executableNames) {
     validateExecutableName(executable);
-    validateConfiguredResponses(executable, config);
   }
 
   const socketDir = await mkdtemp(join(tmpdir(), 'dxb-mock-'));
@@ -85,14 +73,12 @@ export async function startCliMockController(
   const socketPath = join(socketDir, 'mock.sock');
   let activeToken: string | undefined = randomBytes(32).toString('hex');
   const mockByExecutable = new Map(Object.entries(mocks));
-  const responseIndexes = new Map<string, number>();
+  const responseResolver = createCliMockResponseResolver(mocks);
   const pendingCalls: PendingCall[] = [];
   const failures: CliMockFailure[] = [];
   const sockets = new Set<Socket>();
   let nextSequence = 0;
-  let binDir: string | undefined;
-  let clientPath: string | undefined;
-  let scriptShellPath: string | undefined;
+  let shims: CliMockShims | undefined;
   let stopped = false;
 
   const server = createServer((socket) => {
@@ -118,13 +104,14 @@ export async function startCliMockController(
         };
         pendingCalls.push(call);
 
-        const assignment = reserveResponse(
+        const assignment = responseResolver.reserve(
           request.executable,
           request.argv,
           config,
-          responseIndexes,
-          failures,
         );
+        if ('failure' in assignment && assignment.failure !== undefined) {
+          failures.push(assignment.failure);
+        }
         let response: CliMockResponse;
         if ('response' in assignment) {
           response = assignment.response;
@@ -206,21 +193,10 @@ export async function startCliMockController(
     async install() {
       if (stopped) throw new Error('CLI mock controller is already stopped.');
 
-      const rootDir = join(socketDir, 'support');
-      const nextBinDir = join(rootDir, 'bin');
-      const nextClientPath = join(rootDir, 'client.mjs');
-      const nextScriptShellPath = join(rootDir, 'script-shell');
-      await mkdir(nextBinDir, {recursive: true});
-      await writeFile(nextClientPath, CLIENT_SOURCE, {mode: 0o600});
-      await writeFile(nextScriptShellPath, SCRIPT_SHELL_SOURCE, {mode: 0o700});
-      for (const executable of executableNames) {
-        await writeFile(join(nextBinDir, executable), LAUNCHER_SOURCE, {
-          mode: 0o700,
-        });
-      }
-      binDir = nextBinDir;
-      clientPath = nextClientPath;
-      scriptShellPath = nextScriptShellPath;
+      shims = await installCliMockShims(
+        join(socketDir, 'support'),
+        executableNames,
+      );
     },
     beginPhase() {
       if (stopped) throw new Error('CLI mock controller is already stopped.');
@@ -230,28 +206,19 @@ export async function startCliMockController(
       activeToken = randomBytes(32).toString('hex');
     },
     env(basePath, baseScriptShell = '/bin/sh') {
-      if (
-        binDir === undefined ||
-        clientPath === undefined ||
-        scriptShellPath === undefined
-      ) {
+      if (shims === undefined) {
         throw new Error('CLI mock shims have not been installed.');
       }
       if (activeToken === undefined) {
         throw new Error('CLI mock execution phase is not active.');
       }
-      return {
-        PATH: `${binDir}${delimiter}${basePath}`,
-        [SOCKET_ENV]: socketPath,
-        [TOKEN_ENV]: activeToken,
-        [NODE_EXECUTABLE_ENV]: process.execPath,
-        [CLIENT_ENV]: clientPath,
-        [BIN_ENV]: binDir,
-        [TIMEOUT_ENV]: String(requestTimeoutMs + CLIENT_TIMEOUT_GRACE_MS),
-        [SCRIPT_SHELL_ENV]: baseScriptShell,
-        npm_config_script_shell: scriptShellPath,
-        NPM_CONFIG_SCRIPT_SHELL: scriptShellPath,
-      };
+      return shims.env({
+        socketPath,
+        token: activeToken,
+        requestTimeoutMs,
+        basePath,
+        baseScriptShell,
+      });
     },
     calls() {
       return pendingCalls
@@ -360,97 +327,6 @@ function parseRequest(
   };
 }
 
-function reserveResponse(
-  executable: string,
-  argv: string[],
-  config: CliMockConfig,
-  responseIndexes: Map<string, number>,
-  failures: CliMockFailure[],
-):
-  | {response: CliMockResponse}
-  | {
-      handler: Extract<CliMockConfig, {handler: unknown}>['handler'];
-    } {
-  if ('response' in config) return {response: config.response};
-  if ('handler' in config) return {handler: config.handler};
-
-  const index = responseIndexes.get(executable) ?? 0;
-  responseIndexes.set(executable, index + 1);
-  if (index < config.responses.length) {
-    return {response: config.responses[index]!};
-  }
-  if (config.onExhausted === 'repeat-last') {
-    return {response: config.responses.at(-1)!};
-  }
-  if (config.onExhausted !== undefined && config.onExhausted !== 'error') {
-    return {response: config.onExhausted};
-  }
-
-  const message = mockFailureMessage(
-    executable,
-    argv,
-    'exhausted its configured responses',
-  );
-  failures.push({executable, argv: [...argv], message});
-  return {response: internalError(message)};
-}
-
-function normalizeHandlerResponse(value: unknown): CliMockResponse {
-  if (!isRecord(value)) {
-    throw new Error('returned an invalid response');
-  }
-  assertProcessExitCode(value.exitCode, 'returned an invalid response');
-  if (value.stdout !== undefined && typeof value.stdout !== 'string') {
-    throw new Error('returned an invalid response: stdout must be a string');
-  }
-  if (value.stderr !== undefined && typeof value.stderr !== 'string') {
-    throw new Error('returned an invalid response: stderr must be a string');
-  }
-  return {
-    exitCode: value.exitCode as number,
-    stdout: (value.stdout as string | undefined) ?? '',
-    stderr: (value.stderr as string | undefined) ?? '',
-  };
-}
-
-function validateConfiguredResponses(
-  executable: string,
-  config: CliMockConfig,
-): void {
-  if ('handler' in config) return;
-  const responses =
-    'response' in config
-      ? [config.response]
-      : [
-          ...config.responses,
-          ...(typeof config.onExhausted === 'object'
-            ? [config.onExhausted]
-            : []),
-        ];
-  for (const response of responses) {
-    assertProcessExitCode(
-      response.exitCode,
-      `Invalid CLI mock response for ${JSON.stringify(executable)}`,
-    );
-  }
-}
-
-function assertProcessExitCode(
-  value: unknown,
-  context: string,
-): asserts value is number {
-  if (
-    typeof value !== 'number' ||
-    !Number.isInteger(value) ||
-    value < 0 ||
-    value > 255
-  ) {
-    throw new Error(
-      `${context}: exitCode must be an integer between 0 and 255`,
-    );
-  }
-}
-
 function validateExecutableName(executable: string): void {
   if (
     executable.length === 0 ||
@@ -464,25 +340,6 @@ function validateExecutableName(executable: string): void {
       `Invalid CLI mock executable name: ${JSON.stringify(executable)}.`,
     );
   }
-}
-
-function mockFailureMessage(
-  executable: string,
-  argv: readonly string[],
-  reason: string,
-): string {
-  const command = [executable, ...argv].join(' ');
-  return `Dynobox CLI mock "${command}" ${reason}.`;
-}
-
-function internalError(message: string): CliMockResponse {
-  return {
-    exitCode: 1,
-    stdout: '',
-    stderr: message.startsWith('Dynobox')
-      ? `${message}\n`
-      : `Dynobox CLI mock error: ${message}\n`,
-  };
 }
 
 function sendResponse(socket: Socket, response: CliMockResponse): void {
@@ -546,97 +403,3 @@ function closeServer(server: Server): Promise<void> {
     });
   });
 }
-
-const LAUNCHER_SOURCE = `#!/bin/sh
-exec "$${NODE_EXECUTABLE_ENV}" "$${CLIENT_ENV}" "$0" "$@"
-`;
-
-const SCRIPT_SHELL_SOURCE = `#!/bin/sh
-export PATH="\${${BIN_ENV}:?missing internal configuration}:$PATH"
-exec "$${SCRIPT_SHELL_ENV}" "$@"
-`;
-
-const CLIENT_SOURCE = `import net from 'node:net';
-import {basename} from 'node:path';
-
-const socketPath = process.env.${SOCKET_ENV};
-const token = process.env.${TOKEN_ENV};
-const requestTimeoutMs = Number.parseInt(process.env.${TIMEOUT_ENV} ?? '', 10);
-const executable = basename(process.argv[2] ?? '');
-const argv = process.argv.slice(3);
-
-function fail(message) {
-  process.stderr.write('Dynobox CLI mock error: ' + message + '\\n');
-  process.exitCode = 1;
-}
-
-if (
-  !socketPath ||
-  !token ||
-  !Number.isSafeInteger(requestTimeoutMs) ||
-  requestTimeoutMs <= 0 ||
-  !executable
-) {
-  fail('missing internal configuration.');
-} else {
-  await new Promise((resolve) => {
-    const socket = net.createConnection(socketPath);
-    let buffer = '';
-    let settled = false;
-
-    function finish() {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      resolve();
-    }
-
-    socket.setEncoding('utf8');
-    socket.setTimeout(requestTimeoutMs);
-    socket.once('timeout', () => {
-      fail('request timed out after ' + requestTimeoutMs + ' milliseconds.');
-      finish();
-    });
-    socket.once('connect', () => {
-      socket.write(JSON.stringify({
-        token,
-        executable,
-        argv,
-        cwd: process.cwd(),
-        env: process.env,
-      }) + '\\n');
-    });
-    socket.on('data', (chunk) => {
-      buffer += chunk;
-      const newlineIndex = buffer.indexOf('\\n');
-      if (newlineIndex === -1) return;
-      try {
-        const response = JSON.parse(buffer.slice(0, newlineIndex));
-        if (
-          !Number.isInteger(response.exitCode) ||
-          typeof response.stdout !== 'string' ||
-          typeof response.stderr !== 'string'
-        ) {
-          throw new Error('malformed response.');
-        }
-        process.stdout.write(response.stdout);
-        process.stderr.write(response.stderr);
-        process.exitCode = response.exitCode;
-      } catch (error) {
-        fail(error instanceof Error ? error.message : String(error));
-      }
-      finish();
-    });
-    socket.once('error', (error) => {
-      fail('controller unavailable: ' + error.message);
-      finish();
-    });
-    socket.once('end', () => {
-      if (!settled) {
-        fail('controller returned no response.');
-        finish();
-      }
-    });
-  });
-}
-`;
