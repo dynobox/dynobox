@@ -519,12 +519,10 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
       live.rewriteHeadline(row);
       const debugLogPaths = maybeWriteDebugLogs(ctx, result);
       writeStdout(
-        renderLiveJobCompletion(
-          result,
-          assertionById,
-          ctx,
-          debugLogPaths === undefined ? {} : {debugLogPaths},
-        ),
+        renderLiveJobCompletion(result, assertionById, ctx, {
+          configuredCliMockNames: Object.keys(job.scenario.cliMocks),
+          ...(debugLogPaths === undefined ? {} : {debugLogPaths}),
+        }),
       );
       return;
     }
@@ -569,12 +567,10 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
       const assertionById = assertionByIdForJobs([job]);
       const debugLogPaths = maybeWriteDebugLogs(ctx, result);
       writeStdout(
-        renderLiveJobCompletion(
-          result,
-          assertionById,
-          ctx,
-          debugLogPaths === undefined ? {} : {debugLogPaths},
-        ),
+        renderLiveJobCompletion(result, assertionById, ctx, {
+          configuredCliMockNames: Object.keys(job.scenario.cliMocks),
+          ...(debugLogPaths === undefined ? {} : {debugLogPaths}),
+        }),
       );
     }
     writeStdout(`${renderHarnessGroupRow(entries, ctx, rowOptions)}\n`);

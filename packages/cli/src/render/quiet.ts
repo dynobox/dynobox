@@ -100,7 +100,13 @@ function describeJobFailures(entry: GroupedJobEntry): string[] {
     }
     return lines;
   }
-  return failedAssertionLabels(entry.result, assertionById);
+  const assertionLabels = failedAssertionLabels(entry.result, assertionById);
+  if (entry.result.diagnostics.length === 0) return assertionLabels;
+  return [
+    'verification failed',
+    ...entry.result.diagnostics,
+    ...assertionLabels,
+  ];
 }
 
 function failedAssertionLabels(

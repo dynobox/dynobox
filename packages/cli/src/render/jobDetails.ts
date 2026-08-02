@@ -9,12 +9,12 @@
 import type {LocalRunnerResult} from '@dynobox/runner-local';
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
-import type {RenderContext} from '../terminal/index.js';
+import {dim, type RenderContext} from '../terminal/index.js';
 import type {DebugLogPaths} from '../util/transcript.js';
 import {renderAssertionDetails} from './assertions.js';
 import {renderDebugDetails} from './debug.js';
 import {
-  renderHarnessFailureDetails,
+  renderFailureDiagnostics,
   renderSetupFailureDetails,
 } from './failure.js';
 import {
@@ -26,6 +26,7 @@ import {renderWarningDetails} from './warnings.js';
 
 export type JobDetailsOptions = {
   debugLogPaths?: DebugLogPaths;
+  configuredCliMockNames?: readonly string[];
 };
 
 export function renderJobDetails(
@@ -40,11 +41,14 @@ export function renderJobDetails(
     renderHarnessPhase(result, ctx, omitIcons),
     renderAssertionsPhase(result, ctx, omitIcons),
   ];
+  lines.push(
+    renderCliMockDetails(result, options.configuredCliMockNames ?? [], ctx),
+  );
 
   if (result.status === 'setup_failed') {
     lines.push(renderSetupFailureDetails(result, ctx));
-  } else if (result.status === 'harness_failed') {
-    lines.push(renderHarnessFailureDetails(result, ctx));
+  } else if (!result.passed && result.diagnostics.length > 0) {
+    lines.push(renderFailureDiagnostics(result, ctx));
   }
   lines.push(renderWarningDetails(result, ctx));
 
@@ -68,4 +72,24 @@ export function renderJobDetails(
   }
 
   return `${lines.join('')}\n`;
+}
+
+export function renderCliMockDetails(
+  result: LocalRunnerResult,
+  configuredNames: readonly string[],
+  ctx: RenderContext,
+): string {
+  const lines: string[] = [];
+  if (configuredNames.length > 0) {
+    lines.push(
+      `        ${dim(ctx, `cli mocks: ${configuredNames.join(', ')}`)}\n`,
+    );
+  }
+  for (const call of result.cliMockCalls) {
+    const command = [call.executable, ...call.argv].join(' ');
+    lines.push(
+      `        ${dim(ctx, `cli mock: ${command} -> exit ${call.exitCode}`)}\n`,
+    );
+  }
+  return lines.join('');
 }
