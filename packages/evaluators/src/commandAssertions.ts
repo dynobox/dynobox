@@ -3,7 +3,7 @@ import {parse as parseShellCommand, type ParseEntry} from 'shell-quote';
 
 import {describeCommandMatcher} from './presentation.js';
 import {passed} from './results.js';
-import type {AssertionResult, ToolEvent} from './types.js';
+import type {AssertionResult, CliMockCall, ToolEvent} from './types.js';
 
 export type ObservedCommand = {
   toolCallId: string;
@@ -18,6 +18,13 @@ export type ObservedCommand = {
   segmentIndex: number;
   start: number;
   end: number;
+  cliMockCallIndex?: number;
+  cliMockEventPaired?: boolean;
+};
+
+export type CommandObservationOptions = {
+  cliMockCalls?: readonly CliMockCall[];
+  cliMockExecutableNames?: readonly string[];
 };
 
 type CommandCalledAssertion = Extract<IrAssertion, {type: 'command.called'}>;
@@ -32,8 +39,9 @@ type CommandMatcher = NonNullable<CommandCalledAssertion['command']>;
 export function evaluateCommandCalledAssertion(
   assertion: CommandCalledAssertion,
   toolEvents: readonly ToolEvent[],
+  options?: CommandObservationOptions,
 ): AssertionResult {
-  const observed = extractObservedCommands(toolEvents);
+  const observed = extractObservedCommands(toolEvents, options);
   const match = observed.find((command) =>
     commandMatchesAssertion(command, assertion),
   );
@@ -68,8 +76,9 @@ export function evaluateCommandCalledAssertion(
 export function evaluateCommandNotCalledAssertion(
   assertion: CommandNotCalledAssertion,
   toolEvents: readonly ToolEvent[],
+  options?: CommandObservationOptions,
 ): AssertionResult {
-  const observed = extractObservedCommands(toolEvents);
+  const observed = extractObservedCommands(toolEvents, options);
   const match = observed.find((command) =>
     commandMatchesAssertion(command, assertion),
   );
@@ -92,15 +101,145 @@ export function evaluateCommandNotCalledAssertion(
 
 export function extractObservedCommands(
   toolEvents: readonly ToolEvent[],
+  options?: CommandObservationOptions,
 ): ObservedCommand[] {
-  const observed: ObservedCommand[] = [];
+  const shellCommands: ObservedCommand[] = [];
   toolEvents.forEach((event, eventIndex) => {
     if (event.kind !== 'shell' || typeof event.command !== 'string') return;
-    observed.push(
-      ...parseCommand(event.command, event, eventIndex, observed.length),
+    shellCommands.push(
+      ...parseCommand(event.command, event, eventIndex, shellCommands.length),
     );
   });
+
+  const cliMockCalls = options?.cliMockCalls ?? [];
+  const mockExecutableNames = new Set([
+    ...(options?.cliMockExecutableNames ?? []),
+    ...cliMockCalls.map((call) => call.executable),
+  ]);
+  if (mockExecutableNames.size === 0) return shellCommands;
+
+  const pairedShellIndexes = new Set<number>();
+  const shellPairByCallIndex = new Map<number, number>();
+  const shellCommandCounts = new Map<number, number>();
+  let lastPairedShellIndex = -1;
+  for (const command of shellCommands) {
+    shellCommandCounts.set(
+      command.eventIndex,
+      (shellCommandCounts.get(command.eventIndex) ?? 0) + 1,
+    );
+  }
+  const eligibleShellSignatureCounts = new Map<string, number>();
+  for (const command of shellCommands) {
+    if (
+      shellCommandCounts.get(command.eventIndex) !== 1 ||
+      command.executablePath !== undefined
+    ) {
+      continue;
+    }
+    const signature = commandSignature(command.executable, command.argv);
+    eligibleShellSignatureCounts.set(
+      signature,
+      (eligibleShellSignatureCounts.get(signature) ?? 0) + 1,
+    );
+  }
+  const callSignatureCounts = new Map<string, number>();
+  for (const call of cliMockCalls) {
+    const signature = commandSignature(call.executable, call.argv);
+    callSignatureCounts.set(
+      signature,
+      (callSignatureCounts.get(signature) ?? 0) + 1,
+    );
+  }
+  cliMockCalls.forEach((call, callIndex) => {
+    const signature = commandSignature(call.executable, call.argv);
+    if (
+      eligibleShellSignatureCounts.get(signature) !==
+      callSignatureCounts.get(signature)
+    ) {
+      return;
+    }
+    const shellIndex = shellCommands.findIndex(
+      (command, index) =>
+        index > lastPairedShellIndex &&
+        !pairedShellIndexes.has(index) &&
+        shellCommandCounts.get(command.eventIndex) === 1 &&
+        command.executablePath === undefined &&
+        command.executable === call.executable &&
+        arraysEqual(command.argv, call.argv),
+    );
+    if (shellIndex === -1) return;
+    pairedShellIndexes.add(shellIndex);
+    shellPairByCallIndex.set(callIndex, shellIndex);
+    lastPairedShellIndex = shellIndex;
+  });
+
+  const callPairByShellIndex = new Map(
+    [...shellPairByCallIndex].map(([callIndex, shellIndex]) => [
+      shellIndex,
+      callIndex,
+    ]),
+  );
+  const observed: ObservedCommand[] = [];
+  shellCommands.forEach((command, shellIndex) => {
+    const callIndex = callPairByShellIndex.get(shellIndex);
+    if (callIndex !== undefined) {
+      const call = cliMockCalls[callIndex]!;
+      observed.push({
+        ...command,
+        executable: call.executable,
+        argv: [...call.argv],
+        cwd: call.cwd,
+        cliMockCallIndex: callIndex,
+        cliMockEventPaired: true,
+      });
+      return;
+    }
+
+    if (
+      command.executablePath === undefined &&
+      mockExecutableNames.has(command.executable) &&
+      callSignatureCounts.has(
+        commandSignature(command.executable, command.argv),
+      )
+    ) {
+      return;
+    }
+    observed.push(command);
+  });
+
+  cliMockCalls.forEach((call, callIndex) => {
+    if (shellPairByCallIndex.has(callIndex)) return;
+    const original = [call.executable, ...call.argv].join(' ');
+    observed.push({
+      toolCallId: `cli-mock:${callIndex}`,
+      executable: call.executable,
+      argv: [...call.argv],
+      cwd: call.cwd,
+      original,
+      eventIndex: toolEvents.length + callIndex,
+      segmentIndex: 0,
+      start: 0,
+      end: original.length,
+      cliMockCallIndex: callIndex,
+      cliMockEventPaired: false,
+    });
+  });
+
   return observed;
+}
+
+function commandSignature(executable: string, argv: readonly string[]): string {
+  return JSON.stringify([executable, argv]);
+}
+
+function arraysEqual(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
 export function commandMatchesAssertion(

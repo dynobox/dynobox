@@ -2,6 +2,7 @@ import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {
   commandMatchesAssertion,
+  type CommandObservationOptions,
   describeCommandStep,
   extractObservedCommands,
   type ObservedCommand,
@@ -32,7 +33,12 @@ type SequenceCursor = {
   eventIndex: number;
   shellOffset: number;
   commandOffset: number;
+  mockCallOffset: number;
+  lastMatch: 'none' | 'event' | 'paired-mock' | 'unpaired-mock';
 };
+
+const UNPAIRED_MOCK_ORDER_ERROR =
+  'Cannot determine order for an unpaired CLI mock call relative to unrelated harness tool events.';
 
 export function evaluateToolCalledAssertion(
   assertion: ToolCalledAssertion,
@@ -92,13 +98,19 @@ export function evaluateToolNotCalledAssertion(
 export function evaluateSequenceInOrder(
   assertion: Extract<IrAssertion, {type: 'sequence.inOrder'}>,
   toolEvents: readonly ToolEvent[],
+  options?: CommandObservationOptions,
 ): AssertionResult {
-  const observedCommands = extractObservedCommands(toolEvents);
+  const observedCommands = extractObservedCommands(toolEvents, options);
+  const allowUnpairedMocks = assertion.steps.every(
+    (step) => step.type === 'command.called',
+  );
   const matchedEvents: (ToolEvent | ObservedCommand)[] = [];
   let cursor: SequenceCursor = {
     eventIndex: 0,
     shellOffset: 0,
     commandOffset: 0,
+    mockCallOffset: 0,
+    lastMatch: 'none',
   };
 
   for (const [stepIndex, step] of assertion.steps.entries()) {
@@ -107,6 +119,7 @@ export function evaluateSequenceInOrder(
       toolEvents,
       observedCommands,
       cursor,
+      allowUnpairedMocks,
     );
     if (match.error !== undefined) {
       return {
@@ -143,30 +156,74 @@ function findMatchingSequenceStep(
   toolEvents: readonly ToolEvent[],
   observedCommands: readonly ObservedCommand[],
   cursor: SequenceCursor,
+  allowUnpairedMocks: boolean,
 ): {
   event?: ToolEvent | ObservedCommand;
   nextCursor?: SequenceCursor;
   error?: string;
 } {
   if (step.type === 'command.called') {
-    for (const command of observedCommands) {
-      if (command.eventIndex < cursor.eventIndex) continue;
-      if (
-        command.eventIndex === cursor.eventIndex &&
-        (command.segmentIndex < cursor.commandOffset ||
-          command.end <= cursor.shellOffset)
-      ) {
-        continue;
+    const mockMatches = observedCommands
+      .filter(
+        (command) =>
+          command.cliMockCallIndex !== undefined &&
+          command.cliMockCallIndex >= cursor.mockCallOffset &&
+          commandMatchesAssertion(command, step),
+      )
+      .sort((left, right) => left.cliMockCallIndex! - right.cliMockCallIndex!);
+    const orderableMockMatches = allowUnpairedMocks
+      ? mockMatches
+      : mockMatches.filter((command) => command.cliMockEventPaired === true);
+    // Mock-backed command steps can always be ordered against one another by
+    // invocation index, even when a nested call has no shell event to anchor it.
+    const lastMatchWasMock = cursor.lastMatch.endsWith('mock');
+    const nonMockMatches = observedCommands.filter(
+      (command) =>
+        command.cliMockCallIndex === undefined &&
+        commandAfterCursor(command, cursor) &&
+        commandMatchesAssertion(command, step),
+    );
+    if (!allowUnpairedMocks) {
+      const eventMatch = [
+        ...orderableMockMatches.filter(
+          (command) =>
+            cursor.lastMatch === 'none' ||
+            lastMatchWasMock ||
+            commandAfterCursor(command, cursor),
+        ),
+        ...nonMockMatches,
+      ].sort(compareCommandPosition)[0];
+      if (eventMatch !== undefined) {
+        return commandSequenceMatch(eventMatch, cursor);
       }
-      if (!commandMatchesAssertion(command, step)) continue;
-      return {
-        event: command,
-        nextCursor: {
-          eventIndex: command.eventIndex,
-          shellOffset: command.end,
-          commandOffset: command.segmentIndex + 1,
-        },
-      };
+      if (mockMatches.some((command) => command.cliMockEventPaired === false)) {
+        return {error: UNPAIRED_MOCK_ORDER_ERROR};
+      }
+      return {};
+    }
+    const mockMatch =
+      cursor.lastMatch === 'none' || lastMatchWasMock
+        ? orderableMockMatches[0]
+        : orderableMockMatches.find(
+            (command) =>
+              command.cliMockEventPaired === true &&
+              commandAfterCursor(command, cursor),
+          );
+    if (mockMatch !== undefined) {
+      return commandSequenceMatch(mockMatch, cursor);
+    }
+    const nonMockMatch = nonMockMatches[0];
+    if (nonMockMatch !== undefined) {
+      if (cursor.lastMatch === 'unpaired-mock') {
+        return {error: UNPAIRED_MOCK_ORDER_ERROR};
+      }
+      return commandSequenceMatch(nonMockMatch, cursor);
+    }
+    if (
+      cursor.lastMatch === 'event' &&
+      mockMatches.some((command) => command.cliMockEventPaired === false)
+    ) {
+      return {error: UNPAIRED_MOCK_ORDER_ERROR};
     }
     return {};
   }
@@ -192,9 +249,18 @@ function findMatchingSequenceStep(
       if (step.path !== undefined && !toolEventMatchesPath(event, step.path)) {
         continue;
       }
+      if (cursor.lastMatch === 'unpaired-mock') {
+        return {error: UNPAIRED_MOCK_ORDER_ERROR};
+      }
       return {
         event,
-        nextCursor: {eventIndex: index + 1, shellOffset: 0, commandOffset: 0},
+        nextCursor: {
+          eventIndex: index + 1,
+          shellOffset: 0,
+          commandOffset: 0,
+          mockCallOffset: cursor.mockCallOffset,
+          lastMatch: 'event',
+        },
       };
     }
 
@@ -210,6 +276,9 @@ function findMatchingSequenceStep(
       if (match.error !== undefined) return {error: match.error};
       continue;
     }
+    if (cursor.lastMatch === 'unpaired-mock') {
+      return {error: UNPAIRED_MOCK_ORDER_ERROR};
+    }
 
     return {
       event,
@@ -217,11 +286,66 @@ function findMatchingSequenceStep(
         eventIndex: index,
         shellOffset: match.end,
         commandOffset: index === cursor.eventIndex ? cursor.commandOffset : 0,
+        mockCallOffset: cursor.mockCallOffset,
+        lastMatch: 'event',
       },
     };
   }
 
   return {};
+}
+
+function commandSequenceMatch(
+  command: ObservedCommand,
+  cursor: SequenceCursor,
+): {event: ObservedCommand; nextCursor: SequenceCursor} {
+  if (command.cliMockCallIndex === undefined) {
+    return {
+      event: command,
+      nextCursor: {
+        eventIndex: command.eventIndex,
+        shellOffset: command.end,
+        commandOffset: command.segmentIndex + 1,
+        mockCallOffset: cursor.mockCallOffset,
+        lastMatch: 'event',
+      },
+    };
+  }
+
+  const paired = command.cliMockEventPaired === true;
+  return {
+    event: command,
+    nextCursor: {
+      eventIndex: paired ? command.eventIndex : cursor.eventIndex,
+      shellOffset: paired ? command.end : cursor.shellOffset,
+      commandOffset: paired ? command.segmentIndex + 1 : cursor.commandOffset,
+      mockCallOffset: command.cliMockCallIndex + 1,
+      lastMatch: paired ? 'paired-mock' : 'unpaired-mock',
+    },
+  };
+}
+
+function compareCommandPosition(
+  left: ObservedCommand,
+  right: ObservedCommand,
+): number {
+  return (
+    left.eventIndex - right.eventIndex ||
+    left.segmentIndex - right.segmentIndex ||
+    left.start - right.start
+  );
+}
+
+function commandAfterCursor(
+  command: ObservedCommand,
+  cursor: SequenceCursor,
+): boolean {
+  if (command.eventIndex < cursor.eventIndex) return false;
+  if (command.eventIndex > cursor.eventIndex) return true;
+  return (
+    command.segmentIndex >= cursor.commandOffset &&
+    command.end > cursor.shellOffset
+  );
 }
 
 function findMatchingToolEvent(
