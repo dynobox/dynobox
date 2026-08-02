@@ -51,6 +51,11 @@ type PendingCall = {
   response?: CliMockResponse;
 };
 
+/**
+ * Starts a local socket controller that serves configured CLI mock responses
+ * through temporary executable shims. Install it before an execution phase,
+ * then call `beginPhase`, `env`, and `finalizePendingCalls` for each phase.
+ */
 export async function startCliMockController(
   mocks: IrScenario['cliMocks'],
   options: {requestTimeoutMs?: number} = {},
@@ -253,6 +258,7 @@ export async function startCliMockController(
   };
 }
 
+/** Reads and validates one newline-delimited request from a shim socket. */
 function receiveRequest(
   socket: Socket,
   onRequest: (request: CliMockRequest) => void | Promise<void>,
@@ -289,6 +295,7 @@ function receiveRequest(
   });
 }
 
+/** Parses the shim request and verifies it belongs to the active execution phase. */
 function parseRequest(
   payload: string,
   activeToken: string | undefined,

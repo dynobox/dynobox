@@ -1,6 +1,8 @@
 import {mkdir, writeFile} from 'node:fs/promises';
 import {delimiter, join} from 'node:path';
 
+/** Creates executable shims that forward mocked CLI calls to the controller. */
+
 const SOCKET_ENV = 'DYNOBOX_CLI_MOCK_SOCKET';
 const TOKEN_ENV = 'DYNOBOX_CLI_MOCK_TOKEN';
 const NODE_EXECUTABLE_ENV = 'DYNOBOX_CLI_MOCK_NODE';
@@ -20,6 +22,10 @@ export type CliMockShims = {
   }): Record<string, string>;
 };
 
+/**
+ * Installs launcher binaries and the Node socket client in an isolated
+ * directory, returning the environment needed to activate them.
+ */
 export async function installCliMockShims(
   rootDir: string,
   executableNames: readonly string[],

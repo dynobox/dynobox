@@ -1,5 +1,7 @@
 import type {IrScenario} from '@dynobox/sdk/ir';
 
+/** Resolves configured CLI mock responses while preserving per-executable order. */
+
 export type CliMockConfig = IrScenario['cliMocks'][string];
 
 export type CliMockFailure = {
@@ -28,6 +30,10 @@ export type CliMockResponseResolver = {
   ): CliMockAssignment;
 };
 
+/**
+ * Validates configured responses and returns a resolver for each intercepted
+ * executable invocation.
+ */
 export function createCliMockResponseResolver(
   mocks: IrScenario['cliMocks'],
 ): CliMockResponseResolver {
@@ -66,6 +72,7 @@ export function createCliMockResponseResolver(
   };
 }
 
+/** Validates and fills optional output fields from a mock handler response. */
 export function normalizeHandlerResponse(value: unknown): CliMockResponse {
   if (!isRecord(value)) {
     throw new Error('returned an invalid response');
@@ -84,6 +91,7 @@ export function normalizeHandlerResponse(value: unknown): CliMockResponse {
   };
 }
 
+/** Formats a consistent diagnostic for a failed mock invocation. */
 export function mockFailureMessage(
   executable: string,
   argv: readonly string[],
@@ -93,6 +101,7 @@ export function mockFailureMessage(
   return `Dynobox CLI mock "${command}" ${reason}.`;
 }
 
+/** Converts an internal mock failure into a process-like error response. */
 export function internalError(message: string): CliMockResponse {
   return {
     exitCode: 1,
