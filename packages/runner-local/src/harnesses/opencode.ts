@@ -47,7 +47,7 @@ const MCP_PREFIXES_METADATA_KEY = 'opencodeMcpPrefixes';
 export class OpenCodeHarness implements Harness {
   readonly id = 'opencode' as const;
 
-  private readonly executable: string;
+  readonly executable: string;
   private readonly extraArgs: readonly string[];
   private readonly probeVersion: () => Promise<string | null>;
 

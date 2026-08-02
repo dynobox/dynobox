@@ -4,7 +4,6 @@ import {createServer, type Server, type Socket} from 'node:net';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import type {CliMockCall} from '@dynobox/evaluators';
 import type {IrScenario} from '@dynobox/sdk/ir';
 
 import {
@@ -17,6 +16,7 @@ import {
   normalizeHandlerResponse,
 } from './cliMocks/responses.js';
 import {type CliMockShims, installCliMockShims} from './cliMocks/shims.js';
+import type {CliMockCall} from './runTypes.js';
 
 const MAX_REQUEST_BYTES = 10 * 1024 * 1024;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
