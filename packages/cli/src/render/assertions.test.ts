@@ -20,6 +20,7 @@ describe('renderAssertionDetails', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -64,6 +65,7 @@ describe('renderAssertionDetails', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -121,6 +123,7 @@ describe('renderAssertionDetails', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -255,6 +258,7 @@ describe('renderAssertionDetails', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -334,6 +338,7 @@ describe('renderAssertionDetails', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -382,6 +387,7 @@ describe('renderAssertionDetails', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -434,6 +440,7 @@ describe('renderAssertionDetails', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -495,6 +502,7 @@ describe('renderAssertionDetails', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -579,6 +587,7 @@ describe('renderAssertionDetails', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -655,6 +664,7 @@ describe('renderAssertionDetails', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {

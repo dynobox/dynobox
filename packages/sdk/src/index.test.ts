@@ -22,6 +22,9 @@ import {
   type ArtifactNotExistsAssertion,
   type ArtifactUnchangedAssertion,
   type CalledAssertion,
+  type CliMockConfig,
+  type CliMockHandlerContext,
+  type CliMockResponse,
   command,
   type CommandCalledAssertion,
   type CommandNotCalledAssertion,
@@ -32,6 +35,7 @@ import {
   type FinalMessageContainsAssertion,
   http,
   type PermissionMode,
+  type ScenarioCliMocks,
   sequence,
   type SequenceInOrderAssertion,
   skill,
@@ -446,6 +450,62 @@ export default defineDyno({
     expectTypeOf(
       skill.referenced('commit'),
     ).toEqualTypeOf<SkillReferencedAssertion>();
+  });
+
+  it('exports scenario CLI mock authoring types', () => {
+    const response: CliMockResponse = {exitCode: 0, stdout: 'passed'};
+    const handler = ({argv, cwd, env}: CliMockHandlerContext) => ({
+      exitCode: argv[0] === 'run' && cwd === env.PWD ? 0 : 1,
+    });
+    const config: CliMockConfig = {handler};
+    const mocks: ScenarioCliMocks = {
+      vitest: {response},
+      vercel: config,
+    };
+
+    expectTypeOf(mocks).toEqualTypeOf<ScenarioCliMocks>();
+    expect(handler({argv: [], cwd: '', env: {}})).toEqual({exitCode: 1});
+  });
+
+  it('compiles normalized scenario CLI mocks into canonical IR', () => {
+    const handler = async ({argv}: CliMockHandlerContext) => ({
+      exitCode: argv.includes('--fail') ? 1 : 0,
+    });
+    const ir = compile(
+      defineDyno({
+        scenarios: [
+          {
+            name: 'mocked commands',
+            prompt: 'Run tests and deploy.',
+            cliMocks: {
+              vitest: {response: {exitCode: 0, stdout: 'passed'}},
+              vercel: {
+                responses: [{exitCode: 1, stderr: 'retry'}],
+                onExhausted: 'repeat-last',
+              },
+              custom: {handler},
+            },
+          },
+          {
+            name: 'no mocked commands',
+            prompt: 'Do nothing.',
+          },
+        ],
+      }),
+    );
+
+    expect(ir.scenarios[0]!.cliMocks).toEqual({
+      vitest: {
+        response: {exitCode: 0, stdout: 'passed', stderr: ''},
+      },
+      vercel: {
+        responses: [{exitCode: 1, stdout: '', stderr: 'retry'}],
+        onExhausted: 'repeat-last',
+      },
+      custom: {handler},
+    });
+    expect(ir.scenarios[1]!.cliMocks).toEqual({});
+    expect(irSchema.parse(ir)).toEqual(ir);
   });
 
   it('compile returns a deterministic IR for a minimal config', () => {
@@ -1383,6 +1443,7 @@ export default defineDyno({
                 "type": "http.called",
               },
             ],
+            "cliMocks": {},
             "endpoints": [
               {
                 "id": "endpoint.lookup-package-metadata.getPrettierMetadata",
@@ -1422,6 +1483,7 @@ export default defineDyno({
                 "type": "http.notCalled",
               },
             ],
+            "cliMocks": {},
             "endpoints": [
               {
                 "id": "endpoint.avoid-unrelated-lookup.getPrettierMetadata",
@@ -1468,6 +1530,7 @@ export default defineDyno({
                 "type": "http.called",
               },
             ],
+            "cliMocks": {},
             "endpoints": [
               {
                 "id": "endpoint.compare-two-packages.getPrettierMetadata",

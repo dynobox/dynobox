@@ -47,6 +47,7 @@ function createJob(scenario: Partial<IrScenario> = {}): LocalRunnerJob {
       harnesses: [{id: 'claude-code'}],
       setup: [],
       fixtures: [],
+      cliMocks: {},
       endpoints: [],
       assertions: [],
       ...scenario,

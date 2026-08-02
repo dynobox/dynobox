@@ -16,6 +16,7 @@ function job(overrides: Partial<LocalRunnerJob> = {}): LocalRunnerJob {
       harnesses: [{id: 'claude-code'}],
       setup: [],
       fixtures: [],
+      cliMocks: {},
       endpoints: [],
       assertions: [],
     },
