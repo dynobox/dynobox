@@ -10,7 +10,7 @@ export type CliMockResponse = {
 export type CliMockHandlerContext = {
   argv: string[];
   cwd: string;
-  env: NodeJS.ProcessEnv;
+  env: Record<string, string | undefined>;
 };
 
 export type CliMockConfig =
