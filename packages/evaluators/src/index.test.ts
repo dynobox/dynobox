@@ -986,7 +986,7 @@ describe('evaluateAssertions', () => {
       expect(result).toMatchObject({
         passed: false,
         message: expect.stringContaining(
-          'Cannot determine order for an unpaired CLI mock call',
+          'Cannot determine order for command.called(vitest)',
         ),
       });
     },
@@ -1022,6 +1022,36 @@ describe('evaluateAssertions', () => {
     );
 
     expect(result.passed).toBe(true);
+  });
+
+  it('does not double-count a path shell command paired to a CLI mock', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        type: 'sequence.inOrder',
+        steps: [
+          {type: 'command.called', executable: 'vitest'},
+          {type: 'command.called', executable: 'vitest'},
+        ],
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: '/usr/bin/vitest run'},
+          command: '/usr/bin/vitest run',
+        },
+      ],
+      {
+        cliMockCalls: [cliMockCall('vitest', ['run'])],
+        cliMockExecutableNames: ['vitest'],
+      },
+    );
+
+    expect(result).toMatchObject({
+      passed: false,
+      message: expect.stringContaining('ordered step #2'),
+    });
   });
 
   it('uses a paired mock when an earlier unpaired call also matches', () => {
@@ -1133,7 +1163,7 @@ describe('evaluateAssertions', () => {
     expect(result).toMatchObject({
       passed: false,
       message: expect.stringContaining(
-        'Cannot determine order for an unpaired CLI mock call',
+        'Cannot determine order for command.called(vitest)',
       ),
     });
   });
@@ -1168,6 +1198,45 @@ describe('evaluateAssertions', () => {
     );
 
     expect(result.passed).toBe(true);
+  });
+
+  it('reports a sequence miss when an unpaired mock is incidental', () => {
+    const result = evaluateOne(
+      {
+        id: 'assertion.test.0',
+        type: 'sequence.inOrder',
+        steps: [
+          {type: 'command.called', executable: 'vitest'},
+          {type: 'tool.called', tool: 'read_file'},
+          {type: 'command.called', executable: 'vitest'},
+        ],
+      },
+      [
+        {
+          kind: 'shell',
+          rawName: 'Bash',
+          input: {command: '/usr/bin/vitest run'},
+          command: '/usr/bin/vitest run',
+        },
+        {
+          kind: 'read_file',
+          rawName: 'Read',
+          input: {filePath: 'package.json'},
+        },
+      ],
+      {
+        cliMockCalls: [cliMockCall('vitest', ['nested'])],
+        cliMockExecutableNames: ['vitest'],
+      },
+    );
+
+    expect(result).toMatchObject({
+      passed: false,
+      message: expect.stringContaining(
+        'to match a command or tool observation, but none was observed after the previous step',
+      ),
+    });
+    expect(result.message).not.toContain('Cannot determine order');
   });
 
   it('uses the earliest orderable command across explicit and paired mocks', () => {
@@ -1607,7 +1676,7 @@ describe('evaluateAssertions', () => {
     expect(result).toMatchObject({
       passed: false,
       message:
-        'Expected ordered step #2 (tool.called(shell)) to match an observed tool event, but none was observed after the previous step.',
+        'Expected ordered step #2 (tool.called(shell)) to match a command or tool observation, but none was observed after the previous step.',
     });
   });
 
@@ -1772,7 +1841,7 @@ describe('evaluateAssertions', () => {
     expect(result).toMatchObject({
       passed: false,
       message:
-        'Expected ordered step #2 (tool.called(shell, includes "git commit")) to match an observed tool event, but none was observed after the previous step.',
+        'Expected ordered step #2 (tool.called(shell, includes "git commit")) to match a command or tool observation, but none was observed after the previous step.',
     });
   });
 
@@ -1859,7 +1928,7 @@ describe('evaluateAssertions', () => {
     expect(result).toMatchObject({
       passed: false,
       message:
-        'Expected ordered step #2 (tool.called(shell, includes "git commit")) to match an observed tool event, but none was observed after the previous step.',
+        'Expected ordered step #2 (tool.called(shell, includes "git commit")) to match a command or tool observation, but none was observed after the previous step.',
     });
   });
 

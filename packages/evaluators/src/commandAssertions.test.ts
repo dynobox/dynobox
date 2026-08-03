@@ -277,6 +277,26 @@ describe('CLI mock command observations', () => {
     });
   });
 
+  it('pairs path-qualified shell commands when no bare observation exists', () => {
+    const observed = extractObservedCommands(
+      [shellEvent('/usr/bin/vitest run')],
+      {
+        cliMockCalls: [cliMockCall('vitest', ['run'], '/actual')],
+        cliMockExecutableNames: ['vitest'],
+      },
+    );
+
+    expect(observed).toHaveLength(1);
+    expect(observed[0]).toMatchObject({
+      executable: 'vitest',
+      executablePath: '/usr/bin/vitest',
+      argv: ['run'],
+      cwd: '/actual',
+      cliMockCallIndex: 0,
+      cliMockEventPaired: true,
+    });
+  });
+
   it('pairs repeated standalone shell commands with calls in FIFO order', () => {
     const observed = extractObservedCommands(
       [shellEvent('vitest run'), shellEvent('vitest run')],
@@ -331,6 +351,25 @@ describe('CLI mock command observations', () => {
     ]);
   });
 
+  it('uses mock records as authoritative when shell counts exceed call counts', () => {
+    const observed = extractObservedCommands(
+      [shellEvent('vitest run'), shellEvent('vitest run')],
+      {
+        cliMockCalls: [cliMockCall('vitest', ['run'])],
+        cliMockExecutableNames: ['vitest'],
+      },
+    );
+
+    expect(observed).toEqual([
+      expect.objectContaining({
+        executable: 'vitest',
+        argv: ['run'],
+        cliMockCallIndex: 0,
+        cliMockEventPaired: false,
+      }),
+    ]);
+  });
+
   it('does not pair calls backward through shell history', () => {
     const observed = extractObservedCommands(
       [shellEvent('second'), shellEvent('first')],
@@ -355,7 +394,7 @@ describe('CLI mock command observations', () => {
     ]);
   });
 
-  it('preserves unrecorded bare mocks and explicit paths', () => {
+  it('drops unrecorded bare mocks and preserves explicit paths', () => {
     const observed = extractObservedCommands(
       [
         shellEvent(
@@ -374,11 +413,6 @@ describe('CLI mock command observations', () => {
     ).toEqual([
       {
         executable: 'vitest',
-        executablePath: undefined,
-        argv: ['run'],
-      },
-      {
-        executable: 'vitest',
         executablePath: '/usr/bin/vitest',
         argv: ['real'],
       },
@@ -391,7 +425,7 @@ describe('CLI mock command observations', () => {
     ]);
   });
 
-  it('pairs only exact argv and appends unmatched calls in invocation order', () => {
+  it('uses authoritative records for configured bare commands', () => {
     const observed = extractObservedCommands(
       [shellEvent('vitest run; vitest watch')],
       {
@@ -404,15 +438,10 @@ describe('CLI mock command observations', () => {
     );
 
     expect(observed.map((command) => command.argv)).toEqual([
-      ['run'],
       ['watch'],
       ['nested'],
     ]);
-    expect(observed.map((command) => command.cliMockCallIndex)).toEqual([
-      undefined,
-      0,
-      1,
-    ]);
+    expect(observed.map((command) => command.cliMockCallIndex)).toEqual([0, 1]);
   });
 
   it('leaves calls unpaired when a shell event contains multiple commands', () => {
@@ -465,7 +494,7 @@ describe('CLI mock command observations', () => {
     expect(notCalled.passed).toBe(false);
   });
 
-  it('uses unrecorded bare mocks as command assertion evidence', () => {
+  it('does not use unrecorded bare mocked commands as assertion evidence', () => {
     const called = evaluateCommandCalledAssertion(
       {
         id: 'assertion.test.0',
@@ -485,7 +514,7 @@ describe('CLI mock command observations', () => {
       {cliMockCalls: [], cliMockExecutableNames: ['vitest']},
     );
 
-    expect(called.passed).toBe(true);
-    expect(notCalled.passed).toBe(false);
+    expect(called.passed).toBe(false);
+    expect(notCalled.passed).toBe(true);
   });
 });

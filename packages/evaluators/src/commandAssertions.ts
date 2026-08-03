@@ -129,14 +129,12 @@ export function extractObservedCommands(
     );
   }
   const eligibleShellSignatureCounts = new Map<string, number>();
+  const bareShellSignatures = new Set<string>();
   for (const command of shellCommands) {
-    if (
-      shellCommandCounts.get(command.eventIndex) !== 1 ||
-      command.executablePath !== undefined
-    ) {
-      continue;
-    }
+    if (command.executablePath !== undefined) continue;
     const signature = commandSignature(command.executable, command.argv);
+    bareShellSignatures.add(signature);
+    if (shellCommandCounts.get(command.eventIndex) !== 1) continue;
     eligibleShellSignatureCounts.set(
       signature,
       (eligibleShellSignatureCounts.get(signature) ?? 0) + 1,
@@ -152,18 +150,22 @@ export function extractObservedCommands(
   }
   cliMockCalls.forEach((call, callIndex) => {
     const signature = commandSignature(call.executable, call.argv);
-    if (
-      eligibleShellSignatureCounts.get(signature) !==
-      callSignatureCounts.get(signature)
-    ) {
-      return;
-    }
+    const pairBareShell =
+      eligibleShellSignatureCounts.get(signature) ===
+      callSignatureCounts.get(signature);
+    // A path-qualified command normally bypasses the mock shim, but some
+    // harnesses report a resolved path for a bare invocation. Use it only as a
+    // fallback anchor when no bare shell observation can represent this call.
+    const pairPathShell = !pairBareShell && !bareShellSignatures.has(signature);
+    if (!pairBareShell && !pairPathShell) return;
     const shellIndex = shellCommands.findIndex(
       (command, index) =>
         index > lastPairedShellIndex &&
         !pairedShellIndexes.has(index) &&
         shellCommandCounts.get(command.eventIndex) === 1 &&
-        command.executablePath === undefined &&
+        (pairBareShell
+          ? command.executablePath === undefined
+          : command.executablePath !== undefined) &&
         command.executable === call.executable &&
         arraysEqual(command.argv, call.argv),
     );
@@ -195,12 +197,11 @@ export function extractObservedCommands(
       return;
     }
 
+    // For configured bare executables, completed mock records are the source
+    // of truth. Parsed shell text can include commands that never executed.
     if (
       command.executablePath === undefined &&
-      mockExecutableNames.has(command.executable) &&
-      callSignatureCounts.has(
-        commandSignature(command.executable, command.argv),
-      )
+      mockExecutableNames.has(command.executable)
     ) {
       return;
     }

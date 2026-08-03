@@ -4,6 +4,7 @@ import {
   commandMatchesAssertion,
   type CommandObservationOptions,
   describeCommandStep,
+  describeObservedCommand,
   extractObservedCommands,
   type ObservedCommand,
 } from './commandAssertions.js';
@@ -135,7 +136,7 @@ export function evaluateSequenceInOrder(
         assertionId: assertion.id,
         type: assertion.type,
         passed: false,
-        message: `Expected ordered step #${stepIndex + 1} (${describeSequenceStep(step)}) to match an observed tool event, but none was observed after the previous step.`,
+        message: `Expected ordered step #${stepIndex + 1} (${describeSequenceStep(step)}) to match a command or tool observation, but none was observed after the previous step.`,
         evidence: matchedEvents,
       };
     }
@@ -183,6 +184,15 @@ function findMatchingSequenceStep(
         commandAfterCursor(command, cursor) &&
         commandMatchesAssertion(command, step),
     );
+    const hasOrderableObservedMatch = observedCommands.some(
+      (command) =>
+        (command.cliMockCallIndex === undefined ||
+          command.cliMockEventPaired === true) &&
+        commandMatchesAssertion(command, step),
+    );
+    const unpairedMockMatch = mockMatches.find(
+      (command) => command.cliMockEventPaired === false,
+    );
     if (!allowUnpairedMocks) {
       const eventMatch = [
         ...orderableMockMatches.filter(
@@ -196,8 +206,8 @@ function findMatchingSequenceStep(
       if (eventMatch !== undefined) {
         return commandSequenceMatch(eventMatch, cursor);
       }
-      if (mockMatches.some((command) => command.cliMockEventPaired === false)) {
-        return {error: UNPAIRED_MOCK_ORDER_ERROR};
+      if (unpairedMockMatch !== undefined && !hasOrderableObservedMatch) {
+        return {error: unpairedMockOrderError(step, unpairedMockMatch)};
       }
       return {};
     }
@@ -221,9 +231,10 @@ function findMatchingSequenceStep(
     }
     if (
       cursor.lastMatch === 'event' &&
-      mockMatches.some((command) => command.cliMockEventPaired === false)
+      unpairedMockMatch !== undefined &&
+      !hasOrderableObservedMatch
     ) {
-      return {error: UNPAIRED_MOCK_ORDER_ERROR};
+      return {error: unpairedMockOrderError(step, unpairedMockMatch)};
     }
     return {};
   }
@@ -293,6 +304,13 @@ function findMatchingSequenceStep(
   }
 
   return {};
+}
+
+function unpairedMockOrderError(
+  step: CommandCalledStep,
+  command: ObservedCommand,
+): string {
+  return `Cannot determine order for ${describeCommandStep(step)} because its only matching observation is the unpaired CLI mock call "${describeObservedCommand(command)}".`;
 }
 
 function commandSequenceMatch(

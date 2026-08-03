@@ -18,6 +18,7 @@ export type CliMockCall = {
   executable: string;
   argv: string[];
   cwd: string;
+  /** Diagnostic metadata; sequence evaluation uses call list order. */
   timestamp: number;
   exitCode: number;
   stdout: string;
