@@ -160,6 +160,16 @@ sandbox or security boundary. A mock may not use the selected harness executable
 when the harness is invoked by that same bare name. A harness configured with an
 explicit executable path also bypasses bare-name mocks.
 
+Command assertions treat recorded mock calls as authoritative for configured
+bare executable names. A bare command that appears in shell text without a
+recorded hit does not satisfy `command.called` and does not fail
+`command.notCalled`; shell text can include branches that never executed. When
+the shell text and call log contain different counts for the same command, the
+call log determines the observed count. Non-mocked executables and explicit
+paths that bypass the shim continue to use normalized shell observations.
+Consequently, `command.notCalled` fails when a mock fires in a nested process
+even if no harness shell line mentions that executable.
+
 Recorded calls integrate with `command.called`, `command.notCalled`, and
 `sequence.inOrder`. Mock-only sequences use invocation order. Calls that cannot
 be safely associated with one standalone shell tool event, including nested
