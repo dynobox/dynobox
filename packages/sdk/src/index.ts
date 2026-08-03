@@ -50,7 +50,14 @@ export type {
   VerifyCommandOptions,
 } from './types/brands.js';
 export {isShellToolEvent} from './types/brands.js';
-export type {DynoboxConfig, ScenarioInput} from './types/config.js';
+export type {
+  CliMockConfig,
+  CliMockHandlerContext,
+  CliMockResponse,
+  DynoboxConfig,
+  ScenarioCliMocks,
+  ScenarioInput,
+} from './types/config.js';
 export type {EndpointSpec} from './types/endpointSpec.js';
 export {
   HARNESS_IDS,

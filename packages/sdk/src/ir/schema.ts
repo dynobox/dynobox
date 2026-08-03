@@ -11,6 +11,7 @@ import {
   type ShellCommandMatcher,
   TOOL_KINDS,
 } from '../types/brands.js';
+import type {CliMockHandlerContext, CliMockResponse} from '../types/config.js';
 import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/httpMethod.js';
 
@@ -30,6 +31,56 @@ export const irHarnessConfigSchema = z.object({
   model: z.string().min(1).optional(),
   permissionMode: z.enum(PERMISSION_MODES).optional(),
 });
+
+const cliMockExecutableSchema = z
+  .string()
+  .min(1, 'CLI mock executable names may not be empty.')
+  .refine(
+    (value) =>
+      value !== '.' &&
+      value !== '..' &&
+      !value.includes('/') &&
+      !value.includes('\\') &&
+      !value.includes('\0'),
+    'CLI mock executable names must be bare executable names without path separators or null bytes.',
+  );
+
+const irCliMockResponseSchema = z
+  .object({
+    exitCode: z.number().int().min(0).max(255),
+    stdout: z.string(),
+    stderr: z.string(),
+  })
+  .strict();
+
+const cliMockHandlerSchema = z.custom<
+  (context: CliMockHandlerContext) => CliMockResponse | Promise<CliMockResponse>
+>((value) => typeof value === 'function', {
+  message: 'CLI mock handlers must be functions.',
+});
+
+const irCliMockConfigSchema = z.union([
+  z
+    .object({
+      response: irCliMockResponseSchema,
+    })
+    .strict(),
+  z
+    .object({
+      responses: z.array(irCliMockResponseSchema).min(1),
+      onExhausted: z.union([
+        z.literal('error'),
+        z.literal('repeat-last'),
+        irCliMockResponseSchema,
+      ]),
+    })
+    .strict(),
+  z
+    .object({
+      handler: cliMockHandlerSchema,
+    })
+    .strict(),
+]);
 
 const shellCommandMatcherSchema = z.custom<ShellCommandMatcher>(
   isShellCommandMatcher,
@@ -330,6 +381,9 @@ export const irScenarioSchema = z.object({
   harnesses: z.array(irHarnessConfigSchema).min(1),
   setup: z.array(z.string().min(1)),
   fixtures: z.array(z.string().min(1)),
+  cliMocks: z
+    .record(cliMockExecutableSchema, irCliMockConfigSchema)
+    .default({}),
   endpoints: z.array(irEndpointSchema),
   assertions: z.array(irAssertionSchema),
 });

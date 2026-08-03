@@ -106,6 +106,7 @@ export function compile(config: DynoboxConfig): Ir {
       harnesses,
       setup,
       fixtures,
+      cliMocks: scenario.cliMocks ?? {},
       endpoints: irEndpoints,
       assertions: irAssertions,
     };

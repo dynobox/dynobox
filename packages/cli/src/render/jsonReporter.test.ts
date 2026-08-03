@@ -14,6 +14,7 @@ describe('renderJsonRunOutput', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -78,6 +79,7 @@ describe('renderJsonRunOutput', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [],
       },
@@ -138,6 +140,7 @@ describe('renderJsonRunOutput', () => {
             harnesses: [{id: 'claude-code'}],
             setup: [],
             fixtures: [],
+            cliMocks: {},
             endpoints: [],
             assertions: [],
           },

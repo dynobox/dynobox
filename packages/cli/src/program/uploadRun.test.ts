@@ -15,6 +15,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -92,6 +93,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [],
       },
@@ -126,6 +128,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -228,6 +231,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -343,6 +347,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -454,6 +459,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -528,6 +534,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -620,6 +627,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [
           {
@@ -702,6 +710,7 @@ describe('buildRunUploadPayload', () => {
         harnesses: [{id: 'claude-code'}],
         setup: [],
         fixtures: [],
+        cliMocks: {},
         endpoints: [],
         assertions: [],
       },

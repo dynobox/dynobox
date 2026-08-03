@@ -1,6 +1,42 @@
 import type {Assertion, Endpoint} from './brands.js';
 import type {HarnessRunConfig} from './harness.js';
 
+export type CliMockResponse = {
+  exitCode: number;
+  stdout?: string;
+  stderr?: string;
+};
+
+export type CliMockHandlerContext = {
+  argv: string[];
+  cwd: string;
+  env: Record<string, string | undefined>;
+};
+
+export type CliMockConfig =
+  | {
+      response: CliMockResponse;
+      responses?: never;
+      onExhausted?: never;
+      handler?: never;
+    }
+  | {
+      response?: never;
+      responses: CliMockResponse[];
+      onExhausted?: 'error' | 'repeat-last' | CliMockResponse;
+      handler?: never;
+    }
+  | {
+      response?: never;
+      responses?: never;
+      onExhausted?: never;
+      handler: (
+        context: CliMockHandlerContext,
+      ) => CliMockResponse | Promise<CliMockResponse>;
+    };
+
+export type ScenarioCliMocks = Record<string, CliMockConfig>;
+
 /**
  * The author-facing scenario shape.
  *
@@ -23,6 +59,7 @@ export type ScenarioInput<
   harnesses?: HarnessRunConfig[];
   setup?: string[];
   fixtures?: string | readonly string[];
+  cliMocks?: ScenarioCliMocks;
   endpoints?: E;
   assertions?: ReadonlyArray<Assertion<EKeys>>;
 };
