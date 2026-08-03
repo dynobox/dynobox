@@ -43,7 +43,10 @@ export {
   collectArtifactUnchangedTargets,
   collectVerifyCommandAssertions,
 } from './collect.js';
-export type {ObservedCommand} from './commandAssertions.js';
+export type {
+  CommandObservationOptions,
+  ObservedCommand,
+} from './commandAssertions.js';
 export {extractObservedCommands} from './commandAssertions.js';
 export type {ArtifactInspection} from './inspection.js';
 export {
@@ -64,6 +67,7 @@ export type {
   ArtifactPathState,
   ArtifactUnchangedEvidence,
   AssertionResult,
+  CliMockCall,
   EvaluationInput,
   HttpEvent,
   ToolEvent,
@@ -143,11 +147,17 @@ function evaluateAssertion(
   }
 
   if (assertion.type === 'command.called') {
-    return evaluateCommandCalledAssertion(assertion, input.toolEvents);
+    return evaluateCommandCalledAssertion(assertion, input.toolEvents, {
+      cliMockCalls: input.cliMockCalls ?? [],
+      cliMockExecutableNames: input.cliMockExecutableNames ?? [],
+    });
   }
 
   if (assertion.type === 'command.notCalled') {
-    return evaluateCommandNotCalledAssertion(assertion, input.toolEvents);
+    return evaluateCommandNotCalledAssertion(assertion, input.toolEvents, {
+      cliMockCalls: input.cliMockCalls ?? [],
+      cliMockExecutableNames: input.cliMockExecutableNames ?? [],
+    });
   }
 
   if (assertion.type === 'verify.command') {
@@ -158,7 +168,10 @@ function evaluateAssertion(
   }
 
   if (assertion.type === 'sequence.inOrder') {
-    return evaluateSequenceInOrder(assertion, input.toolEvents);
+    return evaluateSequenceInOrder(assertion, input.toolEvents, {
+      cliMockCalls: input.cliMockCalls ?? [],
+      cliMockExecutableNames: input.cliMockExecutableNames ?? [],
+    });
   }
 
   if (assertion.type === 'anyOf') {

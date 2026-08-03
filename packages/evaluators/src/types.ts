@@ -13,6 +13,18 @@ export type HttpEvent = {
   status?: number;
 };
 
+/** One completed invocation of a scenario CLI mock. */
+export type CliMockCall = {
+  executable: string;
+  argv: string[];
+  cwd: string;
+  /** Diagnostic metadata; sequence evaluation uses call list order. */
+  timestamp: number;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+};
+
 /** Captured output from a post-harness verification command. */
 export type VerifyCommandResult = {
   assertionId: string;
@@ -79,6 +91,8 @@ export type EvaluationInput = {
   assertions: readonly IrAssertion[];
   toolEvents: readonly ToolEvent[];
   httpEvents?: readonly HttpEvent[] | undefined;
+  cliMockCalls?: readonly CliMockCall[] | undefined;
+  cliMockExecutableNames?: readonly string[] | undefined;
   verifyCommandResults?: readonly VerifyCommandResult[] | undefined;
   workDir?: string | undefined;
   transcript?: string | undefined;
