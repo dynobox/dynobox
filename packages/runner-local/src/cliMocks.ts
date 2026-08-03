@@ -53,8 +53,13 @@ type PendingCall = {
 
 /**
  * Starts a local socket controller that serves configured CLI mock responses
- * through temporary executable shims. Install it before an execution phase,
- * then call `beginPhase`, `env`, and `finalizePendingCalls` for each phase.
+ * through temporary executable shims. Starting the controller opens the first
+ * execution phase. Install the shims once, then call `env` before running work
+ * and `finalizePendingCalls` when the phase ends. For each additional phase,
+ * call `beginPhase`, `env`, and `finalizePendingCalls` in that order.
+ *
+ * Calls, failures, and sequential response positions accumulate across phases.
+ * Calling `stop` finalizes the active phase and removes the temporary files.
  */
 export async function startCliMockController(
   mocks: IrScenario['cliMocks'],
