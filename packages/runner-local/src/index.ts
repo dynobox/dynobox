@@ -1,6 +1,6 @@
 import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {basename, join} from 'node:path';
 
 import {
   assertionRequiresVerify,
@@ -208,7 +208,7 @@ export async function runJob(
   // "claude" while running the Claude Code harness).
   if (
     harness.executable !== undefined &&
-    Object.hasOwn(job.scenario.cliMocks, harness.executable)
+    Object.hasOwn(job.scenario.cliMocks, basename(harness.executable))
   ) {
     emitProgress(options, {
       type: 'harness.completed',

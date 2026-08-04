@@ -508,6 +508,26 @@ describe('runJob', () => {
     ]);
   });
 
+  it('rejects a CLI mock that collides with a harness executable path', async () => {
+    const scratchRoot = createScratchRoot();
+    const harness = new CommandHarness('mocked-cli', '/usr/local/bin/mocked-cli');
+
+    const result = await runJob(
+      createJob({
+        cliMocks: {
+          'mocked-cli': {
+            response: {exitCode: 0, stdout: '', stderr: ''},
+          },
+        },
+      }),
+      {scratchRoot, harnesses: [harness]},
+    );
+
+    expect(result.status).toBe('harness_failed');
+    expect(result.diagnostics[0]).toContain('conflicts with harness');
+    expect(harness.inputs).toEqual([]);
+  });
+
   it('reports CLI mock initialization errors as harness failures', async () => {
     const scratchRoot = createScratchRoot();
     const harness = new RecordingHarness();
