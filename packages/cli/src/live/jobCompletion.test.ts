@@ -17,6 +17,7 @@ describe('renderLiveJobCompletion', () => {
       workDir: '/tmp/work',
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      harnessCliMockCallCount: 1,
       cliMockCalls: [
         {
           executable: 'vitest',

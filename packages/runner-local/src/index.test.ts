@@ -471,6 +471,7 @@ describe('runJob', () => {
     expect(
       result.assertionResults.map((assertion) => assertion.passed),
     ).toEqual([true, true, true]);
+    expect(result.harnessCliMockCallCount).toBe(1);
     expect(result.cliMockCalls.map((call) => call.argv)).toEqual([
       ['harness'],
       ['verify'],

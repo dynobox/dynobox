@@ -312,9 +312,13 @@ Job records include:
 - `debugLogPaths` when `--debug` produced logs
 - `setup.commands`
 - `harnessOutput.exitCode` and `harnessOutput.durationMs` when the harness ran
-- `observations.toolEventCount` and `observations.httpEventCount`
+- `observations.toolEventCount`, `observations.httpEventCount`, and
+  `observations.cliMockCallCount`
 - `assertions`, with `assertionId`, optional `label`, `type`, `passed`, and
   `message`
+
+`observations.cliMockCallCount` includes every completed mock call in the job,
+including post-harness verification calls.
 
 The summary record includes:
 

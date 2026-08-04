@@ -70,6 +70,7 @@ function makeResult(
     workDir,
     setupResult: {success: true, logs: []},
     httpEvents: [],
+    harnessCliMockCallCount: 0,
     cliMockCalls,
     artifacts: [],
     assertionResults: [],

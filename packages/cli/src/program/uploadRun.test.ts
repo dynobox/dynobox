@@ -39,6 +39,7 @@ describe('buildRunUploadPayload', () => {
       passed: true,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      harnessCliMockCallCount: 0,
       cliMockCalls: [],
       artifacts: [],
       assertionResults: [
@@ -166,6 +167,7 @@ describe('buildRunUploadPayload', () => {
       passed: true,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      harnessCliMockCallCount: 0,
       cliMockCalls: [],
       artifacts: [],
       assertionResults: [
@@ -271,6 +273,7 @@ describe('buildRunUploadPayload', () => {
       passed: false,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      harnessCliMockCallCount: 0,
       cliMockCalls: [],
       artifacts: [],
       assertionResults: [
@@ -377,6 +380,7 @@ describe('buildRunUploadPayload', () => {
       passed: true,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      harnessCliMockCallCount: 0,
       cliMockCalls: [],
       artifacts: [],
       assertionResults: [
@@ -488,6 +492,7 @@ describe('buildRunUploadPayload', () => {
       passed: false,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      harnessCliMockCallCount: 0,
       cliMockCalls: [],
       artifacts: [],
       assertionResults: [
@@ -562,6 +567,7 @@ describe('buildRunUploadPayload', () => {
       passed: false,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      harnessCliMockCallCount: 0,
       cliMockCalls: [],
       artifacts: [],
       assertionResults: [
@@ -623,7 +629,7 @@ describe('buildRunUploadPayload', () => {
     expect(assertion.evidence).not.toHaveProperty('matches');
   });
 
-  it('includes CLI mock calls in uploaded observation metrics', () => {
+  it('includes only harness-phase CLI mock calls in uploaded observation metrics', () => {
     const job = {
       id: 'scenario.cli-mock.claude-code.iteration.0',
       scenario: {
@@ -658,16 +664,28 @@ describe('buildRunUploadPayload', () => {
       iteration: 0,
       status: 'passed',
       passed: true,
+      workDir: '/tmp/work',
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      harnessCliMockCallCount: 1,
       cliMockCalls: [
         {
           executable: 'vitest',
           argv: ['run'],
           cwd: '/tmp/work',
-          startedAt: '2026-08-03T12:00:00.000Z',
-          completedAt: '2026-08-03T12:00:00.100Z',
+          timestamp: 1,
           exitCode: 0,
+          stdout: 'passed',
+          stderr: '',
+        },
+        {
+          executable: 'vitest',
+          argv: ['verify'],
+          cwd: '/tmp/work',
+          timestamp: 2,
+          exitCode: 0,
+          stdout: 'verified',
+          stderr: '',
         },
       ],
       artifacts: [],
@@ -690,7 +708,7 @@ describe('buildRunUploadPayload', () => {
       diagnostics: [],
       warnings: [],
       timing: {setupMs: 0, harnessMs: 10, assertionsMs: 1, totalMs: 11},
-    } as unknown as LocalRunnerResult;
+    } satisfies LocalRunnerResult;
 
     const payload = buildRunUploadPayload({
       dynos: [
@@ -751,6 +769,7 @@ describe('buildRunUploadPayload', () => {
       passed: true,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      harnessCliMockCallCount: 0,
       cliMockCalls: [],
       artifacts: [],
       assertionResults: [
@@ -827,6 +846,7 @@ describe('buildRunUploadPayload', () => {
       passed: false,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      harnessCliMockCallCount: 0,
       cliMockCalls: [],
       artifacts: [],
       assertionResults: [],

@@ -38,7 +38,17 @@ describe('renderJsonRunOutput', () => {
       passed: true,
       setupResult: {success: true, logs: []},
       httpEvents: [],
-      cliMockCalls: [],
+      cliMockCalls: [
+        {
+          executable: 'vitest',
+          argv: ['run'],
+          cwd: '/tmp/work',
+          timestamp: 1,
+          exitCode: 0,
+          stdout: 'passed',
+          stderr: '',
+        },
+      ],
       artifacts: [],
       assertionResults: [
         {
@@ -60,9 +70,11 @@ describe('renderJsonRunOutput', () => {
     const jobRecord = records[0] as {
       assertions: Array<Record<string, unknown>>;
       harness: Record<string, unknown>;
+      observations: Record<string, unknown>;
     };
 
     expect(jobRecord.harness).toMatchObject({version: '2.1.4'});
+    expect(jobRecord.observations).toMatchObject({cliMockCallCount: 1});
     expect(jobRecord.assertions[0]).toMatchObject({
       assertionId: 'assertion.labels.reads-package',
       label: 'reads package.json',

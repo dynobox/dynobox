@@ -580,6 +580,7 @@ export async function runJob(
       harnessOutput,
       harnessResult,
       httpEvents,
+      harnessCliMockCallCount: harnessCliMockCalls.length,
       // Full ordered log (harness + verify phases) for renderers/debug.
       cliMockCalls: cliMockController?.calls() ?? [],
       assertionResults,

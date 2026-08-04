@@ -81,6 +81,7 @@ function jobRecord(
     observations: {
       toolEventCount: result.harnessResult?.toolEvents.length ?? 0,
       httpEventCount: result.httpEvents.length,
+      cliMockCallCount: result.cliMockCalls.length,
     },
     assertions: result.assertionResults.map((assertion) => {
       const label = jobAssertionLabel(job, assertion.assertionId);
