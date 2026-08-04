@@ -510,7 +510,10 @@ describe('runJob', () => {
 
   it('rejects a CLI mock that collides with a harness executable path', async () => {
     const scratchRoot = createScratchRoot();
-    const harness = new CommandHarness('mocked-cli', '/usr/local/bin/mocked-cli');
+    const harness = new CommandHarness(
+      'mocked-cli',
+      '/usr/local/bin/mocked-cli',
+    );
 
     const result = await runJob(
       createJob({
