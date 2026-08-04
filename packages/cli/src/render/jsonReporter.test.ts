@@ -38,6 +38,7 @@ describe('renderJsonRunOutput', () => {
       passed: true,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      cliMockCalls: [],
       artifacts: [],
       assertionResults: [
         {
@@ -95,6 +96,7 @@ describe('renderJsonRunOutput', () => {
       passed: false,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      cliMockCalls: [],
       artifacts: [],
       assertionResults: [
         {
@@ -157,6 +159,7 @@ describe('renderJsonRunOutput', () => {
       passed: index === 0,
       setupResult: {success: true, logs: []},
       httpEvents: [],
+      cliMockCalls: [],
       artifacts: [],
       assertionResults: [],
       diagnostics: [],

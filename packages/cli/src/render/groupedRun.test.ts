@@ -87,6 +87,7 @@ function makeResult(
     workDir: '/tmp/work',
     setupResult: {success: status !== 'setup_failed', logs: []},
     httpEvents: [],
+    cliMockCalls: [],
     artifacts: [],
     assertionResults,
     diagnostics:

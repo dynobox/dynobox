@@ -58,6 +58,8 @@ export type HarnessResult = {
  */
 export interface Harness {
   readonly id: HarnessId;
+  /** Executable lookup used by built-in harnesses, for PATH collision checks. */
+  readonly executable?: string;
 
   /** Best-effort installed executable version for run provenance. */
   version?(): Promise<string | null>;
