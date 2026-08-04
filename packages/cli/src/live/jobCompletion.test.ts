@@ -17,7 +17,17 @@ describe('renderLiveJobCompletion', () => {
       workDir: '/tmp/work',
       setupResult: {success: true, logs: []},
       httpEvents: [],
-      cliMockCalls: [],
+      cliMockCalls: [
+        {
+          executable: 'vitest',
+          argv: ['run'],
+          cwd: '/tmp/work',
+          timestamp: 1,
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+        },
+      ],
       artifacts: [],
       assertionResults: [],
       diagnostics: ['CLI mock handler failed.'],
@@ -29,8 +39,14 @@ describe('renderLiveJobCompletion', () => {
       result,
       new Map(),
       createRenderContext(),
+      {configuredCliMockNames: ['vitest']},
     );
 
     expect(output).toContain('CLI mock handler failed.');
+    expect(output).toContain('cli mocks: vitest');
+    expect(output).toContain('cli mock: vitest run -> exit 0');
+    expect(output.indexOf('cli mocks: vitest')).toBeLessThan(
+      output.indexOf('CLI mock handler failed.'),
+    );
   });
 });

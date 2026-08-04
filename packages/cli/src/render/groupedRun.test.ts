@@ -337,6 +337,24 @@ describe('renderGroupedRun', () => {
     );
   });
 
+  it('labels assertion and verification failures together', () => {
+    const jobs = [makeJob()];
+    const output = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results: [
+        makeResult(jobs[0]!, {
+          status: 'assertion_failed',
+          failedAssertionIndexes: [0],
+          diagnostics: ['CLI mock exhausted its configured responses.'],
+        }),
+      ],
+      ctx,
+    });
+
+    expect(output).toContain('✗ 1 of 2 failed; verification failed');
+    expect(output).toContain('CLI mock exhausted its configured responses.');
+  });
+
   it('renders verification diagnostics for failed iterations', () => {
     const jobs = [makeJob({iteration: 0}), makeJob({iteration: 1})];
     const results = [

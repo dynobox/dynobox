@@ -28,14 +28,14 @@ export function renderLiveJobCompletion(
   options: JobCompletionOptions = {},
 ): string {
   const lines: string[] = [];
+  lines.push(
+    renderCliMockDetails(result, options.configuredCliMockNames ?? [], ctx),
+  );
   if (result.status === 'setup_failed') {
     lines.push(renderSetupFailureDetails(result, ctx));
   } else if (!result.passed && result.diagnostics.length > 0) {
     lines.push(renderFailureDiagnostics(result, ctx));
   }
-  lines.push(
-    renderCliMockDetails(result, options.configuredCliMockNames ?? [], ctx),
-  );
   lines.push(renderWarningDetails(result, ctx));
   if (
     result.assertionResults.length > 0 &&

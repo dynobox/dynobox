@@ -336,6 +336,14 @@ executable does not satisfy `command.called` or fail `command.notCalled` unless
 the mock recorded a completed call; transcript text can describe a branch that
 never executed.
 
+`command.called`, `command.notCalled`, and `sequence.inOrder` evaluate mock
+calls captured during the harness phase only. A post-harness verification
+command can invoke the same mock and consume its next sequential response, and
+that call appears in verbose/debug output and `dynobox-cli-mocks.json`, but it
+is not evidence for these observation assertions. Verification-phase mock calls
+can still fail the job through mock lifecycle diagnostics, such as an exhausted
+response sequence or a failed handler.
+
 All other executables, including explicit paths that bypass a mock shim, use the
 normalized shell command observations described below. When mock call records
 and shell text disagree for the same configured executable, the recorded calls

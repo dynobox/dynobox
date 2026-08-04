@@ -431,7 +431,8 @@ function renderSingleIterationStatus(
       'fail',
     );
   }
-  return `${colorStatus(ctx, symbol(ctx, 'fail'), 'fail')} ${failed} of ${total} failed`;
+  const verificationFailed = result.diagnostics.length > 0;
+  return `${colorStatus(ctx, symbol(ctx, 'fail'), 'fail')} ${failed} of ${total} failed${verificationFailed ? '; verification failed' : ''}`;
 }
 
 function renderMultiIterationStatus(
