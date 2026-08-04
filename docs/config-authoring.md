@@ -103,9 +103,13 @@ import {command, defineDyno} from '@dynobox/sdk';
 export default defineDyno({
   scenarios: [
     {
-      name: 'retries tests before deploying',
-      prompt: 'Run the tests, fix failures, and deploy when they pass.',
+      name: 'prepares a package release after fixing tests',
+      prompt:
+        'Inspect the current package version, fix the failing tests, then prepare a release.',
       cliMocks: {
+        npm: {
+          response: {exitCode: 0, stdout: '0.10.2'},
+        },
         vitest: {
           responses: [
             {exitCode: 1, stderr: 'one test failed'},
@@ -113,19 +117,19 @@ export default defineDyno({
           ],
           onExhausted: 'repeat-last',
         },
-        vercel: {
-          response: {exitCode: 0, stdout: 'https://example.vercel.app'},
-        },
-        'custom-cli': {
-          handler: async ({argv, cwd, env}) => ({
-            exitCode: argv.includes('--fail') ? 1 : 0,
-            stdout: `${cwd}:${env.NODE_ENV ?? 'development'}`,
-          }),
+        changeset: {
+          handler: async ({argv}) => {
+            if (argv[0] === 'version') {
+              return {exitCode: 0, stdout: 'Versioned packages.'};
+            }
+            return {exitCode: 1, stderr: 'expected changeset version'};
+          },
         },
       },
       assertions: [
+        command.called('npm', {args: ['view', 'dynobox', 'version']}),
         command.called('vitest', {args: ['run']}),
-        command.called('vercel'),
+        command.called('changeset', {args: ['version']}),
       ],
     },
   ],
@@ -160,15 +164,8 @@ sandbox or security boundary. A mock may not use the selected harness executable
 when the harness is invoked by that same bare name. A harness configured with an
 explicit executable path also bypasses bare-name mocks.
 
-Command assertions treat recorded mock calls as authoritative for configured
-bare executable names. A bare command that appears in shell text without a
-recorded hit does not satisfy `command.called` and does not fail
-`command.notCalled`; shell text can include branches that never executed. When
-the shell text and call log contain different counts for the same command, the
-call log determines the observed count. Non-mocked executables and explicit
-paths that bypass the shim continue to use normalized shell observations.
-Consequently, `command.notCalled` fails when a mock fires in a nested process
-even if no harness shell line mentions that executable.
+For the different evidence used by command assertions for mocked and standard
+executables, see [Mocked executables use call records](#mocked-executables-use-call-records).
 
 Recorded calls integrate with `command.called`, `command.notCalled`, and
 `sequence.inOrder`. Mock-only sequences use invocation order. Calls that cannot
@@ -326,6 +323,25 @@ command.called('git', {originalIncludes: '--no-verify'});
 `command.*` is generic observed CLI behavior, not a Git/npm/Docker-specific API.
 Use the executable name and argument matchers for any command Dynobox can
 normalize.
+
+#### Mocked executables use call records
+
+For a bare executable configured in `cliMocks`, `command.called` and
+`command.notCalled` use completed mock call records as the source of truth,
+rather than normalized shell-tool transcript events. This means
+`command.called('vitest')` can pass even when the transcript never directly
+mentions `vitest`: a harness command, package script, or nested process may have
+invoked the mock. Conversely, a transcript command that names a mocked
+executable does not satisfy `command.called` or fail `command.notCalled` unless
+the mock recorded a completed call; transcript text can describe a branch that
+never executed.
+
+All other executables, including explicit paths that bypass a mock shim, use the
+normalized shell command observations described below. When mock call records
+and shell text disagree for the same configured executable, the recorded calls
+determine the observed count. Consequently, `command.notCalled('vitest')` fails
+when a mock fires in a nested process even if no harness shell line names
+`vitest`.
 
 Match the first argument against the command's normalized `executable`. The
 optional matcher accepts any combination of the following fields; when several
