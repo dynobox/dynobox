@@ -92,17 +92,31 @@ export type {HttpEvent} from '@dynobox/evaluators';
 /**
  * Run one compiled scenario/harness job locally.
  *
- * The runner creates an isolated work directory, executes setup commands,
- * invokes the selected harness, extracts tool/transcript/final-message data,
- * evaluates assertions, and returns a structured result for renderers.
+ * Pipeline (early exits return a structured result and skip later steps):
+ *   1. Create work directory
+ *   2. Materialize fixtures
+ *   3. Run setup commands (real PATH — CLI mocks not installed yet)
+ *   4. Resolve harness + start version probe (real PATH)
+ *   5. Install CLI mocks when configured (after collision checks)
+ *   6. Capture artifact baselines + start HTTP capture
+ *   7. Invoke harness (mocked PATH / HTTP proxy env)
+ *   8. Finalize harness-phase mocks, extract result, check exit code
+ *   9. Evaluate observation assertions from harness-phase data only
+ *  10. Run verify commands in a new mock phase (mocked PATH)
+ *  11. Evaluate verify assertions and decide pass/fail
+ *  12. Always stop HTTP capture + CLI mocks in `finally`
+ *
+ * Returns a structured result for CLI renderers and upload.
  */
 export async function runJob(
   job: LocalRunnerJob,
   options: RunJobOptions = {},
 ): Promise<LocalRunnerResult> {
+  // --- 1. Work directory ---------------------------------------------------
   const workDir = await createWorkDir(options.scratchRoot);
   const artifacts: LocalArtifact[] = [{kind: 'work_dir', path: workDir}];
 
+  // --- 2. Fixtures ---------------------------------------------------------
   emitProgress(options, {
     type: 'fixtures.started',
     job,
@@ -125,6 +139,7 @@ export async function runJob(
     });
   }
 
+  // --- 3. Setup commands (real PATH; mocks not installed) ------------------
   const setupOptions: Parameters<typeof runScenarioSetup>[0] = {
     scenario: job.scenario,
     workDir,
@@ -154,6 +169,7 @@ export async function runJob(
     });
   }
 
+  // --- 4. Resolve harness + version probe (real PATH) ----------------------
   emitProgress(options, {
     type: 'harness.started',
     job,
@@ -182,10 +198,14 @@ export async function runJob(
     });
   }
 
+  // Non-blocking: version discovery must not delay harness execution.
   const harnessVersion = Promise.resolve()
     .then(() => harness.version?.() ?? null)
     .catch(() => null);
 
+  // --- 5. Install CLI mocks (if any) ---------------------------------------
+  // Reject mocks that would shadow the harness binary itself (e.g. mock
+  // "claude" while running the Claude Code harness).
   if (
     harness.executable !== undefined &&
     Object.hasOwn(job.scenario.cliMocks, harness.executable)
@@ -211,6 +231,7 @@ export async function runJob(
   }
 
   const hasCliMocks = Object.keys(job.scenario.cliMocks).length > 0;
+  // Needed so package-script PATH injection preserves the project's script-shell.
   const baseScriptShell = hasCliMocks
     ? await resolvePackageScriptShell(workDir, options.env)
     : undefined;
@@ -240,8 +261,10 @@ export async function runJob(
     });
   }
 
+  // --- 6–11. Harness, assertions, verify (cleaned up in finally) -----------
   let httpCapture: HttpCapture | undefined;
   try {
+    // --- 6. Baselines + HTTP capture ---------------------------------------
     const cliMockEnv =
       cliMockController?.env(
         options.env?.PATH ?? process.env.PATH ?? '',
@@ -273,6 +296,7 @@ export async function runJob(
       });
     }
 
+    // --- 7. Run harness (mocked PATH + HTTP proxy env) ---------------------
     let harnessOutput: HarnessRunOutput;
     const harnessStartedAt = Date.now();
     let liveToolCount = 0;
@@ -334,11 +358,17 @@ export async function runJob(
         }),
       });
     }
+
+    // --- 8. Finalize harness-phase mocks; extract + validate result --------
     await cliMockController?.finalizePendingCalls();
     const httpEvents = httpCapture?.events ?? [];
+    // Stop proxy before verify so verification traffic is not recorded as
+    // harness HTTP events. `finally` still calls stopHttpCapture safely.
     await stopHttpCapture(httpCapture);
     httpCapture = undefined;
 
+    // Lifecycle failures (exhaustion, pending calls, handler errors) fail the
+    // harness even when the process exited 0.
     const harnessCliMockFailures = cliMockController?.failures() ?? [];
     if (harnessCliMockFailures.length > 0) {
       emitProgress(options, {
@@ -440,12 +470,17 @@ export async function runJob(
       exitCode: harnessResult.exitCode,
       durationMs: harnessResult.durationMs,
     });
+
+    // --- 9. Observation assertions (harness-phase data only) ---------------
     emitProgress(options, {
       type: 'assertions.started',
       job,
       assertionCount: job.scenario.assertions.length,
     });
     const assertionsStartedAt = Date.now();
+    // Snapshot mock calls before verify so command.called / similar assertions
+    // only see harness-phase invocations. The result payload still gets the
+    // full ordered log after verify (step 11).
     const harnessCliMockCalls = cliMockController?.calls() ?? [];
     const observationInput = {
       toolEvents: harnessResult.toolEvents,
@@ -476,10 +511,14 @@ export async function runJob(
       ...observationInput,
       anyOfObservationBranches,
     });
+
+    // --- 10. Verify commands (new mock phase, mocked PATH) -----------------
     const verifyOptions: Parameters<typeof runVerifyCommands>[0] = {
       scenario: job.scenario,
       workDir,
     };
+    // Open a new mock phase so verify traffic is recorded separately from the
+    // harness-phase snapshot used above for observation assertions.
     cliMockController?.beginPhase();
     const verifyCliMockEnv =
       cliMockController?.env(
@@ -491,12 +530,17 @@ export async function runJob(
     }
     const verifyCommandResults = await runVerifyCommands(verifyOptions);
     await cliMockController?.finalizePendingCalls();
+
+    // --- 11. Verify assertions + pass/fail ---------------------------------
+    // Still uses observationInput (harness-phase mocks), plus verify results.
     const verifyAssertionResults = evaluateAssertions({
       assertions: postVerifyAssertions,
       ...observationInput,
       verifyCommandResults,
       anyOfObservationBranches,
     });
+    // Reassemble results in original assertion order (pre- and post-verify
+    // evaluations were split above).
     const resultsByAssertionId = new Map<string, AssertionResult[]>();
     for (const result of [
       ...nonVerifyAssertionResults,
@@ -519,6 +563,8 @@ export async function runJob(
       job,
       assertionResults,
     });
+    // Mock lifecycle failures during verify (or leftover pending calls) fail
+    // the run even when every assertion result is passing.
     const cliMockFailures = cliMockController?.failures() ?? [];
     const passed =
       cliMockFailures.length === 0 &&
@@ -534,6 +580,7 @@ export async function runJob(
       harnessOutput,
       harnessResult,
       httpEvents,
+      // Full ordered log (harness + verify phases) for renderers/debug.
       cliMockCalls: cliMockController?.calls() ?? [],
       assertionResults,
       diagnostics: cliMockFailures.map((failure) => failure.message),
@@ -545,6 +592,7 @@ export async function runJob(
       }),
     });
   } finally {
+    // --- 12. Cleanup sockets / proxy on every exit path --------------------
     await Promise.allSettled([
       stopHttpCapture(httpCapture),
       cliMockController?.stop(),
