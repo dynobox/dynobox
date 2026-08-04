@@ -146,11 +146,13 @@ post-harness verification calls consume the same sequence.
 Handlers receive the invoked arguments, working directory, and child process
 environment visible to the mock shim, which can include credentials or other
 secrets inherited from the harness or nested caller. Handlers must therefore be
-trusted code and must return a response within 30 seconds. Dynobox records the
-executable, arguments, working directory, timestamp, exit code, stdout, and
-stderr, but does not retain environment values. A timeout stops waiting and
-fails the mock call; it does not forcibly cancel handler code. Keep handler
-operations bounded and clean up any timers or other resources they create.
+trusted code. Dynobox waits up to 30 seconds for an asynchronous handler result,
+then fails the mock call; the timeout does not cancel the handler's work.
+Synchronous handler code cannot be interrupted and blocks the mock controller,
+so keep all handler operations bounded and clean up any timers or other
+resources they create. Dynobox records the executable, arguments, working
+directory, timestamp, exit code, stdout, and stderr, but does not retain
+environment values.
 
 Setup commands and harness version detection use the real PATH. The harness and
 post-harness verification commands use a PATH with generated mock shims

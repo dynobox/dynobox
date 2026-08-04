@@ -78,6 +78,7 @@ export type RunJobProgressEvent =
       type: 'assertions.completed';
       job: LocalRunnerJob;
       assertionResults: AssertionResult[];
+      verificationFailed: boolean;
     };
 
 /** Runtime options for local execution of one job. */

@@ -9,7 +9,7 @@
 import type {LocalRunnerResult} from '@dynobox/runner-local';
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
-import {dim, type RenderContext} from '../terminal/index.js';
+import {dim, type RenderContext, truncate} from '../terminal/index.js';
 import type {DebugLogPaths} from '../util/transcript.js';
 import {renderAssertionDetails} from './assertions.js';
 import {renderDebugDetails} from './debug.js';
@@ -86,10 +86,21 @@ export function renderCliMockDetails(
     );
   }
   for (const call of result.cliMockCalls) {
-    const command = [call.executable, ...call.argv].join(' ');
-    lines.push(
-      `        ${dim(ctx, `cli mock: ${command} -> exit ${call.exitCode}`)}\n`,
+    const command = [
+      call.executable,
+      ...call.argv.map(formatCliMockArgument),
+    ].join(' ');
+    const detail = truncate(
+      `cli mock: ${command} -> exit ${call.exitCode}`,
+      Math.max(0, ctx.width - 8),
     );
+    lines.push(`        ${dim(ctx, detail)}\n`);
   }
   return lines.join('');
+}
+
+function formatCliMockArgument(argument: string): string {
+  return /^[A-Za-z0-9_./:=@+-]+$/.test(argument)
+    ? argument
+    : JSON.stringify(argument);
 }

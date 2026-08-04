@@ -515,6 +515,37 @@ describe('renderGroupedRun', () => {
     expect(output).toContain('cli mock: vitest run -> exit 0');
   });
 
+  it('quotes unsafe CLI mock arguments and bounds the rendered call width', () => {
+    const jobs = [makeJob({cliMockNames: ['vitest']})];
+    const output = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results: [
+        makeResult(jobs[0]!, {
+          cliMockCalls: [
+            {
+              executable: 'vitest',
+              argv: ['hello world', 'line\n\u001b[31m', 'x'.repeat(100)],
+              cwd: '/tmp/work',
+              timestamp: 1,
+              exitCode: 0,
+              stdout: '',
+              stderr: '',
+            },
+          ],
+        }),
+      ],
+      ctx: createRenderContext({mode: 'verbose', terminalWidth: 72}),
+    });
+    const callLine = output
+      .split('\n')
+      .find((line) => line.includes('cli mock:'));
+
+    expect(callLine).toContain('vitest "hello world" "line\\n\\u001b[31m"');
+    expect(callLine).not.toContain('\u001b');
+    expect(callLine).toHaveLength(72);
+    expect(callLine?.endsWith('...')).toBe(true);
+  });
+
   it('expands every iteration in verbose multi-iteration mode', () => {
     const jobs = [makeJob({iteration: 0}), makeJob({iteration: 1})];
     const results = [

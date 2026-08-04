@@ -558,14 +558,15 @@ export async function runJob(
       return result;
     });
     const assertionsMs = Date.now() - assertionsStartedAt;
+    // Mock lifecycle failures during verify (or leftover pending calls) fail
+    // the run even when every assertion result is passing.
+    const cliMockFailures = cliMockController?.failures() ?? [];
     emitProgress(options, {
       type: 'assertions.completed',
       job,
       assertionResults,
+      verificationFailed: cliMockFailures.length > 0,
     });
-    // Mock lifecycle failures during verify (or leftover pending calls) fail
-    // the run even when every assertion result is passing.
-    const cliMockFailures = cliMockController?.failures() ?? [];
     const passed =
       cliMockFailures.length === 0 &&
       assertionResults.every((result) => result.passed);
