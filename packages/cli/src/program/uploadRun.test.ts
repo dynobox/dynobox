@@ -623,6 +623,99 @@ describe('buildRunUploadPayload', () => {
     expect(assertion.evidence).not.toHaveProperty('matches');
   });
 
+  it('includes CLI mock calls in uploaded observation metrics', () => {
+    const job = {
+      id: 'scenario.cli-mock.claude-code.iteration.0',
+      scenario: {
+        id: 'scenario.cli-mock',
+        name: 'CLI mock',
+        prompt: 'run vitest',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        cliMocks: {
+          vitest: {
+            response: {exitCode: 0, stdout: 'passed', stderr: ''},
+          },
+        },
+        endpoints: [],
+        assertions: [
+          {
+            id: 'assertion.cli-mock.called',
+            type: 'command.called',
+            executable: 'vitest',
+          },
+        ],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const result = {
+      jobId: job.id,
+      scenarioId: job.scenario.id,
+      harness: 'claude-code',
+      harnessVersion: '2.1.4',
+      iteration: 0,
+      status: 'passed',
+      passed: true,
+      setupResult: {success: true, logs: []},
+      httpEvents: [],
+      cliMockCalls: [
+        {
+          executable: 'vitest',
+          argv: ['run'],
+          cwd: '/tmp/work',
+          startedAt: '2026-08-03T12:00:00.000Z',
+          completedAt: '2026-08-03T12:00:00.100Z',
+          exitCode: 0,
+        },
+      ],
+      artifacts: [],
+      assertionResults: [
+        {
+          assertionId: 'assertion.cli-mock.called',
+          type: 'command.called',
+          passed: true,
+          message: 'Observed command "vitest".',
+          evidence: [
+            {
+              executable: 'vitest',
+              argv: ['run'],
+              cwd: '/tmp/work',
+              original: 'vitest run',
+            },
+          ],
+        },
+      ],
+      diagnostics: [],
+      warnings: [],
+      timing: {setupMs: 0, harnessMs: 10, assertionsMs: 1, totalMs: 11},
+    } as unknown as LocalRunnerResult;
+
+    const payload = buildRunUploadPayload({
+      dynos: [
+        {
+          dynoPath: '.agents/skills/test/test.dyno.ts',
+          name: null,
+          target: 'test',
+          jobs: [job],
+        },
+      ],
+      results: [result],
+      inputPath: '.agents/skills/test',
+      gitHash: null,
+    });
+    const assertion =
+      RunUploadV3.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+
+    expect(assertion.evidence).toMatchObject({
+      observedCount: 1,
+      observedKinds: ['cli-mock'],
+      matchedCount: 1,
+      matches: ['vitest run'],
+    });
+  });
+
   it('preserves empty verify output matchers in upload payloads', () => {
     const job = {
       id: 'scenario.verify.claude-code.iteration.0',

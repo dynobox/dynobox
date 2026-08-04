@@ -524,7 +524,9 @@ function assertionEvidence(
       : undefined;
   return {
     observedCount:
-      (result.harnessResult?.toolEvents.length ?? 0) + result.httpEvents.length,
+      (result.harnessResult?.toolEvents.length ?? 0) +
+      result.httpEvents.length +
+      result.cliMockCalls.length,
     ...(matches.length === 0 ? {} : {matchedCount: matches.length}),
     ...(matchedBranchIndex === undefined ? {} : {matchedBranchIndex}),
     observedKinds: observedKinds(result),
@@ -558,6 +560,7 @@ function observedKinds(result: LocalRunnerResult): string[] {
     ...new Set([
       ...(result.harnessResult?.toolEvents.map((event) => event.kind) ?? []),
       ...result.httpEvents.map((event) => `http:${event.method}`),
+      ...result.cliMockCalls.map(() => 'cli-mock'),
     ]),
   ]
     .slice(0, RUN_UPLOAD_LIMITS.evidenceItems)
