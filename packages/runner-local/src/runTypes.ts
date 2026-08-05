@@ -142,6 +142,8 @@ export type LocalRunnerResult = {
   cliMockCalls: readonly CliMockCall[];
   artifacts: LocalArtifact[];
   assertionResults: AssertionResult[];
+  /** Whether post-harness verification produced a lifecycle failure. */
+  verificationFailed: boolean;
   diagnostics: string[];
   warnings: LocalRunnerWarning[];
   timing: LocalRunnerTiming;

@@ -74,6 +74,7 @@ function makeResult(
     cliMockCalls,
     artifacts: [],
     assertionResults: [],
+    verificationFailed: false,
     diagnostics: [],
     warnings: [],
     timing: {setupMs: 0, harnessMs: 0, assertionsMs: 0, totalMs: 0},

@@ -31,7 +31,8 @@ describe('renderLiveJobCompletion', () => {
       ],
       artifacts: [],
       assertionResults: [],
-      diagnostics: ['CLI mock handler failed.'],
+      verificationFailed: true,
+      diagnostics: ['CLI mock handler failed.\n\u001b[2J'],
       warnings: [],
       timing: {setupMs: 0, harnessMs: 0, assertionsMs: 0, totalMs: 0},
     };
@@ -44,6 +45,8 @@ describe('renderLiveJobCompletion', () => {
     );
 
     expect(output).toContain('CLI mock handler failed.');
+    expect(output).toContain('\\n\\u001b[2J');
+    expect(output).not.toContain('\u001b');
     expect(output).toContain('cli mocks: vitest');
     expect(output).toContain('cli mock: vitest run -> exit 0');
     expect(output.indexOf('cli mocks: vitest')).toBeLessThan(

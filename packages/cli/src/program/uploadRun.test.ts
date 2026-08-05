@@ -50,6 +50,7 @@ describe('buildRunUploadPayload', () => {
           message: 'Observed tool "shell".',
         },
       ],
+      verificationFailed: false,
       diagnostics: [],
       warnings: [],
       timing: {
@@ -705,6 +706,7 @@ describe('buildRunUploadPayload', () => {
           ],
         },
       ],
+      verificationFailed: false,
       diagnostics: [],
       warnings: [],
       timing: {setupMs: 0, harnessMs: 10, assertionsMs: 1, totalMs: 11},

@@ -9,7 +9,11 @@
 import type {LocalRunnerResult} from '@dynobox/runner-local';
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
-import {dim, type RenderContext, truncate} from '../terminal/index.js';
+import {
+  dim,
+  escapeTerminalText,
+  type RenderContext,
+} from '../terminal/index.js';
 import type {DebugLogPaths} from '../util/transcript.js';
 import {renderAssertionDetails} from './assertions.js';
 import {renderDebugDetails} from './debug.js';
@@ -81,26 +85,49 @@ export function renderCliMockDetails(
 ): string {
   const lines: string[] = [];
   if (configuredNames.length > 0) {
-    lines.push(
-      `        ${dim(ctx, `cli mocks: ${configuredNames.join(', ')}`)}\n`,
-    );
-  }
-  for (const call of result.cliMockCalls) {
-    const command = [
-      call.executable,
-      ...call.argv.map(formatCliMockArgument),
-    ].join(' ');
-    const detail = truncate(
-      `cli mock: ${command} -> exit ${call.exitCode}`,
+    const detail = truncateCliText(
+      `cli mocks: ${configuredNames.map(formatCliMockToken).join(', ')}`,
       Math.max(0, ctx.width - 8),
     );
     lines.push(`        ${dim(ctx, detail)}\n`);
   }
+  for (const call of result.cliMockCalls) {
+    const command = [
+      formatCliMockToken(call.executable),
+      ...call.argv.map(formatCliMockToken),
+    ].join(' ');
+    lines.push(
+      `        ${dim(ctx, formatCliMockCall(command, call.exitCode, ctx.width - 8))}\n`,
+    );
+  }
   return lines.join('');
 }
 
-function formatCliMockArgument(argument: string): string {
-  return /^[A-Za-z0-9_./:=@+-]+$/.test(argument)
-    ? argument
-    : JSON.stringify(argument);
+function formatCliMockToken(value: string): string {
+  if (/^[A-Za-z0-9_./:=@+-]+$/.test(value)) return value;
+  return escapeTerminalText(JSON.stringify(value));
+}
+
+function formatCliMockCall(
+  command: string,
+  exitCode: number,
+  maxLength: number,
+): string {
+  const available = Math.max(0, maxLength);
+  const suffix = ` -> exit ${exitCode}`;
+  if (available === 0) return '';
+  if (available <= suffix.length) return suffix.slice(-available);
+
+  const prefix = 'cli mock: ';
+  const commandLength = available - prefix.length - suffix.length;
+  if (commandLength <= 0) {
+    return `${prefix.slice(0, available - suffix.length)}${suffix}`;
+  }
+  return `${prefix}${truncateCliText(command, commandLength)}${suffix}`;
+}
+
+function truncateCliText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  if (maxLength <= 3) return '.'.repeat(Math.max(0, maxLength));
+  return `${value.slice(0, maxLength - 3)}...`;
 }

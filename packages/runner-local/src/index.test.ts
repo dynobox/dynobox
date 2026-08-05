@@ -695,6 +695,7 @@ describe('runJob', () => {
       true,
     );
     expect(result.status).toBe('assertion_failed');
+    expect(result.verificationFailed).toBe(true);
     expect(result.diagnostics[0]).toContain('exhausted');
     expect(events.at(-1)).toMatchObject({
       type: 'assertions.completed',

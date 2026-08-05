@@ -52,6 +52,7 @@ type ResultSpec = {
   status?: LocalRunnerStatus;
   failedAssertionIndexes?: number[];
   diagnostics?: string[];
+  verificationFailed?: boolean;
 };
 
 function makeResult(
@@ -84,6 +85,7 @@ function makeResult(
     cliMockCalls: [],
     artifacts: [],
     assertionResults,
+    verificationFailed: spec.verificationFailed ?? false,
     diagnostics:
       spec.diagnostics ??
       (status === 'harness_failed' ? ['codex exited with code 1'] : []),
@@ -219,13 +221,16 @@ describe('renderQuietRun', () => {
     const job = makeJob();
     const result = makeResult(job, {
       status: 'assertion_failed',
-      diagnostics: ['CLI mock handler failed.'],
+      verificationFailed: true,
+      diagnostics: ['CLI mock handler failed.\n\u001b[2J'],
     });
 
     const output = renderQuietRun([dynoOf([job])], [result], ctx);
 
     expect(output).toContain('verification failed');
     expect(output).toContain('CLI mock handler failed.');
+    expect(output).toContain('\\n\\u001b[2J');
+    expect(output).not.toContain('\u001b');
   });
 
   it('does not prefix single-iteration groups when another group has iterations', () => {

@@ -67,6 +67,7 @@ type ResultSpec = {
   totalMs?: number;
   cliMockCalls?: LocalRunnerResult['cliMockCalls'];
   diagnostics?: string[];
+  verificationFailed?: boolean;
 };
 
 function makeResult(
@@ -99,6 +100,7 @@ function makeResult(
     cliMockCalls: spec.cliMockCalls ?? [],
     artifacts: [],
     assertionResults,
+    verificationFailed: spec.verificationFailed ?? false,
     diagnostics:
       spec.diagnostics ??
       (status === 'harness_failed' ? ['codex exited with code 1'] : []),
@@ -315,6 +317,7 @@ describe('renderGroupedRun', () => {
     const results = [
       makeResult(jobs[0]!, {
         status: 'assertion_failed',
+        verificationFailed: true,
         diagnostics: ['CLI mock exhausted its configured responses.'],
       }),
     ];
@@ -346,6 +349,7 @@ describe('renderGroupedRun', () => {
         makeResult(jobs[0]!, {
           status: 'assertion_failed',
           failedAssertionIndexes: [0],
+          verificationFailed: true,
           diagnostics: ['CLI mock exhausted its configured responses.'],
         }),
       ],
@@ -362,6 +366,7 @@ describe('renderGroupedRun', () => {
       makeResult(jobs[0]!),
       makeResult(jobs[1]!, {
         status: 'assertion_failed',
+        verificationFailed: true,
         diagnostics: ['CLI mock handler failed.'],
       }),
     ];
@@ -380,6 +385,24 @@ describe('renderGroupedRun', () => {
     });
 
     expect(output).toContain('✓ no assertions');
+  });
+
+  it('labels zero-assertion verification failures without a passing count', () => {
+    const jobs = [makeJob({assertionCount: 0})];
+    const output = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results: [
+        makeResult(jobs[0]!, {
+          status: 'assertion_failed',
+          verificationFailed: true,
+          diagnostics: ['CLI mock handler failed.'],
+        }),
+      ],
+      ctx: createRenderContext({mode: 'verbose'}),
+    });
+
+    expect(output).toContain('assertions verification failed');
+    expect(output).not.toContain('0 of 0 passed');
   });
 
   it('renders a job fraction and sparkline for multi-iteration runs', () => {
@@ -516,7 +539,9 @@ describe('renderGroupedRun', () => {
   });
 
   it('quotes unsafe CLI mock arguments and bounds the rendered call width', () => {
-    const jobs = [makeJob({cliMockNames: ['vitest']})];
+    const jobs = [
+      makeJob({cliMockNames: ['vitest', 'bad\n\u001b[31m\u009b2J']}),
+    ];
     const output = renderGroupedRun({
       dynos: [dynoOf(jobs)],
       results: [
@@ -542,8 +567,11 @@ describe('renderGroupedRun', () => {
 
     expect(callLine).toContain('vitest "hello world" "line\\n\\u001b[31m"');
     expect(callLine).not.toContain('\u001b');
+    expect(output).not.toContain('\u009b');
+    expect(output).toContain('bad\\n\\u001b[31m\\u009b2J');
     expect(callLine).toHaveLength(72);
-    expect(callLine?.endsWith('...')).toBe(true);
+    expect(callLine).toContain('...');
+    expect(callLine?.endsWith(' -> exit 0')).toBe(true);
   });
 
   it('expands every iteration in verbose multi-iteration mode', () => {

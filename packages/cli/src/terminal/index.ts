@@ -5,7 +5,12 @@
  */
 
 export {BOLD, RESET, visibleLength} from './ansi.js';
-export {formatCount, formatDuration, formatLiveDuration} from './format.js';
+export {
+  escapeTerminalText,
+  formatCount,
+  formatDuration,
+  formatLiveDuration,
+} from './format.js';
 export {DEFAULT_WIDTH, leftRight, separator, truncate} from './layout.js';
 export {
   createRenderContext,

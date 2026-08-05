@@ -8,6 +8,7 @@ import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {assertionByIdForJobs} from '../jobs.js';
 import {
+  escapeTerminalText,
   formatCount,
   formatDuration,
   type RenderContext,
@@ -91,7 +92,10 @@ function describeJobFailures(entry: GroupedJobEntry): string[] {
   const assertionById = assertionByIdForJobs([entry.job]);
   if (entry.result.status === 'setup_failed') return ['setup failed'];
   if (entry.result.status === 'harness_failed') {
-    const lines = ['harness failed', ...entry.result.diagnostics];
+    const lines = [
+      'harness failed',
+      ...entry.result.diagnostics.map(escapeTerminalText),
+    ];
     if (
       entry.result.assertionResults.length > 0 &&
       entry.result.harnessResult !== undefined
@@ -101,12 +105,11 @@ function describeJobFailures(entry: GroupedJobEntry): string[] {
     return lines;
   }
   const assertionLabels = failedAssertionLabels(entry.result, assertionById);
-  if (entry.result.diagnostics.length === 0) return assertionLabels;
-  return [
-    'verification failed',
-    ...entry.result.diagnostics,
-    ...assertionLabels,
-  ];
+  const diagnostics = entry.result.diagnostics.map(escapeTerminalText);
+  if (!entry.result.verificationFailed) {
+    return [...diagnostics, ...assertionLabels];
+  }
+  return ['verification failed', ...diagnostics, ...assertionLabels];
 }
 
 function failedAssertionLabels(

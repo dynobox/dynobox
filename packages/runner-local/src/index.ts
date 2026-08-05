@@ -585,6 +585,7 @@ export async function runJob(
       // Full ordered log (harness + verify phases) for renderers/debug.
       cliMockCalls: cliMockController?.calls() ?? [],
       assertionResults,
+      verificationFailed: cliMockFailures.length > 0,
       diagnostics: cliMockFailures.map((failure) => failure.message),
       warnings,
       timing: buildTiming({

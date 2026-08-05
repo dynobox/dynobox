@@ -8,6 +8,7 @@ import type {LocalRunnerResult} from '@dynobox/runner-local';
 import {
   colorStatus,
   dim,
+  escapeTerminalText,
   type RenderContext,
   truncate,
 } from '../terminal/index.js';
@@ -42,6 +43,9 @@ export function renderFailureDiagnostics(
 ): string {
   if (result.diagnostics.length === 0) return '';
   return result.diagnostics
-    .map((diagnostic) => `        ${colorStatus(ctx, diagnostic, 'fail')}\n`)
+    .map(
+      (diagnostic) =>
+        `        ${colorStatus(ctx, escapeTerminalText(diagnostic), 'fail')}\n`,
+    )
     .join('');
 }

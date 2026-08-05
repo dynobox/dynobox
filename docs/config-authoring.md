@@ -367,6 +367,13 @@ are given, **all** must match:
 - `originalMatches` — `RegExp` match against the raw text of the single command
   segment.
 
+For a CLI mock call paired with a standalone shell event, `originalIncludes`
+and `originalMatches` use that event's raw command segment. Nested, package
+script, and other unpaired mock calls have no raw shell segment, so Dynobox
+reconstructs this value by joining the recorded executable and arguments with
+spaces. That reconstructed form does not preserve quoting or other shell
+syntax; prefer `args`, `argsInOrder`, or `argsMatching` for unpaired mock calls.
+
 With no matcher, `command.called('git')` passes if any observed command's
 executable is `git`.
 

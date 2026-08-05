@@ -43,4 +43,30 @@ describe('renderLiveProgressEvent', () => {
     expect(line.text).toContain('✗ assertions');
     expect(line.text).toContain('2 of 2 passed; verification failed');
   });
+
+  it('omits the passing count for zero-assertion verification failures', () => {
+    const state: LiveJobState = {
+      setupCommandCount: 0,
+      fixturesCount: 0,
+      toolCount: 0,
+      assertionCount: 0,
+      phaseStartedAtMs: Date.now(),
+    };
+
+    const line = renderLiveProgressEvent(
+      {
+        type: 'assertions.completed',
+        job: {} as LocalRunnerJob,
+        assertionResults: [],
+        verificationFailed: true,
+      },
+      state,
+      createRenderContext(),
+    );
+
+    expect(line.kind).toBe('commit');
+    if (line.kind !== 'commit') throw new Error('Expected committed output.');
+    expect(line.text).toContain('verification failed');
+    expect(line.text).not.toContain('0 of 0 passed');
+  });
 });

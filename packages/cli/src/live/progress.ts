@@ -157,12 +157,16 @@ export function renderLiveProgressEvent(
     passedCount === event.assertionResults.length && !event.verificationFailed
       ? 'pass'
       : 'fail';
+  const detail =
+    event.assertionResults.length === 0 && event.verificationFailed
+      ? 'verification failed'
+      : `${passedCount} of ${state.assertionCount} passed${event.verificationFailed ? '; verification failed' : ''}`;
   return {
     kind: 'commit',
     text: renderPhaseRow(ctx, {
       status,
       label: 'assertions',
-      detail: `${passedCount} of ${state.assertionCount} passed${event.verificationFailed ? '; verification failed' : ''}`,
+      detail,
       durationMs: Date.now() - state.phaseStartedAtMs,
     }),
   };

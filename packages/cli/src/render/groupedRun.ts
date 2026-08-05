@@ -264,11 +264,13 @@ export function renderIterationDetailLines(
         renderFailureDiagnostics(result, ctx),
       );
     } else if (!result.passed) {
-      if (result.diagnostics.length > 0) {
+      if (result.verificationFailed) {
         lines.push(
           `${DETAIL_INDENT}${iter} ${colorStatus(ctx, `${symbol(ctx, 'fail')} verification failed`, 'fail')}\n`,
           renderFailureDiagnostics(result, ctx),
         );
+      } else if (result.diagnostics.length > 0) {
+        lines.push(renderFailureDiagnostics(result, ctx));
       }
       lines.push(
         renderAssertionDetails(result, assertionById, ctx, {
@@ -424,15 +426,14 @@ function renderSingleIterationStatus(
   const failed = result.assertionResults.filter(
     (assertionResult) => !assertionResult.passed,
   ).length;
-  if (failed === 0 && result.diagnostics.length > 0) {
+  if (failed === 0 && result.verificationFailed) {
     return colorStatus(
       ctx,
       `${symbol(ctx, 'fail')} verification failed`,
       'fail',
     );
   }
-  const verificationFailed = result.diagnostics.length > 0;
-  return `${colorStatus(ctx, symbol(ctx, 'fail'), 'fail')} ${failed} of ${total} failed${verificationFailed ? '; verification failed' : ''}`;
+  return `${colorStatus(ctx, symbol(ctx, 'fail'), 'fail')} ${failed} of ${total} failed${result.verificationFailed ? '; verification failed' : ''}`;
 }
 
 function renderMultiIterationStatus(

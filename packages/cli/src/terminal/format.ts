@@ -1,5 +1,5 @@
 /**
- * Numeric formatters for human-readable terminal output.
+ * Formatters for human-readable terminal output.
  */
 
 /**
@@ -36,4 +36,19 @@ export function formatDuration(durationMs: number): string {
  */
 export function formatLiveDuration(durationMs: number): string {
   return `${Math.floor(durationMs / 1000)}s`;
+}
+
+/** Escape control characters before writing untrusted text to a terminal. */
+export function escapeTerminalText(value: string): string {
+  return [...value]
+    .map((character) => {
+      const code = character.charCodeAt(0);
+      if (code >= 0x20 && code !== 0x7f && (code < 0x80 || code > 0x9f)) {
+        return character;
+      }
+      const jsonEscape = JSON.stringify(character).slice(1, -1);
+      if (jsonEscape !== character) return jsonEscape;
+      return `\\u${code.toString(16).padStart(4, '0')}`;
+    })
+    .join('');
 }
