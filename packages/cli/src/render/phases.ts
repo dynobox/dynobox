@@ -128,10 +128,17 @@ export function renderAssertionsPhase(
     (assertionResult) => assertionResult.passed,
   ).length;
   const totalCount = result.assertionResults.length;
+  const detail =
+    totalCount === 0 && result.verificationFailed
+      ? 'verification failed'
+      : `${passedCount} of ${totalCount} passed${result.verificationFailed ? '; verification failed' : ''}`;
   return `${renderPhaseRow(ctx, {
-    status: passedCount === totalCount ? 'pass' : 'fail',
+    status:
+      passedCount === totalCount && !result.verificationFailed
+        ? 'pass'
+        : 'fail',
     label: 'assertions',
-    detail: `${passedCount} of ${totalCount} passed`,
+    detail,
     durationMs: result.timing.assertionsMs,
     omitIcon,
   })}\n`;

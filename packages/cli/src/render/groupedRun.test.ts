@@ -22,6 +22,7 @@ type JobSpec = {
   assertionCount?: number;
   assertionLabel?: string;
   assertionTool?: 'shell' | 'edit_file';
+  cliMockNames?: string[];
 };
 
 function makeJob(spec: JobSpec = {}): LocalRunnerJob {
@@ -38,7 +39,12 @@ function makeJob(spec: JobSpec = {}): LocalRunnerJob {
       harnesses: [{id: harness}],
       setup: [],
       fixtures: [],
-      cliMocks: {},
+      cliMocks: Object.fromEntries(
+        (spec.cliMockNames ?? []).map((name) => [
+          name,
+          {response: {exitCode: 0, stdout: '', stderr: ''}},
+        ]),
+      ),
       endpoints: [],
       assertions: Array.from({length: assertionCount}, (_, index) => ({
         id: `${scenarioId}.assert.${index}`,
@@ -59,6 +65,9 @@ type ResultSpec = {
   status?: LocalRunnerStatus;
   failedAssertionIndexes?: number[];
   totalMs?: number;
+  cliMockCalls?: LocalRunnerResult['cliMockCalls'];
+  diagnostics?: string[];
+  verificationFailed?: boolean;
 };
 
 function makeResult(
@@ -87,11 +96,14 @@ function makeResult(
     workDir: '/tmp/work',
     setupResult: {success: status !== 'setup_failed', logs: []},
     httpEvents: [],
-    cliMockCalls: [],
+    harnessCliMockCallCount: 0,
+    cliMockCalls: spec.cliMockCalls ?? [],
     artifacts: [],
     assertionResults,
+    verificationFailed: spec.verificationFailed ?? false,
     diagnostics:
-      status === 'harness_failed' ? ['codex exited with code 1'] : [],
+      spec.diagnostics ??
+      (status === 'harness_failed' ? ['codex exited with code 1'] : []),
     warnings: [],
     timing: {
       setupMs: 0,
@@ -300,6 +312,70 @@ describe('renderGroupedRun', () => {
     expect(output).toContain('codex exited with code 1');
   });
 
+  it('renders diagnostics-backed assertion failures as verification failures', () => {
+    const jobs = [makeJob()];
+    const results = [
+      makeResult(jobs[0]!, {
+        status: 'assertion_failed',
+        verificationFailed: true,
+        diagnostics: ['CLI mock exhausted its configured responses.'],
+      }),
+    ];
+    const output = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results,
+      ctx,
+    });
+    const verboseOutput = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results,
+      ctx: createRenderContext({mode: 'verbose'}),
+    });
+
+    expect(output).toContain('✗ verification failed');
+    expect(output).toContain('CLI mock exhausted its configured responses.');
+    expect(output).not.toContain('0 of 2 failed');
+    expect(verboseOutput).toContain('2 of 2 passed; verification failed');
+    expect(verboseOutput).toContain(
+      'CLI mock exhausted its configured responses.',
+    );
+  });
+
+  it('labels assertion and verification failures together', () => {
+    const jobs = [makeJob()];
+    const output = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results: [
+        makeResult(jobs[0]!, {
+          status: 'assertion_failed',
+          failedAssertionIndexes: [0],
+          verificationFailed: true,
+          diagnostics: ['CLI mock exhausted its configured responses.'],
+        }),
+      ],
+      ctx,
+    });
+
+    expect(output).toContain('✗ 1 of 2 failed; verification failed');
+    expect(output).toContain('CLI mock exhausted its configured responses.');
+  });
+
+  it('renders verification diagnostics for failed iterations', () => {
+    const jobs = [makeJob({iteration: 0}), makeJob({iteration: 1})];
+    const results = [
+      makeResult(jobs[0]!),
+      makeResult(jobs[1]!, {
+        status: 'assertion_failed',
+        verificationFailed: true,
+        diagnostics: ['CLI mock handler failed.'],
+      }),
+    ];
+    const output = renderGroupedRun({dynos: [dynoOf(jobs)], results, ctx});
+
+    expect(output).toContain('iter 2 ✗ verification failed');
+    expect(output).toContain('CLI mock handler failed.');
+  });
+
   it('marks passing zero-assertion jobs explicitly', () => {
     const jobs = [makeJob({assertionCount: 0})];
     const output = renderGroupedRun({
@@ -309,6 +385,24 @@ describe('renderGroupedRun', () => {
     });
 
     expect(output).toContain('✓ no assertions');
+  });
+
+  it('labels zero-assertion verification failures without a passing count', () => {
+    const jobs = [makeJob({assertionCount: 0})];
+    const output = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results: [
+        makeResult(jobs[0]!, {
+          status: 'assertion_failed',
+          verificationFailed: true,
+          diagnostics: ['CLI mock handler failed.'],
+        }),
+      ],
+      ctx: createRenderContext({mode: 'verbose'}),
+    });
+
+    expect(output).toContain('assertions verification failed');
+    expect(output).not.toContain('0 of 0 passed');
   });
 
   it('renders a job fraction and sparkline for multi-iteration runs', () => {
@@ -346,7 +440,13 @@ describe('renderGroupedRun', () => {
     const jobA = makeJob();
     const jobB = makeJob();
     const debugLogPaths = new Map([
-      [jobA, {transcript: '/tmp/alpha/dynobox-transcript.log'}],
+      [
+        jobA,
+        {
+          transcript: '/tmp/alpha/dynobox-transcript.log',
+          cliMocks: '/tmp/alpha/dynobox-cli-mocks.json',
+        },
+      ],
       [jobB, {transcript: '/tmp/beta/dynobox-transcript.log'}],
     ]);
     const output = renderGroupedRun({
@@ -364,6 +464,9 @@ describe('renderGroupedRun', () => {
     );
     expect(output).toContain(
       'log       transcript /tmp/beta/dynobox-transcript.log',
+    );
+    expect(output).toContain(
+      'log       cli_mocks /tmp/alpha/dynobox-cli-mocks.json',
     );
   });
 
@@ -397,6 +500,78 @@ describe('renderGroupedRun', () => {
     expect(output).toContain('setup');
     expect(output).toContain('assertions');
     expect(output).toContain('✓ tool.called(shell)');
+  });
+
+  it('lists configured CLI mocks and ordered calls in verbose mode', () => {
+    const jobs = [makeJob({cliMockNames: ['vitest', 'vercel']})];
+    const output = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results: [
+        makeResult(jobs[0]!, {
+          cliMockCalls: [
+            {
+              executable: 'vitest',
+              argv: ['run'],
+              cwd: '/tmp/work',
+              timestamp: 1,
+              exitCode: 1,
+              stdout: '',
+              stderr: 'failed',
+            },
+            {
+              executable: 'vitest',
+              argv: ['run'],
+              cwd: '/tmp/work',
+              timestamp: 2,
+              exitCode: 0,
+              stdout: 'passed',
+              stderr: '',
+            },
+          ],
+        }),
+      ],
+      ctx: createRenderContext({mode: 'verbose'}),
+    });
+
+    expect(output).toContain('cli mocks: vitest, vercel');
+    expect(output).toContain('cli mock: vitest run -> exit 1');
+    expect(output).toContain('cli mock: vitest run -> exit 0');
+  });
+
+  it('quotes unsafe CLI mock arguments and bounds the rendered call width', () => {
+    const jobs = [
+      makeJob({cliMockNames: ['vitest', 'bad\n\u001b[31m\u009b2J']}),
+    ];
+    const output = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results: [
+        makeResult(jobs[0]!, {
+          cliMockCalls: [
+            {
+              executable: 'vitest',
+              argv: ['hello world', 'line\n\u001b[31m', 'x'.repeat(100)],
+              cwd: '/tmp/work',
+              timestamp: 1,
+              exitCode: 0,
+              stdout: '',
+              stderr: '',
+            },
+          ],
+        }),
+      ],
+      ctx: createRenderContext({mode: 'verbose', terminalWidth: 72}),
+    });
+    const callLine = output
+      .split('\n')
+      .find((line) => line.includes('cli mock:'));
+
+    expect(callLine).toContain('vitest "hello world" "line\\n\\u001b[31m"');
+    expect(callLine).not.toContain('\u001b');
+    expect(output).not.toContain('\u009b');
+    expect(output).toContain('bad\\n\\u001b[31m\\u009b2J');
+    expect(callLine).toHaveLength(72);
+    expect(callLine).toContain('...');
+    expect(callLine?.endsWith(' -> exit 0')).toBe(true);
   });
 
   it('expands every iteration in verbose multi-iteration mode', () => {

@@ -12,12 +12,14 @@ const TRANSCRIPT_FILENAME = 'dynobox-transcript.log';
 const CHAT_HISTORY_FILENAME = 'dynobox-chat-history.jsonl';
 const STDERR_FILENAME = 'dynobox-stderr.log';
 const TOOL_EVENTS_FILENAME = 'dynobox-tool-events.json';
+const CLI_MOCKS_FILENAME = 'dynobox-cli-mocks.json';
 
 export type DebugLogPaths = {
   transcript?: string;
   chatHistory?: string;
   stderr?: string;
   toolEvents?: string;
+  cliMocks?: string;
 };
 
 /**
@@ -57,6 +59,14 @@ export function writeDebugLogs(result: LocalRunnerResult): DebugLogPaths {
       result.workDir,
       TOOL_EVENTS_FILENAME,
       `${JSON.stringify(toolEvents, null, 2)}\n`,
+    );
+  }
+
+  if (result.cliMockCalls.length > 0) {
+    paths.cliMocks = writeLog(
+      result.workDir,
+      CLI_MOCKS_FILENAME,
+      `${JSON.stringify(result.cliMockCalls, null, 2)}\n`,
     );
   }
 

@@ -20,7 +20,7 @@ export {
   isShellToolEvent,
 } from './describe.js';
 export {
-  renderHarnessFailureDetails,
+  renderFailureDiagnostics,
   renderSetupFailureDetails,
 } from './failure.js';
 export {

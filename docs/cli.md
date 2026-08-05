@@ -266,7 +266,8 @@ harness failures are counted separately as job errors.
 `--verbose` uses the grouped layout and expands every job with setup, harness,
 and assertion phase rows plus all assertion results, even when jobs pass. When
 command assertions are present, verbose output also lists parsed command
-segments observed during the run.
+segments observed during the run. Scenarios with CLI mocks list the configured
+executable names and each recorded call with its exit code.
 
 `--debug` prints everything `--verbose` does, includes temporary work-directory
 and artifact paths, and writes debug logs inside each job's work directory when
@@ -276,7 +277,12 @@ Debug logs can include:
 - `dynobox-transcript.log`
 - `dynobox-chat-history.jsonl`
 - `dynobox-tool-events.json`
+- `dynobox-cli-mocks.json`
 - `dynobox-stderr.log`
+
+`dynobox-cli-mocks.json` contains complete local call records: executable,
+arguments, working directory, timestamp, exit code, stdout, and stderr. Child
+environment values are not included.
 
 `--reporter json` emits newline-delimited JSON on stdout instead of text.
 Dynobox writes one job object per completed job, then one summary object. The
@@ -306,9 +312,15 @@ Job records include:
 - `debugLogPaths` when `--debug` produced logs
 - `setup.commands`
 - `harnessOutput.exitCode` and `harnessOutput.durationMs` when the harness ran
-- `observations.toolEventCount` and `observations.httpEventCount`
+- `observations.toolEventCount`, `observations.httpEventCount`,
+  `observations.cliMockCallCount`, and `observations.harnessCliMockCallCount`
 - `assertions`, with `assertionId`, optional `label`, `type`, `passed`, and
   `message`
+
+`observations.cliMockCallCount` includes every completed mock call in the job,
+including post-harness verification calls.
+`observations.harnessCliMockCallCount` includes only calls completed during the
+harness phase, matching the evidence available to observation assertions.
 
 The summary record includes:
 

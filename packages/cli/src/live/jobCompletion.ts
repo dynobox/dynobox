@@ -4,15 +4,17 @@ import type {IrAssertion} from '@dynobox/sdk/ir';
 import {renderAssertionDetails} from '../render/assertions.js';
 import {renderDebugDetails} from '../render/debug.js';
 import {
-  renderHarnessFailureDetails,
+  renderFailureDiagnostics,
   renderSetupFailureDetails,
 } from '../render/failure.js';
+import {renderCliMockDetails} from '../render/jobDetails.js';
 import {renderWarningDetails} from '../render/warnings.js';
 import type {RenderContext} from '../terminal/index.js';
 import type {DebugLogPaths} from '../util/transcript.js';
 
 export type JobCompletionOptions = {
   debugLogPaths?: DebugLogPaths;
+  configuredCliMockNames?: readonly string[];
 };
 
 /**
@@ -26,10 +28,13 @@ export function renderLiveJobCompletion(
   options: JobCompletionOptions = {},
 ): string {
   const lines: string[] = [];
+  lines.push(
+    renderCliMockDetails(result, options.configuredCliMockNames ?? [], ctx),
+  );
   if (result.status === 'setup_failed') {
     lines.push(renderSetupFailureDetails(result, ctx));
-  } else if (result.status === 'harness_failed') {
-    lines.push(renderHarnessFailureDetails(result, ctx));
+  } else if (!result.passed && result.diagnostics.length > 0) {
+    lines.push(renderFailureDiagnostics(result, ctx));
   }
   lines.push(renderWarningDetails(result, ctx));
   if (

@@ -8,6 +8,16 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Added scenario-scoped CLI mocks with static, sequential, and handler
+  responses, local call recording, command assertion integration, YAML support,
+  and verbose/debug/JSON reporting.
+
+### `@dynobox/sdk`
+
+- Added scenario `cliMocks` authoring types and validation.
+
 ---
 
 ## dynobox@0.10.2 — 2026-07-28

@@ -558,14 +558,15 @@ export async function runJob(
       return result;
     });
     const assertionsMs = Date.now() - assertionsStartedAt;
+    // Mock lifecycle failures during verify (or leftover pending calls) fail
+    // the run even when every assertion result is passing.
+    const cliMockFailures = cliMockController?.failures() ?? [];
     emitProgress(options, {
       type: 'assertions.completed',
       job,
       assertionResults,
+      verificationFailed: cliMockFailures.length > 0,
     });
-    // Mock lifecycle failures during verify (or leftover pending calls) fail
-    // the run even when every assertion result is passing.
-    const cliMockFailures = cliMockController?.failures() ?? [];
     const passed =
       cliMockFailures.length === 0 &&
       assertionResults.every((result) => result.passed);
@@ -580,9 +581,11 @@ export async function runJob(
       harnessOutput,
       harnessResult,
       httpEvents,
+      harnessCliMockCallCount: harnessCliMockCalls.length,
       // Full ordered log (harness + verify phases) for renderers/debug.
       cliMockCalls: cliMockController?.calls() ?? [],
       assertionResults,
+      verificationFailed: cliMockFailures.length > 0,
       diagnostics: cliMockFailures.map((failure) => failure.message),
       warnings,
       timing: buildTiming({

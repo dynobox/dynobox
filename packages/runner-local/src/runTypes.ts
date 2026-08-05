@@ -78,6 +78,7 @@ export type RunJobProgressEvent =
       type: 'assertions.completed';
       job: LocalRunnerJob;
       assertionResults: AssertionResult[];
+      verificationFailed: boolean;
     };
 
 /** Runtime options for local execution of one job. */
@@ -135,9 +136,14 @@ export type LocalRunnerResult = {
   harnessOutput?: HarnessRunOutput;
   harnessResult?: HarnessResult;
   httpEvents: readonly HttpEvent[];
+  /** Completed mock calls captured before post-harness verification. */
+  harnessCliMockCallCount: number;
+  /** Complete ordered mock call log, including post-harness verification. */
   cliMockCalls: readonly CliMockCall[];
   artifacts: LocalArtifact[];
   assertionResults: AssertionResult[];
+  /** Whether post-harness verification produced a lifecycle failure. */
+  verificationFailed: boolean;
   diagnostics: string[];
   warnings: LocalRunnerWarning[];
   timing: LocalRunnerTiming;

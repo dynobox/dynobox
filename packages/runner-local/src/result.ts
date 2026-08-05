@@ -20,8 +20,10 @@ export function buildResult(
     | 'iteration'
     | 'passed'
     | 'httpEvents'
+    | 'harnessCliMockCallCount'
     | 'cliMockCalls'
     | 'assertionResults'
+    | 'verificationFailed'
     | 'diagnostics'
     | 'warnings'
     | 'timing'
@@ -31,7 +33,9 @@ export function buildResult(
     diagnostics?: string[];
     warnings?: LocalRunnerWarning[];
     httpEvents?: readonly HttpEvent[];
+    harnessCliMockCallCount?: number;
     cliMockCalls?: readonly CliMockCall[];
+    verificationFailed?: boolean;
     timing: LocalRunnerTiming;
   },
 ): LocalRunnerResult {
@@ -59,9 +63,12 @@ export function buildResult(
       ? {}
       : {harnessResult: result.harnessResult}),
     httpEvents: result.httpEvents ?? [],
+    harnessCliMockCallCount:
+      result.harnessCliMockCallCount ?? result.cliMockCalls?.length ?? 0,
     cliMockCalls: result.cliMockCalls ?? [],
     artifacts: result.artifacts,
     assertionResults,
+    verificationFailed: result.verificationFailed ?? false,
     diagnostics,
     warnings,
     timing: result.timing,

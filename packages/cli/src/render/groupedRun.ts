@@ -26,7 +26,7 @@ import {
 import type {DebugLogPaths} from '../util/transcript.js';
 import {renderAssertionDetails} from './assertions.js';
 import {
-  renderHarnessFailureDetails,
+  renderFailureDiagnostics,
   renderSetupFailureDetails,
 } from './failure.js';
 import {renderJobDetails} from './jobDetails.js';
@@ -224,8 +224,8 @@ export function renderSingleJobFailureDetails(
   const lines: string[] = [];
   if (result.status === 'setup_failed') {
     lines.push(renderSetupFailureDetails(result, ctx));
-  } else if (result.status === 'harness_failed') {
-    lines.push(renderHarnessFailureDetails(result, ctx));
+  } else if (!result.passed && result.diagnostics.length > 0) {
+    lines.push(renderFailureDiagnostics(result, ctx));
   }
   lines.push(renderWarningDetails(result, ctx));
   if (
@@ -261,9 +261,17 @@ export function renderIterationDetailLines(
     } else if (result.status === 'harness_failed') {
       lines.push(
         `${DETAIL_INDENT}${iter} ${colorStatus(ctx, `${symbol(ctx, 'fail')} harness failed`, 'fail')}\n`,
-        renderHarnessFailureDetails(result, ctx),
+        renderFailureDiagnostics(result, ctx),
       );
     } else if (!result.passed) {
+      if (result.verificationFailed) {
+        lines.push(
+          `${DETAIL_INDENT}${iter} ${colorStatus(ctx, `${symbol(ctx, 'fail')} verification failed`, 'fail')}\n`,
+          renderFailureDiagnostics(result, ctx),
+        );
+      } else if (result.diagnostics.length > 0) {
+        lines.push(renderFailureDiagnostics(result, ctx));
+      }
       lines.push(
         renderAssertionDetails(result, assertionById, ctx, {
           failedOnly: true,
@@ -354,6 +362,7 @@ function renderGroupDetails(
     const entry = group.entries[0]!;
     if (expandAll) {
       return renderJobDetails(entry.result, assertionById, ctx, {
+        configuredCliMockNames: Object.keys(entry.job.scenario.cliMocks),
         ...debugLogPathsOption(input, entry),
       });
     }
@@ -374,6 +383,7 @@ function renderGroupDetails(
     lines.push(`${renderIterationResultLine(entry, ctx)}\n`);
     lines.push(
       renderJobDetails(entry.result, assertionById, ctx, {
+        configuredCliMockNames: Object.keys(entry.job.scenario.cliMocks),
         ...debugLogPathsOption(input, entry),
       }),
     );
@@ -416,7 +426,14 @@ function renderSingleIterationStatus(
   const failed = result.assertionResults.filter(
     (assertionResult) => !assertionResult.passed,
   ).length;
-  return `${colorStatus(ctx, symbol(ctx, 'fail'), 'fail')} ${failed} of ${total} failed`;
+  if (failed === 0 && result.verificationFailed) {
+    return colorStatus(
+      ctx,
+      `${symbol(ctx, 'fail')} verification failed`,
+      'fail',
+    );
+  }
+  return `${colorStatus(ctx, symbol(ctx, 'fail'), 'fail')} ${failed} of ${total} failed${result.verificationFailed ? '; verification failed' : ''}`;
 }
 
 function renderMultiIterationStatus(

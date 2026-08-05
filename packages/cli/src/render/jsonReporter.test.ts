@@ -36,9 +36,30 @@ describe('renderJsonRunOutput', () => {
       iteration: 0,
       status: 'passed',
       passed: true,
+      workDir: '/tmp/work',
       setupResult: {success: true, logs: []},
       httpEvents: [],
-      cliMockCalls: [],
+      harnessCliMockCallCount: 1,
+      cliMockCalls: [
+        {
+          executable: 'vitest',
+          argv: ['run'],
+          cwd: '/tmp/work',
+          timestamp: 1,
+          exitCode: 0,
+          stdout: 'passed',
+          stderr: '',
+        },
+        {
+          executable: 'vitest',
+          argv: ['verify'],
+          cwd: '/tmp/work',
+          timestamp: 2,
+          exitCode: 0,
+          stdout: 'verified',
+          stderr: '',
+        },
+      ],
       artifacts: [],
       assertionResults: [
         {
@@ -48,10 +69,11 @@ describe('renderJsonRunOutput', () => {
           message: 'Observed tool "shell".',
         },
       ],
+      verificationFailed: false,
       diagnostics: [],
       warnings: [],
       timing: {setupMs: 0, harnessMs: 0, assertionsMs: 0, totalMs: 0},
-    } as unknown as LocalRunnerResult;
+    } satisfies LocalRunnerResult;
 
     const records = renderJsonRunOutput({jobs: [job], results: [result]})
       .trim()
@@ -60,9 +82,14 @@ describe('renderJsonRunOutput', () => {
     const jobRecord = records[0] as {
       assertions: Array<Record<string, unknown>>;
       harness: Record<string, unknown>;
+      observations: Record<string, unknown>;
     };
 
     expect(jobRecord.harness).toMatchObject({version: '2.1.4'});
+    expect(jobRecord.observations).toMatchObject({
+      cliMockCallCount: 2,
+      harnessCliMockCallCount: 1,
+    });
     expect(jobRecord.assertions[0]).toMatchObject({
       assertionId: 'assertion.labels.reads-package',
       label: 'reads package.json',

@@ -471,6 +471,7 @@ describe('runJob', () => {
     expect(
       result.assertionResults.map((assertion) => assertion.passed),
     ).toEqual([true, true, true]);
+    expect(result.harnessCliMockCallCount).toBe(1);
     expect(result.cliMockCalls.map((call) => call.argv)).toEqual([
       ['harness'],
       ['verify'],
@@ -659,6 +660,7 @@ describe('runJob', () => {
 
   it('preserves verification mock failures even when assertions accept the exit code', async () => {
     const scratchRoot = createScratchRoot();
+    const events: RunJobProgressEvent[] = [];
     const result = await runJob(
       createJob({
         cliMocks: {
@@ -682,14 +684,23 @@ describe('runJob', () => {
           },
         ],
       }),
-      {scratchRoot, harnesses: [new RecordingHarness()]},
+      {
+        scratchRoot,
+        harnesses: [new RecordingHarness()],
+        onProgress: (event) => events.push(event),
+      },
     );
 
     expect(result.assertionResults.every((assertion) => assertion.passed)).toBe(
       true,
     );
     expect(result.status).toBe('assertion_failed');
+    expect(result.verificationFailed).toBe(true);
     expect(result.diagnostics[0]).toContain('exhausted');
+    expect(events.at(-1)).toMatchObject({
+      type: 'assertions.completed',
+      verificationFailed: true,
+    });
   });
 
   it('passes prompt, workDir, env, and timeout to the harness', async () => {
