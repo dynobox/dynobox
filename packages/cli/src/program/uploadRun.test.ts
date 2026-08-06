@@ -1,8 +1,48 @@
-import {RunUploadV3} from '@dynobox/run-schema';
+import {execFileSync} from 'node:child_process';
+import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+
+import {RunUploadV4} from '@dynobox/run-schema';
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 import {describe, expect, it} from 'vitest';
 
-import {buildRunUploadPayload} from './uploadRun.js';
+import {buildRunUploadPayload, collectGitMetadata} from './uploadRun.js';
+
+describe('collectGitMetadata', () => {
+  it('collects revision, branch, identity, and dirty state', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'dynobox-upload-git-'));
+
+    try {
+      execFileSync('git', ['init'], {cwd, stdio: 'ignore'});
+      execFileSync('git', ['config', 'user.name', 'Upload User'], {cwd});
+      execFileSync('git', ['config', 'user.email', 'upload@example.com'], {
+        cwd,
+      });
+      execFileSync('git', ['checkout', '-b', 'feature/upload'], {
+        cwd,
+        stdio: 'ignore',
+      });
+      writeFileSync(join(cwd, 'dyno.txt'), 'initial\n');
+      execFileSync('git', ['add', 'dyno.txt'], {cwd});
+      execFileSync('git', ['commit', '-m', 'initial'], {
+        cwd,
+        stdio: 'ignore',
+      });
+      writeFileSync(join(cwd, 'dyno.txt'), 'changed\n');
+
+      expect(await collectGitMetadata(cwd)).toEqual({
+        commit: expect.stringMatching(/^[0-9a-f]{40}$/),
+        branch: 'feature/upload',
+        userName: 'Upload User',
+        userEmail: 'upload@example.com',
+        dirty: true,
+      });
+    } finally {
+      rmSync(cwd, {recursive: true, force: true});
+    }
+  });
+});
 
 describe('buildRunUploadPayload', () => {
   it('normalizes dynamic runner values to the shared upload schema', () => {
@@ -72,11 +112,25 @@ describe('buildRunUploadPayload', () => {
       ],
       results: [result],
       inputPath: '.agents/skills/commit',
-      gitHash: null,
+      git: {
+        commit: 'abc123',
+        branch: 'feature/custom-uploads',
+        userName: 'Example User',
+        userEmail: 'user@example.com',
+        dirty: true,
+      },
     });
 
-    expect(RunUploadV3.safeParse(payload).success).toBe(true);
+    expect(RunUploadV4.safeParse(payload).success).toBe(true);
     expect(payload.totals.durationMs).toBe(2);
+    expect(payload.gitHash).toBe('abc123');
+    expect(payload.git).toEqual({
+      commit: 'abc123',
+      branch: 'feature/custom-uploads',
+      userName: 'Example User',
+      userEmail: 'user@example.com',
+      dirty: true,
+    });
     expect(payload.dynos[0]?.target).toBe('commit');
     expect(payload.dynos[0]?.jobs[0]?.durationMs).toBe(2);
     expect(payload.dynos[0]?.jobs[0]?.harness).toEqual({
@@ -116,7 +170,7 @@ describe('buildRunUploadPayload', () => {
         ],
         results: [],
         inputPath: 'misaligned.dyno.ts',
-        gitHash: null,
+        git: null,
       }),
     ).toThrow('Expected 1 runner results for upload, but received 0.');
   });
@@ -196,7 +250,7 @@ describe('buildRunUploadPayload', () => {
       ],
     } as unknown as LocalRunnerResult;
 
-    const parsed = RunUploadV3.parse(
+    const parsed = RunUploadV4.parse(
       buildRunUploadPayload({
         dynos: [
           {
@@ -214,7 +268,7 @@ describe('buildRunUploadPayload', () => {
         ],
         results: [resultA, resultB],
         inputPath: '.',
-        gitHash: null,
+        git: null,
       }),
     );
 
@@ -321,9 +375,9 @@ describe('buildRunUploadPayload', () => {
       ],
       results: [result],
       inputPath: '.agents/skills/commit',
-      gitHash: null,
+      git: null,
     });
-    const parsed = RunUploadV3.parse(payload);
+    const parsed = RunUploadV4.parse(payload);
     const assertion = parsed.dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.definition?.steps).toHaveLength(3);
@@ -438,10 +492,10 @@ describe('buildRunUploadPayload', () => {
       ],
       results: [result],
       inputPath: 'flexible.dyno.ts',
-      gitHash: null,
+      git: null,
     });
     const assertion =
-      RunUploadV3.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV4.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.definition?.steps?.map((step) => step.type)).toEqual([
       'artifact.exists',
@@ -527,10 +581,10 @@ describe('buildRunUploadPayload', () => {
       ],
       results: [result],
       inputPath: 'flexible.dyno.ts',
-      gitHash: null,
+      git: null,
     });
     const assertion =
-      RunUploadV3.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV4.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.evidence).not.toHaveProperty('matchedBranchIndex');
   });
@@ -613,10 +667,10 @@ describe('buildRunUploadPayload', () => {
       ],
       results: [result],
       inputPath: '.agents/skills/commit',
-      gitHash: null,
+      git: null,
     });
     const assertion =
-      RunUploadV3.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV4.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.display?.observed).toBe(
       '1. git status 2. git add README.md',
@@ -723,10 +777,10 @@ describe('buildRunUploadPayload', () => {
       ],
       results: [result],
       inputPath: '.agents/skills/test',
-      gitHash: null,
+      git: null,
     });
     const assertion =
-      RunUploadV3.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV4.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.evidence).toMatchObject({
       observedCount: 1,
@@ -810,10 +864,10 @@ describe('buildRunUploadPayload', () => {
       ],
       results: [result],
       inputPath: '.agents/skills/verify',
-      gitHash: null,
+      git: null,
     });
     const assertion =
-      RunUploadV3.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV4.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.definition).toMatchObject({
       stdout: {equals: ''},
@@ -874,10 +928,10 @@ describe('buildRunUploadPayload', () => {
       ],
       results: [result],
       inputPath: '.agents/skills/deploy',
-      gitHash: null,
+      git: null,
     });
 
-    expect(RunUploadV3.safeParse(payload).success).toBe(true);
+    expect(RunUploadV4.safeParse(payload).success).toBe(true);
     const diagnostics = payload.dynos[0]!.jobs[0]!.diagnostics;
     expect(diagnostics[0]).toBe(
       'setup command `pnpm install` exited with code 1',
