@@ -52,7 +52,8 @@ again to create and save a new one.
 Environment overrides:
 
 - `DYNOBOX_TOKEN`: use a token from the environment instead of local config.
-- `DYNOBOX_API_URL`: point the CLI at a different API URL.
+- `DYNOBOX_API_URL`: development override for the Dynobox API. Commands still
+  require and send Dynobox authentication.
 - `DYNOBOX_DASHBOARD_URL`: point `dynobox login` at a different dashboard URL.
 - `DYNOBOX_UPLOAD_URL`: post `--save-run` payloads to an exact custom URL.
 
@@ -398,9 +399,10 @@ before asking you to try `--save-run` again later.
 
 Set `DYNOBOX_UPLOAD_URL` to send the same JSON payload to an exact custom URL
 instead. Custom uploads do not require Dynobox authentication and never include
-the Dynobox `Authorization` header. All uploads are best-effort: a failed upload
-prints a warning and never changes job status, assertion results, or the exit
-code.
+the Dynobox `Authorization` header. Unlike `DYNOBOX_API_URL`, this overrides only
+the saved-run POST destination and bypasses the Dynobox authentication preflight.
+All uploads are best-effort: a failed upload prints a warning and never changes
+job status, assertion results, or the exit code.
 
 The uploaded summary includes the current Git commit, branch, dirty state, and
 configured Git user name/email when available, plus scenario and assertion
