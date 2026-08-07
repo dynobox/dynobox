@@ -21,11 +21,14 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 - Added scenario `cliMocks` authoring types and validation.
 
+---
+
+## @dynobox/run-schema@0.4.0 — 2026-08-06
+
 ### `@dynobox/run-schema`
 
-- Added run upload schema v4 with structured Git metadata.
-
----
+- Added run upload schema v4 with structured Git metadata and exposed that
+  metadata in stored run response types.
 
 ## dynobox@0.10.2 — 2026-07-28
 
