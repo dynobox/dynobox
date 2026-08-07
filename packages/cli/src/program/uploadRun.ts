@@ -236,7 +236,7 @@ export async function collectGitMetadata(
     readGitValue(['branch', '--show-current'], cwd),
     readGitValue(['config', '--get', 'user.name'], cwd),
     readGitValue(['config', '--get', 'user.email'], cwd),
-    readGitValue(['status', '--porcelain'], cwd),
+    readGitValue(['status', '--porcelain'], cwd, true),
   ]);
 
   return {
@@ -254,11 +254,12 @@ export async function collectGitMetadata(
 async function readGitValue(
   args: string[],
   cwd: string,
+  preserveEmpty = false,
 ): Promise<string | null> {
   try {
     const {stdout} = await execFileAsync('git', args, {cwd});
     const value = stdout.trim();
-    return value.length === 0 ? null : value;
+    return value.length === 0 && !preserveEmpty ? null : value;
   } catch {
     return null;
   }

@@ -29,6 +29,15 @@ describe('collectGitMetadata', () => {
         cwd,
         stdio: 'ignore',
       });
+
+      expect(await collectGitMetadata(cwd)).toEqual({
+        commit: expect.stringMatching(/^[0-9a-f]{40}$/),
+        branch: 'feature/upload',
+        userName: 'Upload User',
+        userEmail: 'upload@example.com',
+        dirty: false,
+      });
+
       writeFileSync(join(cwd, 'dyno.txt'), 'changed\n');
 
       expect(await collectGitMetadata(cwd)).toEqual({

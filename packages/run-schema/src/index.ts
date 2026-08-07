@@ -357,6 +357,7 @@ export type RunSummary = {
   cliVersion: string;
   schemaVersion: RunUploadSchemaVersion;
   gitHash: string | null;
+  git: RunUploadGitV4 | null;
   /** The path the CLI was pointed at when the run was created. */
   inputPath: string | null;
   status: RunUploadStatus;
