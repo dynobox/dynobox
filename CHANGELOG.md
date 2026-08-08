@@ -8,6 +8,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.11.0 — 2026-08-07
+
 ### `dynobox` (CLI)
 
 - Added experimental scenario-scoped CLI mocks with static, sequential, and
@@ -16,6 +20,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Added unauthenticated custom run uploads through `DYNOBOX_UPLOAD_URL` and
   included current Git revision, branch, dirty state, and configured identity in
   run payloads.
+
+## @dynobox/sdk@0.7.0 — 2026-08-07
 
 ### `@dynobox/sdk`
 
