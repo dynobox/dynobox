@@ -52,8 +52,10 @@ again to create and save a new one.
 Environment overrides:
 
 - `DYNOBOX_TOKEN`: use a token from the environment instead of local config.
-- `DYNOBOX_API_URL`: point the CLI at a different API URL.
+- `DYNOBOX_API_URL`: development override for the Dynobox API. Commands still
+  require and send Dynobox authentication.
 - `DYNOBOX_DASHBOARD_URL`: point `dynobox login` at a different dashboard URL.
+- `DYNOBOX_UPLOAD_URL`: post `--save-run` payloads to an exact custom URL.
 
 ### `dynobox whoami`
 
@@ -389,22 +391,29 @@ action, but they do not change job status, assertion results, or exit codes.
 ## Saving Runs
 
 `--save-run` uploads a compact summary of the run to the Dynobox dashboard after
-execution. It requires a token: sign in with `dynobox login` or set `DYNOBOX_TOKEN`.
-If no token is available, the command errors before running any scenarios rather
-than wasting the run. When a token is present, the CLI verifies it before local
-execution and retries transient verification failures before asking you to try
-`--save-run` again later. After verification succeeds, upload is best-effort: a
-failed upload prints a warning and never changes job status, assertion results,
-or the exit code.
+execution. Dashboard uploads require a token: sign in with `dynobox login` or
+set `DYNOBOX_TOKEN`. If no token is available, the command errors before running
+any scenarios rather than wasting the run. When a token is present, the CLI
+verifies it before local execution and retries transient verification failures
+before asking you to try `--save-run` again later.
 
-The uploaded summary includes scenario and assertion details. For all jobs,
+Set `DYNOBOX_UPLOAD_URL` to send the same JSON payload to an exact custom URL
+instead. Custom uploads do not require Dynobox authentication and never include
+the Dynobox `Authorization` header. Unlike `DYNOBOX_API_URL`, this overrides only
+the saved-run POST destination and bypasses the Dynobox authentication preflight.
+All uploads are best-effort: a failed upload prints a warning and never changes
+job status, assertion results, or the exit code.
+
+The uploaded summary includes the current Git commit, branch, dirty state, and
+configured Git user name/email when available, plus scenario and assertion
+details. For all jobs,
 assertion records include the authored definition, display-ready
 expectation/observed text, and compact matched evidence when available, including
 requested HTTP endpoint URLs, tool commands, and verification output. This is
 richer than the local `--reporter json` output. Failed jobs additionally include
 diagnostics such as command and harness error output. These values are
-length-capped but are **not redacted**, so avoid `--save-run` for runs whose
-assertion data, evidence, or diagnostics may contain secrets.
+length-capped but are **not redacted**, so avoid `--save-run` for runs whose Git
+identity, assertion data, evidence, or diagnostics should not be shared.
 
 ## Dashboard
 

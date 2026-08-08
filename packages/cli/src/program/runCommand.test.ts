@@ -243,7 +243,11 @@ describe('dynobox run — upload', () => {
       }),
     );
     expect(payload).toMatchObject({
-      schemaVersion: 3,
+      schemaVersion: 4,
+      git: expect.objectContaining({
+        commit: expect.any(String),
+        dirty: expect.any(Boolean),
+      }),
       inputPath: fixtures.validConfigPath,
       status: 'passed',
       totals: {jobs: 1, passed: 1, failed: 0, warnings: 0},
@@ -268,6 +272,37 @@ describe('dynobox run — upload', () => {
     expect(JSON.stringify(payload)).not.toContain('workDir');
     expect(JSON.stringify(payload)).not.toContain('artifacts');
     expect(JSON.stringify(payload)).not.toContain('harnessOutput');
+  });
+
+  it('posts to a custom upload URL without Dynobox authentication', async () => {
+    const fetchMock = stubFetch(async () =>
+      Response.json({url: 'https://uploads.example/runs/123'}),
+    );
+
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--save-run'],
+      {
+        env: {
+          DYNOBOX_TOKEN: 'must-not-leak',
+          DYNOBOX_UPLOAD_URL: 'https://uploads.example/run-hook',
+        },
+        harnesses: [createPassingHarness()],
+      },
+    );
+    const [, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const payload = JSON.parse(String(request.body)) as Record<string, unknown>;
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('Saved run: https://uploads.example/runs/123\n');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://uploads.example/run-hook',
+      expect.objectContaining({
+        headers: {'content-type': 'application/json'},
+        method: 'POST',
+      }),
+    );
+    expect(payload).toMatchObject({schemaVersion: 4});
   });
 
   it('only uploads dynos with jobs after scenario filtering', async () => {

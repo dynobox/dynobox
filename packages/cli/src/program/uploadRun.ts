@@ -14,9 +14,10 @@ import {
   type RunUploadAssertionEvidenceV2,
   type RunUploadAssertionV2,
   type RunUploadDynoV3,
+  type RunUploadGitV4,
   type RunUploadJobV3,
-  type RunUploadV3 as RunUploadPayloadV3,
-  RunUploadV3,
+  type RunUploadV4 as RunUploadPayloadV4,
+  RunUploadV4,
 } from '@dynobox/run-schema';
 import type {
   LocalRunnerJob,
@@ -82,24 +83,27 @@ export type UploadRunInput = {
 };
 
 export async function uploadRun(input: UploadRunInput): Promise<void> {
-  const token = resolveAuthToken(
-    input.env === undefined ? {} : {env: input.env},
-  );
-  if (token === null) {
+  const customUploadUrl = resolveCustomUploadUrl(input.env);
+  const token =
+    customUploadUrl === null
+      ? resolveAuthToken(input.env === undefined ? {} : {env: input.env})
+      : null;
+  if (customUploadUrl === null && token === null) {
     input.writeStderr(
       'warning: run was not saved; no Dynobox token found. Run `dynobox login` or set DYNOBOX_TOKEN.\n',
     );
     return;
   }
 
+  const git = await collectGitMetadata();
   const payload = buildRunUploadPayload({
     dynos: input.dynos,
     results: input.results,
     runFailed: input.runFailed,
     inputPath: input.inputPath,
-    gitHash: await collectGitHash(),
+    git,
   });
-  const payloadResult = RunUploadV3.safeParse(payload);
+  const payloadResult = RunUploadV4.safeParse(payload);
   if (!payloadResult.success) {
     input.writeStderr(
       `warning: could not save run; generated payload failed validation (${payloadResult.error.issues[0]?.path.join('.') || 'payload'}).\n`,
@@ -108,15 +112,18 @@ export async function uploadRun(input: UploadRunInput): Promise<void> {
   }
 
   try {
-    const response = await fetch(`${resolveApiUrl(input.env)}/runs`, {
-      body: JSON.stringify(payloadResult.data),
-      headers: {
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
+    const response = await fetch(
+      customUploadUrl ?? `${resolveApiUrl(input.env)}/runs`,
+      {
+        body: JSON.stringify(payloadResult.data),
+        headers: {
+          ...(token === null ? {} : {authorization: `Bearer ${token}`}),
+          'content-type': 'application/json',
+        },
+        method: 'POST',
+        signal: AbortSignal.timeout(RUN_UPLOAD_TIMEOUT_MS),
       },
-      method: 'POST',
-      signal: AbortSignal.timeout(RUN_UPLOAD_TIMEOUT_MS),
-    });
+    );
 
     if (!response.ok) {
       const message = await readErrorMessage(response);
@@ -139,8 +146,8 @@ export function buildRunUploadPayload(input: {
   results: readonly LocalRunnerResult[];
   runFailed?: boolean;
   inputPath: string;
-  gitHash: string | null;
-}): RunUploadPayloadV3 {
+  git: RunUploadGitV4 | null;
+}): RunUploadPayloadV4 {
   const allJobs = input.dynos.flatMap((dyno) => dyno.jobs);
   if (input.results.length !== allJobs.length) {
     throw new Error(
@@ -159,7 +166,8 @@ export function buildRunUploadPayload(input: {
     schemaVersion: RUN_UPLOAD_SCHEMA_VERSION,
     createdAt: new Date().toISOString(),
     cliVersion: readPackageVersion(),
-    gitHash: input.gitHash,
+    gitHash: input.git?.commit ?? null,
+    git: input.git,
     inputPath: truncate(input.inputPath, RUN_UPLOAD_LIMITS.inputPathLength),
     status: input.runFailed === true || failed > 0 ? 'failed' : 'passed',
     totals: {
@@ -207,16 +215,61 @@ function buildRunUploadDyno(
   };
 }
 
-export async function collectGitHash(): Promise<string | null> {
+export function resolveCustomUploadUrl(
+  env: AuthEnvironment = process.env,
+): string | null {
+  const value = env.DYNOBOX_UPLOAD_URL?.trim();
+  return value === undefined || value.length === 0 ? null : value;
+}
+
+export async function collectGitMetadata(
+  cwd: string = process.cwd(),
+): Promise<RunUploadGitV4 | null> {
+  if (
+    (await readGitValue(['rev-parse', '--is-inside-work-tree'], cwd)) !== 'true'
+  ) {
+    return null;
+  }
+
+  const [commit, branch, userName, userEmail, status] = await Promise.all([
+    readGitValue(['rev-parse', 'HEAD'], cwd),
+    readGitValue(['branch', '--show-current'], cwd),
+    readGitValue(['config', '--get', 'user.name'], cwd),
+    readGitValue(['config', '--get', 'user.email'], cwd),
+    readGitValue(['status', '--porcelain'], cwd, true),
+  ]);
+
+  return {
+    commit: truncateNullable(commit, RUN_UPLOAD_LIMITS.gitHashLength),
+    branch: truncateNullable(branch, RUN_UPLOAD_LIMITS.gitBranchLength),
+    userName: truncateNullable(userName, RUN_UPLOAD_LIMITS.gitUserNameLength),
+    userEmail: truncateNullable(
+      userEmail,
+      RUN_UPLOAD_LIMITS.gitUserEmailLength,
+    ),
+    dirty: status === null ? null : status.length > 0,
+  };
+}
+
+async function readGitValue(
+  args: string[],
+  cwd: string,
+  preserveEmpty = false,
+): Promise<string | null> {
   try {
-    const {stdout} = await execFileAsync('git', ['rev-parse', 'HEAD']);
-    const hash = stdout.trim();
-    return hash.length === 0
-      ? null
-      : truncate(hash, RUN_UPLOAD_LIMITS.gitHashLength);
+    const {stdout} = await execFileAsync('git', args, {cwd});
+    const value = stdout.trim();
+    return value.length === 0 && !preserveEmpty ? null : value;
   } catch {
     return null;
   }
+}
+
+function truncateNullable(
+  value: string | null,
+  maxLength: number,
+): string | null {
+  return value === null ? null : truncate(value, maxLength);
 }
 
 function buildRunUploadJob(

@@ -1,7 +1,8 @@
 import {z} from 'zod';
 
 export const RUN_UPLOAD_V2_SCHEMA_VERSION = 2 as const;
-export const RUN_UPLOAD_SCHEMA_VERSION = 3 as const;
+export const RUN_UPLOAD_V3_SCHEMA_VERSION = 3 as const;
+export const RUN_UPLOAD_SCHEMA_VERSION = 4 as const;
 
 export const RUN_UPLOAD_STATUS = ['passed', 'failed'] as const;
 export const RUN_UPLOAD_JOB_STATUS = [
@@ -14,6 +15,9 @@ export const RUN_UPLOAD_JOB_STATUS = [
 export const RUN_UPLOAD_LIMITS = {
   cliVersionLength: 64,
   gitHashLength: 128,
+  gitBranchLength: 512,
+  gitUserNameLength: 256,
+  gitUserEmailLength: 320,
   inputPathLength: 256,
   targetLength: 256,
   dynoPathLength: 512,
@@ -282,13 +286,29 @@ export const RunUploadV2 = z
   .strict();
 
 export const RunUploadV3 = RunUploadV2.extend({
-  schemaVersion: z.literal(RUN_UPLOAD_SCHEMA_VERSION),
+  schemaVersion: z.literal(RUN_UPLOAD_V3_SCHEMA_VERSION),
   dynos: z.array(runUploadDynoV3Schema).max(RUN_UPLOAD_LIMITS.dynos),
+}).strict();
+
+export const runUploadGitV4Schema = z
+  .object({
+    commit: optionalNullableString(RUN_UPLOAD_LIMITS.gitHashLength),
+    branch: optionalNullableString(RUN_UPLOAD_LIMITS.gitBranchLength),
+    userName: optionalNullableString(RUN_UPLOAD_LIMITS.gitUserNameLength),
+    userEmail: optionalNullableString(RUN_UPLOAD_LIMITS.gitUserEmailLength),
+    dirty: z.boolean().nullable(),
+  })
+  .strict();
+
+export const RunUploadV4 = RunUploadV3.extend({
+  schemaVersion: z.literal(RUN_UPLOAD_SCHEMA_VERSION),
+  git: runUploadGitV4Schema.nullable(),
 }).strict();
 
 export const RunUpload = z.discriminatedUnion('schemaVersion', [
   RunUploadV2,
   RunUploadV3,
+  RunUploadV4,
 ]);
 
 export const RunSharingUpdate = z
@@ -319,11 +339,14 @@ export type RunUploadV2 = z.infer<typeof RunUploadV2>;
 export type RunUploadJobV3 = z.infer<typeof runUploadJobV3Schema>;
 export type RunUploadDynoV3 = z.infer<typeof runUploadDynoV3Schema>;
 export type RunUploadV3 = z.infer<typeof RunUploadV3>;
+export type RunUploadGitV4 = z.infer<typeof runUploadGitV4Schema>;
+export type RunUploadV4 = z.infer<typeof RunUploadV4>;
 export type RunUpload = z.infer<typeof RunUpload>;
 export type RunUploadSchemaVersion = RunUpload['schemaVersion'];
 
 export type RunUploadCreateInputV2 = z.input<typeof RunUploadV2>;
 export type RunUploadCreateInputV3 = z.input<typeof RunUploadV3>;
+export type RunUploadCreateInputV4 = z.input<typeof RunUploadV4>;
 
 export type RunSharingUpdate = z.infer<typeof RunSharingUpdate>;
 
@@ -334,6 +357,7 @@ export type RunSummary = {
   cliVersion: string;
   schemaVersion: RunUploadSchemaVersion;
   gitHash: string | null;
+  git: RunUploadGitV4 | null;
   /** The path the CLI was pointed at when the run was created. */
   inputPath: string | null;
   status: RunUploadStatus;

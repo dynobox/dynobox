@@ -162,13 +162,14 @@ failed iteration evidence for diagnosis.
 Dynobox runs locally and works without an account. Use terminal output for
 development, `--reporter json` for automation, or authenticate with
 `dynobox login` and add `--save-run` to publish a compact run summary to the
-[Dynobox dashboard](https://dash.dynobox.xyz).
+[Dynobox dashboard](https://dash.dynobox.xyz). Set `DYNOBOX_UPLOAD_URL` to post
+the same payload to your own endpoint without sending Dynobox credentials.
 
-Saved-run data is length-capped but not redacted. All jobs can include authored
-assertion data and matched evidence such as requested endpoint URLs, tool
-commands, and verification output. Failed jobs can additionally include command
-or harness diagnostics. Do not use `--save-run` when those values may contain
-secrets.
+Saved-run data is length-capped but not redacted. It includes available Git
+identity and revision metadata. All jobs can include authored assertion data and
+matched evidence such as requested endpoint URLs, tool commands, and
+verification output. Failed jobs can additionally include command or harness
+diagnostics. Do not use `--save-run` when those values should not be shared.
 
 ## How Dynobox differs
 

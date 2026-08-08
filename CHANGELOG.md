@@ -13,12 +13,22 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Added scenario-scoped CLI mocks with static, sequential, and handler
   responses, local call recording, command assertion integration, YAML support,
   and verbose/debug/JSON reporting.
+- Added unauthenticated custom run uploads through `DYNOBOX_UPLOAD_URL` and
+  included current Git revision, branch, dirty state, and configured identity in
+  run payloads.
 
 ### `@dynobox/sdk`
 
 - Added scenario `cliMocks` authoring types and validation.
 
 ---
+
+## @dynobox/run-schema@0.4.0 — 2026-08-06
+
+### `@dynobox/run-schema`
+
+- Added run upload schema v4 with structured Git metadata and exposed that
+  metadata in stored run response types.
 
 ## dynobox@0.10.2 — 2026-07-28
 

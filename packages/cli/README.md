@@ -102,13 +102,16 @@ saved token. CLI tokens expire after 24 hours; when a token expires, run
 
 Authenticated runs can upload a compact dashboard summary with
 `dynobox run --save-run`. You can also set `DYNOBOX_TOKEN` instead of using the
-saved local config.
+saved local config. To post the same payload to your own endpoint without
+Dynobox authentication, set `DYNOBOX_UPLOAD_URL` to the exact destination URL.
+The CLI does not send a Dynobox `Authorization` header to custom upload URLs.
 
-Saved-run data is length-capped but not redacted. All jobs can include authored
-assertion data and matched evidence such as requested endpoint URLs, tool
-commands, and verification output. Failed jobs can additionally include command
-or harness diagnostics. Do not use `--save-run` when those values may contain
-secrets.
+Saved-run data is length-capped but not redacted. It includes available Git
+commit, branch, dirty-state, and configured user name/email metadata. All jobs
+can include authored assertion data and matched evidence such as requested
+endpoint URLs, tool commands, and verification output. Failed jobs can
+additionally include command or harness diagnostics. Do not use `--save-run`
+when those values should not be shared.
 
 ## Documentation
 

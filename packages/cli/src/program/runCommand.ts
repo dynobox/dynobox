@@ -87,7 +87,7 @@ import {
   validateReporterFormat,
   validateScenarioFilters,
 } from './options.js';
-import {uploadRun} from './uploadRun.js';
+import {resolveCustomUploadUrl, uploadRun} from './uploadRun.js';
 
 const AUTH_PREFLIGHT_ATTEMPTS = 3;
 const AUTH_PREFLIGHT_RETRY_BASE_DELAY_MS = 100;
@@ -158,7 +158,10 @@ export async function runCommandAction(
 
   // Fail fast when --save-run cannot authenticate before doing any expensive
   // local scenario work that would only fail during upload.
-  if (commandFlags.saveRun === true) {
+  if (
+    commandFlags.saveRun === true &&
+    resolveCustomUploadUrl(options.env) === null
+  ) {
     await validateSaveRunAuth({inputLabel, env: options.env, writeStderr});
   }
 
