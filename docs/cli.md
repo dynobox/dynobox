@@ -198,8 +198,8 @@ validated config and a final summary record.
                            paths, and debug logs.
 --reporter <fmt>           Output reporter format: text or json.
 --config <path>            Use a specific dyno.config.json file.
---save-run                 Upload a compact run summary to the dashboard
-                           (requires a token; see Saving Runs below).
+--save-run                 Upload a compact run summary to the dashboard or
+                           DYNOBOX_UPLOAD_URL (see Saving Runs below).
 ```
 
 Harness IDs are `claude-code`, `codex`, and `opencode`.
@@ -401,12 +401,23 @@ Set `DYNOBOX_UPLOAD_URL` to send the same JSON payload to an exact custom URL
 instead. Custom uploads do not require Dynobox authentication and never include
 the Dynobox `Authorization` header. Unlike `DYNOBOX_API_URL`, this overrides only
 the saved-run POST destination and bypasses the Dynobox authentication preflight.
-All uploads are best-effort: a failed upload prints a warning and never changes
-job status, assertion results, or the exit code.
+
+```bash
+DYNOBOX_UPLOAD_URL='https://uploads.example/run-hook' \
+  dynobox run --save-run
+```
+
+The CLI sends an HTTP `POST` with `Content-Type: application/json` and a strict
+run upload schema v4 body. Any `2xx` response succeeds. A JSON response containing
+a non-empty `url` string is printed as `Saved run: <url>`; other successful
+responses print `Saved run.` The request times out after 10 seconds. All uploads
+are best-effort: a failed upload prints a warning and never changes job status,
+assertion results, or the exit code.
 
 The uploaded summary includes the current Git commit, branch, dirty state, and
 configured Git user name/email when available, plus scenario and assertion
-details. For all jobs,
+details. Git metadata is collected from the directory where the CLI process was
+started and is `null` when that directory is not a Git worktree. For all jobs,
 assertion records include the authored definition, display-ready
 expectation/observed text, and compact matched evidence when available, including
 requested HTTP endpoint URLs, tool commands, and verification output. This is
@@ -419,8 +430,8 @@ identity, assertion data, evidence, or diagnostics should not be shared.
 
 [dash.dynobox.xyz](https://dash.dynobox.xyz) is the Dynobox web dashboard. It is
 used for CLI token creation and saved run pages. When `--save-run` uploads
-successfully, the CLI prints the returned dashboard URL so you can review or
-share the run.
+successfully to Dynobox, the CLI prints the returned dashboard URL so you can
+review or share the run. A custom endpoint may return its own URL instead.
 
 ## Development Checkout
 

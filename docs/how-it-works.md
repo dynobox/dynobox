@@ -10,9 +10,11 @@ lifecycle:
 ```text
 fresh work directory
   -> fixtures and setup
-  -> harness runs under observation
+  -> optional CLI mock shims are installed
+  -> harness runs under observation and mock calls are recorded
   -> evidence is captured
-  -> assertions evaluate the evidence
+  -> observation assertions evaluate harness-phase evidence
+  -> verification assertions run
   -> pass or fail with recorded results
 ```
 
@@ -50,6 +52,14 @@ authentication, model configuration, permission rules, and sandbox behavior.
 Dynobox controls the test lifecycle around it rather than replacing the harness
 runtime.
 
+When a scenario configures experimental CLI mocks, Dynobox prepends generated
+shims to the harness process's `PATH`. Bare executable calls from the harness or
+its child processes can then receive configured static, sequential, or
+handler-based responses. Setup commands and harness version detection use the
+real `PATH`. Explicit executable paths and commands that do not use `PATH`
+lookup can bypass the shims, so CLI mocking is a behavioral test double rather
+than a sandbox.
+
 While the process runs, the harness adapter reads its structured output and
 emits tool events. After the process exits, the adapter extracts the complete
 transcript, final assistant message, tool events, exit code, stderr, and timing.
@@ -66,6 +76,9 @@ Dynobox assembles several evidence sources from the harness run:
 - **Normalized commands:** shell tool events are split into command segments and
   normalized into executable and argument data. Assertions can use that
   structure instead of matching an entire raw shell string.
+- **CLI mock calls:** experimental CLI mocks record the executable, arguments,
+  working directory, timestamp, response, and exit code. Child environment
+  values supplied to a handler are not retained in the call record.
 - **Artifacts:** file assertions inspect the final state of the temporary work
   directory. Unchanged checks compare final bytes with the baseline captured
   after fixtures and setup.
@@ -102,8 +115,12 @@ against the captured evidence:
   work directory and checks its exit code or output.
 
 Observation assertions are evaluated before verification commands can mutate
-the work directory. Every assertion receives its own result and evidence; the
-job passes only when every assertion passes.
+the work directory. Command and sequence assertions use CLI mock calls captured
+through the end of the harness phase; later verification calls remain in local
+reporting but cannot satisfy those assertions. Mock sequence exhaustion, handler
+errors or timeouts, and unfinished calls fail the job as lifecycle errors. Every
+assertion receives its own result and evidence; the job passes only when every
+assertion passes.
 
 See the [assertion reference](./config-authoring.md#assertions) for all matchers.
 
@@ -113,12 +130,14 @@ The final job status distinguishes a passing run from setup, harness, and
 assertion failures. Terminal output shows failed expectations and matched or
 observed evidence. `--verbose` expands lifecycle details, while `--debug` also
 prints work-directory and artifact paths and writes available transcript, chat
-history, tool-event, and stderr logs into the job directory.
+history, tool-event, CLI mock-call, and stderr logs into the job directory.
 
 For automation, `--reporter json` returns the structured job and assertion
-results. Authenticated runs can use `--save-run` to upload a compact,
-length-capped summary to the Dynobox dashboard. Saved data is not redacted, so
-do not upload runs whose evidence may contain secrets.
+results. `--save-run` can upload a compact, length-capped summary to the
+authenticated Dynobox dashboard or an unauthenticated custom
+`DYNOBOX_UPLOAD_URL` endpoint. Uploads include available Git revision and
+identity metadata from the directory where the CLI was started. Saved data is
+not redacted, so do not upload runs whose evidence may contain secrets.
 
 See [Getting Started](./getting-started.md#debug-a-run) for local debugging and
 the [CLI Reference](./cli.md#output-modes) for reporter details.

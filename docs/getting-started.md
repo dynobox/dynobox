@@ -48,12 +48,16 @@ dynobox whoami
 ```
 
 After authenticating, you can save a run summary with `dynobox run --save-run`.
-Saved-run data is length-capped but not redacted. All jobs can include authored
-assertion data and matched evidence such as requested endpoint URLs, tool
-commands, and verification output. Failed jobs can additionally include command
-or harness diagnostics. Do not use `--save-run` when those values may contain
-secrets. Local CLI output and `--reporter json` remain available without
-authentication.
+Alternatively, set `DYNOBOX_UPLOAD_URL` to post the same schema v4 JSON payload
+to your own endpoint without a Dynobox token or authorization header.
+
+Saved-run data is length-capped but not redacted. It includes available Git
+commit, branch, dirty-state, and configured user name/email metadata from the
+directory where the CLI was started. All jobs can include authored assertion
+data and matched evidence such as requested endpoint URLs, tool commands, and
+verification output. Failed jobs can additionally include command or harness
+diagnostics. Do not use `--save-run` when those values may contain secrets. Local
+CLI output and `--reporter json` remain available without authentication.
 
 ## Create Your First Dyno
 
@@ -233,7 +237,9 @@ dynobox run --save-run
 ```
 
 `--verbose` expands every job with setup, harness, and assertion phase rows. It
-also lists parsed command segments when command assertions are present.
+also lists parsed command segments when command assertions are present. For
+scenarios using experimental CLI mocks, it lists configured executables and
+recorded calls.
 
 `--debug` includes everything from `--verbose`, prints each job's temporary work
 directory and artifact paths, and writes debug logs when data is available:
@@ -241,7 +247,11 @@ directory and artifact paths, and writes debug logs when data is available:
 - `dynobox-transcript.log`
 - `dynobox-chat-history.jsonl`
 - `dynobox-tool-events.json`
+- `dynobox-cli-mocks.json`
 - `dynobox-stderr.log`
+
+`dynobox-cli-mocks.json` records each completed mock call, including arguments,
+working directory, output, and exit code, but not child environment values.
 
 Dynobox uses each harness's normal permission behavior by default. For trusted
 local evals that intentionally need elevated or automatically approved access,
@@ -259,5 +269,5 @@ but still enforces explicit deny rules.
 - Write more scenarios with [Config Authoring](./config-authoring.md).
 - Add Dynobox to automation with [CI Integration](./ci.md).
 - Check exact flags and output fields in the [CLI Reference](./cli.md).
-- Use `dynobox run --save-run` when you want a dashboard URL for a compact run
-  summary.
+- Use `dynobox run --save-run` to send a compact run summary to the dashboard or
+  a custom `DYNOBOX_UPLOAD_URL` endpoint.

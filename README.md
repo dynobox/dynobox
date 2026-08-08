@@ -37,6 +37,8 @@ capture evidence, assert on tools, commands, files, and answers.
   more to come) to find behavior that varies between environments.
 - Test multi-step tasks in fresh temporary work directories, repeat them to
   expose flaky behavior, and keep the evidence when something fails.
+- Replace bare executable calls with scenario-scoped static, sequential, or
+  handler responses using [experimental CLI mocks](https://docs.dynobox.xyz/config-authoring/#cli-mocks).
 
 ## Requirements
 

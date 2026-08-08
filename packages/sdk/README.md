@@ -38,6 +38,36 @@ export default defineDyno({
 See the [Config Authoring reference](https://docs.dynobox.xyz/config-authoring)
 for setup, fixtures, harness options, YAML, and every assertion type.
 
+## Experimental CLI Mocks
+
+Scenario `cliMocks` can replace bare executable calls with a static response,
+an ordered response sequence, or a JavaScript/TypeScript handler:
+
+```ts
+cliMocks: {
+  npm: {response: {exitCode: 0, stdout: '0.10.2'}},
+  vitest: {
+    responses: [
+      {exitCode: 1, stderr: 'failed'},
+      {exitCode: 0, stdout: 'passed'},
+    ],
+    onExhausted: 'repeat-last',
+  },
+  deploy: {
+    handler: async ({argv, cwd, env}) => ({
+      exitCode: argv[0] === 'production' ? 0 : 1,
+      stdout: cwd,
+      stderr: env.CI ? '' : 'CI is not set',
+    }),
+  },
+}
+```
+
+CLI mocking is experimental. Its authoring and reporting contracts may change
+between releases. See the [CLI Mocks reference](https://docs.dynobox.xyz/config-authoring/#cli-mocks)
+for executable-name restrictions, response validation, assertion behavior, and
+platform limits.
+
 ## Current exports
 
 ### `@dynobox/sdk`
@@ -60,6 +90,13 @@ Authoring helpers for user config files:
 - `sequence.inOrder()`
 - `verify.succeeds()`, `verify.command()`
 - `dyno` helpers
+
+CLI mock authoring types:
+
+- `CliMockResponse`
+- `CliMockHandlerContext`
+- `CliMockConfig`
+- `ScenarioCliMocks`
 
 `defineDyno(...)` also applies authoring defaults for JavaScript and
 TypeScript dynos: adjacent `fixtures/` directories are attached to scenarios

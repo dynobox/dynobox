@@ -71,27 +71,30 @@ const docMetadata: Record<
 > = {
   'README.md': {
     agentSummary:
-      'Overview of Dynobox, the dashboard, supported harnesses, config formats, observable assertions, and current local runner limits.',
+      'Overview of Dynobox, saved-run destinations, supported harnesses, config formats, observable assertions, experimental CLI mocks, and current local runner limits.',
     description:
       'Dynobox documentation for local agent and skill workflow testing.',
     topics: [
       'overview',
       'agent testing',
       'dashboard',
+      'custom uploads',
       'harnesses',
       'assertions',
+      'CLI mocks',
       'config formats',
     ],
   },
   'getting-started.md': {
     agentSummary:
-      'Install Dynobox, select an installed harness, run trusted dynos locally, optionally save runs, and debug agent evals.',
+      'Install Dynobox, select an installed harness, run trusted dynos locally, optionally save runs to Dynobox or a custom endpoint, and debug agent evals.',
     description:
       'Install Dynobox, create a first dyno, choose a harness, and run local agent workflow tests.',
     topics: [
       'install',
       'auth',
       'dashboard',
+      'custom uploads',
       'init',
       'run',
       'harnesses',
@@ -109,6 +112,7 @@ const docMetadata: Record<
       'fixtures',
       'tool events',
       'command normalization',
+      'CLI mocks',
       'artifacts',
       'transcripts',
       'HTTP capture',
@@ -133,21 +137,22 @@ const docMetadata: Record<
   },
   'config-authoring.md': {
     agentSummary:
-      'Author JavaScript, TypeScript, and YAML dynos with @dynobox/sdk helpers, assertions, harness options, HTTP capture, and reusable scenarios.',
+      'Author JavaScript, TypeScript, and YAML dynos with @dynobox/sdk helpers, assertions, harness options, CLI mocks, HTTP capture, and reusable scenarios.',
     description:
-      'Write Dynobox configs with SDK helpers, YAML objects, harness settings, assertions, HTTP checks, and path helpers.',
+      'Write Dynobox configs with SDK helpers, YAML objects, harness settings, CLI mocks, assertions, HTTP checks, and path helpers.',
     topics: [
       '@dynobox/sdk',
       'defineDyno',
       'YAML',
       'assertions',
+      'CLI mocks',
       'HTTP capture',
       'skills',
     ],
   },
   'cli.md': {
     agentSummary:
-      'Reference for Dynobox commands, trusted-code execution, reporters, exit codes, harnesses, and unredacted saved-run data.',
+      'Reference for Dynobox commands, trusted-code execution, reporters, exit codes, harnesses, custom upload endpoints, and unredacted saved-run data.',
     description:
       'Dynobox CLI command reference, including init, run, reporters, exit codes, and harness requirements.',
     topics: [
@@ -160,6 +165,7 @@ const docMetadata: Record<
       'dynobox run',
       'JSON reporter',
       '--save-run',
+      'DYNOBOX_UPLOAD_URL',
       'trusted code',
       'exit codes',
     ],
