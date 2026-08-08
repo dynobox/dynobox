@@ -55,10 +55,13 @@ runtime.
 When a scenario configures experimental CLI mocks, Dynobox prepends generated
 shims to the harness process's `PATH`. Bare executable calls from the harness or
 its child processes can then receive configured static, sequential, or
-handler-based responses. Setup commands and harness version detection use the
-real `PATH`. Explicit executable paths and commands that do not use `PATH`
-lookup can bypass the shims, so CLI mocking is a behavioral test double rather
-than a sandbox.
+handler-based responses. Shell startup hooks keep the shim directory ahead of
+profile-modified paths. For Codex jobs with CLI mocks, Dynobox disables login
+shell execution and shell snapshots so Codex cannot restore a profile-captured
+`PATH` over the shims. Setup commands and harness version detection use the real
+`PATH`. Explicit executable paths and commands that do not use `PATH` lookup can
+bypass the shims, so CLI mocking is a behavioral test double rather than a
+sandbox.
 
 While the process runs, the harness adapter reads its structured output and
 emits tool events. After the process exits, the adapter extracts the complete

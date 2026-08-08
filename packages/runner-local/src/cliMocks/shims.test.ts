@@ -26,12 +26,24 @@ describe('installCliMockShims', () => {
       requestTimeoutMs: 20,
       basePath: '/usr/bin',
       baseScriptShell: '/bin/bash',
+      baseEnv: {
+        HOME: '/home/test',
+        BASH_ENV: '/home/test/bash-env',
+        ENV: '/home/test/posix-env',
+      },
     });
     const binDir = join(root, 'bin');
+    const shellDir = join(root, 'shell');
 
     expect(statSync(join(binDir, 'vitest')).mode & 0o777).toBe(0o700);
     expect(statSync(join(root, 'client.mjs')).mode & 0o777).toBe(0o600);
     expect(statSync(join(root, 'script-shell')).mode & 0o777).toBe(0o700);
+    expect(statSync(join(shellDir, 'path-hook')).mode & 0o777).toBe(0o600);
+    expect(statSync(join(shellDir, 'bash-env')).mode & 0o777).toBe(0o600);
+    expect(statSync(join(shellDir, 'posix-env')).mode & 0o777).toBe(0o600);
+    expect(statSync(join(shellDir, 'zsh', '.zprofile')).mode & 0o777).toBe(
+      0o600,
+    );
     expect(env).toMatchObject({
       PATH: `${binDir}${delimiter}/usr/bin`,
       DYNOBOX_CLI_MOCK_SOCKET: '/tmp/mock.sock',
@@ -39,6 +51,13 @@ describe('installCliMockShims', () => {
       DYNOBOX_CLI_MOCK_BIN: binDir,
       DYNOBOX_CLI_MOCK_TIMEOUT_MS: '1020',
       DYNOBOX_CLI_MOCK_SCRIPT_SHELL: '/bin/bash',
+      DYNOBOX_CLI_MOCK_PATH_HOOK: join(shellDir, 'path-hook'),
+      DYNOBOX_CLI_MOCK_BASE_BASH_ENV: '/home/test/bash-env',
+      DYNOBOX_CLI_MOCK_BASE_POSIX_ENV: '/home/test/posix-env',
+      DYNOBOX_CLI_MOCK_BASE_ZDOTDIR: '/home/test',
+      BASH_ENV: join(shellDir, 'bash-env'),
+      ENV: join(shellDir, 'posix-env'),
+      ZDOTDIR: join(shellDir, 'zsh'),
       npm_config_script_shell: join(root, 'script-shell'),
       NPM_CONFIG_SCRIPT_SHELL: join(root, 'script-shell'),
     });

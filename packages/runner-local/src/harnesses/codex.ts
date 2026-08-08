@@ -59,6 +59,7 @@ export class CodexHarness implements Harness {
         this.extraArgs,
         input.model,
         input.permissionMode,
+        input.cliMocksEnabled ? input.env : undefined,
       ),
       input,
       cwd: realpathSync(input.workDir),
@@ -85,6 +86,7 @@ export function buildCodexArgs(
   extraArgs: readonly string[] = [],
   model?: string,
   permissionMode?: PermissionMode,
+  cliMockEnv?: Readonly<Record<string, string>>,
 ): string[] {
   return [
     'exec',
@@ -95,8 +97,31 @@ export function buildCodexArgs(
     ...codexPermissionArgs(permissionMode),
     ...(model === undefined ? [] : ['--model', model]),
     ...extraArgs,
+    ...(cliMockEnv === undefined ? [] : codexCliMockArgs(cliMockEnv)),
     prompt,
   ];
+}
+
+export function codexCliMockArgs(
+  env: Readonly<Record<string, string>>,
+): string[] {
+  const args = [
+    'allow_login_shell=false',
+    'features.shell_snapshot=false',
+    'shell_environment_policy.inherit="all"',
+    'shell_environment_policy.ignore_default_excludes=true',
+    'shell_environment_policy.exclude=[]',
+    'shell_environment_policy.include_only=[]',
+  ];
+  for (const name of ['PATH', 'ZDOTDIR', 'BASH_ENV', 'ENV']) {
+    const value = env[name];
+    if (value !== undefined) {
+      args.push(
+        `shell_environment_policy.set.${name}=${JSON.stringify(value)}`,
+      );
+    }
+  }
+  return args.flatMap((value) => ['-c', value]);
 }
 
 function codexPermissionArgs(

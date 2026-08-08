@@ -8,6 +8,11 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Fixed CLI mocks being bypassed when Codex login-shell profiles or shell
+  snapshots restored a real executable PATH ahead of generated mock shims.
+
 ---
 
 ## dynobox@0.11.0 — 2026-08-07

@@ -269,6 +269,7 @@ export async function runJob(
       cliMockController?.env(
         options.env?.PATH ?? process.env.PATH ?? '',
         baseScriptShell,
+        {...process.env, ...options.env},
       ) ?? {};
     const artifactBaselines = captureArtifactBaselines(
       job.scenario.assertions,
@@ -310,6 +311,7 @@ export async function runJob(
         prompt: job.scenario.prompt,
         workDir,
         env: harnessEnv,
+        ...(cliMockController === undefined ? {} : {cliMocksEnabled: true}),
         ...(job.model === undefined ? {} : {model: job.model}),
         ...(job.permissionMode === undefined
           ? {}
@@ -524,6 +526,7 @@ export async function runJob(
       cliMockController?.env(
         options.env?.PATH ?? process.env.PATH ?? '',
         baseScriptShell,
+        {...process.env, ...options.env},
       ) ?? {};
     if (options.env !== undefined || cliMockController !== undefined) {
       verifyOptions.env = {...(options.env ?? {}), ...verifyCliMockEnv};

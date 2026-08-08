@@ -1,4 +1,5 @@
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -209,6 +210,51 @@ describe('CLI mock controller', () => {
 
     expect(env.NPM_CONFIG_SCRIPT_SHELL).toBe(env.npm_config_script_shell);
   });
+
+  it.each(
+    [
+      {shell: '/bin/zsh', profile: '.zprofile'},
+      {shell: '/bin/bash', profile: '.bash_profile'},
+    ].filter(({shell}) => existsSync(shell)),
+  )(
+    'keeps mocks ahead of PATH changes made by $shell login profiles',
+    async ({shell, profile}) => {
+      const {controller, workDir} = await createController({
+        'mocked-cli': {
+          response: {exitCode: 0, stdout: 'mocked', stderr: ''},
+        },
+      });
+      const realBin = join(workDir, 'real-bin');
+      const homeDir = join(workDir, 'home');
+      mkdirSync(realBin);
+      mkdirSync(homeDir);
+      writeFileSync(join(realBin, 'mocked-cli'), '#!/bin/sh\nprintf real', {
+        mode: 0o700,
+      });
+      writeFileSync(
+        join(homeDir, profile),
+        `export PATH=${JSON.stringify(realBin)}:$PATH\n`,
+      );
+
+      const result = await execa(shell, ['-lc', 'mocked-cli login'], {
+        cwd: workDir,
+        env: {
+          ...process.env,
+          HOME: homeDir,
+          ...controller.env(`${realBin}:${process.env.PATH ?? ''}`),
+        },
+        reject: false,
+      });
+
+      expect(result).toMatchObject({exitCode: 0, stdout: 'mocked'});
+      expect(controller.calls()).toEqual([
+        expect.objectContaining({
+          executable: 'mocked-cli',
+          argv: ['login'],
+        }),
+      ]);
+    },
+  );
 
   it('fails closed when the script shell has no mock bin path', async () => {
     const {controller, workDir} = await createController({

@@ -6,6 +6,7 @@ import {afterEach, describe, expect, it} from 'vitest';
 
 import {
   buildCodexArgs,
+  codexCliMockArgs,
   CodexHarness,
   parseCodexJson,
   parseCodexJsonLine,
@@ -86,6 +87,40 @@ fi
     ]);
   });
 
+  it('disables profile PATH restoration while CLI mocks are active', () => {
+    const args = codexCliMockArgs({
+      PATH: '/mock/bin:/usr/bin',
+      ZDOTDIR: '/mock/zsh',
+      BASH_ENV: '/mock/bash-env',
+      ENV: '/mock/posix-env',
+      DYNOBOX_CLI_MOCK_TOKEN: 'secret',
+    });
+
+    expect(args).toEqual([
+      '-c',
+      'allow_login_shell=false',
+      '-c',
+      'features.shell_snapshot=false',
+      '-c',
+      'shell_environment_policy.inherit="all"',
+      '-c',
+      'shell_environment_policy.ignore_default_excludes=true',
+      '-c',
+      'shell_environment_policy.exclude=[]',
+      '-c',
+      'shell_environment_policy.include_only=[]',
+      '-c',
+      'shell_environment_policy.set.PATH="/mock/bin:/usr/bin"',
+      '-c',
+      'shell_environment_policy.set.ZDOTDIR="/mock/zsh"',
+      '-c',
+      'shell_environment_policy.set.BASH_ENV="/mock/bash-env"',
+      '-c',
+      'shell_environment_policy.set.ENV="/mock/posix-env"',
+    ]);
+    expect(args.join(' ')).not.toContain('secret');
+  });
+
   it('extractResult returns transcript, final message, and tool events', () => {
     const harness = new CodexHarness();
     const stdout = jsonl(
@@ -163,6 +198,39 @@ JSONL
         command: 'pnpm test',
       },
     ]);
+  });
+
+  it('passes CLI mock isolation config to the Codex executable', async () => {
+    const scratchRoot = createScratchRoot();
+    const executable = join(scratchRoot, 'fake-codex');
+    const argsLog = join(scratchRoot, 'args.log');
+    writeFileSync(
+      executable,
+      `#!/bin/sh
+printf '%s\n' "$@" > '${argsLog}'
+printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"done"}}'
+`,
+      {mode: 0o755},
+    );
+    const harness = new CodexHarness({executable});
+
+    await harness.run({
+      prompt: 'Run the mock.',
+      workDir: scratchRoot,
+      env: {
+        PATH: '/mock/bin:/usr/bin',
+        ZDOTDIR: '/mock/zsh',
+      },
+      cliMocksEnabled: true,
+    });
+
+    const args = readFileSync(argsLog, 'utf8').trim().split('\n');
+    expect(args).toContain('allow_login_shell=false');
+    expect(args).toContain('features.shell_snapshot=false');
+    expect(args).toContain(
+      'shell_environment_policy.set.PATH="/mock/bin:/usr/bin"',
+    );
+    expect(args.at(-1)).toBe('Run the mock.');
   });
 
   it('deduplicates streamed tool events with the same item id', async () => {
