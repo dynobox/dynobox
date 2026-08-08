@@ -35,10 +35,10 @@ structured `git` metadata:
 
 ```ts
 type RunUploadGitV4 = {
-  commit: string | null;
-  branch: string | null;
-  userName: string | null;
-  userEmail: string | null;
+  commit?: string | null;
+  branch?: string | null;
+  userName?: string | null;
+  userEmail?: string | null;
   dirty: boolean | null;
 };
 ```
