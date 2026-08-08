@@ -93,6 +93,9 @@ letters, numbers, dots, underscores, and hyphens.
 
 ## CLI Mocks
 
+> **Experimental:** CLI mocking is an experimental feature. Its authoring and
+> reporting contracts may change between releases.
+
 Use scenario `cliMocks` to replace bare executable calls made by the harness or
 verification commands. Mocks are scoped to one scenario job and support static
 responses, ordered responses, and JavaScript or TypeScript handlers.
@@ -143,6 +146,10 @@ least one response and default to an exhaustion error. Set `onExhausted` to
 positions are scoped to one scenario/harness/iteration job; harness and
 post-harness verification calls consume the same sequence.
 
+Each executable must configure exactly one of `response`, `responses`, or
+`handler`. Executable keys must be bare names: empty names, `.`, `..`, paths,
+and names containing `/`, `\`, or NUL bytes are rejected.
+
 Handlers receive the invoked arguments, working directory, and child process
 environment visible to the mock shim, which can include credentials or other
 secrets inherited from the harness or nested caller. Handlers must therefore be
@@ -176,6 +183,13 @@ calls and calls from compound shell events, cannot be ordered relative to
 unrelated harness tool events. Mixed sequence assertions that require that
 comparison fail with an explicit diagnostic. CLI mocks currently require macOS
 or Linux.
+
+Command and sequence assertions use the mock-call snapshot captured when the
+harness exits. Later verification calls remain available in reporting but do
+not satisfy observation assertions. A configured nonzero exit is an ordinary
+process result; sequence exhaustion, handler errors or timeouts, and unfinished
+calls are mock lifecycle failures that fail the job even if the harness catches
+the command error.
 
 ## Harnesses
 

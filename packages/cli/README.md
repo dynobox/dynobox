@@ -81,6 +81,11 @@ Dynobox supports assertions for:
   variables.
 - Post-run executable checks with `verify.command(...)`.
 
+Scenario-scoped CLI mocking is experimental. It can replace bare executable
+calls with static, sequential, or handler-based responses and expose recorded
+calls to command assertions. See [CLI Mocks](https://docs.dynobox.xyz/config-authoring/#cli-mocks)
+for the contract and current limits.
+
 ## Common Run Flags
 
 - `--quiet`: compact discovery, dots-and-failures, and summary output for CI.
@@ -91,9 +96,10 @@ Dynobox supports assertions for:
 - `--scenario <pattern>`: run only matching scenarios.
 - `--iterations <count>`: repeat each selected scenario/harness pair.
 - `--permission-mode default|dangerous`: override harness permission behavior.
-- `--save-run`: upload a compact dashboard summary when authenticated.
+- `--save-run`: upload a compact summary to the dashboard or
+  `DYNOBOX_UPLOAD_URL`.
 
-## Auth
+## Authentication And Uploads
 
 Use `dynobox login` to paste a dashboard-generated CLI token into local config,
 then `dynobox whoami` to verify the saved identity. `dynobox logout` removes the
@@ -102,9 +108,10 @@ saved token. CLI tokens expire after 24 hours; when a token expires, run
 
 Authenticated runs can upload a compact dashboard summary with
 `dynobox run --save-run`. You can also set `DYNOBOX_TOKEN` instead of using the
-saved local config. To post the same payload to your own endpoint without
-Dynobox authentication, set `DYNOBOX_UPLOAD_URL` to the exact destination URL.
-The CLI does not send a Dynobox `Authorization` header to custom upload URLs.
+saved local config. To post the schema v4 JSON payload to your own endpoint
+without Dynobox authentication, set `DYNOBOX_UPLOAD_URL` to the exact destination
+URL. The CLI does not send a Dynobox `Authorization` header to custom upload
+URLs.
 
 Saved-run data is length-capped but not redacted. It includes available Git
 commit, branch, dirty-state, and configured user name/email metadata. All jobs
