@@ -118,9 +118,17 @@ fi
 `;
 
 function zshStartupSource(startupFile: string): string {
-  return `if [ -n "\${${BASE_ZDOTDIR_ENV}:-}" ] && [ "$${BASE_ZDOTDIR_ENV}" != "$ZDOTDIR" ] && [ -r "$${BASE_ZDOTDIR_ENV}/${startupFile}" ]; then
-  . "$${BASE_ZDOTDIR_ENV}/${startupFile}"
+  return `_dynobox_cli_mock_zdotdir="$ZDOTDIR"
+_dynobox_cli_mock_base_zdotdir="\${${BASE_ZDOTDIR_ENV}:-}"
+if [ -n "$_dynobox_cli_mock_base_zdotdir" ] && [ "$_dynobox_cli_mock_base_zdotdir" != "$_dynobox_cli_mock_zdotdir" ] && [ -r "$_dynobox_cli_mock_base_zdotdir/${startupFile}" ]; then
+  ZDOTDIR="$_dynobox_cli_mock_base_zdotdir"
+  export ZDOTDIR
+  . "$_dynobox_cli_mock_base_zdotdir/${startupFile}"
+  ${BASE_ZDOTDIR_ENV}="\${ZDOTDIR:-\${HOME:-}}"
 fi
+ZDOTDIR="$_dynobox_cli_mock_zdotdir"
+export ${BASE_ZDOTDIR_ENV} ZDOTDIR
+unset _dynobox_cli_mock_base_zdotdir _dynobox_cli_mock_zdotdir
 . "\${${PATH_HOOK_ENV}:?missing internal configuration}"
 `;
 }

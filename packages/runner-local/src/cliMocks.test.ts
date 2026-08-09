@@ -256,6 +256,56 @@ describe('CLI mock controller', () => {
     },
   );
 
+  it.runIf(existsSync('/bin/zsh'))(
+    'keeps zsh hooks active when .zshenv relocates ZDOTDIR',
+    async () => {
+      const {controller, workDir} = await createController({
+        'mocked-cli': {
+          response: {exitCode: 0, stdout: 'mocked', stderr: ''},
+        },
+      });
+      const realBin = join(workDir, 'real-bin');
+      const homeDir = join(workDir, 'home');
+      const relocatedZdotDir = join(homeDir, 'relocated');
+      mkdirSync(realBin);
+      mkdirSync(homeDir);
+      mkdirSync(relocatedZdotDir);
+      writeFileSync(join(realBin, 'mocked-cli'), '#!/bin/sh\nprintf real', {
+        mode: 0o700,
+      });
+      writeFileSync(
+        join(homeDir, '.zshenv'),
+        'export ZDOTDIR="$HOME/relocated"\n',
+      );
+      writeFileSync(
+        join(relocatedZdotDir, '.zprofile'),
+        `export PATH=${JSON.stringify(realBin)}:$PATH\n`,
+      );
+
+      const result = await execa('/bin/zsh', ['-lc', 'mocked-cli relocated'], {
+        cwd: workDir,
+        env: {
+          ...process.env,
+          HOME: homeDir,
+          ...controller.env(`${realBin}:${process.env.PATH ?? ''}`, undefined, {
+            ...process.env,
+            HOME: homeDir,
+            ZDOTDIR: undefined,
+          }),
+        },
+        reject: false,
+      });
+
+      expect(result).toMatchObject({exitCode: 0, stdout: 'mocked'});
+      expect(controller.calls()).toEqual([
+        expect.objectContaining({
+          executable: 'mocked-cli',
+          argv: ['relocated'],
+        }),
+      ]);
+    },
+  );
+
   it('fails closed when the script shell has no mock bin path', async () => {
     const {controller, workDir} = await createController({
       vitest: {response: {exitCode: 0, stdout: 'mocked', stderr: ''}},
