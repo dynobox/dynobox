@@ -8,6 +8,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.11.1 — 2026-08-09
+
 ### `dynobox` (CLI)
 
 - Fixed CLI mocks being bypassed by common zsh, bash, and interactive POSIX
