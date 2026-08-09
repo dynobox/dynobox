@@ -4,7 +4,7 @@ import {delimiter, join} from 'node:path';
 /** Creates executable shims that forward mocked CLI calls to the controller. */
 
 const SOCKET_ENV = 'DYNOBOX_CLI_MOCK_SOCKET';
-const TOKEN_ENV = 'DYNOBOX_CLI_MOCK_TOKEN';
+const AUTH_ENV = 'DYNOBOX_CLI_MOCK_AUTH';
 const NODE_EXECUTABLE_ENV = 'DYNOBOX_CLI_MOCK_NODE';
 const CLIENT_ENV = 'DYNOBOX_CLI_MOCK_CLIENT';
 const BIN_ENV = 'DYNOBOX_CLI_MOCK_BIN';
@@ -78,7 +78,7 @@ export async function installCliMockShims(
       return {
         PATH: `${binDir}${delimiter}${basePath}`,
         [SOCKET_ENV]: socketPath,
-        [TOKEN_ENV]: token,
+        [AUTH_ENV]: token,
         [NODE_EXECUTABLE_ENV]: process.execPath,
         [CLIENT_ENV]: clientPath,
         [BIN_ENV]: binDir,
@@ -143,7 +143,7 @@ const CLIENT_SOURCE = `import net from 'node:net';
 import {basename} from 'node:path';
 
 const socketPath = process.env.${SOCKET_ENV};
-const token = process.env.${TOKEN_ENV};
+const token = process.env.${AUTH_ENV};
 const requestTimeoutMs = Number.parseInt(process.env.${TIMEOUT_ENV} ?? '', 10);
 const executable = basename(process.argv[2] ?? '');
 const argv = process.argv.slice(3);

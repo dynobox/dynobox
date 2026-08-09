@@ -241,7 +241,11 @@ describe('CLI mock controller', () => {
         env: {
           ...process.env,
           HOME: homeDir,
-          ...controller.env(`${realBin}:${process.env.PATH ?? ''}`),
+          ...controller.env(`${realBin}:${process.env.PATH ?? ''}`, undefined, {
+            ...process.env,
+            HOME: homeDir,
+            ZDOTDIR: undefined,
+          }),
         },
         reject: false,
       });
@@ -539,7 +543,7 @@ describe('CLI mock controller', () => {
     await new Promise<void>((resolve) => client.once('connect', resolve));
     client.write(
       `${JSON.stringify({
-        token: env.DYNOBOX_CLI_MOCK_TOKEN,
+        token: env.DYNOBOX_CLI_MOCK_AUTH,
         executable: 'delayed',
         argv: [],
         cwd: workDir,

@@ -57,14 +57,14 @@ shims to the harness process's `PATH`. Bare executable calls from the harness or
 its child processes can then receive configured static, sequential, or
 handler-based responses. Dynobox does not force a particular interactive shell.
 Startup hooks for zsh, bash, and interactive POSIX `sh` keep the shim directory
-ahead of profile-modified paths. Non-interactive POSIX shells do not read `ENV`,
-so login profiles invoked through commands such as `sh -lc`, as well as profiles
-for other shells such as fish or nushell, can still put a real executable first.
-For Codex jobs with CLI mocks, Dynobox disables login shell execution and shell
-snapshots so Codex cannot restore a profile-captured `PATH` over the shims.
-Setup commands and harness version detection use the real `PATH`. Explicit
-executable paths and commands that do not use `PATH` lookup can bypass the shims,
-so CLI mocking is a behavioral test double rather than a sandbox.
+ahead of profile-modified paths. Bash login profiles that replace `BASH_ENV` and
+non-interactive POSIX login shells that ignore `ENV`, as well as profiles for
+other shells such as fish or nushell, can still put a real executable first. For
+Codex jobs with CLI mocks, Dynobox disables login shell execution and shell
+snapshots without clearing configured shell-environment filters. Setup commands
+and harness version detection use the real `PATH`. Explicit executable paths and
+commands that do not use `PATH` lookup can bypass the shims, so CLI mocking is a
+behavioral test double rather than a sandbox.
 
 While the process runs, the harness adapter reads its structured output and
 emits tool events. After the process exits, the adapter extracts the complete

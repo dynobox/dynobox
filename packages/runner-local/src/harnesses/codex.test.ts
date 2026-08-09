@@ -87,13 +87,17 @@ fi
     ]);
   });
 
-  it('disables profile PATH restoration while CLI mocks are active', () => {
+  it('preserves environment filtering while CLI mocks are active', () => {
     const args = codexCliMockArgs({
       PATH: '/mock/bin:/usr/bin',
       ZDOTDIR: '/mock/zsh',
       BASH_ENV: '/mock/bash-env',
       ENV: '/mock/posix-env',
-      DYNOBOX_CLI_MOCK_TOKEN: 'secret',
+      DYNOBOX_CLI_MOCK_SOCKET: '/tmp/mock.sock',
+      DYNOBOX_CLI_MOCK_AUTH: 'phase-auth',
+      npm_config_script_shell: '/mock/script-shell',
+      NPM_CONFIG_SCRIPT_SHELL: '/mock/script-shell',
+      AWS_SECRET_ACCESS_KEY: 'secret',
     });
 
     expect(args).toEqual([
@@ -102,14 +106,6 @@ fi
       '-c',
       'features.shell_snapshot=false',
       '-c',
-      'shell_environment_policy.inherit="all"',
-      '-c',
-      'shell_environment_policy.ignore_default_excludes=true',
-      '-c',
-      'shell_environment_policy.exclude=[]',
-      '-c',
-      'shell_environment_policy.include_only=[]',
-      '-c',
       'shell_environment_policy.set.PATH="/mock/bin:/usr/bin"',
       '-c',
       'shell_environment_policy.set.ZDOTDIR="/mock/zsh"',
@@ -117,8 +113,15 @@ fi
       'shell_environment_policy.set.BASH_ENV="/mock/bash-env"',
       '-c',
       'shell_environment_policy.set.ENV="/mock/posix-env"',
+      '-c',
+      'shell_environment_policy.set.DYNOBOX_CLI_MOCK_SOCKET="/tmp/mock.sock"',
+      '-c',
+      'shell_environment_policy.set.npm_config_script_shell="/mock/script-shell"',
+      '-c',
+      'shell_environment_policy.set.NPM_CONFIG_SCRIPT_SHELL="/mock/script-shell"',
     ]);
     expect(args.join(' ')).not.toContain('secret');
+    expect(args.join(' ')).not.toContain('phase-auth');
   });
 
   it('extractResult returns transcript, final message, and tool events', () => {

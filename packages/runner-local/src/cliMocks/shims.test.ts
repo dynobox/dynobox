@@ -47,7 +47,7 @@ describe('installCliMockShims', () => {
     expect(env).toMatchObject({
       PATH: `${binDir}${delimiter}/usr/bin`,
       DYNOBOX_CLI_MOCK_SOCKET: '/tmp/mock.sock',
-      DYNOBOX_CLI_MOCK_TOKEN: 'token',
+      DYNOBOX_CLI_MOCK_AUTH: 'token',
       DYNOBOX_CLI_MOCK_BIN: binDir,
       DYNOBOX_CLI_MOCK_TIMEOUT_MS: '1020',
       DYNOBOX_CLI_MOCK_SCRIPT_SHELL: '/bin/bash',
@@ -61,5 +61,6 @@ describe('installCliMockShims', () => {
       npm_config_script_shell: join(root, 'script-shell'),
       NPM_CONFIG_SCRIPT_SHELL: join(root, 'script-shell'),
     });
+    expect(env).not.toHaveProperty('DYNOBOX_CLI_MOCK_TOKEN');
   });
 });

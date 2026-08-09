@@ -105,15 +105,8 @@ export function buildCodexArgs(
 export function codexCliMockArgs(
   env: Readonly<Record<string, string>>,
 ): string[] {
-  const args = [
-    'allow_login_shell=false',
-    'features.shell_snapshot=false',
-    'shell_environment_policy.inherit="all"',
-    'shell_environment_policy.ignore_default_excludes=true',
-    'shell_environment_policy.exclude=[]',
-    'shell_environment_policy.include_only=[]',
-  ];
-  for (const name of ['PATH', 'ZDOTDIR', 'BASH_ENV', 'ENV']) {
+  const args = ['allow_login_shell=false', 'features.shell_snapshot=false'];
+  for (const name of CODEX_CLI_MOCK_ENV_NAMES) {
     const value = env[name];
     if (value !== undefined) {
       args.push(
@@ -123,6 +116,25 @@ export function codexCliMockArgs(
   }
   return args.flatMap((value) => ['-c', value]);
 }
+
+const CODEX_CLI_MOCK_ENV_NAMES = [
+  'PATH',
+  'ZDOTDIR',
+  'BASH_ENV',
+  'ENV',
+  'DYNOBOX_CLI_MOCK_SOCKET',
+  'DYNOBOX_CLI_MOCK_NODE',
+  'DYNOBOX_CLI_MOCK_CLIENT',
+  'DYNOBOX_CLI_MOCK_BIN',
+  'DYNOBOX_CLI_MOCK_TIMEOUT_MS',
+  'DYNOBOX_CLI_MOCK_SCRIPT_SHELL',
+  'DYNOBOX_CLI_MOCK_PATH_HOOK',
+  'DYNOBOX_CLI_MOCK_BASE_BASH_ENV',
+  'DYNOBOX_CLI_MOCK_BASE_POSIX_ENV',
+  'DYNOBOX_CLI_MOCK_BASE_ZDOTDIR',
+  'npm_config_script_shell',
+  'NPM_CONFIG_SCRIPT_SHELL',
+] as const;
 
 function codexPermissionArgs(
   permissionMode: PermissionMode | undefined,

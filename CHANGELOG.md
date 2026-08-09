@@ -10,8 +10,9 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
-- Fixed CLI mocks being bypassed when Codex login-shell profiles or shell
-  snapshots restored a real executable PATH ahead of generated mock shims.
+- Fixed CLI mocks being bypassed by common zsh, bash, and interactive POSIX
+  shell startup PATH changes or by Codex login shells and shell snapshots,
+  while preserving Codex shell-environment filtering.
 
 ---
 
