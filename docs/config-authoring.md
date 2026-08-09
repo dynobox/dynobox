@@ -164,8 +164,13 @@ environment values.
 Setup commands and harness version detection use the real PATH. The harness and
 post-harness verification commands use a PATH with generated mock shims
 prepended. This intercepts bare names such as `vitest run`, including calls from
-nested subprocesses. Generated zsh, bash, and POSIX shell startup hooks reapply
-the mock PATH after shell initialization. When Codex runs with CLI mocks,
+nested subprocesses. Dynobox does not force a particular interactive shell.
+Generated zsh and bash startup hooks, plus an interactive POSIX `sh` hook,
+reapply the mock PATH after shell initialization. Non-interactive POSIX shells
+do not read `ENV`, so a login profile invoked through a command such as
+`sh -lc` can still put a real executable ahead of the shim. Other shells such as
+fish or nushell are not covered by these hooks and have the same limitation.
+When Codex runs with CLI mocks,
 Dynobox also disables Codex login shells and shell snapshots for that invocation
 so a profile-captured PATH cannot restore real executables over the shims. npm
 and pnpm package scripts keep mock shims ahead of local `node_modules/.bin`

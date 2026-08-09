@@ -306,6 +306,41 @@ describe('CLI mock controller', () => {
     },
   );
 
+  it.runIf(existsSync('/bin/zsh'))(
+    'runs the original .zlogout when a login shell exits',
+    async () => {
+      const {controller, workDir} = await createController({
+        'mocked-cli': {
+          response: {exitCode: 0, stdout: 'mocked', stderr: ''},
+        },
+      });
+      const homeDir = join(workDir, 'home');
+      const marker = join(workDir, 'zlogout-ran');
+      mkdirSync(homeDir);
+      writeFileSync(
+        join(homeDir, '.zlogout'),
+        `printf logout > ${JSON.stringify(marker)}\n`,
+      );
+
+      const result = await execa('/bin/zsh', ['-lic', 'exit 0'], {
+        cwd: workDir,
+        env: {
+          ...process.env,
+          HOME: homeDir,
+          ...controller.env(process.env.PATH ?? '', undefined, {
+            ...process.env,
+            HOME: homeDir,
+            ZDOTDIR: undefined,
+          }),
+        },
+        reject: false,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(readFileSync(marker, 'utf8')).toBe('logout');
+    },
+  );
+
   it('fails closed when the script shell has no mock bin path', async () => {
     const {controller, workDir} = await createController({
       vitest: {response: {exitCode: 0, stdout: 'mocked', stderr: ''}},

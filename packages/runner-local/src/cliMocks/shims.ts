@@ -50,7 +50,13 @@ export async function installCliMockShims(
   await writeFile(pathHook, PATH_HOOK_SOURCE, {mode: 0o600});
   await writeFile(bashEnv, BASH_ENV_SOURCE, {mode: 0o600});
   await writeFile(posixEnv, POSIX_ENV_SOURCE, {mode: 0o600});
-  for (const startupFile of ['.zshenv', '.zprofile', '.zshrc', '.zlogin']) {
+  for (const startupFile of [
+    '.zshenv',
+    '.zprofile',
+    '.zshrc',
+    '.zlogin',
+    '.zlogout',
+  ]) {
     await writeFile(join(zshDir, startupFile), zshStartupSource(startupFile), {
       mode: 0o600,
     });
