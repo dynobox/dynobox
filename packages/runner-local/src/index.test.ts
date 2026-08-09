@@ -339,6 +339,7 @@ describe('runJob', () => {
       'real',
     );
     expect(result.harnessOutput?.stdout).toBe('mocked');
+    expect(harness.inputs[0]?.cliMocksEnabled).toBe(true);
     expect(result.cliMockCalls).toEqual([
       expect.objectContaining({
         executable: 'mocked-cli',

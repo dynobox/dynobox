@@ -14,6 +14,8 @@ export type HarnessInput = {
   workDir: string;
   /** Environment variables (proxy settings, API keys, etc.). */
   env: Record<string, string>;
+  /** Whether the harness must preserve Dynobox CLI mock interception. */
+  cliMocksEnabled?: boolean;
   /** Optional invocation timeout in milliseconds. */
   timeoutMs?: number;
   /** Optional harness-specific model name or alias. */

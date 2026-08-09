@@ -59,6 +59,7 @@ export class CodexHarness implements Harness {
         this.extraArgs,
         input.model,
         input.permissionMode,
+        input.cliMocksEnabled ? input.env : undefined,
       ),
       input,
       cwd: realpathSync(input.workDir),
@@ -85,6 +86,7 @@ export function buildCodexArgs(
   extraArgs: readonly string[] = [],
   model?: string,
   permissionMode?: PermissionMode,
+  cliMockEnv?: Readonly<Record<string, string>>,
 ): string[] {
   return [
     'exec',
@@ -95,9 +97,44 @@ export function buildCodexArgs(
     ...codexPermissionArgs(permissionMode),
     ...(model === undefined ? [] : ['--model', model]),
     ...extraArgs,
+    ...(cliMockEnv === undefined ? [] : codexCliMockArgs(cliMockEnv)),
     prompt,
   ];
 }
+
+export function codexCliMockArgs(
+  env: Readonly<Record<string, string>>,
+): string[] {
+  const args = ['allow_login_shell=false', 'features.shell_snapshot=false'];
+  for (const name of CODEX_CLI_MOCK_ENV_NAMES) {
+    const value = env[name];
+    if (value !== undefined) {
+      args.push(
+        `shell_environment_policy.set.${name}=${JSON.stringify(value)}`,
+      );
+    }
+  }
+  return args.flatMap((value) => ['-c', value]);
+}
+
+const CODEX_CLI_MOCK_ENV_NAMES = [
+  'PATH',
+  'ZDOTDIR',
+  'BASH_ENV',
+  'ENV',
+  'DYNOBOX_CLI_MOCK_SOCKET',
+  'DYNOBOX_CLI_MOCK_NODE',
+  'DYNOBOX_CLI_MOCK_CLIENT',
+  'DYNOBOX_CLI_MOCK_BIN',
+  'DYNOBOX_CLI_MOCK_TIMEOUT_MS',
+  'DYNOBOX_CLI_MOCK_SCRIPT_SHELL',
+  'DYNOBOX_CLI_MOCK_PATH_HOOK',
+  'DYNOBOX_CLI_MOCK_BASE_BASH_ENV',
+  'DYNOBOX_CLI_MOCK_BASE_POSIX_ENV',
+  'DYNOBOX_CLI_MOCK_BASE_ZDOTDIR',
+  'npm_config_script_shell',
+  'NPM_CONFIG_SCRIPT_SHELL',
+] as const;
 
 function codexPermissionArgs(
   permissionMode: PermissionMode | undefined,

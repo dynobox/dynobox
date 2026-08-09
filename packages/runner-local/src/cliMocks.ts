@@ -26,7 +26,11 @@ export type CliMockController = {
   readonly executableNames: readonly string[];
   install(): Promise<void>;
   beginPhase(): void;
-  env(basePath: string, baseScriptShell?: string): Record<string, string>;
+  env(
+    basePath: string,
+    baseScriptShell?: string,
+    baseEnv?: NodeJS.ProcessEnv,
+  ): Record<string, string>;
   calls(): CliMockCall[];
   failures(): CliMockFailure[];
   finalizePendingCalls(): Promise<void>;
@@ -215,7 +219,7 @@ export async function startCliMockController(
       }
       activeToken = randomBytes(32).toString('hex');
     },
-    env(basePath, baseScriptShell = '/bin/sh') {
+    env(basePath, baseScriptShell = '/bin/sh', baseEnv = process.env) {
       if (shims === undefined) {
         throw new Error('CLI mock shims have not been installed.');
       }
@@ -228,6 +232,7 @@ export async function startCliMockController(
         requestTimeoutMs,
         basePath,
         baseScriptShell,
+        baseEnv,
       });
     },
     calls() {

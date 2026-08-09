@@ -164,14 +164,27 @@ environment values.
 Setup commands and harness version detection use the real PATH. The harness and
 post-harness verification commands use a PATH with generated mock shims
 prepended. This intercepts bare names such as `vitest run`, including calls from
-nested subprocesses. npm and pnpm package scripts also keep mock shims ahead of
-local `node_modules/.bin` entries. Yarn package scripts do not currently provide
-this guarantee. Explicit paths such as `/usr/bin/vitest run` bypass the mock.
-Shell builtins, functions, aliases, and keywords can also bypass PATH lookup and
-therefore the mock shim. CLI mocks are behavioral test doubles, not a command
-sandbox or security boundary. A CLI mock whose name matches the selected
-harness executable's basename is rejected, including when that harness uses an
-explicit executable path. Explicit paths otherwise bypass the mock shim.
+nested subprocesses. Dynobox does not force a particular interactive shell.
+Generated zsh and bash startup hooks, plus an interactive POSIX `sh` hook,
+reapply the mock PATH after shell initialization. A bash login profile that
+unsets or replaces `BASH_ENV` can prevent its later non-interactive startup hook
+from running. Non-interactive POSIX shells do not read `ENV`, so a login profile
+invoked through a command such as `sh -lc` can also put a real executable ahead
+of the shim. Other shells such as fish or nushell are not covered by these hooks
+and have the same limitation. When Codex runs with CLI mocks, Dynobox disables
+Codex login shells and shell snapshots for that invocation so a profile-captured
+PATH cannot restore real executables over the shims. Codex environment filtering
+remains in effect; a restrictive `shell_environment_policy.include_only` can
+exclude Dynobox's activation variables and prevent mocks from running. npm and
+pnpm package scripts keep mock shims ahead of local `node_modules/.bin` entries.
+Yarn package scripts do not currently provide this guarantee.
+
+Explicit paths such as `/usr/bin/vitest run` bypass the mock. Shell builtins,
+functions, aliases, and keywords can also bypass PATH lookup and therefore the
+mock shim. CLI mocks are behavioral test doubles, not a command sandbox or
+security boundary. A CLI mock whose name matches the selected harness
+executable's basename is rejected, including when that harness uses an explicit
+executable path. Explicit paths otherwise bypass the mock shim.
 
 For the different evidence used by command assertions for mocked and standard
 executables, see [Mocked executables use call records](#mocked-executables-use-call-records).
