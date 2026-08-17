@@ -155,7 +155,7 @@ JSONL
       },
     );
     const raw: HarnessRunOutput = {
-      exitCode: 1,
+      exitCode: 0,
       stdout,
       stderr: '',
       durationMs: 250,
@@ -181,25 +181,25 @@ JSONL
     ]);
   });
 
-  it('extracts assistant errors when the stream is aborted', () => {
+  it('fails an aborted stream even when Pi omits the error message', () => {
     const stdout = jsonl({
       type: 'message_end',
       message: {
         role: 'assistant',
         content: [{type: 'text', text: 'Stopped.'}],
         stopReason: 'aborted',
-        errorMessage: 'User aborted.',
       },
     });
 
     const result = new PiHarness().extractResult({
-      exitCode: 1,
+      exitCode: 0,
       stdout,
       stderr: '',
       durationMs: 50,
     });
 
-    expect(result.errorMessage).toBe('User aborted.');
+    expect(result.exitCode).toBe(1);
+    expect(result.errorMessage).toBe('Pi stream aborted');
   });
 });
 

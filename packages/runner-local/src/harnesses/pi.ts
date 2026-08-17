@@ -27,12 +27,14 @@ export type PiParsedOutput = {
   finalMessage: string | undefined;
   toolEvents: ToolEvent[];
   errorMessage: string | undefined;
+  terminalFailure: boolean;
 };
 
 export type PiParsedLine = {
   toolEvents: ToolEvent[];
   finalMessage?: string;
   errorMessage?: string;
+  terminalFailure?: boolean;
 };
 
 export class PiHarness implements Harness {
@@ -75,7 +77,7 @@ export class PiHarness implements Harness {
   extractResult(raw: HarnessRunOutput): HarnessResult {
     const parsed = parsePiJson(raw.stdout);
     return {
-      exitCode: raw.exitCode,
+      exitCode: raw.exitCode === 0 && parsed.terminalFailure ? 1 : raw.exitCode,
       durationMs: raw.durationMs,
       transcript: raw.stdout,
       finalMessage: parsed.finalMessage,
@@ -113,6 +115,7 @@ function piPermissionArgs(
 export function parsePiJson(stdout: string): PiParsedOutput {
   let finalMessage: string | undefined;
   let errorMessage: string | undefined;
+  let terminalFailure = false;
   const toolEvents: ToolEvent[] = [];
   const toolInputs = new Map<string, unknown>();
 
@@ -121,9 +124,10 @@ export function parsePiJson(stdout: string): PiParsedOutput {
     toolEvents.push(...parsed.toolEvents);
     if (parsed.finalMessage !== undefined) finalMessage = parsed.finalMessage;
     if (parsed.errorMessage !== undefined) errorMessage = parsed.errorMessage;
+    if (parsed.terminalFailure === true) terminalFailure = true;
   }
 
-  return {finalMessage, toolEvents, errorMessage};
+  return {finalMessage, toolEvents, errorMessage, terminalFailure};
 }
 
 export function parsePiJsonLine(
@@ -187,14 +191,23 @@ function parseAssistantMessage(message: JsonObject): PiParsedLine {
   if (message.role !== 'assistant') return {toolEvents: []};
 
   const finalMessage = textFromContent(message.content);
-  const errorMessage =
-    (message.stopReason === 'error' || message.stopReason === 'aborted') &&
-    typeof message.errorMessage === 'string'
+  const terminalFailure =
+    message.stopReason === 'error' || message.stopReason === 'aborted';
+  const providedError =
+    typeof message.errorMessage === 'string' &&
+    message.errorMessage.trim() !== ''
       ? message.errorMessage
       : undefined;
+  const errorMessage = terminalFailure
+    ? (providedError ??
+      (message.stopReason === 'aborted'
+        ? 'Pi stream aborted'
+        : 'Pi stream ended with an error'))
+    : undefined;
   return {
     toolEvents: [],
     ...(finalMessage === undefined ? {} : {finalMessage}),
     ...(errorMessage === undefined ? {} : {errorMessage}),
+    ...(terminalFailure ? {terminalFailure} : {}),
   };
 }
