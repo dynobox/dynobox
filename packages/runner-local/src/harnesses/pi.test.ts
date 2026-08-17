@@ -95,7 +95,7 @@ else
 fi
 cat <<'JSONL'
 {"type":"tool_execution_start","toolCallId":"call-1","toolName":"bash","args":{"command":"pnpm test"}}
-{"type":"tool_execution_end","toolCallId":"call-1","toolName":"bash","result":{"type":"text","text":"tests passed"},"isError":false}
+{"type":"tool_execution_end","toolCallId":"call-1","toolName":"bash","result":{"content":[{"type":"text","text":"tests passed"}],"details":{}},"isError":false}
 JSONL
 `,
       {mode: 0o755},
@@ -135,7 +135,10 @@ JSONL
         type: 'tool_execution_end',
         toolCallId: 'call-1',
         toolName: 'write',
-        result: [{type: 'text', text: 'written'}],
+        result: {
+          content: [{type: 'text', text: 'written'}],
+          details: {},
+        },
         isError: false,
       },
       {
@@ -201,7 +204,10 @@ describe('parsePiJson', () => {
           type: 'tool_execution_end',
           toolCallId: 'call-1',
           toolName: 'bash',
-          result: 'exit status 1',
+          result: {
+            content: [{type: 'text', text: 'permission denied'}],
+            details: {},
+          },
           isError: true,
         }),
         2,
@@ -214,7 +220,7 @@ describe('parsePiJson', () => {
         input: {command: 'false'},
         command: 'false',
         status: 'failure',
-        message: 'exit status 1',
+        message: 'permission denied',
       },
     ]);
   });

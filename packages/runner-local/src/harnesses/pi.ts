@@ -178,6 +178,8 @@ function textFromPiContent(content: unknown): string | undefined {
   const text = textFromContent(content);
   if (text !== undefined) return text;
   if (!isRecord(content)) return undefined;
+  const nestedText = textFromContent(content.content);
+  if (nestedText !== undefined) return nestedText;
   return typeof content.text === 'string' ? content.text : undefined;
 }
 
