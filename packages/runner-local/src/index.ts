@@ -53,6 +53,7 @@ export type {
   ClaudeCodeHarnessOptions,
   CodexHarnessOptions,
   OpenCodeHarnessOptions,
+  PiHarnessOptions,
 } from './harnesses/index.js';
 export {
   ClaudeCodeHarness,
@@ -60,6 +61,7 @@ export {
   FakeHarness,
   normalizeToolKind,
   OpenCodeHarness,
+  PiHarness,
 } from './harnesses/index.js';
 export {ensureDynoboxCA} from './http/ca.js';
 export {buildHttpRoutes, matchHttpEndpointId} from './http/events.js';

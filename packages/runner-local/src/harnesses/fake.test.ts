@@ -196,6 +196,8 @@ describe('normalizeToolKind', () => {
     expect(normalizeToolKind('glob')).toBe('search_files');
     expect(normalizeToolKind('grep')).toBe('search_files');
     expect(normalizeToolKind('list')).toBe('search_files');
+    expect(normalizeToolKind('find')).toBe('search_files');
+    expect(normalizeToolKind('ls')).toBe('search_files');
     expect(normalizeToolKind('webfetch')).toBe('web_fetch');
     expect(normalizeToolKind('websearch')).toBe('web_search');
     expect(normalizeToolKind('task')).toBe('task');

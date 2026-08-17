@@ -5,6 +5,8 @@ export {CodexHarness} from './codex.js';
 export {FakeHarness} from './fake.js';
 export type {OpenCodeHarnessOptions} from './opencode.js';
 export {OpenCodeHarness} from './opencode.js';
+export type {PiHarnessOptions} from './pi.js';
+export {PiHarness} from './pi.js';
 export {normalizeToolKind} from './toolEvents.js';
 export type {
   Harness,
