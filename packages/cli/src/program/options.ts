@@ -8,6 +8,7 @@ import {
   ClaudeCodeHarness,
   CodexHarness,
   OpenCodeHarness,
+  PiHarness,
   type RunJobOptions,
 } from '@dynobox/runner-local';
 import {
@@ -158,6 +159,7 @@ export function buildRunJobOptions(options: ExecuteCliOptions): RunJobOptions {
       new ClaudeCodeHarness(),
       new CodexHarness(),
       new OpenCodeHarness(),
+      new PiHarness(),
     ],
   };
 

@@ -33,8 +33,8 @@ capture evidence, assert on tools, commands, files, and answers.
 
 - Assert on tool calls, commands, files, HTTP requests, transcripts, and final
   answers without requiring one model to judge another.
-- Run the same scenario through Claude Code, OpenAI Codex, and OpenCode (with
-  more to come) to find behavior that varies between environments.
+- Run the same scenario through Claude Code, OpenAI Codex, OpenCode, and Pi to
+  find behavior that varies between environments.
 - Test multi-step tasks in fresh temporary work directories, repeat them to
   expose flaky behavior, and keep the evidence when something fails.
 - Replace bare executable calls with scenario-scoped static, sequential, or
@@ -42,8 +42,8 @@ capture evidence, assert on tools, commands, files, and answers.
 
 ## Requirements
 
-Node.js 22+ and at least one supported harness (Claude Code, Codex, or OpenCode)
-installed, authenticated, and available on `PATH`.
+Node.js 22+ and at least one supported harness (Claude Code, Codex, OpenCode, or
+Pi) installed, authenticated, and available on `PATH`.
 
 ## Quick start
 
@@ -51,6 +51,7 @@ installed, authenticated, and available on `PATH`.
 npx dynobox init                         # Claude Code (default)
 npx dynobox init --harness codex         # OpenAI Codex
 npx dynobox init --harness opencode      # OpenCode
+npx dynobox init --harness pi            # Pi
 npx dynobox run
 ```
 
@@ -78,6 +79,7 @@ harnesses:
   - claude-code
   - codex
   - opencode
+  - pi
 scenarios:
   - name: detects the test script
     setup:
@@ -145,14 +147,15 @@ Override the configured harnesses from the command line:
 npx dynobox run --harness claude-code
 npx dynobox run --harness codex
 npx dynobox run --harness opencode
-npx dynobox run --harness claude-code,codex,opencode
+npx dynobox run --harness pi
+npx dynobox run --harness claude-code,codex,opencode,pi
 ```
 
 Repeat every scenario and harness pair to measure pass rates:
 
 ```bash
 npx dynobox run \
-  --harness claude-code,codex,opencode \
+  --harness claude-code,codex,opencode,pi \
   --iterations 5
 ```
 

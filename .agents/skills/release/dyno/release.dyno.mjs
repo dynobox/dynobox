@@ -30,6 +30,11 @@ export default defineDyno({
       model: 'openai/gpt-5.4-mini',
       permissionMode: 'dangerous',
     },
+    {
+      id: 'pi',
+      model: 'openai-codex/gpt-5.4-mini',
+      permissionMode: 'dangerous',
+    },
   ],
   scenarios: [
     {

@@ -55,13 +55,14 @@ Pick a harness at runtime when needed:
 dynobox run --harness claude-code
 dynobox run --harness codex
 dynobox run --harness opencode
-dynobox run --harness claude-code,codex,opencode
+dynobox run --harness pi
+dynobox run --harness claude-code,codex,opencode,pi
 ```
 
 Repeat each selected scenario/harness pair when you want a pass-rate signal:
 
 ```bash
-dynobox run --harness claude-code,codex,opencode --iterations 5
+dynobox run --harness claude-code,codex,opencode,pi --iterations 5
 ```
 
 ## What You Can Assert

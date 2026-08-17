@@ -8,6 +8,15 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Added Pi harness execution with JSONL tool and final-message capture, model
+  selection, permission approval, and non-persistent sessions.
+
+### `@dynobox/sdk`
+
+- Added `pi` as a supported harness ID.
+
 ---
 
 ## dynobox@0.11.1 — 2026-08-09

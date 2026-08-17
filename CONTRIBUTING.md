@@ -8,8 +8,8 @@ Dynobox is a pnpm monorepo. Published packages live under `packages/`.
   support an earlier Node.js 22 release according to their package engines.
 - pnpm 10.33.0, as declared by the root `packageManager`.
 - At least one supported local harness installed and authenticated when running
-  real dynos: Claude Code via `claude`, Codex via `codex`, or OpenCode via
-  `opencode`.
+  real dynos: Claude Code via `claude`, Codex via `codex`, OpenCode via
+  `opencode`, or Pi via `pi`.
 
 ## Common Commands
 
@@ -65,8 +65,9 @@ smoke_dir=$(mktemp -d)
 rm -rf "$smoke_dir"
 ```
 
-The starter defaults to Claude Code. Pass `--harness codex` or
-`--harness opencode` to `init` to use another authenticated harness. See
+The starter defaults to Claude Code. Pass `--harness codex`,
+`--harness opencode`, or `--harness pi` to `init` to use another authenticated
+harness. See
 [`dynobox/examples`](https://github.com/dynobox/examples) for larger scenarios.
 
 ## Package Scripts

@@ -94,7 +94,8 @@ runtime:
 dynobox run --harness claude-code
 dynobox run --harness codex
 dynobox run --harness opencode
-dynobox run --harness claude-code,codex,opencode
+dynobox run --harness pi
+dynobox run --harness claude-code,codex,opencode,pi
 ```
 
 If neither the config nor the CLI selects a harness, Dynobox defaults to
@@ -103,7 +104,7 @@ If neither the config nor the CLI selects a harness, Dynobox defaults to
 Repeat runs when you want a pass-rate signal instead of a single sample:
 
 ```bash
-dynobox run --harness claude-code,codex,opencode --iterations 5
+dynobox run --harness claude-code,codex,opencode,pi --iterations 5
 ```
 
 Iterations are chosen at runtime. The dyno still only describes what to test;

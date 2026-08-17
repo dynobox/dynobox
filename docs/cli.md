@@ -202,7 +202,7 @@ validated config and a final summary record.
                            DYNOBOX_UPLOAD_URL (see Saving Runs below).
 ```
 
-Harness IDs are `claude-code`, `codex`, and `opencode`.
+Harness IDs are `claude-code`, `codex`, `opencode`, and `pi`.
 
 Examples:
 
@@ -210,7 +210,8 @@ Examples:
 dynobox run --harness claude-code
 dynobox run --harness codex
 dynobox run --harness opencode
-dynobox run --harness claude-code,codex,opencode
+dynobox run --harness pi
+dynobox run --harness claude-code,codex,opencode,pi
 dynobox run --harness codex --model gpt-5.5
 dynobox run --harness opencode --model openai/gpt-5.5
 dynobox run --harness claude-code,codex --model sonnet,gpt-5.5
