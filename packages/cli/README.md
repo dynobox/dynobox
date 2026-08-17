@@ -3,7 +3,7 @@
 Cross-harness testing for multi-step agent and skill workflows.
 
 Dynobox runs agent scenarios through local harnesses such as Claude Code, Codex,
-and OpenCode, captures observable behavior, and evaluates assertions against
+OpenCode, and Pi, captures observable behavior, and evaluates assertions against
 what actually happened.
 
 - Site: [dynobox.xyz](https://dynobox.xyz)
@@ -27,6 +27,7 @@ Create a starter dyno file, then run it:
 dynobox init                         # Claude Code (default)
 dynobox init --harness codex         # OpenAI Codex
 dynobox init --harness opencode      # OpenCode
+dynobox init --harness pi            # Pi
 dynobox discover
 dynobox run
 ```

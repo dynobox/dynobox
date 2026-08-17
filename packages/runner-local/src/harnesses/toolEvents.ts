@@ -36,6 +36,8 @@ export function normalizeToolKind(rawName: string): ToolKind {
     case 'glob':
     case 'grep':
     case 'list':
+    case 'find':
+    case 'ls':
     case 'search_files':
       return 'search_files';
     case 'WebFetch':

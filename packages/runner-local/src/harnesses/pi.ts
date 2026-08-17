@@ -188,7 +188,8 @@ function parseAssistantMessage(message: JsonObject): PiParsedLine {
 
   const finalMessage = textFromContent(message.content);
   const errorMessage =
-    message.stopReason === 'error' && typeof message.errorMessage === 'string'
+    (message.stopReason === 'error' || message.stopReason === 'aborted') &&
+    typeof message.errorMessage === 'string'
       ? message.errorMessage
       : undefined;
   return {

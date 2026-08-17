@@ -180,6 +180,27 @@ JSONL
       },
     ]);
   });
+
+  it('extracts assistant errors when the stream is aborted', () => {
+    const stdout = jsonl({
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        content: [{type: 'text', text: 'Stopped.'}],
+        stopReason: 'aborted',
+        errorMessage: 'User aborted.',
+      },
+    });
+
+    const result = new PiHarness().extractResult({
+      exitCode: 1,
+      stdout,
+      stderr: '',
+      durationMs: 50,
+    });
+
+    expect(result.errorMessage).toBe('User aborted.');
+  });
 });
 
 describe('parsePiJson', () => {

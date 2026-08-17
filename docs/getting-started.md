@@ -13,6 +13,7 @@ while completing the task.
   - `claude` for Claude Code.
   - `codex` for OpenAI Codex.
   - `opencode` for OpenCode.
+  - `pi` for Pi.
 
 The selected harness must be installed, authenticated, and available on `PATH`.
 
@@ -68,6 +69,7 @@ Choose a starter harness that is installed and authenticated. Omitting
 dynobox init                         # Claude Code (default)
 dynobox init --harness codex         # OpenAI Codex
 dynobox init --harness opencode      # OpenCode
+dynobox init --harness pi            # Pi
 ```
 
 Run one of the commands above. It writes `dynobox/example.dyno.mjs`, which you

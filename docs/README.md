@@ -100,6 +100,7 @@ Dynobox currently runs local scenarios through:
 - Claude Code via the `claude` executable.
 - OpenAI Codex via the `codex` executable.
 - OpenCode via the `opencode` executable.
+- Pi via the `pi` executable.
 
 Each harness must already be installed, authenticated, and available on
 `PATH`.

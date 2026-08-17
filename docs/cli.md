@@ -371,6 +371,8 @@ The CLI supports these real harnesses:
   skipped.
 - `opencode` invokes OpenCode with JSON output and an explicit scenario work
   directory.
+- `pi` invokes Pi with JSONL output via `--mode json` and `--no-session`, sets
+  `PI_OFFLINE=1`, and adds `--no-approve` by default.
 
 Make sure the selected harness executable is installed, authenticated, and
 available on `PATH`.
@@ -385,6 +387,7 @@ Dangerous mode maps to harness-specific flags:
 - `codex`: adds `--sandbox danger-full-access -c approval_policy="never"`.
 - `opencode`: adds `--auto`, which approves permission prompts but does not
   override explicit deny rules.
+- `pi`: adds `--approve` instead of `--no-approve`.
 
 Permission warnings are advisory. They explain when a harness blocked a tool
 action, but they do not change job status, assertion results, or exit codes.
