@@ -8,6 +8,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.12.0 — 2026-08-18
+
 ### `dynobox` (CLI)
 
 - Added Pi harness execution with JSONL tool and final-message capture, model
@@ -22,6 +26,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   permissions, and dangerous-mode tool auto-approval. Print mode sets
   `--print-timeout` to the Dynobox job timeout, or 30 minutes when unset, so
   AGY's default five-minute cap does not cut off long evals.
+
+## @dynobox/sdk@0.8.0 — 2026-08-18
 
 ### `@dynobox/sdk`
 

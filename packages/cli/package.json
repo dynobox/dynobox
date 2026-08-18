@@ -1,6 +1,6 @@
 {
   "name": "dynobox",
-  "version": "0.11.1",
+  "version": "0.12.0",
   "description": "Cross-harness testing for multi-step agent and skill workflows",
   "keywords": [
     "agent",
@@ -9,7 +9,9 @@
     "claude-code",
     "codex",
     "opencode",
+    "pi",
     "cursor",
+    "antigravity",
     "evals"
   ],
   "homepage": "https://dynobox.xyz",

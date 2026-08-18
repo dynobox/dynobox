@@ -94,7 +94,8 @@ security sandbox; processes can access the host according to their permissions.
 ## Choose A Harness
 
 Each dyno can declare its own harness list. You can also override harnesses at
-runtime:
+runtime. Select only harnesses installed and authenticated in the current
+environment:
 
 ```bash
 dynobox run --harness claude-code
@@ -262,16 +263,17 @@ directory and artifact paths, and writes debug logs when data is available:
 `dynobox-cli-mocks.json` records each completed mock call, including arguments,
 working directory, output, and exit code, but not child environment values.
 
-Dynobox uses each harness's normal permission behavior by default. For trusted
-local evals that intentionally need elevated or automatically approved access,
-configure `permissionMode: 'dangerous'` in the dyno or pass:
+Dynobox uses harness-specific non-dangerous headless behavior by default. For
+trusted local evals that intentionally need elevated or automatically approved
+access, configure `permissionMode: 'dangerous'` in the dyno or pass:
 
 ```bash
 dynobox run --permission-mode dangerous
 ```
 
-The exact behavior is harness-specific. OpenCode's dangerous mode adds `--auto`
-but still enforces explicit deny rules.
+The exact behavior is harness-specific. See the
+[CLI harness requirements](./cli.md#harness-requirements) for every default and
+dangerous-mode mapping.
 
 ## Next Steps
 

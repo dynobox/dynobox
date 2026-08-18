@@ -236,7 +236,8 @@ harnesses: [
 
 Permission modes:
 
-- `default`: use the harness's normal permission and sandbox behavior.
+- `default`: use the harness-specific non-dangerous headless behavior described
+  in the [CLI reference](./cli.md#harness-requirements).
 - `dangerous`: opt into harness-specific full-access or automatic permission
   approval flags for trusted local evals.
 
@@ -748,7 +749,12 @@ For example, a dyno at `.agents/skills/commit/dyno/commit.dyno.mjs` with
 `.agents/skills/commit/SKILL.md` gets setup commands that create both
 `.agents/skills/commit/SKILL.md` and `.claude/skills/commit/SKILL.md` in the
 scenario work directory. This makes skill reference tests work across harness
-conventions without manually copying the instruction file in each scenario.
+conventions that use these two layouts without manually copying the instruction
+file in each scenario.
+
+`skill.referenced(...)` also recognizes Cursor's `.cursor/skills/<name>/SKILL.md`
+layout, but automatic skill staging does not create it. Use fixtures or scenario
+setup when a test specifically needs Cursor's native skill layout.
 
 ## Reusable Scenarios
 

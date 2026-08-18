@@ -43,8 +43,10 @@ capture evidence, assert on tools, commands, files, and answers.
 
 ## Requirements
 
-Node.js 22+ and at least one supported harness (Claude Code, Codex, OpenCode, Pi,
-Cursor, or Antigravity) installed, authenticated, and available on `PATH`.
+Node.js 22+ and at least one supported harness installed, authenticated, and
+available on `PATH`: Claude Code (`claude`), Codex (`codex`), OpenCode
+(`opencode`), Pi (`pi`), Cursor CLI (`cursor-agent`), or Google Antigravity CLI
+1.1.14+ (`agy`).
 
 ## Quick start
 
@@ -73,7 +75,8 @@ can access the host according to their permissions.
 ## Writing a dyno
 
 A dyno combines the prompt, fixture setup, harnesses, and acceptance criteria in
-one TypeScript, JavaScript, or YAML file:
+one TypeScript, JavaScript, or YAML file. Include only harnesses installed and
+authenticated in the current environment:
 
 ```yaml
 # package.dyno.yaml

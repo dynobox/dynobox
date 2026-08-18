@@ -17,7 +17,8 @@ npm install -g dynobox
 ```
 
 Dynobox requires Node.js 22 or later. The selected harness executable must
-already be installed, authenticated, and available on `PATH`.
+already be installed, authenticated, and available on `PATH`: `claude`,
+`codex`, `opencode`, `pi`, `cursor-agent`, or `agy` 1.1.14 or newer.
 
 ## Quick Start
 
@@ -52,7 +53,7 @@ dynobox run .agents/skills/
 dynobox run my-skill.dyno.yaml
 ```
 
-Pick a harness at runtime when needed:
+Pick one or more installed and authenticated harnesses at runtime when needed:
 
 ```bash
 dynobox run --harness claude-code

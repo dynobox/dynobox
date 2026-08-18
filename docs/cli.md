@@ -376,10 +376,11 @@ The CLI supports these real harnesses:
   directory.
 - `pi` invokes Pi with JSONL output via `--mode json` and `--no-session`, sets
   `PI_OFFLINE=1`, and adds `--no-approve` by default.
-- `cursor` invokes Cursor CLI (`cursor-agent`) with stream-json output, workspace
-  trust, and an explicit scenario work directory. Default mode uses Cursor's
-  normal command approval, sandbox, and permission-rule behavior. It does not
-  pass `--approve-mcps`; existing Cursor MCP approvals still apply.
+- `cursor` invokes Cursor CLI (`cursor-agent`) with stream-json output and an
+  explicit scenario work directory. Dynobox always passes `--trust`, including
+  in default mode. Default mode otherwise uses Cursor's normal command approval,
+  sandbox, and permission-rule behavior. It does not pass `--approve-mcps`;
+  existing Cursor MCP approvals still apply.
 - `antigravity` invokes Google Antigravity CLI (`agy`) 1.1.14 or newer in
   headless mode with documented stream-json output. Each invocation creates a
   fresh Antigravity project and explicitly adds the scenario work directory so
@@ -392,9 +393,10 @@ The CLI supports these real harnesses:
 Make sure the selected harness executable is installed, authenticated, and
 available on `PATH`.
 
-Dynobox uses each harness's normal permission behavior by default. Use
-`--permission-mode dangerous` only for trusted local evals that intentionally
-need harness-specific access elevation or non-interactive approval bypasses.
+Dynobox uses each harness's non-dangerous headless behavior described above by
+default. Use `--permission-mode dangerous` only for trusted local evals that
+intentionally need harness-specific access elevation or non-interactive approval
+bypasses.
 
 Dangerous mode maps to harness-specific flags:
 
