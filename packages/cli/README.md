@@ -3,8 +3,8 @@
 Cross-harness testing for multi-step agent and skill workflows.
 
 Dynobox runs agent scenarios through local harnesses such as Claude Code, Codex,
-OpenCode, Pi, and Cursor CLI, captures observable behavior, and evaluates
-assertions against what actually happened.
+OpenCode, Pi, Cursor CLI, and Google Antigravity CLI, captures observable
+behavior, and evaluates assertions against what actually happened.
 
 - Site: [dynobox.xyz](https://dynobox.xyz)
 - Docs: [docs.dynobox.xyz](https://docs.dynobox.xyz)
@@ -29,6 +29,7 @@ dynobox init --harness codex         # OpenAI Codex
 dynobox init --harness opencode      # OpenCode
 dynobox init --harness pi            # Pi
 dynobox init --harness cursor        # Cursor CLI
+dynobox init --harness antigravity   # Google Antigravity CLI
 dynobox discover
 dynobox run
 ```
@@ -59,13 +60,14 @@ dynobox run --harness codex
 dynobox run --harness opencode
 dynobox run --harness pi
 dynobox run --harness cursor
-dynobox run --harness claude-code,codex,opencode,pi,cursor
+dynobox run --harness antigravity
+dynobox run --harness claude-code,codex,opencode,pi,cursor,antigravity
 ```
 
 Repeat each selected scenario/harness pair when you want a pass-rate signal:
 
 ```bash
-dynobox run --harness claude-code,codex,opencode,pi,cursor --iterations 5
+dynobox run --harness claude-code,codex,opencode,pi,cursor,antigravity --iterations 5
 ```
 
 ## What You Can Assert

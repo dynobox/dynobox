@@ -33,9 +33,9 @@ capture evidence, assert on tools, commands, files, and answers.
 
 - Assert on tool calls, commands, files, HTTP requests, transcripts, and final
   answers without requiring one model to judge another.
-- Run the same scenario through Claude Code, OpenAI Codex, OpenCode, Pi, and
-  Cursor CLI to
-  find behavior that varies between environments.
+- Run the same scenario through Claude Code, OpenAI Codex, OpenCode, Pi, Cursor
+  CLI, and Google Antigravity CLI to find behavior that varies between
+  environments.
 - Test multi-step tasks in fresh temporary work directories, repeat them to
   expose flaky behavior, and keep the evidence when something fails.
 - Replace bare executable calls with scenario-scoped static, sequential, or
@@ -44,7 +44,7 @@ capture evidence, assert on tools, commands, files, and answers.
 ## Requirements
 
 Node.js 22+ and at least one supported harness (Claude Code, Codex, OpenCode, Pi,
-or Cursor) installed, authenticated, and available on `PATH`.
+Cursor, or Antigravity) installed, authenticated, and available on `PATH`.
 
 ## Quick start
 
@@ -54,6 +54,7 @@ npx dynobox init --harness codex         # OpenAI Codex
 npx dynobox init --harness opencode      # OpenCode
 npx dynobox init --harness pi            # Pi
 npx dynobox init --harness cursor        # Cursor CLI
+npx dynobox init --harness antigravity   # Google Antigravity CLI
 npx dynobox run
 ```
 
@@ -83,6 +84,7 @@ harnesses:
   - opencode
   - pi
   - cursor
+  - antigravity
 scenarios:
   - name: detects the test script
     setup:
@@ -152,14 +154,15 @@ npx dynobox run --harness codex
 npx dynobox run --harness opencode
 npx dynobox run --harness pi
 npx dynobox run --harness cursor
-npx dynobox run --harness claude-code,codex,opencode,pi,cursor
+npx dynobox run --harness antigravity
+npx dynobox run --harness claude-code,codex,opencode,pi,cursor,antigravity
 ```
 
 Repeat every scenario and harness pair to measure pass rates:
 
 ```bash
 npx dynobox run \
-  --harness claude-code,codex,opencode,pi,cursor \
+  --harness claude-code,codex,opencode,pi,cursor,antigravity \
   --iterations 5
 ```
 

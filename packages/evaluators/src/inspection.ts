@@ -109,7 +109,17 @@ export function resolveArtifactPath(
 export function pathStringsFromToolInput(value: unknown): string[] {
   const paths: string[] = [];
   const seen = new WeakSet<object>();
-  const pathKeys = new Set(['path', 'file_path', 'filepath', 'file']);
+  const pathKeys = new Set([
+    'path',
+    'file_path',
+    'filepath',
+    'file',
+    'absolutepath',
+    'targetfile',
+    'directorypath',
+    'searchdirectory',
+    'searchpath',
+  ]);
 
   function visit(current: unknown): void {
     if (typeof current === 'string') {

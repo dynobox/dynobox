@@ -115,6 +115,20 @@ Cursor CLI runs should accept a `CURSOR_API_KEY` repository secret if you want
 to run that harness in CI. Locally, a prior `cursor-agent login` session also
 works.
 
+Google Antigravity CLI runs require `agy` 1.1.14 or newer. For unattended CI,
+store a Gemini API key as `GEMINI_API_KEY` and create
+`~/.gemini/antigravity-cli/settings.json` with:
+
+```json
+{
+  "modelProvider": "gemini"
+}
+```
+
+Antigravity does not select API-key authentication from `GEMINI_API_KEY` alone.
+With the provider setting present it skips account sign-in, so CI does not need
+to copy an interactive login or keyring cache.
+
 If your dynos only use one harness, adjust the setup and secret checks to match
 the harnesses you actually run.
 

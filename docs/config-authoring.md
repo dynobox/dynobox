@@ -213,11 +213,12 @@ Supported harness IDs:
 - `opencode`
 - `pi`
 - `cursor`
+- `antigravity`
 
 Use strings when the default model and permission behavior are fine:
 
 ```ts
-harnesses: ['claude-code', 'codex', 'opencode', 'pi', 'cursor'];
+harnesses: ['claude-code', 'codex', 'opencode', 'pi', 'cursor', 'antigravity'];
 ```
 
 Use objects to set a model or permission mode:
@@ -229,6 +230,7 @@ harnesses: [
   {id: 'opencode', model: 'openai/gpt-5.1'},
   {id: 'pi', model: 'anthropic/claude-sonnet-4-5'},
   {id: 'cursor', model: 'composer-2'},
+  {id: 'antigravity', model: 'gemini-3.5-flash-medium'},
 ];
 ```
 
@@ -248,6 +250,8 @@ Dangerous mode maps to:
 - `cursor`: `--force --sandbox disabled`, which automatically approves commands
   unless explicitly denied and disables the sandbox. Dynobox does not pass
   `--approve-mcps`; existing Cursor MCP approvals still apply.
+- `antigravity`: `--dangerously-skip-permissions`, which auto-approves every
+  tool call, including file writes and commands.
 
 The CLI can override authored harnesses with `--harness` and authored
 permission modes with `--permission-mode`.

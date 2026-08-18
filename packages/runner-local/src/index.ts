@@ -50,6 +50,7 @@ export type {
   ToolKind,
 } from './harnesses/index.js';
 export type {
+  AntigravityHarnessOptions,
   ClaudeCodeHarnessOptions,
   CodexHarnessOptions,
   CursorHarnessOptions,
@@ -57,6 +58,7 @@ export type {
   PiHarnessOptions,
 } from './harnesses/index.js';
 export {
+  AntigravityHarness,
   ClaudeCodeHarness,
   CodexHarness,
   CursorHarness,

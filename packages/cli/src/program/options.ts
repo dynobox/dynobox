@@ -5,6 +5,7 @@
  */
 
 import {
+  AntigravityHarness,
   ClaudeCodeHarness,
   CodexHarness,
   CursorHarness,
@@ -162,6 +163,7 @@ export function buildRunJobOptions(options: ExecuteCliOptions): RunJobOptions {
       new OpenCodeHarness(),
       new PiHarness(),
       new CursorHarness(),
+      new AntigravityHarness(),
     ],
   };
 

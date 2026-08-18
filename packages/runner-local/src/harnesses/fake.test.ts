@@ -208,4 +208,22 @@ describe('normalizeToolKind', () => {
     expect(normalizeToolKind('list_mcp_resource_templates')).toBe('mcp');
     expect(normalizeToolKind('read_mcp_resource')).toBe('mcp');
   });
+
+  it('normalizes representative Antigravity raw tool names', () => {
+    expect(normalizeToolKind('run_command')).toBe('shell');
+    expect(normalizeToolKind('view_file')).toBe('read_file');
+    expect(normalizeToolKind('write_to_file')).toBe('write_file');
+    expect(normalizeToolKind('replace_file_content')).toBe('edit_file');
+    expect(normalizeToolKind('multi_replace_file_content')).toBe('edit_file');
+    expect(normalizeToolKind('list_dir')).toBe('search_files');
+    expect(normalizeToolKind('find_by_name')).toBe('search_files');
+    expect(normalizeToolKind('grep_search')).toBe('search_files');
+    expect(normalizeToolKind('code_search')).toBe('search_files');
+    expect(normalizeToolKind('search_web')).toBe('web_search');
+    expect(normalizeToolKind('read_url_content')).toBe('web_fetch');
+    expect(normalizeToolKind('invoke_subagent')).toBe('task');
+    expect(normalizeToolKind('manage_task')).toBe('task');
+    expect(normalizeToolKind('manage_subagents')).toBe('task');
+    expect(normalizeToolKind('mcp_github_search')).toBe('mcp');
+  });
 });

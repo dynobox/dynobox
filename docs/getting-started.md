@@ -15,6 +15,7 @@ while completing the task.
   - `opencode` for OpenCode.
   - `pi` for Pi.
   - `cursor-agent` for Cursor CLI.
+  - `agy` 1.1.14 or newer for Google Antigravity CLI.
 
 The selected harness must be installed, authenticated, and available on `PATH`.
 
@@ -72,6 +73,7 @@ dynobox init --harness codex         # OpenAI Codex
 dynobox init --harness opencode      # OpenCode
 dynobox init --harness pi            # Pi
 dynobox init --harness cursor        # Cursor CLI
+dynobox init --harness antigravity   # Google Antigravity CLI
 ```
 
 Run one of the commands above. It writes `dynobox/example.dyno.mjs`, which you
@@ -100,7 +102,8 @@ dynobox run --harness codex
 dynobox run --harness opencode
 dynobox run --harness pi
 dynobox run --harness cursor
-dynobox run --harness claude-code,codex,opencode,pi,cursor
+dynobox run --harness antigravity
+dynobox run --harness claude-code,codex,opencode,pi,cursor,antigravity
 ```
 
 If neither the config nor the CLI selects a harness, Dynobox defaults to
@@ -109,7 +112,7 @@ If neither the config nor the CLI selects a harness, Dynobox defaults to
 Repeat runs when you want a pass-rate signal instead of a single sample:
 
 ```bash
-dynobox run --harness claude-code,codex,opencode,pi,cursor --iterations 5
+dynobox run --harness claude-code,codex,opencode,pi,cursor,antigravity --iterations 5
 ```
 
 Iterations are chosen at runtime. The dyno still only describes what to test;
