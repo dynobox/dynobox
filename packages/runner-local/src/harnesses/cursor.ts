@@ -117,8 +117,11 @@ export function buildCursorArgs(
 function cursorPermissionArgs(
   permissionMode: PermissionMode | undefined,
 ): string[] {
-  if (permissionMode !== 'dangerous') return [];
-  return ['--force', '--sandbox', 'disabled', '--approve-mcps'];
+  // Print mode only persists writes with --force; sandbox-off stays dangerous-only.
+  if (permissionMode === 'dangerous') {
+    return ['--force', '--sandbox', 'disabled'];
+  }
+  return ['--force'];
 }
 
 export function parseCursorJson(stdout: string): CursorParsedOutput {

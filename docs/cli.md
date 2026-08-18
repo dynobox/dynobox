@@ -375,7 +375,10 @@ The CLI supports these real harnesses:
 - `pi` invokes Pi with JSONL output via `--mode json` and `--no-session`, sets
   `PI_OFFLINE=1`, and adds `--no-approve` by default.
 - `cursor` invokes Cursor CLI (`cursor-agent`) with stream-json output, workspace
-  trust, and an explicit scenario work directory.
+  trust, `--force` so print mode persists file changes, and an explicit scenario
+  work directory. Default mode still honors the user's sandbox setting and deny
+  rules. It does not pass `--approve-mcps`; host MCP servers from `~/.cursor`
+  stay unapproved unless you add that flag through extra args.
 
 Make sure the selected harness executable is installed, authenticated, and
 available on `PATH`.
@@ -391,7 +394,8 @@ Dangerous mode maps to harness-specific flags:
 - `opencode`: adds `--auto`, which approves permission prompts but does not
   override explicit deny rules.
 - `pi`: adds `--approve` instead of `--no-approve`.
-- `cursor`: adds `--force --sandbox disabled --approve-mcps`.
+- `cursor`: adds `--sandbox disabled`. `--force` is always passed in print
+  mode so writes persist; it is not the dangerous-mode elevation flag.
 
 Permission warnings are advisory. They explain when a harness blocked a tool
 action, but they do not change job status, assertion results, or exit codes.

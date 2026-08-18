@@ -77,6 +77,7 @@ fi
       '--trust',
       '--workspace',
       '/tmp/work',
+      '--force',
       '--model',
       'composer-2',
       '--approve-mcps',
@@ -84,7 +85,7 @@ fi
     ]);
   });
 
-  it('adds force, disabled sandbox, and MCP approval only in dangerous mode', () => {
+  it('disables sandbox only in dangerous mode', () => {
     expect(
       buildCursorArgs('/tmp/work', 'Say hello.', [], undefined, 'dangerous'),
     ).toEqual([
@@ -97,7 +98,6 @@ fi
       '--force',
       '--sandbox',
       'disabled',
-      '--approve-mcps',
       'Say hello.',
     ]);
   });
