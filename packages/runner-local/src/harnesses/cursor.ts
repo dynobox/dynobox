@@ -331,6 +331,7 @@ function parseAssistantMessage(event: JsonObject): string | undefined {
 function kindOverrideFor(rawName: string): ToolEvent['kind'] | undefined {
   const normalized = rawName.toLowerCase();
   if (
+    normalized === 'mcp' ||
     normalized.startsWith('mcp__') ||
     normalized.startsWith('mcp_') ||
     normalized.startsWith('mcp-')

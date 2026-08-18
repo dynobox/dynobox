@@ -317,6 +317,31 @@ describe('parseCursorJson', () => {
     ]);
   });
 
+  it('maps typed MCP tool calls to the MCP kind', () => {
+    expect(
+      parseCursorJson(
+        jsonl({
+          type: 'tool_call',
+          subtype: 'completed',
+          call_id: 'mcp-typed-1',
+          tool_call: {
+            mcpToolCall: {
+              args: {server: 'linear', tool: 'get_issue'},
+              result: {success: {content: 'DYNO-57'}},
+            },
+          },
+        }),
+      ).toolEvents,
+    ).toEqual([
+      {
+        kind: 'mcp',
+        rawName: 'mcp',
+        input: {server: 'linear', tool: 'get_issue'},
+        status: 'success',
+      },
+    ]);
+  });
+
   it('maps read, edit, and search tools to canonical kinds', () => {
     expect(
       parseCursorJson(
