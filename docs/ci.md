@@ -106,10 +106,12 @@ The current example expects these repository secrets:
 
 - `ANTHROPIC_API_KEY` for Claude Code runs.
 - `OPENAI_API_KEY` for Codex runs.
+- `CURSOR_API_KEY` for Cursor CLI runs.
 
 OpenCode runs require the `opencode` executable plus credentials for the
 provider named by the configured `provider/model`. OpenCode has no single
-provider-independent CI secret.
+provider-independent CI secret. Pi uses its own installed provider credentials.
+Cursor CLI also accepts a prior `cursor-agent login` session for local runs.
 
 If your dynos only use one harness, adjust the setup and secret checks to match
 the harnesses you actually run.

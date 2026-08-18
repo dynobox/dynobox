@@ -7,6 +7,7 @@
 import {
   ClaudeCodeHarness,
   CodexHarness,
+  CursorHarness,
   OpenCodeHarness,
   PiHarness,
   type RunJobOptions,
@@ -160,6 +161,7 @@ export function buildRunJobOptions(options: ExecuteCliOptions): RunJobOptions {
       new CodexHarness(),
       new OpenCodeHarness(),
       new PiHarness(),
+      new CursorHarness(),
     ],
   };
 

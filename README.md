@@ -33,7 +33,8 @@ capture evidence, assert on tools, commands, files, and answers.
 
 - Assert on tool calls, commands, files, HTTP requests, transcripts, and final
   answers without requiring one model to judge another.
-- Run the same scenario through Claude Code, OpenAI Codex, OpenCode, and Pi to
+- Run the same scenario through Claude Code, OpenAI Codex, OpenCode, Pi, and
+  Cursor CLI to
   find behavior that varies between environments.
 - Test multi-step tasks in fresh temporary work directories, repeat them to
   expose flaky behavior, and keep the evidence when something fails.
@@ -42,8 +43,8 @@ capture evidence, assert on tools, commands, files, and answers.
 
 ## Requirements
 
-Node.js 22+ and at least one supported harness (Claude Code, Codex, OpenCode, or
-Pi) installed, authenticated, and available on `PATH`.
+Node.js 22+ and at least one supported harness (Claude Code, Codex, OpenCode, Pi,
+or Cursor) installed, authenticated, and available on `PATH`.
 
 ## Quick start
 
@@ -52,6 +53,7 @@ npx dynobox init                         # Claude Code (default)
 npx dynobox init --harness codex         # OpenAI Codex
 npx dynobox init --harness opencode      # OpenCode
 npx dynobox init --harness pi            # Pi
+npx dynobox init --harness cursor        # Cursor CLI
 npx dynobox run
 ```
 
@@ -80,6 +82,7 @@ harnesses:
   - codex
   - opencode
   - pi
+  - cursor
 scenarios:
   - name: detects the test script
     setup:
@@ -148,14 +151,15 @@ npx dynobox run --harness claude-code
 npx dynobox run --harness codex
 npx dynobox run --harness opencode
 npx dynobox run --harness pi
-npx dynobox run --harness claude-code,codex,opencode,pi
+npx dynobox run --harness cursor
+npx dynobox run --harness claude-code,codex,opencode,pi,cursor
 ```
 
 Repeat every scenario and harness pair to measure pass rates:
 
 ```bash
 npx dynobox run \
-  --harness claude-code,codex,opencode,pi \
+  --harness claude-code,codex,opencode,pi,cursor \
   --iterations 5
 ```
 

@@ -52,12 +52,14 @@ export type {
 export type {
   ClaudeCodeHarnessOptions,
   CodexHarnessOptions,
+  CursorHarnessOptions,
   OpenCodeHarnessOptions,
   PiHarnessOptions,
 } from './harnesses/index.js';
 export {
   ClaudeCodeHarness,
   CodexHarness,
+  CursorHarness,
   FakeHarness,
   normalizeToolKind,
   OpenCodeHarness,

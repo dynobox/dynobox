@@ -170,14 +170,20 @@ export function extractSkillFiles(value: string): string[] {
   const lower = normalized.toLowerCase();
   const files: string[] = [];
 
-  for (const marker of ['.agents/skills/', '.claude/skills/']) {
+  for (const marker of [
+    '.agents/skills/',
+    '.claude/skills/',
+    '.cursor/skills/',
+  ]) {
     let markerIndex = lower.indexOf(marker);
     while (markerIndex !== -1) {
       const start = skillPathStart(normalized, markerIndex);
       const end = skillPathEnd(normalized, markerIndex + marker.length);
       const candidate = normalized.slice(start, end);
       if (
-        /(^|\/)\.(agents|claude)\/skills\/[^/]+\/skill\.md$/i.test(candidate)
+        /(^|\/)\.(agents|claude|cursor)\/skills\/[^/]+\/skill\.md$/i.test(
+          candidate,
+        )
       ) {
         files.push(candidate);
       }

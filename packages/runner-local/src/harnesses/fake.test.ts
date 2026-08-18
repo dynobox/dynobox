@@ -198,8 +198,11 @@ describe('normalizeToolKind', () => {
     expect(normalizeToolKind('list')).toBe('search_files');
     expect(normalizeToolKind('find')).toBe('search_files');
     expect(normalizeToolKind('ls')).toBe('search_files');
+    expect(normalizeToolKind('search')).toBe('search_files');
     expect(normalizeToolKind('webfetch')).toBe('web_fetch');
+    expect(normalizeToolKind('webFetch')).toBe('web_fetch');
     expect(normalizeToolKind('websearch')).toBe('web_search');
+    expect(normalizeToolKind('webSearch')).toBe('web_search');
     expect(normalizeToolKind('task')).toBe('task');
     expect(normalizeToolKind('list_mcp_resources')).toBe('mcp');
     expect(normalizeToolKind('list_mcp_resource_templates')).toBe('mcp');

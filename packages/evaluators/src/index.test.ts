@@ -299,6 +299,21 @@ describe('evaluateAssertions', () => {
     expect(result.passed).toBe(true);
   });
 
+  it('passes skill.referenced for .cursor skill directories', () => {
+    const event: ToolEvent = {
+      kind: 'read_file',
+      rawName: 'read',
+      input: {path: '/tmp/work/.cursor/skills/commit/SKILL.md'},
+    };
+
+    const result = evaluateOne(
+      {id: 'assertion.test.0', type: 'skill.referenced', skill: 'commit'},
+      [event],
+    );
+
+    expect(result.passed).toBe(true);
+  });
+
   it('passes skill.referenced when a native Skill tool invokes the skill', () => {
     const event: ToolEvent = {
       kind: 'unknown',

@@ -55,5 +55,6 @@ function stringMentionsSkillFile(value: string, skillName: string): boolean {
   return [
     `.agents/skills/${normalizedSkill}/skill.md`,
     `.claude/skills/${normalizedSkill}/skill.md`,
+    `.cursor/skills/${normalizedSkill}/skill.md`,
   ].some((path) => normalized.includes(path));
 }
