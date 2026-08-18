@@ -1,3 +1,5 @@
+export type {AntigravityHarnessOptions} from './antigravity.js';
+export {AntigravityHarness} from './antigravity.js';
 export type {ClaudeCodeHarnessOptions} from './claudeCode.js';
 export {ClaudeCodeHarness} from './claudeCode.js';
 export type {CodexHarnessOptions} from './codex.js';

@@ -224,6 +224,34 @@ describe('evaluateAssertions', () => {
     expect(contentString.passed).toBe(false);
   });
 
+  it('matches Antigravity file tool path fields case-insensitively', () => {
+    const writeEvent: ToolEvent = {
+      kind: 'write_file',
+      rawName: 'write_to_file',
+      input: {TargetFile: '/tmp/work/src/index.ts', CodeContent: 'README.md'},
+    };
+
+    const targetFile = evaluateOne(
+      toolAssertion({
+        type: 'tool.called',
+        tool: 'write_file',
+        path: 'src/index.ts',
+      }),
+      [writeEvent],
+    );
+    const contentString = evaluateOne(
+      toolAssertion({
+        type: 'tool.called',
+        tool: 'write_file',
+        path: 'README.md',
+      }),
+      [writeEvent],
+    );
+
+    expect(targetFile.passed).toBe(true);
+    expect(contentString.passed).toBe(false);
+  });
+
   it('evaluates mcp, task, and unknown as kind-only tool assertions', () => {
     const toolEvents: ToolEvent[] = [
       {kind: 'mcp', rawName: 'mcp__github__search', input: {query: 'x'}},

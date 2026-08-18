@@ -9,6 +9,7 @@ export const HARNESS_IDS = [
   'opencode',
   'pi',
   'cursor',
+  'antigravity',
 ] as const;
 
 export type HarnessId = (typeof HARNESS_IDS)[number];

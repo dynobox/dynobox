@@ -202,7 +202,8 @@ validated config and a final summary record.
                            DYNOBOX_UPLOAD_URL (see Saving Runs below).
 ```
 
-Harness IDs are `claude-code`, `codex`, `opencode`, `pi`, and `cursor`.
+Harness IDs are `claude-code`, `codex`, `opencode`, `pi`, `cursor`, and
+`antigravity`.
 
 Examples:
 
@@ -212,7 +213,8 @@ dynobox run --harness codex
 dynobox run --harness opencode
 dynobox run --harness pi
 dynobox run --harness cursor
-dynobox run --harness claude-code,codex,opencode,pi,cursor
+dynobox run --harness antigravity
+dynobox run --harness claude-code,codex,opencode,pi,cursor,antigravity
 dynobox run --harness codex --model gpt-5.5
 dynobox run --harness opencode --model openai/gpt-5.5
 dynobox run --harness claude-code,codex --model sonnet,gpt-5.5
@@ -378,6 +380,14 @@ The CLI supports these real harnesses:
   trust, and an explicit scenario work directory. Default mode uses Cursor's
   normal command approval, sandbox, and permission-rule behavior. It does not
   pass `--approve-mcps`; existing Cursor MCP approvals still apply.
+- `antigravity` invokes Google Antigravity CLI (`agy`) 1.1.14 or newer in
+  headless mode with documented stream-json output. Each invocation creates a
+  fresh Antigravity project and explicitly adds the scenario work directory so
+  AGY does not reuse its persistent default project workspace. Print mode
+  always sets `--print-timeout`: the Dynobox job timeout when one is set, or
+  `30m` otherwise, so AGY's default five-minute cap does not cut off long
+  evals. Default mode preserves the permission policy in Antigravity settings;
+  tools that still require approval are soft-denied rather than prompting.
 
 Make sure the selected harness executable is installed, authenticated, and
 available on `PATH`.
@@ -395,6 +405,13 @@ Dangerous mode maps to harness-specific flags:
 - `pi`: adds `--approve` instead of `--no-approve`.
 - `cursor`: adds `--force --sandbox disabled`, which automatically approves
   commands unless explicitly denied and disables the sandbox.
+- `antigravity`: adds `--dangerously-skip-permissions`, which auto-approves all
+  tool calls, including file writes and commands.
+
+Antigravity can use a cached interactive login locally. For headless CI, set
+`modelProvider` to `gemini` in `~/.gemini/antigravity-cli/settings.json` and
+provide `GEMINI_API_KEY`; setting the environment variable alone does not select
+API-key authentication.
 
 Permission warnings are advisory. They explain when a harness blocked a tool
 action, but they do not change job status, assertion results, or exit codes.

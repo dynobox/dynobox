@@ -101,6 +101,8 @@ Dynobox currently runs local scenarios through:
 - OpenAI Codex via the `codex` executable.
 - OpenCode via the `opencode` executable.
 - Pi via the `pi` executable.
+- Cursor CLI via the `cursor-agent` executable.
+- Google Antigravity CLI 1.1.14 or newer via the `agy` executable.
 
 Each harness must already be installed, authenticated, and available on
 `PATH`.

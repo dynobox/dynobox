@@ -16,11 +16,18 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   capture, model selection, workspace trust, default Cursor permissions, and
   dangerous-mode command auto-approval and sandbox disable. Host MCP
   auto-approval is not enabled.
+- Added Google Antigravity CLI harness execution for AGY 1.1.14 or newer with
+  stream-json tool and final-message capture, model selection, documented
+  Gemini API-key authentication, isolated per-run projects, default Antigravity
+  permissions, and dangerous-mode tool auto-approval. Print mode sets
+  `--print-timeout` to the Dynobox job timeout, or 30 minutes when unset, so
+  AGY's default five-minute cap does not cut off long evals.
 
 ### `@dynobox/sdk`
 
 - Added `pi` as a supported harness ID.
 - Added `cursor` as a supported harness ID.
+- Added `antigravity` as a supported harness ID.
 
 ---
 
