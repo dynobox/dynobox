@@ -19,7 +19,7 @@ describe('--harness override validation', () => {
   it('registers all supported real harnesses by default', () => {
     expect(
       buildRunJobOptions({}).harnesses?.map((harness) => harness.id),
-    ).toEqual(['claude-code', 'codex', 'opencode', 'pi']);
+    ).toEqual(['claude-code', 'codex', 'opencode', 'pi', 'cursor']);
   });
 
   it('accepts a valid harness id and runs in quiet mode', async () => {

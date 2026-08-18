@@ -14,6 +14,7 @@ while completing the task.
   - `codex` for OpenAI Codex.
   - `opencode` for OpenCode.
   - `pi` for Pi.
+  - `cursor-agent` for Cursor CLI.
 
 The selected harness must be installed, authenticated, and available on `PATH`.
 
@@ -70,6 +71,7 @@ dynobox init                         # Claude Code (default)
 dynobox init --harness codex         # OpenAI Codex
 dynobox init --harness opencode      # OpenCode
 dynobox init --harness pi            # Pi
+dynobox init --harness cursor        # Cursor CLI
 ```
 
 Run one of the commands above. It writes `dynobox/example.dyno.mjs`, which you
@@ -97,7 +99,8 @@ dynobox run --harness claude-code
 dynobox run --harness codex
 dynobox run --harness opencode
 dynobox run --harness pi
-dynobox run --harness claude-code,codex,opencode,pi
+dynobox run --harness cursor
+dynobox run --harness claude-code,codex,opencode,pi,cursor
 ```
 
 If neither the config nor the CLI selects a harness, Dynobox defaults to
@@ -106,7 +109,7 @@ If neither the config nor the CLI selects a harness, Dynobox defaults to
 Repeat runs when you want a pass-rate signal instead of a single sample:
 
 ```bash
-dynobox run --harness claude-code,codex,opencode,pi --iterations 5
+dynobox run --harness claude-code,codex,opencode,pi,cursor --iterations 5
 ```
 
 Iterations are chosen at runtime. The dyno still only describes what to test;

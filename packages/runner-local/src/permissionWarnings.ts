@@ -85,6 +85,7 @@ const PERMISSION_DENIED_PATTERNS = [
   /\brequires approval\b/i,
   /\buser has specified a rule\b.*\b(?:prevents?|prohibits?|blocks?)\b/i,
   /\bdenied by policy\b/i,
+  /\bblocked by permissions configuration\b/i,
   /\bblocked by sandbox\b/i,
   /\bsandbox denied\b/i,
 ] as const;

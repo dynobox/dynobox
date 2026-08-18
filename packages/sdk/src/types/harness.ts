@@ -3,7 +3,13 @@
  *
  * Adding a value here is non-breaking; removing one is.
  */
-export const HARNESS_IDS = ['claude-code', 'codex', 'opencode', 'pi'] as const;
+export const HARNESS_IDS = [
+  'claude-code',
+  'codex',
+  'opencode',
+  'pi',
+  'cursor',
+] as const;
 
 export type HarnessId = (typeof HARNESS_IDS)[number];
 

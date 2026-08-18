@@ -212,11 +212,12 @@ Supported harness IDs:
 - `codex`
 - `opencode`
 - `pi`
+- `cursor`
 
 Use strings when the default model and permission behavior are fine:
 
 ```ts
-harnesses: ['claude-code', 'codex', 'opencode', 'pi'];
+harnesses: ['claude-code', 'codex', 'opencode', 'pi', 'cursor'];
 ```
 
 Use objects to set a model or permission mode:
@@ -227,6 +228,7 @@ harnesses: [
   {id: 'codex', model: 'gpt-5.1', permissionMode: 'dangerous'},
   {id: 'opencode', model: 'openai/gpt-5.1'},
   {id: 'pi', model: 'anthropic/claude-sonnet-4-5'},
+  {id: 'cursor', model: 'composer-2'},
 ];
 ```
 
@@ -243,6 +245,9 @@ Dangerous mode maps to:
 - `opencode`: `--auto`, which approves permission prompts but does not override
   explicit deny rules.
 - `pi`: `--approve`, which trusts project-local Pi resources for the run.
+- `cursor`: `--force --sandbox disabled`, which automatically approves commands
+  unless explicitly denied and disables the sandbox. Dynobox does not pass
+  `--approve-mcps`; existing Cursor MCP approvals still apply.
 
 The CLI can override authored harnesses with `--harness` and authored
 permission modes with `--permission-mode`.
@@ -529,8 +534,9 @@ skill.referenced('commit');
 ```
 
 This passes when observed tool events reference
-`.agents/skills/<name>/SKILL.md` or `.claude/skills/<name>/SKILL.md`, including
-reads, searches, or shell commands that access the file.
+`.agents/skills/<name>/SKILL.md`, `.claude/skills/<name>/SKILL.md`, or
+`.cursor/skills/<name>/SKILL.md`, including reads, searches, or shell commands
+that access the file.
 
 The name is intentionally narrow: Dynobox observes file references, not whether
 a harness semantically activated or followed the skill instructions.

@@ -41,7 +41,7 @@ export async function GET() {
     '- Run discovered dynos: `dynobox run`',
     '- Run a target: `dynobox run [path]`',
     '- Validate dynos without running harnesses: `dynobox validate [path]`',
-    '- Select a harness: `dynobox run --harness claude-code`, `dynobox run --harness codex`, `dynobox run --harness opencode`, or `dynobox run --harness pi`',
+    '- Select a harness: `dynobox run --harness claude-code`, `dynobox run --harness codex`, `dynobox run --harness opencode`, `dynobox run --harness pi`, or `dynobox run --harness cursor`',
     '- Emit machine-readable reports: `dynobox run --reporter json`',
     '',
     '## Agent Retrieval Notes',

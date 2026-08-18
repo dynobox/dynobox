@@ -38,14 +38,17 @@ export function normalizeToolKind(rawName: string): ToolKind {
     case 'list':
     case 'find':
     case 'ls':
+    case 'search':
     case 'search_files':
       return 'search_files';
     case 'WebFetch':
     case 'webfetch':
+    case 'webFetch':
     case 'web_fetch':
       return 'web_fetch';
     case 'WebSearch':
     case 'websearch':
+    case 'webSearch':
     case 'web_search':
       return 'web_search';
     case 'Task':

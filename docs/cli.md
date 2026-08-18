@@ -202,7 +202,7 @@ validated config and a final summary record.
                            DYNOBOX_UPLOAD_URL (see Saving Runs below).
 ```
 
-Harness IDs are `claude-code`, `codex`, `opencode`, and `pi`.
+Harness IDs are `claude-code`, `codex`, `opencode`, `pi`, and `cursor`.
 
 Examples:
 
@@ -211,7 +211,8 @@ dynobox run --harness claude-code
 dynobox run --harness codex
 dynobox run --harness opencode
 dynobox run --harness pi
-dynobox run --harness claude-code,codex,opencode,pi
+dynobox run --harness cursor
+dynobox run --harness claude-code,codex,opencode,pi,cursor
 dynobox run --harness codex --model gpt-5.5
 dynobox run --harness opencode --model openai/gpt-5.5
 dynobox run --harness claude-code,codex --model sonnet,gpt-5.5
@@ -373,6 +374,10 @@ The CLI supports these real harnesses:
   directory.
 - `pi` invokes Pi with JSONL output via `--mode json` and `--no-session`, sets
   `PI_OFFLINE=1`, and adds `--no-approve` by default.
+- `cursor` invokes Cursor CLI (`cursor-agent`) with stream-json output, workspace
+  trust, and an explicit scenario work directory. Default mode uses Cursor's
+  normal command approval, sandbox, and permission-rule behavior. It does not
+  pass `--approve-mcps`; existing Cursor MCP approvals still apply.
 
 Make sure the selected harness executable is installed, authenticated, and
 available on `PATH`.
@@ -388,6 +393,8 @@ Dangerous mode maps to harness-specific flags:
 - `opencode`: adds `--auto`, which approves permission prompts but does not
   override explicit deny rules.
 - `pi`: adds `--approve` instead of `--no-approve`.
+- `cursor`: adds `--force --sandbox disabled`, which automatically approves
+  commands unless explicitly denied and disables the sandbox.
 
 Permission warnings are advisory. They explain when a harness blocked a tool
 action, but they do not change job status, assertion results, or exit codes.

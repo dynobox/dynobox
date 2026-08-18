@@ -109,7 +109,11 @@ The current example expects these repository secrets:
 
 OpenCode runs require the `opencode` executable plus credentials for the
 provider named by the configured `provider/model`. OpenCode has no single
-provider-independent CI secret.
+provider-independent CI secret. Pi uses its own installed provider credentials.
+
+Cursor CLI runs should accept a `CURSOR_API_KEY` repository secret if you want
+to run that harness in CI. Locally, a prior `cursor-agent login` session also
+works.
 
 If your dynos only use one harness, adjust the setup and secret checks to match
 the harnesses you actually run.
