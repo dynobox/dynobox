@@ -65,6 +65,7 @@ export class AntigravityHarness implements Harness {
         this.extraArgs,
         input.model,
         input.permissionMode,
+        input.timeoutMs,
       ),
       input,
       cwd: workDir,
@@ -88,12 +89,16 @@ export class AntigravityHarness implements Harness {
   }
 }
 
+/** AGY print mode defaults to 5m; other harnesses have no inner cap. */
+const DEFAULT_ANTIGRAVITY_PRINT_TIMEOUT = '30m';
+
 export function buildAntigravityArgs(
   workDir: string,
   prompt: string,
   extraArgs: readonly string[] = [],
   model?: string,
   permissionMode?: PermissionMode,
+  timeoutMs?: number,
 ): string[] {
   return [
     '--new-project',
@@ -103,6 +108,10 @@ export function buildAntigravityArgs(
     prompt,
     '--output-format',
     'stream-json',
+    '--print-timeout',
+    timeoutMs === undefined
+      ? DEFAULT_ANTIGRAVITY_PRINT_TIMEOUT
+      : `${timeoutMs}ms`,
     ...(permissionMode === 'dangerous'
       ? ['--dangerously-skip-permissions']
       : []),

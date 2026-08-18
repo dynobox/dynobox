@@ -77,6 +77,8 @@ fi
       'Say hello.',
       '--output-format',
       'stream-json',
+      '--print-timeout',
+      '30m',
       '--model',
       'gemini-3.5-flash-medium',
       '--effort',
@@ -101,7 +103,32 @@ fi
       'Run tests.',
       '--output-format',
       'stream-json',
+      '--print-timeout',
+      '30m',
       '--dangerously-skip-permissions',
+    ]);
+  });
+
+  it('maps a Dynobox timeout onto Antigravity print-timeout', () => {
+    expect(
+      buildAntigravityArgs(
+        '/tmp/work',
+        'Say hello.',
+        [],
+        undefined,
+        undefined,
+        90_000,
+      ),
+    ).toEqual([
+      '--new-project',
+      '--add-dir',
+      '/tmp/work',
+      '-p',
+      'Say hello.',
+      '--output-format',
+      'stream-json',
+      '--print-timeout',
+      '90000ms',
     ]);
   });
 

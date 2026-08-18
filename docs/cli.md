@@ -383,9 +383,11 @@ The CLI supports these real harnesses:
 - `antigravity` invokes Google Antigravity CLI (`agy`) 1.1.14 or newer in
   headless mode with documented stream-json output. Each invocation creates a
   fresh Antigravity project and explicitly adds the scenario work directory so
-  AGY does not reuse its persistent default project workspace. Default mode
-  preserves the permission policy in Antigravity settings; tools that still
-  require approval are soft-denied rather than prompting.
+  AGY does not reuse its persistent default project workspace. Print mode
+  always sets `--print-timeout`: the Dynobox job timeout when one is set, or
+  `30m` otherwise, so AGY's default five-minute cap does not cut off long
+  evals. Default mode preserves the permission policy in Antigravity settings;
+  tools that still require approval are soft-denied rather than prompting.
 
 Make sure the selected harness executable is installed, authenticated, and
 available on `PATH`.
