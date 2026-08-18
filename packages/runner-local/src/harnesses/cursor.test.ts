@@ -77,7 +77,6 @@ fi
       '--trust',
       '--workspace',
       '/tmp/work',
-      '--force',
       '--model',
       'composer-2',
       '--approve-mcps',
@@ -317,6 +316,46 @@ describe('parseCursorJson', () => {
     ]);
   });
 
+  it('records permission-denied tool results as failures', () => {
+    expect(
+      parseCursorJson(
+        jsonl(
+          {
+            type: 'tool_call',
+            subtype: 'started',
+            call_id: 'shell-denied-1',
+            tool_call: {
+              shellToolCall: {args: {command: 'printf denied-review'}},
+            },
+          },
+          {
+            type: 'tool_call',
+            subtype: 'completed',
+            call_id: 'shell-denied-1',
+            tool_call: {
+              shellToolCall: {
+                result: {
+                  permissionDenied: {
+                    error: 'Command blocked by permissions configuration',
+                  },
+                },
+              },
+            },
+          },
+        ),
+      ).toolEvents,
+    ).toEqual([
+      {
+        kind: 'shell',
+        rawName: 'shell',
+        input: {command: 'printf denied-review'},
+        command: 'printf denied-review',
+        status: 'failure',
+        message: 'Command blocked by permissions configuration',
+      },
+    ]);
+  });
+
   it('maps typed MCP tool calls to the MCP kind', () => {
     expect(
       parseCursorJson(
@@ -337,6 +376,31 @@ describe('parseCursorJson', () => {
         kind: 'mcp',
         rawName: 'mcp',
         input: {server: 'linear', tool: 'get_issue'},
+        status: 'success',
+      },
+    ]);
+  });
+
+  it('maps Cursor MCP discovery calls to the MCP kind', () => {
+    expect(
+      parseCursorJson(
+        jsonl({
+          type: 'tool_call',
+          subtype: 'completed',
+          call_id: 'mcp-discovery-1',
+          tool_call: {
+            getMcpToolsToolCall: {
+              args: {toolCallId: 'mcp-discovery-1'},
+              result: {success: {content: '{"mode":"catalog"}'}},
+            },
+          },
+        }),
+      ).toolEvents,
+    ).toEqual([
+      {
+        kind: 'mcp',
+        rawName: 'getMcpTools',
+        input: {toolCallId: 'mcp-discovery-1'},
         status: 'success',
       },
     ]);

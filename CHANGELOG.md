@@ -13,9 +13,9 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Added Pi harness execution with JSONL tool and final-message capture, model
   selection, permission approval, and non-persistent sessions.
 - Added Cursor CLI harness execution with stream-json tool and final-message
-  capture, model selection, workspace trust, print-mode `--force` so writes
-  persist, and dangerous-mode sandbox disable. Host MCP auto-approval is
-  not enabled.
+  capture, model selection, workspace trust, default Cursor permissions, and
+  dangerous-mode command auto-approval and sandbox disable. Host MCP
+  auto-approval is not enabled.
 
 ### `@dynobox/sdk`
 

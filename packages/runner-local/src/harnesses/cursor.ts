@@ -117,11 +117,8 @@ export function buildCursorArgs(
 function cursorPermissionArgs(
   permissionMode: PermissionMode | undefined,
 ): string[] {
-  // Print mode only persists writes with --force; sandbox-off stays dangerous-only.
-  if (permissionMode === 'dangerous') {
-    return ['--force', '--sandbox', 'disabled'];
-  }
-  return ['--force'];
+  if (permissionMode !== 'dangerous') return [];
+  return ['--force', '--sandbox', 'disabled'];
 }
 
 export function parseCursorJson(stdout: string): CursorParsedOutput {
@@ -286,6 +283,7 @@ function hasFailureResult(result: JsonObject): boolean {
     result.success === false ||
     result.error != null ||
     result.failure != null ||
+    result.permissionDenied != null ||
     result.rejected != null
   );
 }
@@ -300,6 +298,7 @@ function parseToolMessage(candidate: JsonObject): string | undefined {
   const failureMessage =
     stringFromUnknown(result.error) ??
     stringFromUnknown(result.failure) ??
+    stringFromUnknown(result.permissionDenied) ??
     rejectedReason;
   if (failureMessage !== undefined) return failureMessage;
 
@@ -335,6 +334,7 @@ function kindOverrideFor(rawName: string): ToolEvent['kind'] | undefined {
   const normalized = rawName.toLowerCase();
   if (
     normalized === 'mcp' ||
+    normalized === 'getmcptools' ||
     normalized.startsWith('mcp__') ||
     normalized.startsWith('mcp_') ||
     normalized.startsWith('mcp-')

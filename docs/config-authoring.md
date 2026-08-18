@@ -245,10 +245,9 @@ Dangerous mode maps to:
 - `opencode`: `--auto`, which approves permission prompts but does not override
   explicit deny rules.
 - `pi`: `--approve`, which trusts project-local Pi resources for the run.
-- `cursor`: `--sandbox disabled`. `--force` is always passed in print mode so
-  writes persist; it is not the dangerous-mode elevation flag. Dynobox does
-  not pass `--approve-mcps`, so host MCP servers from `~/.cursor` stay
-  unapproved unless you add that flag through extra args.
+- `cursor`: `--force --sandbox disabled`, which automatically approves commands
+  unless explicitly denied and disables the sandbox. Dynobox does not pass
+  `--approve-mcps`; existing Cursor MCP approvals still apply.
 
 The CLI can override authored harnesses with `--harness` and authored
 permission modes with `--permission-mode`.
