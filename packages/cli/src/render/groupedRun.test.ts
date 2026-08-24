@@ -65,6 +65,7 @@ type ResultSpec = {
   status?: LocalRunnerStatus;
   failedAssertionIndexes?: number[];
   totalMs?: number;
+  assertionsMs?: number;
   cliMockCalls?: LocalRunnerResult['cliMockCalls'];
   diagnostics?: string[];
   verificationFailed?: boolean;
@@ -108,7 +109,7 @@ function makeResult(
     timing: {
       setupMs: 0,
       harnessMs: 0,
-      assertionsMs: 0,
+      assertionsMs: spec.assertionsMs ?? 0,
       totalMs: spec.totalMs ?? 4200,
     },
   };
@@ -225,10 +226,24 @@ describe('renderGroupedRun', () => {
     expect(output).not.toContain('claude-code');
   });
 
-  it('aligns harness labels when there are multiple harness labels', () => {
+  it('renders full metadata for one configured harness', () => {
+    const jobs = [makeJob({harness: 'opencode', model: 'openai/gpt-5.4-mini'})];
+    const output = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results: jobs.map((job) => makeResult(job)),
+      ctx,
+    });
+
+    expect(output).toContain(
+      '      opencode · model: openai/gpt-5.4-mini\n        ✓ 2 assertions',
+    );
+    expect(output).not.toContain('...');
+  });
+
+  it('renders full harness metadata above results when there are multiple labels', () => {
     const jobs = [
       makeJob({model: 'sonnet'}),
-      makeJob({harness: 'codex', model: 'gpt-5.4-mini'}),
+      makeJob({harness: 'opencode', model: 'openai/gpt-5.4-mini'}),
     ];
     const output = renderGroupedRun({
       dynos: [dynoOf(jobs)],
@@ -236,10 +251,13 @@ describe('renderGroupedRun', () => {
       ctx,
     });
 
-    expect(output).toContain('claude-code/sonnet');
-    expect(output).toContain('codex/gpt-5.4-mini');
-    // Both rows align: labels are padded to the same column.
-    expect(output).toContain('claude-code/sonnet  ');
+    expect(output).toContain(
+      '      claude-code · model: sonnet\n        ✓ 2 assertions',
+    );
+    expect(output).toContain(
+      '      opencode · model: openai/gpt-5.4-mini\n        ✓ 2 assertions',
+    );
+    expect(output).not.toContain('...');
   });
 
   it('shows failed assertions below a failed row', () => {
@@ -493,13 +511,20 @@ describe('renderGroupedRun', () => {
     const jobs = [makeJob()];
     const output = renderGroupedRun({
       dynos: [dynoOf(jobs)],
-      results: jobs.map((job) => makeResult(job)),
+      results: jobs.map((job) => makeResult(job, {assertionsMs: 1200})),
       ctx: createRenderContext({mode: 'verbose'}),
     });
 
     expect(output).toContain('setup');
     expect(output).toContain('assertions');
     expect(output).toContain('✓ tool.called(shell)');
+    const assertionsLine = output
+      .split('\n')
+      .find(
+        (line) => line.includes('assertions') && line.includes('2 of 2 passed'),
+      );
+    expect(assertionsLine).toBeDefined();
+    expect(assertionsLine).not.toContain('1.2s');
   });
 
   it('lists configured CLI mocks and ordered calls in verbose mode', () => {

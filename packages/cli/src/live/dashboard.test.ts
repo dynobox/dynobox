@@ -13,8 +13,8 @@ describe('createLiveDashboard', () => {
     );
 
     dashboard.start([
-      {headline: 'claude running'},
-      {headline: 'codex running'},
+      {headline: 'claude · model: sonnet\n  running'},
+      {headline: 'codex · model: gpt-5\n  running'},
     ]);
     dashboard.emit(0, {
       kind: 'update',
@@ -24,13 +24,15 @@ describe('createLiveDashboard', () => {
     dashboard.tick('b');
     dashboard.clear();
 
-    expect(writes[0]).toBe('claude running\ncodex running\n');
-    expect(writes).toContain('\x1b[2A\r\x1b[J');
-    expect(writes).toContain('\x1b[3A\r\x1b[J');
+    expect(writes[0]).toBe(
+      'claude · model: sonnet\n  running\ncodex · model: gpt-5\n  running\n',
+    );
+    expect(writes).toContain('\x1b[4A\r\x1b[J');
+    expect(writes).toContain('\x1b[5A\r\x1b[J');
     expect(writes.join('')).toContain('claude a 100');
     expect(writes.join('')).toContain('codex setup passed');
     expect(writes.join('')).toContain('claude b 100');
-    expect(writes.at(-1)).toBe('\x1b[4A\r\x1b[J');
+    expect(writes.at(-1)).toBe('\x1b[6A\r\x1b[J');
 
     vi.restoreAllMocks();
   });

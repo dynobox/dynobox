@@ -139,7 +139,6 @@ export function renderAssertionsPhase(
         : 'fail',
     label: 'assertions',
     detail,
-    durationMs: result.timing.assertionsMs,
     omitIcon,
   })}\n`;
 }

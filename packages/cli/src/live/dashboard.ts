@@ -28,7 +28,7 @@ export function createLiveDashboard(
   let frame = initialFrame;
 
   const renderBlock = (block: DashboardBlockState, nowMs: number): string[] => {
-    const lines = [block.headline];
+    const lines = block.headline.split('\n');
     if (block.phase !== undefined) {
       lines.push(
         typeof block.phase === 'string'

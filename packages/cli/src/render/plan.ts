@@ -15,9 +15,10 @@ export function formatJobHarness(
   job: Pick<LocalRunnerJob, 'harness' | 'model' | 'permissionMode'>,
 ): string {
   const parts: string[] = [job.harness];
-  if (job.model !== undefined) parts.push(job.model);
-  if (job.permissionMode !== undefined) parts.push(job.permissionMode);
-  return parts.join('/');
+  if (job.model !== undefined) parts.push(`model: ${job.model}`);
+  if (job.permissionMode !== undefined)
+    parts.push(`mode: ${job.permissionMode}`);
+  return parts.join(' · ');
 }
 
 /** Unique harness labels across a run, in first-seen job order. */
@@ -32,7 +33,7 @@ export function iterationCount(jobs: readonly LocalRunnerJob[]): number {
 
 /**
  * Render the discovery summary used in run headers and quiet output:
- * `1 dyno · 2 scenarios · harness: codex/gpt-5.4-mini/dangerous`.
+ * `1 dyno · 2 scenarios · harness: codex · model: gpt-5.4-mini`.
  *
  * When the full harness label list would push the line past `maxWidth`,
  * fall back to a count (`harnesses: 4`). Iterations only appear when the

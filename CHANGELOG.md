@@ -13,6 +13,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Run harness configurations concurrently within each scenario while keeping
   iterations sequential, preserving configured result order, and showing
   parallel progress in interactive terminals.
+- Display complete harness metadata with explicit model and mode labels, and
+  omit assertion-phase timing from terminal output.
 
 ---
 

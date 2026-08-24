@@ -255,9 +255,12 @@ harness configurations to finish.
 Default output groups results by dyno, then by scenario. The header shows a
 discovery summary (`discovered 1 dyno · 2 scenarios · harness: …`) including
 model and permission mode in harness labels when configured. When a run spans
-multiple harness labels, each scenario shows one aligned row per harness. A
-single harness label is shown in the header but omitted from result rows to keep
-the grouped output compact.
+multiple harness labels, each scenario shows full explicit metadata such as
+`opencode · model: openai/gpt-5 · mode: dangerous` above its result row. A bare
+single harness is shown only in the header, while a configured model or mode is
+also shown above its result so long metadata is never lost to header width.
+Assertion phase rows omit their typically negligible duration; setup, harness,
+job, and aggregate durations remain visible.
 
 Failed rows show failed assertions with an `expected` line and an `observed`
 line describing the evidence Dynobox actually saw. For path-aware tool

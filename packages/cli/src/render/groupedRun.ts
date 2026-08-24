@@ -21,7 +21,6 @@ import {
   style,
   symbol,
   truncate,
-  visibleLength,
 } from '../terminal/index.js';
 import type {DebugLogPaths} from '../util/transcript.js';
 import {renderAssertionDetails} from './assertions.js';
@@ -41,7 +40,6 @@ const DYNO_INDENT = '  ';
 const SCENARIO_INDENT = '    ';
 const ROW_INDENT = '      ';
 const DETAIL_INDENT = '        ';
-const MAX_HARNESS_COLUMN_WIDTH = 24;
 
 export type GroupedJobEntry = {
   job: LocalRunnerJob;
@@ -155,21 +153,9 @@ export function buildGroupedRunView(
 }
 
 export type RowLabelOptions = {
-  /** Harness label column; rendered (padded) only when the run has multiple labels. */
+  /** Full harness metadata rendered above the status when context requires it. */
   harnessLabel?: string;
-  harnessLabelWidth?: number;
 };
-
-/** Column width for aligned harness labels, capped for readability. */
-export function harnessLabelColumnWidth(
-  jobs: readonly LocalRunnerJob[],
-): number {
-  return uniqueHarnessLabels(jobs).reduce(
-    (max, label) =>
-      Math.max(max, visibleLength(truncate(label, MAX_HARNESS_COLUMN_WIDTH))),
-    0,
-  );
-}
 
 /**
  * Render the result row for one harness group: assertion status + duration
@@ -189,8 +175,13 @@ export function renderHarnessGroupRow(
     (sum, entry) => sum + entry.result.timing.totalMs,
     0,
   );
-  const left = `${ROW_INDENT}${rowLabelPrefix(options)}${status}`;
-  return leftRight(left, dim(ctx, formatDuration(durationMs)), ctx.width);
+  const left = `${statusIndent(options)}${status}`;
+  const result = leftRight(
+    left,
+    dim(ctx, formatDuration(durationMs)),
+    ctx.width,
+  );
+  return `${harnessLabelLine(options)}${result}`;
 }
 
 /** Transient headline shown while a harness group is running in live mode. */
@@ -203,7 +194,8 @@ export function renderRunningGroupRow(
     options.iteration === undefined || options.iterationCount === undefined
       ? ''
       : ` iteration ${options.iteration + 1}/${options.iterationCount}`;
-  return `${ROW_INDENT}${rowLabelPrefix(options)}${icon} ${dim(ctx, `running${iteration}`)}`;
+  const result = `${statusIndent(options)}${icon} ${dim(ctx, `running${iteration}`)}`;
+  return `${harnessLabelLine(options)}${result}`;
 }
 
 /** Render the `  {dyno label}` group line. */
@@ -328,8 +320,11 @@ export type GroupedRunRenderInput = {
 export function renderGroupedRun(input: GroupedRunRenderInput): string {
   const {dynos, results, ctx} = input;
   const jobs = dynos.flatMap((dyno) => dyno.jobs);
-  const multiHarness = uniqueHarnessLabels(jobs).length > 1;
-  const labelWidth = harnessLabelColumnWidth(jobs);
+  const showHarnessMetadata =
+    uniqueHarnessLabels(jobs).length > 1 ||
+    jobs.some(
+      (job) => job.model !== undefined || job.permissionMode !== undefined,
+    );
   const expandAll = ctx.mode === 'verbose' || ctx.mode === 'debug';
   const view = buildGroupedRunView(dynos, results);
 
@@ -340,8 +335,8 @@ export function renderGroupedRun(input: GroupedRunRenderInput): string {
     for (const scenario of dyno.scenarios) {
       lines.push(`${renderScenarioLine(scenario.name, ctx)}\n`);
       for (const group of scenario.harnessGroups) {
-        const rowOptions: RowLabelOptions = multiHarness
-          ? {harnessLabel: group.label, harnessLabelWidth: labelWidth}
+        const rowOptions: RowLabelOptions = showHarnessMetadata
+          ? {harnessLabel: group.label}
           : {};
         lines.push(
           `${renderHarnessGroupRow(group.entries, ctx, rowOptions)}\n`,
@@ -403,12 +398,14 @@ function debugLogPathsOption(
   return paths === undefined ? {} : {debugLogPaths: paths};
 }
 
-function rowLabelPrefix(options: RowLabelOptions): string {
-  if (options.harnessLabel === undefined) return '';
-  const label = truncate(options.harnessLabel, MAX_HARNESS_COLUMN_WIDTH);
-  const width = options.harnessLabelWidth ?? visibleLength(label);
-  const gap = Math.max(0, width - visibleLength(label));
-  return `${label}${' '.repeat(gap)}  `;
+function harnessLabelLine(options: RowLabelOptions): string {
+  return options.harnessLabel === undefined
+    ? ''
+    : `${ROW_INDENT}${options.harnessLabel}\n`;
+}
+
+function statusIndent(options: RowLabelOptions): string {
+  return options.harnessLabel === undefined ? ROW_INDENT : DETAIL_INDENT;
 }
 
 function renderSingleIterationStatus(

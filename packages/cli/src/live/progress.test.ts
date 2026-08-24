@@ -42,6 +42,7 @@ describe('renderLiveProgressEvent', () => {
     if (line.kind !== 'commit') throw new Error('Expected committed output.');
     expect(line.text).toContain('✗ assertions');
     expect(line.text).toContain('2 of 2 passed; verification failed');
+    expect(line.text).not.toMatch(/\d+\.\d+s/);
   });
 
   it('omits the passing count for zero-assertion verification failures', () => {

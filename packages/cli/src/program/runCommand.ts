@@ -35,7 +35,6 @@ import {
 } from '../live/index.js';
 import {
   groupJobs,
-  harnessLabelColumnWidth,
   renderDynoLine,
   renderHarnessGroupRow,
   renderIterationDetailLines,
@@ -486,8 +485,11 @@ async function runLive(input: RunPathInput): Promise<RunPathResult> {
   const jobs = dynos.flatMap((dyno) => dyno.jobs);
 
   writeStdout(renderRunHeader(dynos, ctx));
-  const multiHarness = uniqueHarnessLabels(jobs).length > 1;
-  const labelWidth = harnessLabelColumnWidth(jobs);
+  const showHarnessMetadata =
+    uniqueHarnessLabels(jobs).length > 1 ||
+    jobs.some(
+      (job) => job.model !== undefined || job.permissionMode !== undefined,
+    );
   const live = createLiveDashboard(writeStdout, ctx.color, SPINNER_FRAMES[0]);
   const spinnerEnabled = ctx.color && !ctx.usePlainSymbols;
   const spinner = spinnerEnabled
@@ -505,10 +507,9 @@ async function runLive(input: RunPathInput): Promise<RunPathResult> {
   let currentDyno: RunDynoGroup | undefined;
 
   const rowOptionsFor = (job: LocalRunnerJob): RowLabelOptions =>
-    multiHarness
+    showHarnessMetadata
       ? {
           harnessLabel: uniqueHarnessLabels([job])[0]!,
-          harnessLabelWidth: labelWidth,
         }
       : {};
 
@@ -586,8 +587,7 @@ async function runLive(input: RunPathInput): Promise<RunPathResult> {
           scenarioResults,
           ctx,
           writeStdout,
-          multiHarness,
-          labelWidth,
+          showHarnessMetadata,
           expanded,
         );
       },
@@ -615,8 +615,7 @@ function writeLiveScenarioCompletion(
   scenarioResults: readonly LocalRunnerResult[],
   ctx: RenderContext,
   writeStdout: OutputWriter,
-  multiHarness: boolean,
-  labelWidth: number,
+  showHarnessMetadata: boolean,
   expanded: boolean,
 ): void {
   const resultByJob = new Map(
@@ -632,8 +631,8 @@ function writeLiveScenarioCompletion(
       job,
       result: resultByJob.get(job)!,
     }));
-    const rowOptions: RowLabelOptions = multiHarness
-      ? {harnessLabel: group.label, harnessLabelWidth: labelWidth}
+    const rowOptions: RowLabelOptions = showHarnessMetadata
+      ? {harnessLabel: group.label}
       : {};
     writeStdout(`${renderHarnessGroupRow(entries, ctx, rowOptions)}\n`);
     const assertionById = assertionByIdForJobs(group.jobs);

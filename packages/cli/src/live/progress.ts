@@ -167,7 +167,6 @@ export function renderLiveProgressEvent(
       status,
       label: 'assertions',
       detail,
-      durationMs: Date.now() - state.phaseStartedAtMs,
     }),
   };
 }
