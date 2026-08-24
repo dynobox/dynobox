@@ -18,6 +18,12 @@ fresh work directory
   -> pass or fail with recorded results
 ```
 
+Within a scenario, effective harness configurations (including model and
+permission-mode differences) run concurrently. Iterations within one harness
+configuration run sequentially. Dynobox completes every harness lane before it
+starts the next scenario, and reports results in configured order regardless of
+which harness finishes first.
+
 ## 1. Start With A Fresh Work Directory
 
 Dynobox creates a new temporary work directory for every job. The selected

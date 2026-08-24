@@ -10,12 +10,29 @@ export type DynoboxCA = {
   generated: boolean;
 };
 
+const initializationByDirectory = new Map<string, Promise<DynoboxCA>>();
+
 export async function ensureDynoboxCA(
   options: {
     homeDir?: string;
   } = {},
 ): Promise<DynoboxCA> {
   const dynoboxDir = join(options.homeDir ?? homedir(), '.dynobox');
+  const pending = initializationByDirectory.get(dynoboxDir);
+  if (pending !== undefined) return pending;
+
+  const initialization = initializeDynoboxCA(dynoboxDir);
+  initializationByDirectory.set(dynoboxDir, initialization);
+  try {
+    return await initialization;
+  } finally {
+    if (initializationByDirectory.get(dynoboxDir) === initialization) {
+      initializationByDirectory.delete(dynoboxDir);
+    }
+  }
+}
+
+async function initializeDynoboxCA(dynoboxDir: string): Promise<DynoboxCA> {
   const certPath = join(dynoboxDir, 'ca.pem');
   const keyPath = join(dynoboxDir, 'ca-key.pem');
 

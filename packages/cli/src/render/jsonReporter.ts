@@ -14,6 +14,7 @@ const REPORT_SCHEMA = 'dynobox.report.v2';
 export type RenderJsonRunOutputInput = {
   jobs: readonly LocalRunnerJob[];
   results: readonly LocalRunnerResult[];
+  elapsedMs?: number;
   configErrorCount?: number;
   debugLogPaths?: Map<LocalRunnerJob, DebugLogPaths>;
 };
@@ -114,10 +115,9 @@ function summaryRecord(input: RenderJsonRunOutputInput) {
   const passedCount = input.results.filter((result) => result.passed).length;
   const failedCount = input.results.length - passedCount;
   const configErrorCount = input.configErrorCount ?? 0;
-  const totalMs = input.results.reduce(
-    (sum, result) => sum + result.timing.totalMs,
-    0,
-  );
+  const totalMs =
+    input.elapsedMs ??
+    input.results.reduce((sum, result) => sum + result.timing.totalMs, 0);
   const matrix = buildRunMatrix(input.jobs, input.results);
 
   return {

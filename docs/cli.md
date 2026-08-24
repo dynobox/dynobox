@@ -244,7 +244,11 @@ Iterations are a runtime option, not part of dyno configs. `--iterations 5`
 runs every selected scenario/harness pair five times and reports a per-row
 job fraction with an inline sparkline such as `✗ 2/5 failed   .FF..`. Passing
 marks are `.` and failing marks are `F`; marks are colored when ANSI color
-output is enabled. Every failed iteration is listed under its row.
+output is enabled. Every failed iteration is listed under its row. Harness
+configurations for one scenario run concurrently, including separate model or
+permission-mode configurations of the same harness. Iterations within each
+configuration remain sequential, and the next scenario waits for all current
+harness configurations to finish.
 
 ## Output Modes
 
@@ -264,7 +268,8 @@ assertions show a compact match-count summary by default.
 The final summary leads with job counts (a job is one executed
 `scenario × harness × iteration` unit); assertion detail is always labeled,
 such as `✗ 1 of 2 jobs failed · 1 failed assertion · 1m02s`. Setup and
-harness failures are counted separately as job errors.
+harness failures are counted separately as job errors. The final duration is
+wall-clock elapsed time; per-harness rows sum their own iteration durations.
 
 `--quiet` prints a one-line discovery summary, compact `.`/`F` progress marks,
 `FAIL`/`WARN` groups when needed, and the same job-led summary semantics.
@@ -295,7 +300,8 @@ Dynobox writes one job object per completed job, then one summary object. The
 JSON reporter always uses static output so stdout remains machine-readable.
 
 When stdout is an interactive terminal and live output is enabled, Dynobox
-streams phase progress and harness tool events as they happen. In
+shows one updating phase block per active harness configuration. Completed
+scenario rows and verbose/debug details are printed in configured order. In
 non-interactive output, quiet mode, or incompatible terminals, it renders static
 output after jobs complete.
 

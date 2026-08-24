@@ -7,6 +7,11 @@
  */
 
 export {
+  createLiveDashboard,
+  type LiveDashboard,
+  type LiveDashboardBlock,
+} from './dashboard.js';
+export {
   type JobCompletionOptions,
   renderLiveJobCompletion,
 } from './jobCompletion.js';

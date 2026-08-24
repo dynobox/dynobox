@@ -196,10 +196,14 @@ export function renderHarnessGroupRow(
 /** Transient headline shown while a harness group is running in live mode. */
 export function renderRunningGroupRow(
   ctx: RenderContext,
-  options: RowLabelOptions = {},
+  options: RowLabelOptions & {iteration?: number; iterationCount?: number} = {},
 ): string {
   const icon = symbol(ctx, 'running');
-  return `${ROW_INDENT}${rowLabelPrefix(options)}${icon} ${dim(ctx, 'running')}`;
+  const iteration =
+    options.iteration === undefined || options.iterationCount === undefined
+      ? ''
+      : ` iteration ${options.iteration + 1}/${options.iterationCount}`;
+  return `${ROW_INDENT}${rowLabelPrefix(options)}${icon} ${dim(ctx, `running${iteration}`)}`;
 }
 
 /** Render the `  {dyno label}` group line. */

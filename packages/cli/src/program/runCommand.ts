@@ -27,10 +27,9 @@ import {CommanderError} from 'commander';
 
 import {assertionByIdForJobs, buildLocalRunnerJobs} from '../jobs.js';
 import {
-  createLiveWriter,
+  createLiveDashboard,
   createSpinner,
   type LiveJobState,
-  renderLiveJobCompletion,
   renderLiveProgressEvent,
   SPINNER_FRAMES,
 } from '../live/index.js';
@@ -41,11 +40,11 @@ import {
   renderHarnessGroupRow,
   renderIterationDetailLines,
   renderIterationResultLine,
+  renderJobDetails,
   renderJsonRunOutput,
   renderRunConfigErrorMessage,
   renderRunHeader,
   renderRunningGroupRow,
-  renderRunningIterationRow,
   renderRunOutput,
   renderRunSummary,
   renderScenarioLine,
@@ -87,6 +86,7 @@ import {
   validateReporterFormat,
   validateScenarioFilters,
 } from './options.js';
+import {runScenarioExecutions, type ScenarioExecution} from './runJobs.js';
 import {resolveCustomUploadUrl, uploadRun} from './uploadRun.js';
 
 const AUTH_PREFLIGHT_ATTEMPTS = 3;
@@ -250,7 +250,7 @@ export async function runCommandAction(
       jobs: dynoJobs,
     }));
 
-  const results =
+  const execution =
     reporter === 'json'
       ? await runStatic({
           dynos: renderDynos,
@@ -271,6 +271,7 @@ export async function runCommandAction(
             configErrorCount: errors.length,
           });
 
+  const {results} = execution;
   const anyJobFailed = results.some((result) => !result.passed);
   const runFailed = anyJobFailed || errors.length > 0;
 
@@ -431,38 +432,45 @@ type RunPathInput = {
   configErrorCount?: number;
 };
 
+type RunPathResult = {
+  results: LocalRunnerResult[];
+  elapsedMs: number;
+};
+
 /**
  * Static path: run every job to completion, then render the full output as
  * one batched string. Used in CI, with `--quiet`, or when the terminal
  * doesn't support live updates.
  */
-async function runStatic(input: RunPathInput): Promise<LocalRunnerResult[]> {
+async function runStatic(input: RunPathInput): Promise<RunPathResult> {
   const jobs = input.dynos.flatMap((dyno) => dyno.jobs);
-  const results: LocalRunnerResult[] = [];
-  for (const job of jobs) {
-    results.push(await runJob(job, input.runOptions));
-  }
+  const execution = await runScenarioExecutions(input.dynos, (job) =>
+    runJob(job, input.runOptions),
+  );
+  const {results, elapsedMs} = execution;
   const debugLogPaths = writeDebugLogsIfDebug(input.ctx, input.dynos, results);
   if (input.reporter === 'json') {
     input.writeStdout(
       renderJsonRunOutput({
         jobs,
         results,
+        elapsedMs,
         configErrorCount: input.configErrorCount ?? 0,
         ...(debugLogPaths === undefined ? {} : {debugLogPaths}),
       }),
     );
-    return results;
+    return execution;
   }
   input.writeStdout(
     renderRunOutput({
       dynos: input.dynos,
       results,
+      elapsedMs,
       ctx: input.ctx,
       ...(debugLogPaths === undefined ? {} : {debugLogPaths}),
     }),
   );
-  return results;
+  return execution;
 }
 
 /**
@@ -473,14 +481,14 @@ async function runStatic(input: RunPathInput): Promise<LocalRunnerResult[]> {
  * Passing groups in default mode collapse to a one-line grouped row;
  * failures and expanded modes keep their detail blocks.
  */
-async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
+async function runLive(input: RunPathInput): Promise<RunPathResult> {
   const {dynos, runOptions, ctx, writeStdout} = input;
   const jobs = dynos.flatMap((dyno) => dyno.jobs);
 
   writeStdout(renderRunHeader(dynos, ctx));
   const multiHarness = uniqueHarnessLabels(jobs).length > 1;
   const labelWidth = harnessLabelColumnWidth(jobs);
-  const live = createLiveWriter(writeStdout, ctx.color, SPINNER_FRAMES[0]);
+  const live = createLiveDashboard(writeStdout, ctx.color, SPINNER_FRAMES[0]);
   const spinnerEnabled = ctx.color && !ctx.usePlainSymbols;
   const spinner = spinnerEnabled
     ? createSpinner((frame) => {
@@ -488,125 +496,176 @@ async function runLive(input: RunPathInput): Promise<LocalRunnerResult[]> {
       })
     : undefined;
   const expanded = ctx.mode === 'verbose' || ctx.mode === 'debug';
-  const results: LocalRunnerResult[] = [];
+  const stateByJob = new Map<LocalRunnerJob, LiveJobState>();
+  const laneIndexByJob = new Map<LocalRunnerJob, number>();
+  const completedByLane = new Map<
+    number,
+    Array<{job: LocalRunnerJob; result: LocalRunnerResult}>
+  >();
+  let currentDyno: RunDynoGroup | undefined;
 
-  const runOneJob = async (job: LocalRunnerJob): Promise<LocalRunnerResult> => {
-    const state: LiveJobState = {
-      setupCommandCount: 0,
-      fixturesCount: 0,
-      toolCount: 0,
-      assertionCount: 0,
-      phaseStartedAtMs: Date.now(),
-    };
-    const result = await runJob(job, {
+  const rowOptionsFor = (job: LocalRunnerJob): RowLabelOptions =>
+    multiHarness
+      ? {
+          harnessLabel: uniqueHarnessLabels([job])[0]!,
+          harnessLabelWidth: labelWidth,
+        }
+      : {};
+
+  const executeJob = (job: LocalRunnerJob): Promise<LocalRunnerResult> =>
+    runJob(job, {
       ...runOptions,
       onProgress: (event) => {
-        live.emit(renderLiveProgressEvent(event, state, ctx));
+        const state = stateByJob.get(job);
+        const laneIndex = laneIndexByJob.get(job);
+        if (state === undefined || laneIndex === undefined) return;
+        live.emit(laneIndex, renderLiveProgressEvent(event, state, ctx));
       },
     });
-    results.push(result);
-    live.flush();
-    return result;
-  };
-
-  const runSingleIterationGroup = async (
-    job: LocalRunnerJob,
-    rowOptions: RowLabelOptions,
-  ): Promise<void> => {
-    live.beginJob(renderRunningGroupRow(ctx, rowOptions));
-    const result = await runOneJob(job);
-    const assertionById = assertionByIdForJobs([job]);
-    const row = renderHarnessGroupRow([{job, result}], ctx, rowOptions);
-
-    if (expanded) {
-      live.rewriteHeadline(row);
-      const debugLogPaths = maybeWriteDebugLogs(ctx, result);
-      writeStdout(
-        renderLiveJobCompletion(result, assertionById, ctx, {
-          configuredCliMockNames: Object.keys(job.scenario.cliMocks),
-          ...(debugLogPaths === undefined ? {} : {debugLogPaths}),
-        }),
-      );
-      return;
-    }
-
-    // Default mode: collapse phase rows away and keep only the grouped row
-    // (plus failure/warning details), matching the static grouped output.
-    live.collapseToHeadline(row);
-    if (!result.passed || result.warnings.length > 0) {
-      writeStdout(renderSingleJobFailureDetails(result, assertionById, ctx));
-    }
-  };
-
-  const runMultiIterationGroup = async (
-    groupJobs: readonly LocalRunnerJob[],
-    rowOptions: RowLabelOptions,
-  ): Promise<void> => {
-    if (!expanded) {
-      // One live row for the whole group; per-iteration phase rows are
-      // transient and collapse into the sparkline row when the group ends.
-      live.beginJob(renderRunningGroupRow(ctx, rowOptions));
-      const entries: Array<{job: LocalRunnerJob; result: LocalRunnerResult}> =
-        [];
-      for (const job of groupJobs) {
-        entries.push({job, result: await runOneJob(job)});
-      }
-      live.collapseToHeadline(renderHarnessGroupRow(entries, ctx, rowOptions));
-      const assertionById = assertionByIdForJobs(groupJobs);
-      writeStdout(renderIterationDetailLines(entries, assertionById, ctx));
-      return;
-    }
-
-    // Expanded modes stream one row per iteration; the aggregate sparkline
-    // row lands after the iterations instead of above them (the static
-    // renderer puts it first, but live output can't rewrite history).
-    const entries: Array<{job: LocalRunnerJob; result: LocalRunnerResult}> = [];
-    for (const job of groupJobs) {
-      live.beginJob(renderRunningIterationRow(job.iteration, ctx));
-      const result = await runOneJob(job);
-      const entry = {job, result};
-      entries.push(entry);
-      live.rewriteHeadline(renderIterationResultLine(entry, ctx));
-      const assertionById = assertionByIdForJobs([job]);
-      const debugLogPaths = maybeWriteDebugLogs(ctx, result);
-      writeStdout(
-        renderLiveJobCompletion(result, assertionById, ctx, {
-          configuredCliMockNames: Object.keys(job.scenario.cliMocks),
-          ...(debugLogPaths === undefined ? {} : {debugLogPaths}),
-        }),
-      );
-    }
-    writeStdout(`${renderHarnessGroupRow(entries, ctx, rowOptions)}\n`);
-  };
 
   try {
     spinner?.start();
-    let firstDyno = true;
-    for (const dyno of dynos) {
-      if (dyno.jobs.length === 0) continue;
-      if (!firstDyno) writeStdout('\n');
-      firstDyno = false;
-      writeStdout(`${renderDynoLine(dyno.name ?? dyno.path, ctx)}\n`);
-      for (const scenario of groupJobs(dyno.jobs)) {
-        writeStdout(`${renderScenarioLine(scenario.name, ctx)}\n`);
-        for (const group of scenario.harnessGroups) {
-          const rowOptions: RowLabelOptions = multiHarness
-            ? {harnessLabel: group.label, harnessLabelWidth: labelWidth}
-            : {};
-          if (group.jobs.length === 1) {
-            await runSingleIterationGroup(group.jobs[0]!, rowOptions);
-          } else {
-            await runMultiIterationGroup(group.jobs, rowOptions);
-          }
+    const execution = await runScenarioExecutions(dynos, executeJob, {
+      scenarioStarted: (scenario) => {
+        if (scenario.dyno !== currentDyno) {
+          if (currentDyno !== undefined) writeStdout('\n');
+          currentDyno = scenario.dyno;
+          writeStdout(
+            `${renderDynoLine(scenario.dyno.name ?? scenario.dyno.path, ctx)}\n`,
+          );
         }
-      }
-    }
+        writeStdout(`${renderScenarioLine(scenario.name, ctx)}\n`);
+        stateByJob.clear();
+        laneIndexByJob.clear();
+        completedByLane.clear();
+        scenario.harnessLanes.forEach((lane, laneIndex) => {
+          completedByLane.set(laneIndex, []);
+          for (const entry of lane.jobs) {
+            laneIndexByJob.set(entry.job, laneIndex);
+          }
+        });
+        live.start(
+          scenario.harnessLanes.map((lane) => ({
+            headline: renderRunningGroupRow(
+              ctx,
+              rowOptionsFor(lane.jobs[0]!.job),
+            ),
+          })),
+        );
+      },
+      jobStarted: (entry, scenario) => {
+        stateByJob.set(entry.job, createLiveJobState());
+        const laneIndex = laneIndexByJob.get(entry.job);
+        if (laneIndex === undefined) return;
+        const iterationCount = scenario.harnessLanes[laneIndex]!.jobs.length;
+        live.setHeadline(
+          laneIndex,
+          renderRunningGroupRow(ctx, {
+            ...rowOptionsFor(entry.job),
+            ...(iterationCount === 1
+              ? {}
+              : {iteration: entry.job.iteration, iterationCount}),
+          }),
+          true,
+        );
+      },
+      jobCompleted: (entry, result) => {
+        const laneIndex = laneIndexByJob.get(entry.job);
+        if (laneIndex === undefined) return;
+        const entries = completedByLane.get(laneIndex)!;
+        entries.push({job: entry.job, result});
+        live.setHeadline(
+          laneIndex,
+          renderHarnessGroupRow(entries, ctx, rowOptionsFor(entry.job)),
+        );
+      },
+      scenarioCompleted: (scenario, scenarioResults) => {
+        live.clear();
+        writeLiveScenarioCompletion(
+          scenario,
+          scenarioResults,
+          ctx,
+          writeStdout,
+          multiHarness,
+          labelWidth,
+          expanded,
+        );
+      },
+    });
+    writeStdout(renderRunSummary(execution.results, ctx, execution.elapsedMs));
+    return execution;
   } finally {
     spinner?.stop();
+    live.clear();
   }
+}
 
-  writeStdout(renderRunSummary(results, ctx));
-  return results;
+function createLiveJobState(): LiveJobState {
+  return {
+    setupCommandCount: 0,
+    fixturesCount: 0,
+    toolCount: 0,
+    assertionCount: 0,
+    phaseStartedAtMs: Date.now(),
+  };
+}
+
+function writeLiveScenarioCompletion(
+  scenario: ScenarioExecution,
+  scenarioResults: readonly LocalRunnerResult[],
+  ctx: RenderContext,
+  writeStdout: OutputWriter,
+  multiHarness: boolean,
+  labelWidth: number,
+  expanded: boolean,
+): void {
+  const resultByJob = new Map(
+    scenario.jobs.map(
+      (entry, index) => [entry.job, scenarioResults[index]!] as const,
+    ),
+  );
+  const groupedScenario = groupJobs(scenario.jobs.map((entry) => entry.job))[0];
+  if (groupedScenario === undefined) return;
+
+  for (const group of groupedScenario.harnessGroups) {
+    const entries = group.jobs.map((job) => ({
+      job,
+      result: resultByJob.get(job)!,
+    }));
+    const rowOptions: RowLabelOptions = multiHarness
+      ? {harnessLabel: group.label, harnessLabelWidth: labelWidth}
+      : {};
+    writeStdout(`${renderHarnessGroupRow(entries, ctx, rowOptions)}\n`);
+    const assertionById = assertionByIdForJobs(group.jobs);
+
+    if (!expanded) {
+      writeStdout(
+        entries.length === 1
+          ? !entries[0]!.result.passed || entries[0]!.result.warnings.length > 0
+            ? renderSingleJobFailureDetails(
+                entries[0]!.result,
+                assertionById,
+                ctx,
+              )
+            : ''
+          : renderIterationDetailLines(entries, assertionById, ctx),
+      );
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (entries.length > 1) {
+        writeStdout(`${renderIterationResultLine(entry, ctx)}\n`);
+      }
+      const debugLogPaths = maybeWriteDebugLogs(ctx, entry.result);
+      writeStdout(
+        renderJobDetails(entry.result, assertionById, ctx, {
+          configuredCliMockNames: Object.keys(entry.job.scenario.cliMocks),
+          ...(debugLogPaths === undefined ? {} : {debugLogPaths}),
+        }),
+      );
+    }
+  }
 }
 
 function validateOverrides(

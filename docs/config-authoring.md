@@ -157,9 +157,11 @@ trusted code. Dynobox waits up to 30 seconds for an asynchronous handler result,
 then fails the mock call; the timeout does not cancel the handler's work.
 Synchronous handler code cannot be interrupted and blocks the mock controller,
 so keep all handler operations bounded and clean up any timers or other
-resources they create. Dynobox records the executable, arguments, working
-directory, timestamp, exit code, stdout, and stderr, but does not retain
-environment values.
+resources they create. Different harness configurations for one scenario can
+invoke the same authored handler concurrently, so handlers that use shared
+mutable state must synchronize access. Dynobox records the executable,
+arguments, working directory, timestamp, exit code, stdout, and stderr, but does
+not retain environment values.
 
 Setup commands and harness version detection use the real PATH. The harness and
 post-harness verification commands use a PATH with generated mock shims
