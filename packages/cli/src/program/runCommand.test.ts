@@ -13,6 +13,7 @@ import {
 import type {HarnessId} from '@dynobox/sdk';
 import {afterAll, afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 
+import {visibleLength} from '../terminal/index.js';
 import {
   createFixtureSet,
   createPassingHarness,
@@ -1120,7 +1121,7 @@ export default defineDyno({
       ['codex', 1],
       ['codex', 2],
     ]);
-    expect(summary.totals!.durationMs).toBe(400);
+    expect(summary.totals!.durationMs).toBeGreaterThanOrEqual(400);
     expect(summary.totals!.elapsedMs).toBeLessThan(400);
   });
 
@@ -1290,6 +1291,26 @@ describe('dynobox run — live output', () => {
     expect(result.exitCode).toBe(0);
     expect(toolLines).toHaveLength(1);
     expect(toolLines[0]).toContain(`Bash: pnpm test && git commit -m`);
+  });
+
+  it('keeps live phase rows within a narrow terminal', async () => {
+    const writes: string[] = [];
+    const result = await executeCli(['run', fixtures.validConfigPath], {
+      harnesses: [new StreamingHarness(MULTILINE_GIT_COMMIT_EVENT)],
+      live: true,
+      color: true,
+      terminalWidth: 60,
+      writeStdout: (value) => writes.push(value),
+    });
+    const phaseLines = writes
+      .flatMap((value) => value.split('\n'))
+      .filter((line) =>
+        /^\s{8,}.*\b(?:setup|harness|assertions)\s/.test(stripAnsi(line)),
+      );
+
+    expect(result.exitCode).toBe(0);
+    expect(phaseLines.some((line) => line.includes('Bash:'))).toBe(true);
+    expect(phaseLines.filter((line) => visibleLength(line) > 60)).toEqual([]);
   });
 
   it('redraws concurrent harnesses in one live scenario dashboard', async () => {

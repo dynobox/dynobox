@@ -48,12 +48,12 @@ export function renderPhaseRow(
     input.omitIcon === true
       ? dim(ctx, `${labelText}${input.detail}`)
       : `${renderPhaseIcon(ctx, input)} ${labelText}${input.detail}`;
-  const left = `      ${inner}`;
+  const left = `        ${inner}`;
   const formatter =
     input.status === 'running' ? formatLiveDuration : formatDuration;
   const right =
     input.durationMs === undefined ? '' : dim(ctx, formatter(input.durationMs));
-  return `  ${leftRight(left, right, ctx.width)}`;
+  return leftRight(left, right, ctx.width);
 }
 
 /**
