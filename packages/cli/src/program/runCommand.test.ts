@@ -23,6 +23,7 @@ import {
   SHELL_EVENT,
   SKILL_READ_EVENT,
   StreamingHarness,
+  stripAnsi,
 } from '../testUtils.js';
 import {executeCli} from './execute.js';
 import {configErrorExitCode, runFailureExitCode} from './exitCodes.js';
@@ -1101,7 +1102,7 @@ export default defineDyno({
             type: string;
             harness?: {id: string};
             iteration?: number;
-            totals?: {durationMs: number};
+            totals?: {durationMs: number; elapsedMs: number};
           },
       );
     const jobRecords = records.filter((record) => record.type === 'job');
@@ -1119,7 +1120,8 @@ export default defineDyno({
       ['codex', 1],
       ['codex', 2],
     ]);
-    expect(summary.totals!.durationMs).toBeLessThan(400);
+    expect(summary.totals!.durationMs).toBe(400);
+    expect(summary.totals!.elapsedMs).toBeLessThan(400);
   });
 
   it('runs separate models of one harness concurrently', async () => {
@@ -1258,14 +1260,16 @@ describe('dynobox run — live output', () => {
       {
         harnesses: [new StreamingHarness()],
         live: true,
+        color: true,
         writeStdout: (value) => writes.push(value),
       },
     );
+    const output = stripAnsi(writes.join(''));
 
     expect(result.exitCode).toBe(0);
-    expect(writes.join('')).toContain('Bash: pnpm test 1 tool');
-    expect(writes.join('')).toContain('✓ tool.called(shell)');
-    expect(writes.join('')).toContain('1 job passed');
+    expect(output).toContain('Bash: pnpm test 1 tool');
+    expect(output).toContain('✓ tool.called(shell)');
+    expect(output).toContain('1 job passed');
   });
 
   it('keeps multiline live shell progress on one rendered row', async () => {
@@ -1337,11 +1341,13 @@ describe('dynobox run — live output', () => {
         }),
       ],
       live: true,
+      color: true,
       writeStdout: (value) => writes.push(value),
     });
+    const output = stripAnsi(writes.join(''));
 
     expect(result.exitCode).toBe(0);
-    expect(writes.join('')).toContain(
+    expect(output).toContain(
       'warning permission denied for shell command: git commit -m test',
     );
   });

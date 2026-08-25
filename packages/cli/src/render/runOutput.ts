@@ -2,8 +2,8 @@
  * Static-mode (non-live) run output orchestrator. Composes header + grouped
  * run body + summary into a single string.
  *
- * The live path doesn't go through here — it streams to a `LiveWriter` in
- * `program/runCommand.ts` using the same grouped row renderers.
+ * The live path doesn't go through here; its dashboard in
+ * `program/runCommand.ts` uses the same grouped row renderers.
  */
 
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';

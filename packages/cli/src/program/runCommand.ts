@@ -490,7 +490,7 @@ async function runLive(input: RunPathInput): Promise<RunPathResult> {
     jobs.some(
       (job) => job.model !== undefined || job.permissionMode !== undefined,
     );
-  const live = createLiveDashboard(writeStdout, ctx.color, SPINNER_FRAMES[0]);
+  const live = createLiveDashboard(writeStdout, SPINNER_FRAMES[0]);
   const spinnerEnabled = ctx.color && !ctx.usePlainSymbols;
   const spinner = spinnerEnabled
     ? createSpinner((frame) => {

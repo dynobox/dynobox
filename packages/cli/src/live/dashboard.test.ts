@@ -6,11 +6,7 @@ describe('createLiveDashboard', () => {
   it('redraws independent harness blocks as one terminal region', () => {
     vi.spyOn(Date, 'now').mockReturnValue(100);
     const writes: string[] = [];
-    const dashboard = createLiveDashboard(
-      (value) => writes.push(value),
-      true,
-      'a',
-    );
+    const dashboard = createLiveDashboard((value) => writes.push(value), 'a');
 
     dashboard.start([
       {headline: 'claude · model: sonnet\n  running'},
@@ -35,28 +31,5 @@ describe('createLiveDashboard', () => {
     expect(writes.at(-1)).toBe('\x1b[6A\r\x1b[J');
 
     vi.restoreAllMocks();
-  });
-
-  it('appends only changed rows without ANSI support', () => {
-    const writes: string[] = [];
-    const dashboard = createLiveDashboard(
-      (value) => writes.push(value),
-      false,
-      'a',
-    );
-
-    dashboard.start([
-      {headline: 'claude running'},
-      {headline: 'codex running'},
-    ]);
-    dashboard.emit(0, {kind: 'commit', text: 'claude setup passed'});
-    dashboard.setHeadline(1, 'codex passed');
-    dashboard.tick('b');
-    dashboard.clear();
-
-    expect(writes).toEqual([
-      'claude running\ncodex running\n',
-      'claude setup passed\n',
-    ]);
   });
 });

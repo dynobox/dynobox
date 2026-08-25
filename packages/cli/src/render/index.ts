@@ -36,7 +36,6 @@ export {
   renderIterationDetailLines,
   renderIterationResultLine,
   renderRunningGroupRow,
-  renderRunningIterationRow,
   renderScenarioLine,
   renderSingleJobFailureDetails,
   type RowLabelOptions,

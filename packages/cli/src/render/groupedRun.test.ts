@@ -3,10 +3,10 @@ import type {
   LocalRunnerResult,
   LocalRunnerStatus,
 } from '@dynobox/runner-local';
-import type {HarnessId} from '@dynobox/sdk';
+import type {HarnessId, PermissionMode} from '@dynobox/sdk';
 import {describe, expect, it} from 'vitest';
 
-import {createRenderContext} from '../terminal/index.js';
+import {createRenderContext, visibleLength} from '../terminal/index.js';
 import {buildGroupedRunView, renderGroupedRun} from './groupedRun.js';
 import type {RunDynoGroup} from './plan.js';
 import {renderRunSummary} from './summary.js';
@@ -18,6 +18,7 @@ type JobSpec = {
   scenarioName?: string;
   harness?: HarnessId;
   model?: string;
+  permissionMode?: PermissionMode;
   iteration?: number;
   assertionCount?: number;
   assertionLabel?: string;
@@ -36,7 +37,14 @@ function makeJob(spec: JobSpec = {}): LocalRunnerJob {
       id: scenarioId,
       name: spec.scenarioName ?? 'test scenario',
       prompt: 'Run a test.',
-      harnesses: [{id: harness}],
+      harnesses: [
+        {
+          id: harness,
+          ...(spec.permissionMode === undefined
+            ? {}
+            : {permissionMode: spec.permissionMode}),
+        },
+      ],
       setup: [],
       fixtures: [],
       cliMocks: Object.fromEntries(
@@ -57,6 +65,9 @@ function makeJob(spec: JobSpec = {}): LocalRunnerJob {
     },
     harness,
     ...(spec.model === undefined ? {} : {model: spec.model}),
+    ...(spec.permissionMode === undefined
+      ? {}
+      : {permissionMode: spec.permissionMode}),
     iteration,
   };
 }
@@ -238,6 +249,31 @@ describe('renderGroupedRun', () => {
       '      opencode · model: openai/gpt-5.4-mini\n        ✓ 2 assertions',
     );
     expect(output).not.toContain('...');
+  });
+
+  it('wraps full harness metadata to the render width', () => {
+    const jobs = [
+      makeJob({
+        harness: 'opencode',
+        model: 'openai/gpt-5.4-mini',
+        permissionMode: 'dangerous',
+      }),
+    ];
+    const output = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results: jobs.map((job) => makeResult(job)),
+      ctx: createRenderContext({terminalWidth: 40}),
+    });
+
+    expect(output.replace(/\s+/g, ' ')).toContain(
+      'opencode · model: openai/gpt-5.4-mini · mode: dangerous',
+    );
+    expect(
+      output
+        .trimEnd()
+        .split('\n')
+        .every((line) => visibleLength(line) <= 40),
+    ).toBe(true);
   });
 
   it('renders full harness metadata above results when there are multiple labels', () => {

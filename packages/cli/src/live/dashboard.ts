@@ -1,4 +1,9 @@
-import type {LiveLine, LiveRender} from './writer.js';
+export type LiveRender = (frame: string, nowMs: number) => string;
+
+export type LiveLine =
+  | {kind: 'update'; render: LiveRender}
+  | {kind: 'commit'; text: string}
+  | {kind: 'skip'};
 
 export type LiveDashboardBlock = {
   headline: string;
@@ -20,7 +25,6 @@ type DashboardBlockState = {
 /** Redraw all active harness blocks as one terminal region. */
 export function createLiveDashboard(
   write: (value: string) => void,
-  supportsAnsi: boolean,
   initialFrame: string,
 ): LiveDashboard {
   let blocks: DashboardBlockState[] = [];
@@ -41,7 +45,7 @@ export function createLiveDashboard(
 
   const redraw = (): void => {
     const lines = blocks.flatMap((block) => renderBlock(block, Date.now()));
-    if (supportsAnsi && renderedLineCount > 0) {
+    if (renderedLineCount > 0) {
       write(`\x1b[${renderedLineCount}A\r\x1b[J`);
     }
     if (lines.length > 0) write(`${lines.join('\n')}\n`);
@@ -51,11 +55,7 @@ export function createLiveDashboard(
   return {
     start(nextBlocks): void {
       blocks = nextBlocks.map((block) => ({headline: block.headline}));
-      if (supportsAnsi) {
-        redraw();
-      } else if (blocks.length > 0) {
-        write(`${blocks.map((block) => block.headline).join('\n')}\n`);
-      }
+      redraw();
     },
 
     setHeadline(index, headline, clearPhase = false): void {
@@ -63,7 +63,7 @@ export function createLiveDashboard(
       if (block === undefined) return;
       block.headline = headline;
       if (clearPhase) delete block.phase;
-      if (supportsAnsi) redraw();
+      redraw();
     },
 
     emit(index, line): void {
@@ -71,29 +71,18 @@ export function createLiveDashboard(
       const block = blocks[index];
       if (block === undefined) return;
       block.phase = line.kind === 'commit' ? line.text : line.render;
-      if (supportsAnsi) {
-        redraw();
-      } else {
-        const text =
-          typeof block.phase === 'string'
-            ? block.phase
-            : block.phase(frame, Date.now());
-        write(`${text}\n`);
-      }
+      redraw();
     },
 
     tick(nextFrame): void {
       frame = nextFrame;
-      if (
-        supportsAnsi &&
-        blocks.some((block) => typeof block.phase === 'function')
-      ) {
+      if (blocks.some((block) => typeof block.phase === 'function')) {
         redraw();
       }
     },
 
     clear(): void {
-      if (supportsAnsi && renderedLineCount > 0) {
+      if (renderedLineCount > 0) {
         write(`\x1b[${renderedLineCount}A\r\x1b[J`);
       }
       blocks = [];

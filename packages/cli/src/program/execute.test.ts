@@ -134,4 +134,55 @@ describe('runCli — process.stdout/stderr wiring', () => {
 
     stdoutWrite.mockRestore();
   });
+
+  it('uses the stdout column count for run layout', async () => {
+    const stdoutWrite = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+    const stdoutColumns = Object.getOwnPropertyDescriptor(
+      process.stdout,
+      'columns',
+    );
+    Object.defineProperty(process.stdout, 'columns', {
+      configurable: true,
+      value: 40,
+    });
+
+    try {
+      await expect(
+        runCli(
+          [
+            'run',
+            fixtures.validConfigPath,
+            '--model',
+            'openai/gpt-5.4-mini',
+            '--harness',
+            'claude-code',
+            '--permission-mode',
+            'dangerous',
+          ],
+          {harnesses: [createPassingHarness()]},
+        ),
+      ).resolves.toBe(0);
+      const output = stripAnsi(
+        stdoutWrite.mock.calls.map((call) => call[0]).join(''),
+      );
+
+      expect(output.replace(/\s+/g, ' ')).toContain(
+        'claude-code · model: openai/gpt-5.4-mini · mode: dangerous',
+      );
+      expect(output).toContain(
+        '      claude-code · model:\n' +
+          '      openai/gpt-5.4-mini · mode:\n' +
+          '      dangerous\n',
+      );
+    } finally {
+      if (stdoutColumns === undefined) {
+        Reflect.deleteProperty(process.stdout, 'columns');
+      } else {
+        Object.defineProperty(process.stdout, 'columns', stdoutColumns);
+      }
+      stdoutWrite.mockRestore();
+    }
+  });
 });

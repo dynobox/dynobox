@@ -97,11 +97,13 @@ export async function runCli(
   options: ExecuteCliOptions = {},
 ): Promise<number> {
   const liveOutput = shouldUseLiveTerminalOutput();
+  const terminalWidth = options.terminalWidth ?? process.stdout.columns;
   const result = await executeCli(args, {
     ...options,
     color: options.color ?? liveOutput,
     usePlainSymbols: options.usePlainSymbols ?? !liveOutput,
     live: options.live ?? liveOutput,
+    ...(terminalWidth === undefined ? {} : {terminalWidth}),
     writeStdout:
       options.writeStdout ?? ((value) => void process.stdout.write(value)),
     writeStderr:

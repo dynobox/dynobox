@@ -299,7 +299,7 @@ arguments, working directory, timestamp, exit code, stdout, and stderr. Child
 environment values are not included.
 
 `--reporter json` emits newline-delimited JSON on stdout instead of text.
-Dynobox writes one job object per completed job, then one summary object. The
+Dynobox writes one job object in configured order, then one summary object. The
 JSON reporter always uses static output so stdout remains machine-readable.
 
 When stdout is an interactive terminal and live output is enabled, Dynobox
@@ -341,7 +341,8 @@ The summary record includes:
 
 - `status`
 - `totals.jobs`, `totals.passed`, `totals.failed`, `totals.configErrors`,
-  `totals.warnings`, and `totals.durationMs`
+  `totals.warnings`, aggregate job `totals.durationMs`, and wall-clock
+  `totals.elapsedMs`
 - `plan.scenarios`, `plan.harnesses`, and `plan.iterations`
 - `matrix.scenarios`, `matrix.harnesses`, `matrix.iterations`, and
   `matrix.cells` with aggregate `passed`, `failed`, `total`, and `failedJobs`

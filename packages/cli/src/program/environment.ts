@@ -23,12 +23,12 @@ export function shouldUseLiveTerminalOutput(): boolean {
 
 /**
  * Final gate before driving the live writer. We only render live in live
- * mode AND when the output mode is interactive (`quiet` always falls back
- * to the static one-liner-per-job path).
+ * mode, ANSI-capable color output, AND an interactive output mode (`quiet`
+ * always falls back to the static one-liner-per-job path).
  */
 export function shouldRenderLive(
   options: Pick<ExecuteCliOptions, 'live'>,
-  ctx: {mode: RunOutputMode},
+  ctx: {mode: RunOutputMode; color: boolean},
 ): boolean {
-  return options.live === true && ctx.mode !== 'quiet';
+  return options.live === true && ctx.color && ctx.mode !== 'quiet';
 }

@@ -181,7 +181,7 @@ export function renderHarnessGroupRow(
     dim(ctx, formatDuration(durationMs)),
     ctx.width,
   );
-  return `${harnessLabelLine(options)}${result}`;
+  return `${harnessLabelLines(options, ctx)}${result}`;
 }
 
 /** Transient headline shown while a harness group is running in live mode. */
@@ -195,7 +195,7 @@ export function renderRunningGroupRow(
       ? ''
       : ` iteration ${options.iteration + 1}/${options.iterationCount}`;
   const result = `${statusIndent(options)}${icon} ${dim(ctx, `running${iteration}`)}`;
-  return `${harnessLabelLine(options)}${result}`;
+  return `${harnessLabelLines(options, ctx)}${result}`;
 }
 
 /** Render the `  {dyno label}` group line. */
@@ -298,14 +298,6 @@ export function renderIterationResultLine(
   );
 }
 
-/** Transient headline shown while one iteration runs in expanded live mode. */
-export function renderRunningIterationRow(
-  iteration: number,
-  ctx: RenderContext,
-): string {
-  return `${DETAIL_INDENT}iter ${iteration + 1} ${symbol(ctx, 'running')} ${dim(ctx, 'running')}`;
-}
-
 export type GroupedRunRenderInput = {
   dynos: readonly RunDynoGroup[];
   results: readonly LocalRunnerResult[];
@@ -398,14 +390,32 @@ function debugLogPathsOption(
   return paths === undefined ? {} : {debugLogPaths: paths};
 }
 
-function harnessLabelLine(options: RowLabelOptions): string {
-  return options.harnessLabel === undefined
-    ? ''
-    : `${ROW_INDENT}${options.harnessLabel}\n`;
+function harnessLabelLines(
+  options: RowLabelOptions,
+  ctx: RenderContext,
+): string {
+  if (options.harnessLabel === undefined) return '';
+  const width = Math.max(1, ctx.width - ROW_INDENT.length);
+  return `${wrapText(options.harnessLabel, width)
+    .map((line) => `${ROW_INDENT}${line}`)
+    .join('\n')}\n`;
 }
 
 function statusIndent(options: RowLabelOptions): string {
   return options.harnessLabel === undefined ? ROW_INDENT : DETAIL_INDENT;
+}
+
+function wrapText(value: string, width: number): string[] {
+  const lines: string[] = [];
+  let remaining = value;
+  while (remaining.length > width) {
+    const spaceIndex = remaining.lastIndexOf(' ', width);
+    const breakIndex = spaceIndex > 0 ? spaceIndex : width;
+    lines.push(remaining.slice(0, breakIndex).trimEnd());
+    remaining = remaining.slice(breakIndex).trimStart();
+  }
+  lines.push(remaining);
+  return lines;
 }
 
 function renderSingleIterationStatus(
