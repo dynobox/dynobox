@@ -1,0 +1,34 @@
+---
+import '../styles/explorer.css';
+
+import BehaviorExplorer from './explorer/BehaviorExplorer.astro';
+---
+
+<main class="explorer-page">
+  <div class="explorer-shell">
+    <header class="explorer-intro">
+      <h1>Behavior tests for ai agents.</h1>
+      <p class="explorer-summary">
+        Run real workflows. Check the evidence. Catch bugs before they ship.
+
+      </p>
+    </header>
+
+    <BehaviorExplorer />
+
+    <nav class="explorer-resources" aria-label="Resources">
+      <a href="https://docs.dynobox.xyz/getting-started">Getting started</a>
+      <a href="https://docs.dynobox.xyz/config-authoring/#assertions">Assertion reference</a>
+      <a href="https://docs.dynobox.xyz/cli/">CLI reference</a>
+      <a href="https://docs.dynobox.xyz/ci/">Running in CI</a>
+      <a href="https://github.com/dynobox/examples">Examples</a>
+      <a href="https://www.skills.sh/dynobox/skills">Agent skills</a>
+    </nav>
+  </div>
+
+  <footer class="explorer-footer">
+    <div>
+      <span>Copyright 2026 Dynobox &middot; Apache-2.0 &middot; <a href="mailto:inbox@dynobox.xyz">inbox@dynobox.xyz</a></span>
+    </div>
+  </footer>
+</main>
