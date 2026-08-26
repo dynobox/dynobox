@@ -66,7 +66,10 @@ export interface Harness {
   /** Best-effort installed executable version for run provenance. */
   version?(): Promise<string | null>;
 
-  /** Launch the agent and return raw output. */
+  /**
+   * Launch the agent and return raw output. The same adapter instance may run
+   * concurrent model or permission-mode configurations.
+   */
   run(input: HarnessInput): Promise<HarnessRunOutput>;
 
   /** Parse raw invocation output into a structured result. */

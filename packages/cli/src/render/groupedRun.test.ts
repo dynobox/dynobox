@@ -3,11 +3,15 @@ import type {
   LocalRunnerResult,
   LocalRunnerStatus,
 } from '@dynobox/runner-local';
-import type {HarnessId} from '@dynobox/sdk';
+import type {HarnessId, PermissionMode} from '@dynobox/sdk';
 import {describe, expect, it} from 'vitest';
 
-import {createRenderContext} from '../terminal/index.js';
-import {buildGroupedRunView, renderGroupedRun} from './groupedRun.js';
+import {createRenderContext, visibleLength} from '../terminal/index.js';
+import {
+  buildGroupedRunView,
+  renderGroupedRun,
+  renderRunningGroupRow,
+} from './groupedRun.js';
 import type {RunDynoGroup} from './plan.js';
 import {renderRunSummary} from './summary.js';
 
@@ -18,6 +22,7 @@ type JobSpec = {
   scenarioName?: string;
   harness?: HarnessId;
   model?: string;
+  permissionMode?: PermissionMode;
   iteration?: number;
   assertionCount?: number;
   assertionLabel?: string;
@@ -36,7 +41,14 @@ function makeJob(spec: JobSpec = {}): LocalRunnerJob {
       id: scenarioId,
       name: spec.scenarioName ?? 'test scenario',
       prompt: 'Run a test.',
-      harnesses: [{id: harness}],
+      harnesses: [
+        {
+          id: harness,
+          ...(spec.permissionMode === undefined
+            ? {}
+            : {permissionMode: spec.permissionMode}),
+        },
+      ],
       setup: [],
       fixtures: [],
       cliMocks: Object.fromEntries(
@@ -57,6 +69,9 @@ function makeJob(spec: JobSpec = {}): LocalRunnerJob {
     },
     harness,
     ...(spec.model === undefined ? {} : {model: spec.model}),
+    ...(spec.permissionMode === undefined
+      ? {}
+      : {permissionMode: spec.permissionMode}),
     iteration,
   };
 }
@@ -65,6 +80,7 @@ type ResultSpec = {
   status?: LocalRunnerStatus;
   failedAssertionIndexes?: number[];
   totalMs?: number;
+  assertionsMs?: number;
   cliMockCalls?: LocalRunnerResult['cliMockCalls'];
   diagnostics?: string[];
   verificationFailed?: boolean;
@@ -108,7 +124,7 @@ function makeResult(
     timing: {
       setupMs: 0,
       harnessMs: 0,
-      assertionsMs: 0,
+      assertionsMs: spec.assertionsMs ?? 0,
       totalMs: spec.totalMs ?? 4200,
     },
   };
@@ -225,10 +241,49 @@ describe('renderGroupedRun', () => {
     expect(output).not.toContain('claude-code');
   });
 
-  it('aligns harness labels when there are multiple harness labels', () => {
+  it('renders full metadata for one configured harness', () => {
+    const jobs = [makeJob({harness: 'opencode', model: 'openai/gpt-5.4-mini'})];
+    const output = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results: jobs.map((job) => makeResult(job)),
+      ctx,
+    });
+
+    expect(output).toContain(
+      '      opencode · model: openai/gpt-5.4-mini\n        ✓ 2 assertions',
+    );
+    expect(output).not.toContain('...');
+  });
+
+  it('wraps full harness metadata to the render width', () => {
+    const jobs = [
+      makeJob({
+        harness: 'opencode',
+        model: 'openai/gpt-5.4-mini',
+        permissionMode: 'dangerous',
+      }),
+    ];
+    const output = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results: jobs.map((job) => makeResult(job)),
+      ctx: createRenderContext({terminalWidth: 40}),
+    });
+
+    expect(output.replace(/\s+/g, ' ')).toContain(
+      'opencode · model: openai/gpt-5.4-mini · mode: dangerous',
+    );
+    expect(
+      output
+        .trimEnd()
+        .split('\n')
+        .every((line) => visibleLength(line) <= 40),
+    ).toBe(true);
+  });
+
+  it('renders full harness metadata above results when there are multiple labels', () => {
     const jobs = [
       makeJob({model: 'sonnet'}),
-      makeJob({harness: 'codex', model: 'gpt-5.4-mini'}),
+      makeJob({harness: 'opencode', model: 'openai/gpt-5.4-mini'}),
     ];
     const output = renderGroupedRun({
       dynos: [dynoOf(jobs)],
@@ -236,10 +291,13 @@ describe('renderGroupedRun', () => {
       ctx,
     });
 
-    expect(output).toContain('claude-code/sonnet');
-    expect(output).toContain('codex/gpt-5.4-mini');
-    // Both rows align: labels are padded to the same column.
-    expect(output).toContain('claude-code/sonnet  ');
+    expect(output).toContain(
+      '      claude-code · model: sonnet\n        ✓ 2 assertions',
+    );
+    expect(output).toContain(
+      '      opencode · model: openai/gpt-5.4-mini\n        ✓ 2 assertions',
+    );
+    expect(output).not.toContain('...');
   });
 
   it('shows failed assertions below a failed row', () => {
@@ -493,13 +551,20 @@ describe('renderGroupedRun', () => {
     const jobs = [makeJob()];
     const output = renderGroupedRun({
       dynos: [dynoOf(jobs)],
-      results: jobs.map((job) => makeResult(job)),
+      results: jobs.map((job) => makeResult(job, {assertionsMs: 1200})),
       ctx: createRenderContext({mode: 'verbose'}),
     });
 
     expect(output).toContain('setup');
     expect(output).toContain('assertions');
     expect(output).toContain('✓ tool.called(shell)');
+    const assertionsLine = output
+      .split('\n')
+      .find(
+        (line) => line.includes('assertions') && line.includes('2 of 2 passed'),
+      );
+    expect(assertionsLine).toBeDefined();
+    expect(assertionsLine).not.toContain('1.2s');
   });
 
   it('lists configured CLI mocks and ordered calls in verbose mode', () => {
@@ -596,6 +661,20 @@ describe('renderGroupedRun', () => {
     // Passing iterations expand too: one phase block per iteration.
     expect(output.match(/setup {6}0 commands/g)).toHaveLength(2);
   });
+});
+
+describe('renderRunningGroupRow', () => {
+  it.each([20, 30])(
+    'keeps iteration progress within a %i-column terminal',
+    (terminalWidth) => {
+      const output = renderRunningGroupRow(
+        createRenderContext({color: true, terminalWidth}),
+        {iteration: 9, iterationCount: 100},
+      );
+
+      expect(visibleLength(output)).toBe(terminalWidth);
+    },
+  );
 });
 
 describe('renderRunSummary', () => {

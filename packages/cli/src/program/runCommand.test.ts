@@ -13,6 +13,7 @@ import {
 import type {HarnessId} from '@dynobox/sdk';
 import {afterAll, afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 
+import {visibleLength} from '../terminal/index.js';
 import {
   createFixtureSet,
   createPassingHarness,
@@ -23,6 +24,7 @@ import {
   SHELL_EVENT,
   SKILL_READ_EVENT,
   StreamingHarness,
+  stripAnsi,
 } from '../testUtils.js';
 import {executeCli} from './execute.js';
 import {configErrorExitCode, runFailureExitCode} from './exitCodes.js';
@@ -82,6 +84,66 @@ class CapturingHarness implements Harness {
       toolEvents: [SHELL_EVENT],
     };
   }
+}
+
+type ConcurrencyTracker = {
+  active: number;
+  maxActive: number;
+  activeByHarness: Map<HarnessId, number>;
+  maxActiveByHarness: Map<HarnessId, number>;
+};
+
+class DelayedHarness implements Harness {
+  constructor(
+    readonly id: HarnessId,
+    private readonly delayMs: number,
+    private readonly tracker: ConcurrencyTracker,
+  ) {}
+
+  async run(_input: HarnessInput): Promise<HarnessRunOutput> {
+    this.tracker.active += 1;
+    this.tracker.maxActive = Math.max(
+      this.tracker.maxActive,
+      this.tracker.active,
+    );
+    const activeForHarness =
+      (this.tracker.activeByHarness.get(this.id) ?? 0) + 1;
+    this.tracker.activeByHarness.set(this.id, activeForHarness);
+    this.tracker.maxActiveByHarness.set(
+      this.id,
+      Math.max(
+        this.tracker.maxActiveByHarness.get(this.id) ?? 0,
+        activeForHarness,
+      ),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, this.delayMs));
+    this.tracker.active -= 1;
+    this.tracker.activeByHarness.set(
+      this.id,
+      (this.tracker.activeByHarness.get(this.id) ?? 1) - 1,
+    );
+    return {exitCode: 0, stdout: 'fake output', stderr: '', durationMs: 100};
+  }
+
+  extractResult(raw: HarnessRunOutput): HarnessResult {
+    return {
+      exitCode: raw.exitCode,
+      durationMs: raw.durationMs,
+      transcript: raw.stdout,
+      finalMessage: raw.stdout,
+      toolEvents: [SHELL_EVENT],
+    };
+  }
+}
+
+function createConcurrencyTracker(): ConcurrencyTracker {
+  return {
+    active: 0,
+    maxActive: 0,
+    activeByHarness: new Map(),
+    maxActiveByHarness: new Map(),
+  };
 }
 
 describe('dynobox run — config loading', () => {
@@ -599,7 +661,7 @@ describe('dynobox run — output modes', () => {
       'dynobox  1 dyno · 1 scenario · harness: claude-code',
     );
     expect(result.stdout).toContain('\n  .\n');
-    expect(result.stdout).toContain('1 job passed, 2 assertions in 0.1s');
+    expect(result.stdout).toMatch(/1 job passed, 2 assertions in 0\.\ds/);
   });
 
   it('prints permission warnings for passing jobs', async () => {
@@ -1012,6 +1074,92 @@ export default defineDyno({
     });
   });
 
+  it('runs harness lanes concurrently while preserving ordered JSON results', async () => {
+    const tracker = createConcurrencyTracker();
+    const result = await executeCli(
+      [
+        'run',
+        fixtures.validConfigPath,
+        '--harness',
+        'claude-code,codex',
+        '--iterations',
+        '2',
+        '--reporter',
+        'json',
+      ],
+      {
+        harnesses: [
+          new DelayedHarness('claude-code', 30, tracker),
+          new DelayedHarness('codex', 5, tracker),
+        ],
+      },
+    );
+    const records = result.stdout
+      .trim()
+      .split('\n')
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            type: string;
+            harness?: {id: string};
+            iteration?: number;
+            totals?: {durationMs: number; elapsedMs: number};
+          },
+      );
+    const jobRecords = records.filter((record) => record.type === 'job');
+    const summary = records.at(-1)!;
+
+    expect(result.exitCode).toBe(0);
+    expect(tracker.maxActive).toBe(2);
+    expect(tracker.maxActiveByHarness.get('claude-code')).toBe(1);
+    expect(tracker.maxActiveByHarness.get('codex')).toBe(1);
+    expect(
+      jobRecords.map((record) => [record.harness!.id, record.iteration]),
+    ).toEqual([
+      ['claude-code', 1],
+      ['claude-code', 2],
+      ['codex', 1],
+      ['codex', 2],
+    ]);
+    expect(summary.totals!.durationMs).toBeGreaterThanOrEqual(400);
+    expect(summary.totals!.elapsedMs).toBeLessThan(400);
+  });
+
+  it('runs separate models of one harness concurrently', async () => {
+    const tracker = createConcurrencyTracker();
+    const result = await executeCli(
+      [
+        'run',
+        fixtures.validConfigPath,
+        '--harness',
+        'codex,codex',
+        '--model',
+        'gpt-a,gpt-b',
+        '--reporter',
+        'json',
+      ],
+      {harnesses: [new DelayedHarness('codex', 20, tracker)]},
+    );
+    const records = result.stdout
+      .trim()
+      .split('\n')
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            type: string;
+            harness?: {model?: string};
+          },
+      );
+
+    expect(result.exitCode).toBe(0);
+    expect(tracker.maxActiveByHarness.get('codex')).toBe(2);
+    expect(
+      records
+        .filter((record) => record.type === 'job')
+        .map((record) => record.harness?.model),
+    ).toEqual(['gpt-a', 'gpt-b']);
+  });
+
   it('exits with a config error when no scenarios match --scenario', async () => {
     const result = await executeCli([
       'run',
@@ -1113,14 +1261,16 @@ describe('dynobox run — live output', () => {
       {
         harnesses: [new StreamingHarness()],
         live: true,
+        color: true,
         writeStdout: (value) => writes.push(value),
       },
     );
+    const output = stripAnsi(writes.join(''));
 
     expect(result.exitCode).toBe(0);
-    expect(writes.join('')).toContain('Bash: pnpm test 1 tool');
-    expect(writes.join('')).toContain('✓ tool.called(shell)');
-    expect(writes.join('')).toContain('1 job passed');
+    expect(output).toContain('Bash: pnpm test 1 tool');
+    expect(output).toContain('✓ tool.called(shell)');
+    expect(output).toContain('1 job passed');
   });
 
   it('keeps multiline live shell progress on one rendered row', async () => {
@@ -1135,11 +1285,72 @@ describe('dynobox run — live output', () => {
       },
     );
 
-    const toolWrites = writes.filter((value) => value.includes('Bash:'));
+    const toolLines = writes
+      .flatMap((value) => value.split('\n'))
+      .filter((value) => value.includes('Bash:'));
     expect(result.exitCode).toBe(0);
-    expect(toolWrites).toHaveLength(1);
-    expect(toolWrites[0]).toContain(`Bash: pnpm test && git commit -m`);
-    expect(toolWrites[0]).not.toContain('\n');
+    expect(toolLines).toHaveLength(1);
+    expect(toolLines[0]).toContain(`Bash: pnpm test && git commit -m`);
+  });
+
+  it('keeps live phase rows within a narrow terminal', async () => {
+    const writes: string[] = [];
+    const result = await executeCli(['run', fixtures.validConfigPath], {
+      harnesses: [new StreamingHarness(MULTILINE_GIT_COMMIT_EVENT)],
+      live: true,
+      color: true,
+      terminalWidth: 60,
+      writeStdout: (value) => writes.push(value),
+    });
+    const phaseLines = writes
+      .flatMap((value) => value.split('\n'))
+      .filter((line) =>
+        /^\s{8,}.*\b(?:setup|harness|assertions)\s/.test(stripAnsi(line)),
+      );
+
+    expect(result.exitCode).toBe(0);
+    expect(phaseLines.some((line) => line.includes('Bash:'))).toBe(true);
+    expect(phaseLines.filter((line) => visibleLength(line) > 60)).toEqual([]);
+  });
+
+  it('redraws concurrent harnesses in one live scenario dashboard', async () => {
+    const tracker = createConcurrencyTracker();
+    const writes: string[] = [];
+    const result = await executeCli(
+      [
+        'run',
+        fixtures.validConfigPath,
+        '--harness',
+        'claude-code,codex',
+        '--verbose',
+      ],
+      {
+        harnesses: [
+          new DelayedHarness('claude-code', 20, tracker),
+          new DelayedHarness('codex', 10, tracker),
+        ],
+        live: true,
+        color: true,
+        writeStdout: (value) => writes.push(value),
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(tracker.maxActive).toBe(2);
+    expect(
+      writes.some(
+        (value) => value.includes('claude-code') && value.includes('codex'),
+      ),
+    ).toBe(true);
+    expect(writes.join('')).toContain('\x1b[');
+    expect(writes.join('')).toContain('2 jobs passed');
+    const lastDashboardClear = writes
+      .map((value) => value.includes('\x1b[J'))
+      .lastIndexOf(true);
+    const committedOutput = writes.slice(lastDashboardClear + 1).join('');
+    expect(committedOutput).toContain('setup');
+    expect(committedOutput).toContain('harness');
+    expect(committedOutput).toContain('assertions');
   });
 
   it('prints permission warnings when live output completes', async () => {
@@ -1151,11 +1362,13 @@ describe('dynobox run — live output', () => {
         }),
       ],
       live: true,
+      color: true,
       writeStdout: (value) => writes.push(value),
     });
+    const output = stripAnsi(writes.join(''));
 
     expect(result.exitCode).toBe(0);
-    expect(writes.join('')).toContain(
+    expect(output).toContain(
       'warning permission denied for shell command: git commit -m test',
     );
   });

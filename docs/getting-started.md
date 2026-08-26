@@ -118,6 +118,9 @@ dynobox run --harness claude-code,codex,opencode,pi,cursor,antigravity --iterati
 
 Iterations are chosen at runtime. The dyno still only describes what to test;
 the CLI decides how many times to execute each selected scenario/harness pair.
+Harness configurations for the same scenario run in parallel, while iterations
+for each configuration run sequentially. Dynobox waits for all harnesses in the
+current scenario before starting the next scenario.
 
 ## Author A Minimal Dyno
 

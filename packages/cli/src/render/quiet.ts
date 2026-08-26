@@ -27,6 +27,7 @@ export function renderQuietRun(
   dynos: readonly RunDynoGroup[],
   results: readonly LocalRunnerResult[],
   ctx: RenderContext,
+  elapsedMs?: number,
 ): string {
   const marks = results.map((result) => (result.passed ? '.' : 'F')).join('');
   const summaryPrefix = '  dynobox  ';
@@ -83,7 +84,7 @@ export function renderQuietRun(
 
   const totals = summarizeRunResults(results);
   lines.push(
-    `\n  ${quietSummarySegments(totals).join(', ')} in ${formatDuration(totals.durationMs)}\n`,
+    `\n  ${quietSummarySegments(totals).join(', ')} in ${formatDuration(elapsedMs ?? totals.durationMs)}\n`,
   );
   return lines.join('');
 }

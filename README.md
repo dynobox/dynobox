@@ -169,6 +169,11 @@ npx dynobox run \
   --iterations 5
 ```
 
+For each scenario, Dynobox runs the selected harness configurations in
+parallel. Repeated iterations for one harness configuration remain sequential,
+and the next scenario starts after every harness for the current scenario
+finishes.
+
 Repeated runs render compact pass-rate rows such as `.FF..` while retaining the
 failed iteration evidence for diagnosis.
 

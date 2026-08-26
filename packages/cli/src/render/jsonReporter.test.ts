@@ -191,16 +191,22 @@ describe('renderJsonRunOutput', () => {
       assertionResults: [],
       diagnostics: [],
       warnings: [],
-      timing: {setupMs: 0, harnessMs: 0, assertionsMs: 0, totalMs: 0},
+      timing: {
+        setupMs: 0,
+        harnessMs: 0,
+        assertionsMs: 0,
+        totalMs: (index + 1) * 100,
+      },
     })) as unknown as LocalRunnerResult[];
 
-    const records = renderJsonRunOutput({jobs, results})
+    const records = renderJsonRunOutput({jobs, results, elapsedMs: 50})
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line) as Record<string, unknown>);
 
     expect(records.at(-1)).toMatchObject({
       type: 'summary',
+      totals: {durationMs: 300, elapsedMs: 50},
       matrix: {
         scenarios: [{id: 'scenario.labels', name: 'labels'}],
         harnesses: [{id: 'claude-code'}],

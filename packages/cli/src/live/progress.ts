@@ -3,7 +3,7 @@ import type {RunJobProgressEvent} from '@dynobox/runner-local';
 import {describeToolEvent} from '../render/describe.js';
 import {renderPhaseRow, setupDurationMs} from '../render/phases.js';
 import {dim, formatCount, type RenderContext} from '../terminal/index.js';
-import type {LiveLine} from './writer.js';
+import type {LiveLine} from './dashboard.js';
 
 export type LiveJobState = {
   setupCommandCount: number;
@@ -167,7 +167,6 @@ export function renderLiveProgressEvent(
       status,
       label: 'assertions',
       detail,
-      durationMs: Date.now() - state.phaseStartedAtMs,
     }),
   };
 }

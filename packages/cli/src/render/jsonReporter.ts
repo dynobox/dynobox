@@ -14,6 +14,7 @@ const REPORT_SCHEMA = 'dynobox.report.v2';
 export type RenderJsonRunOutputInput = {
   jobs: readonly LocalRunnerJob[];
   results: readonly LocalRunnerResult[];
+  elapsedMs?: number;
   configErrorCount?: number;
   debugLogPaths?: Map<LocalRunnerJob, DebugLogPaths>;
 };
@@ -134,6 +135,7 @@ function summaryRecord(input: RenderJsonRunOutputInput) {
         0,
       ),
       durationMs: totalMs,
+      ...(input.elapsedMs === undefined ? {} : {elapsedMs: input.elapsedMs}),
     },
     plan: {
       scenarios: matrix.scenarios.length,

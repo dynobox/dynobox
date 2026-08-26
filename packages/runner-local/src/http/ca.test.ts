@@ -38,4 +38,23 @@ describe('ensureDynoboxCA', () => {
     expect(readFileSync(second.certPath, 'utf8')).toBe(firstCert);
     expect(readFileSync(second.keyPath, 'utf8')).toBe(firstKey);
   });
+
+  it('shares concurrent first-time initialization', async () => {
+    const homeDir = createHomeDir();
+
+    const [first, second, third] = await Promise.all([
+      ensureDynoboxCA({homeDir}),
+      ensureDynoboxCA({homeDir}),
+      ensureDynoboxCA({homeDir}),
+    ]);
+
+    expect(first).toBe(second);
+    expect(second).toBe(third);
+    expect(first.generated).toBe(true);
+    await expect(ensureDynoboxCA({homeDir})).resolves.toMatchObject({
+      generated: false,
+      certPath: first.certPath,
+      keyPath: first.keyPath,
+    });
+  });
 });

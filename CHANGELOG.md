@@ -8,6 +8,15 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Run harness configurations concurrently within each scenario while keeping
+  iterations sequential, preserving configured result order, and showing
+  parallel progress in ANSI-capable interactive terminals. JSON summaries now
+  report wall-clock `elapsedMs` separately from aggregate job `durationMs`.
+- Display complete harness metadata with explicit model and mode labels, and
+  omit assertion-phase timing from terminal output.
+
 ---
 
 ## dynobox@0.12.0 — 2026-08-18

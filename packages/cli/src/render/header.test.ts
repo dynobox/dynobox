@@ -48,7 +48,9 @@ describe('renderRunHeader', () => {
       createRenderContext({terminalWidth: 120}),
     );
 
-    expect(header).toContain('harness: claude-code/gpt-5.4-mini/dangerous');
+    expect(header).toContain(
+      'harness: claude-code · model: gpt-5.4-mini · mode: dangerous',
+    );
   });
 
   it('lists multiple harness labels and pluralizes correctly', () => {
@@ -103,7 +105,9 @@ describe('renderRunHeader', () => {
     );
 
     expect(header).toContain('harnesses: 1');
-    expect(header).not.toContain('harness: claude-code/sonnet/dangerous');
+    expect(header).not.toContain(
+      'harness: claude-code · model: sonnet · mode: dangerous',
+    );
   });
 
   it('shows the iteration count for multi-iteration runs', () => {

@@ -2,8 +2,8 @@
  * Static-mode (non-live) run output orchestrator. Composes header + grouped
  * run body + summary into a single string.
  *
- * The live path doesn't go through here — it streams to a `LiveWriter` in
- * `program/runCommand.ts` using the same grouped row renderers.
+ * The live path doesn't go through here; its dashboard in
+ * `program/runCommand.ts` uses the same grouped row renderers.
  */
 
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
@@ -20,6 +20,8 @@ export type RenderRunOutputInput = {
   /** Jobs grouped by the dyno they were discovered from, in execution order. */
   dynos: readonly RunDynoGroup[];
   results: readonly LocalRunnerResult[];
+  /** Wall-clock time for the complete run. */
+  elapsedMs?: number;
   ctx?: RenderContext;
   /**
    * Optional map of job → debug log paths, populated by the runner when
@@ -32,7 +34,7 @@ export type RenderRunOutputInput = {
 export function renderRunOutput(input: RenderRunOutputInput): string {
   const ctx = input.ctx ?? createRenderContext();
   if (ctx.mode === 'quiet') {
-    return renderQuietRun(input.dynos, input.results, ctx);
+    return renderQuietRun(input.dynos, input.results, ctx, input.elapsedMs);
   }
 
   return [
@@ -45,6 +47,6 @@ export function renderRunOutput(input: RenderRunOutputInput): string {
         ? {}
         : {debugLogPaths: input.debugLogPaths}),
     }),
-    renderRunSummary(input.results, ctx),
+    renderRunSummary(input.results, ctx, input.elapsedMs),
   ].join('');
 }

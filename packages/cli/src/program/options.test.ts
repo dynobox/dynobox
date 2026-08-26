@@ -67,7 +67,7 @@ describe('--harness override validation', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(
-      '1 dyno · 1 scenario · harness: claude-code/dangerous',
+      '1 dyno · 1 scenario · harness: claude-code · mode: dangerous',
     );
   });
 

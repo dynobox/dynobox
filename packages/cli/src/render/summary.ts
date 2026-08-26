@@ -118,11 +118,12 @@ export function runSummarySegments(
 export function renderRunSummary(
   results: readonly LocalRunnerResult[],
   ctx: RenderContext = createRenderContext(),
+  elapsedMs?: number,
 ): string {
   const totals = summarizeRunResults(results);
   const segments = [
     ...runSummarySegments(totals, ctx),
-    formatDuration(totals.durationMs),
+    formatDuration(elapsedMs ?? totals.durationMs),
   ];
   return `
   ${separator(ctx)}
