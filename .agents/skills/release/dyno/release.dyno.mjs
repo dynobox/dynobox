@@ -35,6 +35,11 @@ export default defineDyno({
       model: 'openai-codex/gpt-5.4-mini',
       permissionMode: 'dangerous',
     },
+    {
+      id: 'antigravity',
+      model: 'gemini-3.7-flash-low',
+      permissionMode: 'dangerous',
+    },
   ],
   scenarios: [
     {

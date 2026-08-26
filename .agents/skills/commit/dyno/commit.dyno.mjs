@@ -27,12 +27,17 @@ export default defineDyno({
           model: 'openai-codex/gpt-5.4-mini',
           permissionMode: 'dangerous',
         },
+        {
+          id: 'antigravity',
+          model: 'gemini-3.7-flash-low',
+          permissionMode: 'dangerous',
+        },
       ],
       prompt:
         'Use the commit skill to commit the README.md change in this scratch repository. Do not push. Do not amend any commit.',
       setup: [
         'git init',
-        'git config user.email dynobox@example.com',
+        'git config user.email tester@dynobox.com',
         'git config user.name Dynobox Test',
         'git add .',
         'git commit -m "chore: initial commit"',
