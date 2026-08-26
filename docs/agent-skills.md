@@ -13,22 +13,12 @@ The source lives at [`dynobox/skills`](https://github.com/dynobox/skills).
 
 ## Included Skills
 
-- `dyno-from-skill`: create a Dynobox test from an agent skill's `SKILL.md`.
-- `dyno-run-debug`: diagnose a failed Dynobox run and propose a verified fix.
-- `dyno-skill-fit`: assess whether a skill is a good candidate for Dynobox
-  coverage before writing tests.
-
-## When To Use Them
-
-Use `dyno-from-skill` when you want to turn a `SKILL.md` into a repeatable
-Dynobox scenario with appropriate assertions and fixtures.
-
-Use `dyno-run-debug` when a Dynobox run fails and you need help reading the
-output, identifying the root cause, or proposing a dyno change. It waits for
-approval before editing and validates any approved dyno change.
-
-Use `dyno-skill-fit` before authoring tests when you want a coverage assessment,
-example assertions, and a High, Partial, or Low fit rating.
+- `dyno-from-skill`: turn a `SKILL.md` into a repeatable scenario with assertions
+  and fixtures.
+- `dyno-run-debug`: diagnose a failed run and propose a fix. It waits for
+  approval before editing and validates approved dyno changes.
+- `dyno-skill-fit`: assess Dynobox test fit before authoring, with example
+  assertions and a High, Partial, or Low fit rating.
 
 ## Example Prompts
 

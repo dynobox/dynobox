@@ -96,8 +96,8 @@ letters, numbers, dots, underscores, and hyphens.
 > **Experimental:** CLI mocking is an experimental feature. Its authoring and
 > reporting contracts may change between releases.
 
-Use scenario `cliMocks` to replace bare executable calls made by the harness or
-verification commands. Mocks are scoped to one scenario job and support static
+Use scenario `cliMocks` to replace bare executable calls during the harness or
+post-harness verification. Mocks are scoped to one job and support static
 responses, ordered responses, and JavaScript or TypeScript handlers.
 
 ```ts
@@ -106,13 +106,10 @@ import {command, defineDyno} from '@dynobox/sdk';
 export default defineDyno({
   scenarios: [
     {
-      name: 'prepares a package release after fixing tests',
-      prompt:
-        'Inspect the current package version, fix the failing tests, then prepare a release.',
+      name: 'fixes tests and prepares a release',
+      prompt: 'Fix the tests, then prepare a release.',
       cliMocks: {
-        npm: {
-          response: {exitCode: 0, stdout: '0.10.2'},
-        },
+        npm: {response: {exitCode: 0, stdout: '0.10.2'}},
         vitest: {
           responses: [
             {exitCode: 1, stderr: 'one test failed'},
@@ -121,16 +118,12 @@ export default defineDyno({
           onExhausted: 'repeat-last',
         },
         changeset: {
-          handler: async ({argv}) => {
-            if (argv[0] === 'version') {
-              return {exitCode: 0, stdout: 'Versioned packages.'};
-            }
-            return {exitCode: 1, stderr: 'expected changeset version'};
-          },
+          handler: async ({argv}) => ({
+            exitCode: argv[0] === 'version' ? 0 : 1,
+          }),
         },
       },
       assertions: [
-        command.called('npm', {args: ['view', 'dynobox', 'version']}),
         command.called('vitest', {args: ['run']}),
         command.called('changeset', {args: ['version']}),
       ],
@@ -139,72 +132,34 @@ export default defineDyno({
 });
 ```
 
-Every response requires an integer `exitCode` from 0 through 255. Omitted
-`stdout` and `stderr` default to empty strings. Sequential mocks require at
-least one response and default to an exhaustion error. Set `onExhausted` to
-`repeat-last` or to a fallback response to choose different behavior. Response
-positions are scoped to one scenario/harness/iteration job; harness and
-post-harness verification calls consume the same sequence.
+Configuration rules:
 
-Each executable must configure exactly one of `response`, `responses`, or
-`handler`. Executable keys must be bare names: empty names, `.`, `..`, paths,
-and names containing `/`, `\`, or NUL bytes are rejected.
+- Each executable configures exactly one of `response`, `responses`, or
+  `handler`. Keys must be bare executable names, not paths, `.`, or `..`.
+- Every response needs an integer `exitCode` from 0 through 255; omitted output
+  defaults to an empty string. Sequences default to an exhaustion error. Use
+  `onExhausted` to repeat the last response or provide a fallback.
+- Handlers receive `argv`, `cwd`, and the child environment, which may contain
+  secrets. Treat them as trusted code, keep their work bounded, and account for
+  concurrent jobs. Async handlers time out after 30 seconds without cancellation.
+  Call records omit environment values.
 
-Handlers receive the invoked arguments, working directory, and child process
-environment visible to the mock shim, which can include credentials or other
-secrets inherited from the harness or nested caller. Handlers must therefore be
-trusted code. Dynobox waits up to 30 seconds for an asynchronous handler result,
-then fails the mock call; the timeout does not cancel the handler's work.
-Synchronous handler code cannot be interrupted and blocks the mock controller,
-so keep all handler operations bounded and clean up any timers or other
-resources they create. Different harness configurations for one scenario can
-invoke the same authored handler concurrently, so handlers that use shared
-mutable state must synchronize access. Dynobox records the executable,
-arguments, working directory, timestamp, exit code, stdout, and stderr, but does
-not retain environment values.
+Dynobox prepends generated shims to `PATH` for the harness and verification
+commands, including nested processes. Setup and harness version detection use
+the real `PATH`. Shell startup hooks protect the mock path for common zsh, bash,
+and interactive POSIX `sh` flows; npm and pnpm scripts are also covered. Custom
+shell profiles, other shells, restrictive Codex environment filtering, and Yarn
+scripts may restore a real executable ahead of a shim.
 
-Setup commands and harness version detection use the real PATH. The harness and
-post-harness verification commands use a PATH with generated mock shims
-prepended. This intercepts bare names such as `vitest run`, including calls from
-nested subprocesses. Dynobox does not force a particular interactive shell.
-Generated zsh and bash startup hooks, plus an interactive POSIX `sh` hook,
-reapply the mock PATH after shell initialization. A bash login profile that
-unsets or replaces `BASH_ENV` can prevent its later non-interactive startup hook
-from running. Non-interactive POSIX shells do not read `ENV`, so a login profile
-invoked through a command such as `sh -lc` can also put a real executable ahead
-of the shim. Other shells such as fish or nushell are not covered by these hooks
-and have the same limitation. When Codex runs with CLI mocks, Dynobox disables
-Codex login shells and shell snapshots for that invocation so a profile-captured
-PATH cannot restore real executables over the shims. Codex environment filtering
-remains in effect; a restrictive `shell_environment_policy.include_only` can
-exclude Dynobox's activation variables and prevent mocks from running. npm and
-pnpm package scripts keep mock shims ahead of local `node_modules/.bin` entries.
-Yarn package scripts do not currently provide this guarantee.
+Explicit paths, shell builtins, functions, aliases, and keywords bypass `PATH`
+lookup. CLI mocks are therefore behavioral test doubles, not a sandbox or
+security boundary. Mocking the selected harness executable is rejected. CLI
+mocks currently require macOS or Linux.
 
-Explicit paths such as `/usr/bin/vitest run` bypass the mock. Shell builtins,
-functions, aliases, and keywords can also bypass PATH lookup and therefore the
-mock shim. CLI mocks are behavioral test doubles, not a command sandbox or
-security boundary. A CLI mock whose name matches the selected harness
-executable's basename is rejected, including when that harness uses an explicit
-executable path. Explicit paths otherwise bypass the mock shim.
-
-For the different evidence used by command assertions for mocked and standard
-executables, see [Mocked executables use call records](#mocked-executables-use-call-records).
-
-Recorded calls integrate with `command.called`, `command.notCalled`, and
-`sequence.inOrder`. Mock-only sequences use invocation order. Calls that cannot
-be safely associated with one standalone shell tool event, including nested
-calls and calls from compound shell events, cannot be ordered relative to
-unrelated harness tool events. Mixed sequence assertions that require that
-comparison fail with an explicit diagnostic. CLI mocks currently require macOS
-or Linux.
-
-Command and sequence assertions use the mock-call snapshot captured when the
-harness exits. Later verification calls remain available in reporting but do
-not satisfy observation assertions. A configured nonzero exit is an ordinary
-process result; sequence exhaustion, handler errors or timeouts, and unfinished
-calls are mock lifecycle failures that fail the job even if the harness catches
-the command error.
+See [Mocked executables use call records](#mocked-executables-use-call-records)
+for assertion and reporting behavior. A configured nonzero exit is an ordinary
+response; sequence exhaustion, handler failures, timeouts, and unfinished calls
+fail the job even if the harness catches the command error.
 
 ## Harnesses
 
@@ -241,20 +196,8 @@ Permission modes:
 - `default`: use the harness-specific non-dangerous headless behavior described
   in the [CLI reference](./cli.md#harness-requirements).
 - `dangerous`: opt into harness-specific full-access or automatic permission
-  approval flags for trusted local evals.
-
-Dangerous mode maps to:
-
-- `claude-code`: `--permission-mode bypassPermissions`
-- `codex`: `--sandbox danger-full-access -c approval_policy="never"`
-- `opencode`: `--auto`, which approves permission prompts but does not override
-  explicit deny rules.
-- `pi`: `--approve`, which trusts project-local Pi resources for the run.
-- `cursor`: `--force --sandbox disabled`, which automatically approves commands
-  unless explicitly denied and disables the sandbox. Dynobox does not pass
-  `--approve-mcps`; existing Cursor MCP approvals still apply.
-- `antigravity`: `--dangerously-skip-permissions`, which auto-approves every
-  tool call, including file writes and commands.
+  approval flags for trusted local evals. See [Harness
+  Requirements](./cli.md#harness-requirements) for exact mappings.
 
 The CLI can override authored harnesses with `--harness` and authored
 permission modes with `--permission-mode`.
@@ -370,30 +313,21 @@ normalize.
 
 #### Mocked executables use call records
 
-For a bare executable configured in `cliMocks`, `command.called` and
-`command.notCalled` use completed mock call records as the source of truth,
-rather than normalized shell-tool transcript events. This means
-`command.called('vitest')` can pass even when the transcript never directly
-mentions `vitest`: a harness command, package script, or nested process may have
-invoked the mock. Conversely, a transcript command that names a mocked
-executable does not satisfy `command.called` or fail `command.notCalled` unless
-the mock recorded a completed call; transcript text can describe a branch that
-never executed.
+For bare executables in `cliMocks`, completed call records are authoritative for
+`command.called`, `command.notCalled`, and `sequence.inOrder`. This captures
+package scripts and nested processes that may not appear directly in the
+transcript, while transcript text alone cannot prove a command ran. Other
+executables, including explicit paths that bypass a shim, use normalized shell
+observations.
 
-`command.called`, `command.notCalled`, and `sequence.inOrder` evaluate mock
-calls captured during the harness phase only. A post-harness verification
-command can invoke the same mock and consume its next sequential response, and
-that call appears in verbose/debug output and `dynobox-cli-mocks.json`, but it
-is not evidence for these observation assertions. Verification-phase mock calls
-can still fail the job through mock lifecycle diagnostics, such as an exhausted
-response sequence or a failed handler.
+Observation assertions use calls captured through the end of the harness phase.
+Verification calls still consume sequential responses and appear in reports,
+but cannot satisfy those assertions. Mock lifecycle failures during either
+phase still fail the job.
 
-All other executables, including explicit paths that bypass a mock shim, use the
-normalized shell command observations described below. When mock call records
-and shell text disagree for the same configured executable, the recorded calls
-determine the observed count. Consequently, `command.notCalled('vitest')` fails
-when a mock fires in a nested process even if no harness shell line names
-`vitest`.
+Mock-only sequences use invocation order. A nested or compound-shell mock call
+cannot always be ordered against unrelated harness tool events; mixed sequence
+assertions that require such a comparison fail with a diagnostic.
 
 Match the first argument against the command's normalized `executable`. The
 optional matcher accepts any combination of the following fields; when several
@@ -637,28 +571,13 @@ Endpoint specs include only `method` and `url`. HTTP assertions match observed
 requests by endpoint URL/method and optional response status.
 
 When a scenario includes HTTP assertions, Dynobox starts a per-job local proxy
-and sets proxy environment variables on the harness child process:
-
-- `HTTP_PROXY`
-- `HTTPS_PROXY`
-- `http_proxy`
-- `https_proxy`
-- `NO_PROXY`
-- `no_proxy`
-
-Dynobox also sets common CA variables to a generated CA at
-`~/.dynobox/ca.pem`:
-
-- `NODE_EXTRA_CA_CERTS`
-- `SSL_CERT_FILE`
-- `REQUESTS_CA_BUNDLE`
-- `CURL_CA_BUNDLE`
-
-HTTP capture covers local child-process traffic that honors those proxy and CA
-environment variables. Existing `NO_PROXY` and `no_proxy` entries are preserved,
-and Dynobox adds `localhost`, `127.0.0.1`, and `::1` so local services bypass
-the proxy. Harness-native web tools and binaries with their own trust stores may
-bypass capture.
+and sets `HTTP_PROXY`, `HTTPS_PROXY`, and their lowercase variants on the harness
+child process. Existing `NO_PROXY` and `no_proxy` values are preserved, and local
+loopback values (`localhost`, `127.0.0.1`, and `::1`) are added. A generated CA
+at `~/.dynobox/ca.pem` is exposed through `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`,
+`REQUESTS_CA_BUNDLE`, and `CURL_CA_BUNDLE`. Capture covers traffic that honors
+those settings; harness-native web tools and clients with their own trust stores
+may bypass it.
 
 ## Path Helpers
 
@@ -796,14 +715,6 @@ scenarios:
         cat > package.json <<'JSON'
         {"scripts":{"test":"vitest run"}}
         JSON
-    cliMocks:
-      vitest:
-        responses:
-          - exitCode: 1
-            stderr: one test failed
-          - exitCode: 0
-            stdout: all tests passed
-        onExhausted: repeat-last
     assertions:
       - label: reads package.json
         type: command.called
@@ -823,6 +734,16 @@ scenarios:
 YAML configs flow through the same schema and IR compiler as JavaScript and
 TypeScript configs. YAML supports static and sequential CLI mocks. Function
 handlers require a JavaScript or TypeScript config.
+
+A static mock inside a YAML scenario uses this shape:
+
+```yaml
+cliMocks:
+  vitest:
+    response:
+      exitCode: 0
+      stdout: all tests passed
+```
 
 ## Authoring Assertion Contract
 

@@ -136,13 +136,3 @@ to copy an interactive login or keyring cache.
 
 If your dynos only use one harness, adjust the setup and secret checks to match
 the harnesses you actually run.
-
-## Status
-
-This pattern is a practical starting point for teams that want Dynobox in CI
-today. Adapt its triggers and permissions to your repository's trust model;
-copying the same-repository pull-request trigger into a contributor-facing repo
-without an approval boundary can expose model credentials. Future Dynobox
-releases may provide a smaller packaged action or a different hosted reporting
-path, so treat the skills repo workflow as an example rather than a stable final
-interface.
