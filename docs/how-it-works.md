@@ -61,16 +61,10 @@ runtime.
 When a scenario configures experimental CLI mocks, Dynobox prepends generated
 shims to the harness process's `PATH`. Bare executable calls from the harness or
 its child processes can then receive configured static, sequential, or
-handler-based responses. Dynobox does not force a particular interactive shell.
-Startup hooks for zsh, bash, and interactive POSIX `sh` keep the shim directory
-ahead of profile-modified paths. Bash login profiles that replace `BASH_ENV` and
-non-interactive POSIX login shells that ignore `ENV`, as well as profiles for
-other shells such as fish or nushell, can still put a real executable first. For
-Codex jobs with CLI mocks, Dynobox disables login shell execution and shell
-snapshots without clearing configured shell-environment filters. Setup commands
-and harness version detection use the real `PATH`. Explicit executable paths and
-commands that do not use `PATH` lookup can bypass the shims, so CLI mocking is a
-behavioral test double rather than a sandbox.
+handler-based responses. Setup and harness version detection use the real
+`PATH`; explicit paths and other calls that bypass `PATH` can bypass the mocks.
+CLI mocks are behavioral test doubles, not a sandbox. See [CLI
+Mocks](./config-authoring.md#cli-mocks) for shell and platform limits.
 
 While the process runs, the harness adapter reads its structured output and
 emits tool events. After the process exits, the adapter extracts the complete
@@ -127,12 +121,10 @@ against the captured evidence:
   work directory and checks its exit code or output.
 
 Observation assertions are evaluated before verification commands can mutate
-the work directory. Command and sequence assertions use CLI mock calls captured
-through the end of the harness phase; later verification calls remain in local
-reporting but cannot satisfy those assertions. Mock sequence exhaustion, handler
-errors or timeouts, and unfinished calls fail the job as lifecycle errors. Every
-assertion receives its own result and evidence; the job passes only when every
-assertion passes.
+the work directory. They use the harness-phase evidence snapshot; later
+verification calls remain in reports but cannot satisfy observation assertions.
+Every assertion receives its own result and evidence, and lifecycle failures
+still fail the job.
 
 See the [assertion reference](./config-authoring.md#assertions) for all matchers.
 

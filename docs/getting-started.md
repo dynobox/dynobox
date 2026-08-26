@@ -51,16 +51,10 @@ dynobox whoami
 ```
 
 After authenticating, you can save a run summary with `dynobox run --save-run`.
-Alternatively, set `DYNOBOX_UPLOAD_URL` to post the same schema v4 JSON payload
-to your own endpoint without a Dynobox token or authorization header.
-
-Saved-run data is length-capped but not redacted. It includes available Git
-commit, branch, dirty-state, and configured user name/email metadata from the
-directory where the CLI was started. All jobs can include authored assertion
-data and matched evidence such as requested endpoint URLs, tool commands, and
-verification output. Failed jobs can additionally include command or harness
-diagnostics. Do not use `--save-run` when those values may contain secrets. Local
-CLI output and `--reporter json` remain available without authentication.
+Alternatively, set `DYNOBOX_UPLOAD_URL` to use your own endpoint without a
+Dynobox token. Saved-run data is not redacted, so do not upload runs that may
+contain secrets. See [Saving Runs](./cli.md#saving-runs) for payload and endpoint
+details.
 
 ## Create Your First Dyno
 
@@ -158,40 +152,9 @@ JSON`,
 });
 ```
 
-The same dyno can be authored in YAML:
-
-```yaml
-name: package-script-check
-harnesses:
-  - claude-code
-scenarios:
-  - name: detects test script
-    prompt: >-
-      Use cat package.json and tell me whether this project has a test script.
-    setup:
-      - |
-        cat > package.json <<'JSON'
-        {
-          "name": "fixture",
-          "scripts": {"test": "vitest run"}
-        }
-        JSON
-    assertions:
-      - label: reads package.json
-        type: command.called
-        executable: cat
-        command:
-          args:
-            - package.json
-      - type: tool.notCalled
-        tool: edit_file
-      - type: artifact.unchanged
-        path: package.json
-      - type: finalMessage.contains
-        text: test
-```
-
-See [Config Authoring](./config-authoring.md) for the full assertion reference.
+Prefer YAML? Use `dynobox init --yaml` and see [YAML
+Configs](./config-authoring.md#yaml-configs). The [Config Authoring
+reference](./config-authoring.md) covers every assertion type.
 
 For larger fixtures, put files in a `fixtures/` directory next to a JavaScript
 or TypeScript dyno that uses `defineDyno(...)`. Dynobox copies that directory
@@ -215,28 +178,8 @@ dynobox run my-skill.dyno.yaml
 dynobox run dynobox.config.ts
 ```
 
-Directory discovery skips dot directories by default, but explicitly includes
-`.agents` and `.claude` skill directories. If you pass a hidden directory as the
-path, Dynobox searches that directory. Discovery also skips `node_modules`,
-`dist`, `build`, `coverage`, `.git`, `.dynobox`, `.next`, and `.cache`.
-Explicit file paths do not need to match the `*.dyno.*` naming pattern, but they
-still need to be loadable JavaScript, TypeScript, or YAML Dynobox configs. `.cjs`
-and `.cts` configs are not supported.
-
-To skip additional generated directories, add `dyno.config.json` to your
-project root:
-
-```json
-{
-  "ignoredDirectories": ["generated", "vendor/examples"]
-}
-```
-
-`dynobox run`, `dynobox validate`, and `dynobox discover` read
-`dyno.config.json` from the directory you run them in (no upward walk), so run
-them from your project root. Pass `--config <path>` to use a specific JSON config
-file from anywhere. `ignoredDirectories` entries are relative to the config file,
-so a project-root config can ignore project-root directories.
+See [`dynobox run [path]`](./cli.md#dynobox-run-path) for discovery exclusions,
+supported extensions, and `dyno.config.json` options.
 
 ## Debug A Run
 
@@ -249,22 +192,10 @@ dynobox run --reporter json
 dynobox run --save-run
 ```
 
-`--verbose` expands every job with setup, harness, and assertion phase rows. It
-also lists parsed command segments when command assertions are present. For
-scenarios using experimental CLI mocks, it lists configured executables and
-recorded calls.
-
-`--debug` includes everything from `--verbose`, prints each job's temporary work
-directory and artifact paths, and writes debug logs when data is available:
-
-- `dynobox-transcript.log`
-- `dynobox-chat-history.jsonl`
-- `dynobox-tool-events.json`
-- `dynobox-cli-mocks.json`
-- `dynobox-stderr.log`
-
-`dynobox-cli-mocks.json` records each completed mock call, including arguments,
-working directory, output, and exit code, but not child environment values.
+`--verbose` expands lifecycle and observed-command details. `--debug` also shows
+temporary paths and writes available run artifacts. Use the JSON reporter for
+automation and `--save-run` to upload a compact run summary. See [Output
+Modes](./cli.md#output-modes) for the complete output and debug-file contract.
 
 Dynobox uses harness-specific non-dangerous headless behavior by default. For
 trusted local evals that intentionally need elevated or automatically approved

@@ -16,6 +16,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   report wall-clock `elapsedMs` separately from aggregate job `durationMs`.
 - Display complete harness metadata with explicit model and mode labels, and
   omit assertion-phase timing from terminal output.
+- Streamlined published CLI and config-authoring documentation, especially CLI
+  mock guidance, by consolidating reference details and removing duplication.
 
 ---
 

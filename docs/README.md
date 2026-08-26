@@ -36,15 +36,9 @@ for reviewing or sharing the saved run. Run owners can compare compatible jobs
 across saved runs to inspect assertion outcome and evidence changes.
 
 Set `DYNOBOX_UPLOAD_URL` to post the same schema v4 JSON payload to your own
-endpoint without Dynobox authentication. A custom endpoint may return its own
-URL for the CLI to print.
-
-Saved-run data is length-capped but not redacted. All jobs can include authored
-assertion data and matched evidence such as requested endpoint URLs, tool
-commands, and verification output. Uploads also include available Git revision,
-dirty-state, and configured identity metadata from the directory where the CLI
-was started. Failed jobs can additionally include command or harness diagnostics.
-Do not use `--save-run` when those values may contain secrets.
+endpoint without Dynobox authentication. Saved-run data is not redacted, so do
+not upload runs that may contain secrets. See [Saving Runs](./cli.md#saving-runs)
+for the payload and custom-endpoint contract.
 
 ## Agent Resources
 
