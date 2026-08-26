@@ -1,3 +1,7 @@
+---
+import TerminalRecording from './TerminalRecording.astro';
+---
+
 <section
   id="harnesses-panel"
   class="explorer-panel"
@@ -10,20 +14,11 @@
   <header class="panel-header">
     <span><span class="panel-number">02</span> &middot; one dyno, installed harnesses</span>
   </header>
-  <div class="panel-content harness-content">
-    <p class="command"><span>$</span> npx dynobox run commit.dyno.mjs --harness claude-code,codex,opencode</p>
-    <p class="muted">discovered 1 dyno &middot; 1 scenario &middot; harnesses: 3</p>
-    <div class="result-block">
-      <p class="result-title">[commit-skill] no push</p>
-      <p><span>claude-code</span><b class="pass">PASS</b><small>5 assertions</small></p>
-      <p><span>codex</span><b class="pass">PASS</b><small>5 assertions</small></p>
-      <p><span>opencode</span><b class="fail">FAIL</b><small>4 of 5</small></p>
-    </div>
-    <div class="failure-block">
-      <p><b class="fail">FAIL</b> command.notCalled(git, push)</p>
-      <p><span>expected</span> no git push command</p>
-      <p><span>observed</span> git push origin main</p>
-    </div>
+  <TerminalRecording
+    src="/casts/02-harnesses.cast"
+    label="Commit dyno running across Claude Code, Codex, and Antigravity"
+  />
+  <div class="panel-content">
     <p class="panel-note">
       Supported adapters: Claude Code, OpenAI Codex, OpenCode, Pi, Cursor CLI,
       and Google Antigravity CLI. Harnesses must already be installed and

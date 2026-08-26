@@ -1,3 +1,7 @@
+---
+import TerminalRecording from './TerminalRecording.astro';
+---
+
 <section
   id="iterations-panel"
   class="explorer-panel"
@@ -8,18 +12,13 @@
   hidden
 >
   <header class="panel-header">
-    <span><span class="panel-number">05</span> &middot; reliability across five iterations</span>
+    <span><span class="panel-number">05</span> &middot; reliability across three iterations</span>
   </header>
-  <div class="panel-content iterations-content">
-    <p class="command"><span>$</span> npx dynobox run --harness claude-code,codex --iterations 5</p>
-    <div class="rate-list">
-      <p><span>claude-code</span><b>5/5</b><code class="pass-dots">.....</code></p>
-      <p><span>codex</span><b>3/5</b><code>.<i>FF</i>..</code></p>
-    </div>
-    <div class="failure-block">
-      <p><span>iteration 2</span> command.notCalled(git, push)</p>
-      <p><span>iteration 3</span> command.notCalled(git, push)</p>
-    </div>
+  <TerminalRecording
+    src="/casts/05-iterations.cast"
+    label="Commit dyno running three iterations each in Claude Code, Codex, and Antigravity"
+  />
+  <div class="panel-content">
     <p class="panel-note">
       A single pass can be luck. Repeat each scenario and harness pair to
       measure consistency; Dynobox reports the pass rate and keeps evidence

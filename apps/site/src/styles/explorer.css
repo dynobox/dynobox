@@ -89,8 +89,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0;
-  width: min(960px, calc(100% - 48px));
-  margin-inline: 24px;
+  width: min(1320px, calc(100% - 76px));
+  margin-inline: auto;
   padding-top: clamp(40px, 5svh, 64px);
   padding-bottom: 32px;
 }
@@ -215,6 +215,10 @@ body {
 
 .panel-content p {
   margin: 0;
+}
+
+.panel-content .panel-note {
+  margin-top: 0 !important;
 }
 
 .command {
@@ -467,8 +471,8 @@ body {
   flex-wrap: wrap;
   justify-content: flex-start;
   gap: 12px 24px;
-  width: min(960px, calc(100% - 48px));
-  margin-inline: 24px;
+  width: min(1320px, calc(100% - 76px));
+  margin-inline: auto;
   padding: 20px 0;
   color: var(--page-muted);
   font-size: 11px;
@@ -512,12 +516,6 @@ body {
 }
 
 @media (max-width: 780px) {
-  .explorer-shell,
-  .explorer-footer > div {
-    width: min(100% - 36px, 620px);
-    margin-inline: 18px;
-  }
-
   .explorer-shell {
     padding-top: clamp(32px, 4svh, 44px);
   }
@@ -533,6 +531,11 @@ body {
 }
 
 @media (max-width: 700px) {
+  .explorer-shell,
+  .explorer-footer > div {
+    width: calc(100% - 40px);
+  }
+
   .topbar-inner {
     grid-template-columns: minmax(0, 1fr);
     gap: 13px;
