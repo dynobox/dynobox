@@ -1,0 +1,108 @@
+---
+import AssertionsPanel from './AssertionsPanel.astro';
+import BoundariesPanel from './BoundariesPanel.astro';
+import DashboardPanel from './DashboardPanel.astro';
+import HarnessesPanel from './HarnessesPanel.astro';
+import IterationsPanel from './IterationsPanel.astro';
+import SourcePanel from './SourcePanel.astro';
+
+const tabs = [
+  {id: 'source', label: 'Write dynos in TypeScript or YAML.'},
+  {
+    id: 'harnesses',
+    label: 'Run Claude Code, Codex, OpenCode, Pi, Cursor, and Antigravity.',
+  },
+  {
+    id: 'assertions',
+    label: 'Assert on tool calls, commands, files, HTTP requests, and answers.',
+  },
+  {
+    id: 'boundaries',
+    label: 'Mock CLI tools, and capture HTTPS through a local proxy.',
+  },
+  {id: 'iterations', label: 'Repeat the same scenario to measure reliability.'},
+  {id: 'runs', label: 'Save runs to the dashboard to review and share them.'},
+];
+---
+
+<section class="explorer" aria-labelledby="explorer-heading" data-behavior-explorer>
+  <h2 id="explorer-heading" class="visually-hidden">How Dynobox works</h2>
+
+  <div class="explorer-tabs" role="tablist" aria-label="How Dynobox works">
+    {tabs.map(({id, label}, index) => (
+      <button
+        id={`${id}-tab`}
+        type="button"
+        role="tab"
+        aria-controls={`${id}-panel`}
+        aria-selected={index === 0}
+        tabindex={index === 0 ? 0 : -1}
+        data-explorer-tab
+      >
+        <span class="explorer-tab-number" aria-hidden="true">
+          {String(index + 1).padStart(2, '0')}
+        </span>
+        <span>{label}</span>
+      </button>
+    ))}
+  </div>
+
+  <div class="explorer-stage">
+    <SourcePanel />
+    <HarnessesPanel />
+    <AssertionsPanel />
+    <BoundariesPanel />
+    <IterationsPanel />
+    <DashboardPanel />
+  </div>
+</section>
+
+<script>
+  for (const explorer of document.querySelectorAll<HTMLElement>('[data-behavior-explorer]')) {
+    const tabs = Array.from(
+      explorer.querySelectorAll<HTMLButtonElement>('[data-explorer-tab]'),
+    );
+    const panels = Array.from(
+      explorer.querySelectorAll<HTMLElement>('[data-explorer-panel]'),
+    );
+
+    function selectTab(tab: HTMLButtonElement, focus = false) {
+      const panelId = tab.getAttribute('aria-controls');
+
+      for (const candidate of tabs) {
+        const selected = candidate === tab;
+        candidate.setAttribute('aria-selected', String(selected));
+        candidate.tabIndex = selected ? 0 : -1;
+      }
+
+      for (const panel of panels) {
+        const selected = panel.id === panelId;
+        panel.hidden = !selected;
+        panel.classList.toggle('is-entering', selected);
+      }
+
+      if (focus) tab.focus();
+    }
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => selectTab(tab));
+      tab.addEventListener('keydown', (event) => {
+        let nextIndex: number | undefined;
+
+        if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+          nextIndex = (index + 1) % tabs.length;
+        }
+        if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+          nextIndex = (index - 1 + tabs.length) % tabs.length;
+        }
+        if (event.key === 'Home') nextIndex = 0;
+        if (event.key === 'End') nextIndex = tabs.length - 1;
+
+        if (nextIndex !== undefined) {
+          event.preventDefault();
+          selectTab(tabs[nextIndex], true);
+        }
+      });
+    });
+  }
+</script>

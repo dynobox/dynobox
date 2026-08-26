@@ -1,0 +1,110 @@
+---
+import 'asciinema-player/dist/bundle/asciinema-player.css';
+
+type Props = {
+  src: string;
+  label: string;
+};
+
+const {src, label} = Astro.props;
+---
+
+<div
+  class="terminal-recording"
+  data-terminal-recording
+  data-src={src}
+  aria-label={label}
+>
+  <span class="terminal-recording-status">Loading terminal recording...</span>
+</div>
+<noscript>
+  <a class="terminal-recording-fallback" href={src}>Download the terminal recording</a>
+</noscript>
+
+<script>
+  import {create, type Player} from 'asciinema-player';
+
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const players = new WeakMap<HTMLElement, Player>();
+
+  function mountRecording(container: HTMLElement) {
+    if (players.has(container)) return;
+    const src = container.dataset.src;
+    if (!src) return;
+
+    if (container.closest('[hidden]')) return;
+
+    container.replaceChildren();
+    const player = create(src, container, {
+      autoplay: !prefersReducedMotion.matches,
+      controls: true,
+      cursorMode: 'hidden',
+      fit: 'width',
+      idleTimeLimit: 1,
+      preload: true,
+      speed: 2,
+      terminalFontFamily: "'Ioskeley Mono', ui-monospace, monospace",
+      theme: 'asciinema',
+    });
+    players.set(container, player);
+  }
+
+  for (const container of document.querySelectorAll<HTMLElement>(
+    '[data-terminal-recording]',
+  )) {
+    const panel = container.closest<HTMLElement>('[data-explorer-panel]');
+    if (!panel) continue;
+
+    const syncPlayback = () => {
+      const player = players.get(container);
+
+      if (panel.hidden) {
+        if (player) void player.pause();
+      } else if (player && !prefersReducedMotion.matches) {
+        void player.play();
+      } else {
+        mountRecording(container);
+      }
+    };
+
+    new MutationObserver(syncPlayback).observe(panel, {
+      attributeFilter: ['hidden'],
+      attributes: true,
+    });
+    syncPlayback();
+  }
+</script>
+
+<style>
+  .terminal-recording {
+    min-width: 0;
+    background: #121314;
+  }
+
+  .terminal-recording-status {
+    padding: 18px;
+    color: var(--page-muted);
+    font-size: 12px;
+  }
+
+  .terminal-recording :global(.ap-wrapper) {
+    justify-content: flex-start;
+  }
+
+  .terminal-recording :global(.ap-player) {
+    border-radius: 0;
+  }
+
+  .terminal-recording-fallback {
+    display: block;
+    padding: 18px;
+    color: var(--page-link);
+    font-size: 12px;
+  }
+
+  @media (max-width: 480px) {
+    .terminal-recording {
+      min-height: 250px;
+    }
+  }
+</style>
