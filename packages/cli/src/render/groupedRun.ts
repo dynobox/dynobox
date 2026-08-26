@@ -194,7 +194,8 @@ export function renderRunningGroupRow(
     options.iteration === undefined || options.iterationCount === undefined
       ? ''
       : ` iteration ${options.iteration + 1}/${options.iterationCount}`;
-  const result = `${statusIndent(options)}${icon} ${dim(ctx, `running${iteration}`)}`;
+  const left = `${statusIndent(options)}${icon} ${dim(ctx, `running${iteration}`)}`;
+  const result = leftRight(left, '', ctx.width);
   return `${harnessLabelLines(options, ctx)}${result}`;
 }
 

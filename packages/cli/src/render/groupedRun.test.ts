@@ -7,7 +7,11 @@ import type {HarnessId, PermissionMode} from '@dynobox/sdk';
 import {describe, expect, it} from 'vitest';
 
 import {createRenderContext, visibleLength} from '../terminal/index.js';
-import {buildGroupedRunView, renderGroupedRun} from './groupedRun.js';
+import {
+  buildGroupedRunView,
+  renderGroupedRun,
+  renderRunningGroupRow,
+} from './groupedRun.js';
 import type {RunDynoGroup} from './plan.js';
 import {renderRunSummary} from './summary.js';
 
@@ -657,6 +661,20 @@ describe('renderGroupedRun', () => {
     // Passing iterations expand too: one phase block per iteration.
     expect(output.match(/setup {6}0 commands/g)).toHaveLength(2);
   });
+});
+
+describe('renderRunningGroupRow', () => {
+  it.each([20, 30])(
+    'keeps iteration progress within a %i-column terminal',
+    (terminalWidth) => {
+      const output = renderRunningGroupRow(
+        createRenderContext({color: true, terminalWidth}),
+        {iteration: 9, iterationCount: 100},
+      );
+
+      expect(visibleLength(output)).toBe(terminalWidth);
+    },
+  );
 });
 
 describe('renderRunSummary', () => {
