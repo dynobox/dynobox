@@ -8,6 +8,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.13.0 — 2026-08-26
+
 ### `dynobox` (CLI)
 
 - Run harness configurations concurrently within each scenario while keeping
@@ -18,8 +22,6 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   omit assertion-phase timing from terminal output.
 - Streamlined published CLI and config-authoring documentation, especially CLI
   mock guidance, by consolidating reference details and removing duplication.
-
----
 
 ## dynobox@0.12.0 — 2026-08-18
 
