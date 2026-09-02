@@ -1,0 +1,32 @@
+<section
+  id="assertions-panel"
+  class="explorer-panel"
+  role="tabpanel"
+  aria-labelledby="assertions-tab"
+  tabindex="0"
+  data-explorer-panel
+  hidden
+>
+  <header class="panel-header">
+    <span><span class="panel-number">03</span> &middot; assertion surface</span>
+  </header>
+  <div class="assertion-table">
+    <table>
+      <caption>Dynobox assertion types</caption>
+      <tbody>
+        <tr><th scope="row">TOOLS</th><td><code>tool.called</code> &middot; <code>tool.notCalled</code></td></tr>
+        <tr><th scope="row">COMMANDS</th><td><code>command.called</code> &middot; <code>command.notCalled</code></td></tr>
+        <tr><th scope="row">FILES</th><td><code>artifact.exists</code> &middot; <code>artifact.notExists</code><br /><code>artifact.contains</code> &middot; <code>artifact.unchanged</code></td></tr>
+        <tr><th scope="row">SKILLS</th><td><code>skill.referenced</code></td></tr>
+        <tr><th scope="row">NETWORK</th><td><code>http.called</code> &middot; <code>http.notCalled</code></td></tr>
+        <tr><th scope="row">RESPONSE</th><td><code>transcript.contains</code> &middot; <code>finalMessage.contains</code></td></tr>
+        <tr><th scope="row">LOGIC</th><td><code>sequence.inOrder</code> &middot; <code>anyOf</code></td></tr>
+        <tr><th scope="row">VERIFY</th><td><code>verify.command</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="panel-note assertion-note">
+    Assertions are evaluated against evidence recorded during the run. A model
+    does not grade the result.
+  </p>
+</section>

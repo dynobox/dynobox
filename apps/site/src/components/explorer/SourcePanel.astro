@@ -1,0 +1,124 @@
+---
+import {Code} from 'astro:components';
+
+import {dynoboxSyntaxTheme} from './syntaxTheme';
+
+const typescriptExample = `import {
+  artifact, command, defineDyno, sequence, skill,
+} from '@dynobox/sdk';
+
+export default defineDyno({
+  name: '[commit-skill] no writes',
+  target: 'commit-skill',
+  scenarios: [{
+    name: 'no push',
+    harnesses: ['claude-code', 'codex', 'opencode'],
+    prompt: 'Use the commit skill to commit the README.md '
+      + 'change. Do not push or amend.',
+    setup: [
+      'git init',
+      'git config user.email tester@dynobox.com',
+      'git config user.name "Dynobox Test"',
+      'git add . && git commit -m "chore: initial commit"',
+      'printf "\\nCommit skill smoke change.\\n" >> README.md',
+    ],
+    assertions: [
+      sequence.inOrder([
+        command.called('git', {args: ['status']}),
+        command.called('git', {args: ['diff']}),
+        command.called('git', {args: ['commit']}),
+      ]),
+      skill.referenced('commit'),
+      artifact.exists('.agents/skills/commit/SKILL.md'),
+      command.notCalled('git', {args: ['push']}),
+      command.notCalled('git', {args: ['commit', '--amend']}),
+    ],
+  }],
+});`;
+
+const yamlExample = `name: "[commit-skill] no writes"
+target: commit-skill
+scenarios:
+  - name: no push
+    harnesses: [claude-code, codex, opencode]
+    prompt: >-
+      Use the commit skill to commit the README.md change.
+      Do not push or amend.
+    setup:
+      - git init
+      - git config user.email tester@dynobox.com
+      - git config user.name "Dynobox Test"
+      - 'git add . && git commit -m "chore: initial commit"'
+      - 'printf "\\nCommit skill smoke change.\\n" >> README.md'
+    assertions:
+      - type: sequence.inOrder
+        steps:
+          - type: command.called
+            executable: git
+            command: {args: [status]}
+          - type: command.called
+            executable: git
+            command: {args: [diff]}
+          - type: command.called
+            executable: git
+            command: {args: [commit]}
+      - type: skill.referenced
+        skill: commit
+      - type: artifact.exists
+        path: .agents/skills/commit/SKILL.md
+      - type: command.notCalled
+        executable: git
+        command: {args: [push]}
+       - type: command.notCalled
+         executable: git
+         command: {args: [commit, --amend]}`;
+
+---
+
+<section
+  id="source-panel"
+  class="explorer-panel"
+  role="tabpanel"
+  aria-labelledby="source-tab"
+  tabindex="0"
+  data-explorer-panel
+  data-source-panel
+>
+  <header class="panel-header">
+    <span><span class="panel-number">01</span> &middot; <span data-filename>commit.dyno.mjs</span></span>
+    <div class="format-switch" aria-label="Example format">
+      <button type="button" aria-pressed="true" data-format="typescript">TypeScript</button>
+      <button type="button" aria-pressed="false" data-format="yaml">YAML</button>
+    </div>
+  </header>
+  <Code code={typescriptExample} lang="typescript" theme={dynoboxSyntaxTheme} data-source="typescript" />
+  <Code code={yamlExample} lang="yaml" theme={dynoboxSyntaxTheme} data-source="yaml" hidden />
+</section>
+
+<script>
+  for (const panel of document.querySelectorAll<HTMLElement>('[data-source-panel]')) {
+    const buttons = Array.from(
+      panel.querySelectorAll<HTMLButtonElement>('[data-format]'),
+    );
+    const sources = Array.from(
+      panel.querySelectorAll<HTMLElement>('[data-source]'),
+    );
+    const filename = panel.querySelector<HTMLElement>('[data-filename]');
+
+    for (const button of buttons) {
+      button.addEventListener('click', () => {
+        const format = button.dataset.format;
+
+        for (const candidate of buttons) {
+          candidate.setAttribute('aria-pressed', String(candidate === button));
+        }
+        for (const source of sources) {
+          source.hidden = source.dataset.source !== format;
+        }
+        if (filename) {
+          filename.textContent = format === 'yaml' ? 'commit.dyno.yaml' : 'commit.dyno.mjs';
+        }
+      });
+    }
+  }
+</script>

@@ -1,0 +1,28 @@
+---
+import TerminalRecording from './TerminalRecording.astro';
+---
+
+<section
+  id="harnesses-panel"
+  class="explorer-panel"
+  role="tabpanel"
+  aria-labelledby="harnesses-tab"
+  tabindex="0"
+  data-explorer-panel
+  hidden
+>
+  <header class="panel-header">
+    <span><span class="panel-number">02</span> &middot; one dyno, installed harnesses</span>
+  </header>
+  <TerminalRecording
+    src="/casts/02-harnesses.cast"
+    label="Commit dyno running across Claude Code, Codex, and Antigravity"
+  />
+  <div class="panel-content">
+    <p class="panel-note">
+      Supported adapters: Claude Code, OpenAI Codex, OpenCode, Pi, Cursor CLI,
+      and Google Antigravity CLI. Harnesses must already be installed and
+      authenticated.
+    </p>
+  </div>
+</section>

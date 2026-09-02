@@ -1,0 +1,48 @@
+---
+import {Code} from 'astro:components';
+
+import {dynoboxSyntaxTheme} from './syntaxTheme';
+
+const example = `defineDyno({
+  // ...
+  cliMocks: {
+    vitest: {
+      responses: [
+        {exitCode: 1, stderr: 'one test failed'},
+        {exitCode: 0, stdout: 'all tests passed'},
+      ],
+      onExhausted: 'repeat-last',
+    },
+  },
+
+  endpoints: {
+    package: http.endpoint({
+      method: 'GET',
+      url: 'https://registry.npmjs.org/prettier',
+    }),
+  },
+  // ...
+});`;
+---
+
+<section
+  id="boundaries-panel"
+  class="explorer-panel"
+  role="tabpanel"
+  aria-labelledby="boundaries-tab"
+  tabindex="0"
+  data-explorer-panel
+  hidden
+>
+  <header class="panel-header">
+    <span><span class="panel-number">04</span> &middot; cliMocks &middot; endpoints</span>
+    <span class="panel-status">experimental</span>
+  </header>
+  <div class="panel-content boundary-content">
+    <Code code={example} lang="typescript" theme={dynoboxSyntaxTheme} />
+    <div class="boundary-notes">
+      <p><b>CLI mocks</b> replace bare executable calls on <code>PATH</code> with static, sequential, or handler responses.</p>
+      <p><b>HTTP capture</b> observes child-process traffic that honors the per-job proxy and generated CA. It does not cover every harness-native web tool.</p>
+    </div>
+  </div>
+</section>
