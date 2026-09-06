@@ -10,6 +10,12 @@ import type {CliMockHandlerContext, CliMockResponse} from '../types/config.js';
 import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/httpMethod.js';
 import {
+  mcpInputMatcherSchema,
+  mcpMocksSchema,
+  mcpNameSchema,
+  validateMcpReferences,
+} from './mcpMocks.js';
+import {
   isToolAssertionKind,
   SHELL_COMMAND_MATCHER_SHAPE_MESSAGE,
   TOOL_MATCHER_MESSAGES,
@@ -128,6 +134,28 @@ const notCalledAssertionSchema = z
   .object({
     type: z.literal('http.notCalled'),
     endpoint: z.string(),
+  })
+  .merge(assertionBaseSchema)
+  .strict();
+
+const mcpAssertionShape = {
+  server: mcpNameSchema,
+  tool: mcpNameSchema,
+  input: mcpInputMatcherSchema.optional(),
+};
+
+const mcpCalledAssertionSchema = z
+  .object({
+    type: z.literal('mcp.called'),
+    ...mcpAssertionShape,
+  })
+  .merge(assertionBaseSchema)
+  .strict();
+
+const mcpNotCalledAssertionSchema = z
+  .object({
+    type: z.literal('mcp.notCalled'),
+    ...mcpAssertionShape,
   })
   .merge(assertionBaseSchema)
   .strict();
@@ -290,6 +318,8 @@ const skillReferencedAssertionSchema = z
   .strict();
 
 const anyOfBranchAssertionSchema = z.discriminatedUnion('type', [
+  mcpCalledAssertionSchema,
+  mcpNotCalledAssertionSchema,
   calledAssertionSchema,
   notCalledAssertionSchema,
   commandCalledAssertionSchema,
@@ -324,6 +354,8 @@ const authoringToolMatcherOptions = {
 
 export const assertionSchema = z
   .discriminatedUnion('type', [
+    mcpCalledAssertionSchema,
+    mcpNotCalledAssertionSchema,
     calledAssertionSchema,
     notCalledAssertionSchema,
     commandCalledAssertionSchema,
@@ -412,17 +444,22 @@ function validateToolAssertion(
   validateToolAssertionNode(assertion, ctx, path, authoringToolMatcherOptions);
 }
 
-export const scenarioSchema = z.object({
-  id: authoredIdSchema.optional(),
-  name: z.string().min(1),
-  prompt: z.string().min(1),
-  harnesses: z.array(harnessRunConfigSchema).min(1).optional(),
-  setup: z.array(z.string().min(1)).optional(),
-  fixtures: z.union([z.string().min(1), z.array(z.string().min(1))]).optional(),
-  cliMocks: z.record(cliMockExecutableSchema, cliMockConfigSchema).optional(),
-  endpoints: z.record(endpointKeySchema, endpointSchema).optional(),
-  assertions: z.array(assertionSchema).optional(),
-});
+export const scenarioSchema = z
+  .object({
+    id: authoredIdSchema.optional(),
+    name: z.string().min(1),
+    prompt: z.string().min(1),
+    harnesses: z.array(harnessRunConfigSchema).min(1).optional(),
+    setup: z.array(z.string().min(1)).optional(),
+    fixtures: z
+      .union([z.string().min(1), z.array(z.string().min(1))])
+      .optional(),
+    cliMocks: z.record(cliMockExecutableSchema, cliMockConfigSchema).optional(),
+    mcpMocks: mcpMocksSchema.optional(),
+    endpoints: z.record(endpointKeySchema, endpointSchema).optional(),
+    assertions: z.array(assertionSchema).optional(),
+  })
+  .superRefine(validateMcpReferences);
 
 export const configSchema = z.object({
   name: z.string().optional(),

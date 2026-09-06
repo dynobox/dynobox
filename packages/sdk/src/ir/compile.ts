@@ -107,6 +107,7 @@ export function compile(config: DynoboxConfig): Ir {
       setup,
       fixtures,
       cliMocks: scenario.cliMocks ?? {},
+      ...(scenario.mcpMocks === undefined ? {} : {mcpMocks: scenario.mcpMocks}),
       endpoints: irEndpoints,
       assertions: irAssertions,
     };
@@ -176,6 +177,14 @@ function buildIrAssertionNode(
   endpointIdByKey: Map<string, string>,
   assertion: AuthoredAssertion,
 ): IrAssertionBody {
+  if (assertion.type === 'mcp.called' || assertion.type === 'mcp.notCalled') {
+    return {
+      type: assertion.type,
+      server: assertion.server,
+      tool: assertion.tool,
+      ...(assertion.input === undefined ? {} : {input: assertion.input}),
+    };
+  }
   if (assertion.type === 'tool.called') {
     return buildIrToolCalledStep(assertion);
   }
