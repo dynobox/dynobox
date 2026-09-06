@@ -1,11 +1,41 @@
+import {defineDyno} from '@dynobox/sdk';
+import {compile} from '@dynobox/sdk/compiler';
 import {describe, expect, it} from 'vitest';
 
 import {buildLocalRunnerJobs} from './jobs.js';
 
 describe('buildLocalRunnerJobs', () => {
+  it('rejects MCP scenarios before scheduling until an adapter is enabled', () => {
+    const ir = compile(
+      defineDyno({
+        scenarios: [
+          {
+            name: 'MCP',
+            prompt: 'Save',
+            mcpMocks: {
+              linear: {
+                tools: {
+                  save: {
+                    inputSchema: {type: 'object'},
+                    response: {content: []},
+                  },
+                },
+              },
+            },
+          },
+        ],
+      }),
+    );
+    expect(() => buildLocalRunnerJobs(ir)).toThrow(
+      'MCP mock execution is not enabled',
+    );
+    expect(buildLocalRunnerJobs(ir, {scenarioPatterns: ['unrelated']})).toEqual(
+      [],
+    );
+  });
   it('expands jobs across scenario harnesses', () => {
     const jobs = buildLocalRunnerJobs({
-      version: '0.3',
+      version: '0.4',
       scenarios: [
         {
           id: 'scenario.test',
@@ -30,7 +60,7 @@ describe('buildLocalRunnerJobs', () => {
   it('expands jobs across iterations', () => {
     const jobs = buildLocalRunnerJobs(
       {
-        version: '0.3',
+        version: '0.4',
         scenarios: [
           {
             id: 'scenario.test',
@@ -59,7 +89,7 @@ describe('buildLocalRunnerJobs', () => {
 
   it('preserves and overrides harness permission modes', () => {
     const ir = {
-      version: '0.3' as const,
+      version: '0.4' as const,
       scenarios: [
         {
           id: 'scenario.test',
@@ -92,7 +122,7 @@ describe('buildLocalRunnerJobs', () => {
   it('preserves configured model and permission mode when selecting a harness', () => {
     const jobs = buildLocalRunnerJobs(
       {
-        version: '0.3',
+        version: '0.4',
         scenarios: [
           {
             id: 'scenario.test',
@@ -129,7 +159,7 @@ describe('buildLocalRunnerJobs', () => {
   it('maps positional model overrides to selected harnesses', () => {
     const jobs = buildLocalRunnerJobs(
       {
-        version: '0.3',
+        version: '0.4',
         scenarios: [
           {
             id: 'scenario.test',
@@ -162,7 +192,7 @@ describe('buildLocalRunnerJobs', () => {
 
   it('collapses duplicate configured harness ids when model is overridden', () => {
     const ir = {
-      version: '0.3' as const,
+      version: '0.4' as const,
       scenarios: [
         {
           id: 'scenario.test',
@@ -193,7 +223,7 @@ describe('buildLocalRunnerJobs', () => {
 
   it('filters scenarios by exact name, id, and glob pattern', () => {
     const ir = {
-      version: '0.3' as const,
+      version: '0.4' as const,
       scenarios: [
         {
           id: 'scenario.lint-package',
@@ -255,7 +285,7 @@ describe('buildLocalRunnerJobs', () => {
 
   it('filters source-prefixed scenario ids by authored id suffixes', () => {
     const ir = {
-      version: '0.3' as const,
+      version: '0.4' as const,
       scenarios: [
         {
           id: 'dynobox-release.dyno.ts::scenario.release-notes',

@@ -9,6 +9,7 @@ import {
   evaluateAssertions,
   preEvaluateAnyOfObservationBranches,
 } from '@dynobox/evaluators';
+import {DynoboxConfigError} from '@dynobox/sdk/compiler';
 import {execa} from 'execa';
 
 import {type CliMockController, startCliMockController} from './cliMocks.js';
@@ -95,6 +96,29 @@ export {
 export {runVerifyCommands} from './verify.js';
 export type {HttpEvent} from '@dynobox/evaluators';
 
+/** Reject unsupported MCP runs before scheduling or creating a workspace. */
+export function assertMcpExecutionSupported(
+  scenario: LocalRunnerJob['scenario'],
+): void {
+  if (
+    scenario.mcpMocks !== undefined ||
+    scenario.assertions.some(
+      (assertion) =>
+        assertion.type === 'mcp.called' ||
+        assertion.type === 'mcp.notCalled' ||
+        (assertion.type === 'anyOf' &&
+          assertion.steps.some(
+            (step) =>
+              step.type === 'mcp.called' || step.type === 'mcp.notCalled',
+          )),
+    )
+  ) {
+    throw new DynoboxConfigError(
+      'MCP mock execution is not enabled for this harness. Adapter isolation and readiness validation are required before running MCP scenarios.',
+    );
+  }
+}
+
 /**
  * Run one compiled scenario/harness job locally.
  *
@@ -118,6 +142,7 @@ export async function runJob(
   job: LocalRunnerJob,
   options: RunJobOptions = {},
 ): Promise<LocalRunnerResult> {
+  assertMcpExecutionSupported(job.scenario);
   // --- 1. Work directory ---------------------------------------------------
   const workDir = await createWorkDir(options.scratchRoot);
   const artifacts: LocalArtifact[] = [{kind: 'work_dir', path: workDir}];

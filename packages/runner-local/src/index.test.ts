@@ -63,6 +63,56 @@ function createJob(scenario: Partial<IrScenario> = {}): LocalRunnerJob {
   };
 }
 
+describe('MCP adapter availability', () => {
+  it.each([
+    {
+      mcpMocks: {
+        linear: {
+          tools: {
+            save: {inputSchema: {type: 'object'}, response: {content: []}},
+          },
+        },
+      },
+    },
+    {
+      assertions: [
+        {
+          id: 'a',
+          type: 'mcp.notCalled' as const,
+          server: 'linear',
+          tool: 'save',
+        },
+      ],
+    },
+    {
+      assertions: [
+        {
+          id: 'a',
+          type: 'anyOf' as const,
+          steps: [
+            {type: 'mcp.notCalled' as const, server: 'linear', tool: 'save'},
+          ],
+        },
+      ],
+    },
+  ])(
+    'rejects MCP execution before setup or harness invocation %#',
+    async (scenario) => {
+      const scratchRoot = createScratchRoot();
+      const marker = join(scratchRoot, 'setup-ran');
+      const harness = new RecordingHarness();
+      await expect(
+        runJob(createJob({...scenario, setup: [`touch ${marker}`]}), {
+          scratchRoot,
+          harnesses: [harness],
+        }),
+      ).rejects.toThrow('MCP mock execution is not enabled');
+      expect(existsSync(marker)).toBe(false);
+      expect(harness.inputs).toEqual([]);
+    },
+  );
+});
+
 class RecordingHarness implements Harness {
   readonly id = 'claude-code' as const;
 

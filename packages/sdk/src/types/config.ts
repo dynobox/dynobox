@@ -1,5 +1,6 @@
 import type {Assertion, Endpoint} from './brands.js';
 import type {HarnessRunConfig} from './harness.js';
+import type {ScenarioMcpMocks} from './mcp.js';
 
 export type CliMockResponse = {
   exitCode: number;
@@ -60,6 +61,7 @@ export type ScenarioInput<
   setup?: string[];
   fixtures?: string | readonly string[];
   cliMocks?: ScenarioCliMocks;
+  mcpMocks?: ScenarioMcpMocks;
   endpoints?: E;
   assertions?: ReadonlyArray<Assertion<EKeys>>;
 };

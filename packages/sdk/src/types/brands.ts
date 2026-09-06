@@ -1,4 +1,5 @@
 import type {EndpointSpec} from './endpointSpec.js';
+import type {JsonObject} from './mcp.js';
 
 /**
  * Brand symbols backing opaque authoring types. Endpoint and assertion objects
@@ -218,6 +219,20 @@ export type CommandNotCalledAssertion = {
   readonly command?: CommandMatcher;
 };
 
+export type McpCalledAssertion = {
+  readonly [ASSERTION_BRAND]: true;
+  readonly id?: string;
+  readonly label?: string;
+  readonly type: 'mcp.called';
+  readonly server: string;
+  readonly tool: string;
+  readonly input?: JsonObject;
+};
+
+export type McpNotCalledAssertion = Omit<McpCalledAssertion, 'type'> & {
+  readonly type: 'mcp.notCalled';
+};
+
 /** Assertion that a post-harness verification command should satisfy checks. */
 export type VerifyCommandAssertion = {
   readonly [ASSERTION_BRAND]: true;
@@ -304,6 +319,8 @@ export type SequenceStepAssertion =
 
 /** Assertion branch that can safely be evaluated as part of an `anyOf`. */
 export type AnyOfBranchAssertion<K extends string = string> =
+  | McpCalledAssertion
+  | McpNotCalledAssertion
   | CalledAssertion<K>
   | NotCalledAssertion<K>
   | CommandCalledAssertion
