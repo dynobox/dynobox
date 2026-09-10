@@ -83,6 +83,7 @@ export type UploadRunInput = {
 };
 
 export async function uploadRun(input: UploadRunInput): Promise<void> {
+  assertNoMcpUpload(input);
   const customUploadUrl = resolveCustomUploadUrl(input.env);
   const token =
     customUploadUrl === null
@@ -148,6 +149,7 @@ export function buildRunUploadPayload(input: {
   inputPath: string;
   git: RunUploadGitV4 | null;
 }): RunUploadPayloadV4 {
+  assertNoMcpUpload(input);
   const allJobs = input.dynos.flatMap((dyno) => dyno.jobs);
   if (input.results.length !== allJobs.length) {
     throw new Error(
@@ -182,6 +184,30 @@ export function buildRunUploadPayload(input: {
     },
     dynos,
   };
+}
+
+function assertNoMcpUpload(
+  input: Pick<UploadRunInput, 'dynos' | 'results'>,
+): void {
+  if (
+    input.results.some((result) => result.mcp !== undefined) ||
+    input.dynos.some((dyno) =>
+      dyno.jobs.some(
+        (job) =>
+          job.scenario.mcpMocks !== undefined ||
+          job.scenario.assertions.some(
+            (assertion) =>
+              assertion.type.startsWith('mcp.') ||
+              (assertion.type === 'anyOf' &&
+                assertion.steps.some((step) => step.type.startsWith('mcp.'))),
+          ),
+      ),
+    )
+  ) {
+    throw new Error(
+      'MCP uploads are not enabled. Run locally without --save-run.',
+    );
+  }
 }
 
 function buildRunUploadDyno(

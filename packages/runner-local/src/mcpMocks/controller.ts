@@ -220,6 +220,26 @@ export async function startMcpMockController(
       if (!('method' in message))
         throw new Error('Unexpected client response.');
       method = message.method;
+      // Modern clients probe before falling back to the legacy handshake. The
+      // pinned SDK rejects their newer protocol header before method dispatch.
+      // Decline only this unsupported discovery RPC; it establishes no readiness
+      // and does not claim support for the modern protocol or bypass tool checks.
+      if (method === 'server/discover' && 'id' in message) {
+        response.writeHead(404, {'Content-Type': 'application/json'});
+        response.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: message.id,
+            error: {
+              code: ErrorCode.MethodNotFound,
+              message: 'Method not found',
+            },
+          }),
+        );
+        await finished;
+        if (!delivered && !sealed) failures.add('protocol_failed');
+        return;
+      }
       if (method === 'tools/call') CallToolRequestSchema.parse(message);
       const definition = mocks[name]!;
       server = new Server(

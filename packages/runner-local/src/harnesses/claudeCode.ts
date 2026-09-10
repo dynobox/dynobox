@@ -1,3 +1,7 @@
+import {constants} from 'node:fs';
+import {access, realpath} from 'node:fs/promises';
+import {delimiter, resolve} from 'node:path';
+
 import type {PermissionMode} from '@dynobox/sdk';
 
 import {
@@ -14,6 +18,7 @@ import type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
+  PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
 import {createVersionProbe} from './version.js';
@@ -49,6 +54,44 @@ export class ClaudeCodeHarness implements Harness {
 
   version(): Promise<string | null> {
     return this.probeVersion();
+  }
+
+  async prepareMcp(
+    input: Pick<HarnessInput, 'workDir' | 'env'>,
+  ): Promise<PreparedMcpHarness> {
+    const {runClaudeCodeWithMcp, ClaudeCodeMcpError} =
+      await import('./claudeCodeMcp.js');
+    const cwd = await realpath(input.workDir);
+    const candidates =
+      this.executable.includes('/') || this.executable.includes('\\')
+        ? [resolve(cwd, this.executable)]
+        : (input.env.PATH ?? process.env.PATH ?? '')
+            .split(delimiter)
+            .map((directory) => resolve(cwd, directory, this.executable));
+    let executable: string | undefined;
+    for (const candidate of candidates) {
+      try {
+        await access(candidate, constants.X_OK);
+        executable = await realpath(candidate);
+        break;
+      } catch {
+        // Continue searching the caller's original PATH.
+      }
+    }
+    if (executable === undefined)
+      throw new ClaudeCodeMcpError('configuration_failed');
+    const resolvedExecutable = executable;
+    const extraArgs = [...this.extraArgs];
+    return {
+      run: (runInput, servers) =>
+        runClaudeCodeWithMcp({
+          executable: resolvedExecutable,
+          input: {...runInput, workDir: cwd},
+          extraArgs,
+          servers,
+          ...(runInput.signal === undefined ? {} : {signal: runInput.signal}),
+        }),
+    };
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {

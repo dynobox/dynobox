@@ -99,6 +99,7 @@ export type RunCommandFlags = {
   debug?: boolean;
   reporter?: string;
   saveRun?: boolean;
+  allowMcpTool?: string[];
   scenario?: string[];
   iterations?: string;
   permissionMode?: string;
@@ -155,15 +156,6 @@ export async function runCommandAction(
   );
   const scenarioPatterns = validateScenarioFilters(commandFlags.scenario);
 
-  // Fail fast when --save-run cannot authenticate before doing any expensive
-  // local scenario work that would only fail during upload.
-  if (
-    commandFlags.saveRun === true &&
-    resolveCustomUploadUrl(options.env) === null
-  ) {
-    await validateSaveRunAuth({inputLabel, env: options.env, writeStderr});
-  }
-
   const {files, configPath: appliedConfigPath} = await discoverOrFail(
     configPath,
     resolvedInputPath,
@@ -203,19 +195,38 @@ export async function runCommandAction(
 
   // Jobs stay grouped by source dyno so the run upload can report each
   // dyno (and its target) separately; execution flattens them in order.
-  const dynoGroups = compiled.map((entry) => ({
-    entry,
-    jobs: buildLocalRunnerJobs(
-      entry.ir,
-      buildJobOptions(
-        overrideHarnesses,
-        overrideModels,
-        permissionMode,
-        scenarioPatterns,
-        iterations,
-      ),
-    ),
-  }));
+  const runOptions = buildRunJobOptions(options);
+  const dynoGroups = compiled.map((entry) => {
+    try {
+      return {
+        entry,
+        jobs: buildLocalRunnerJobs(entry.ir, {
+          ...buildJobOptions(
+            overrideHarnesses,
+            overrideModels,
+            permissionMode,
+            scenarioPatterns,
+            iterations,
+          ),
+          ...(runOptions.experimentalMcp === undefined
+            ? {}
+            : {experimentalMcp: runOptions.experimentalMcp}),
+        }),
+      };
+    } catch (error) {
+      writeStderr(
+        renderRunConfigErrorMessage(
+          entry.filePath,
+          error instanceof Error ? error.message : 'Could not schedule dyno.',
+        ),
+      );
+      throw new CommanderError(
+        configErrorExitCode,
+        'dynobox.mcp',
+        'unsupported MCP execution',
+      );
+    }
+  });
   const jobs = dynoGroups.flatMap((group) => group.jobs);
   if (jobs.length === 0 && scenarioPatterns !== undefined) {
     writeStderr(
@@ -230,7 +241,60 @@ export async function runCommandAction(
       'no scenarios matched',
     );
   }
-  const runOptions = buildRunJobOptions(options);
+  const usesMcp = jobs.some((job) => job.scenario.mcpMocks !== undefined);
+  if (commandFlags.allowMcpTool?.length) {
+    runOptions.allowedMcpTools = commandFlags.allowMcpTool.map((value) => {
+      const [server, tool, extra] = value.split('/');
+      if (
+        !server ||
+        !tool ||
+        extra !== undefined ||
+        jobs.some((job) => {
+          const mocks = job.scenario.mcpMocks;
+          return (
+            mocks === undefined ||
+            !Object.hasOwn(mocks, server) ||
+            !Object.hasOwn(mocks[server]!.tools, tool)
+          );
+        })
+      ) {
+        writeStderr(
+          renderRunConfigErrorMessage(
+            inputLabel,
+            '--allow-mcp-tool must name a declared mock server/tool in every selected job.',
+          ),
+        );
+        throw new CommanderError(
+          configErrorExitCode,
+          'dynobox.mcpPermission',
+          'invalid MCP tool permission',
+        );
+      }
+      return {server, tool};
+    });
+  }
+  if (usesMcp && commandFlags.saveRun === true) {
+    writeStderr(
+      renderRunConfigErrorMessage(
+        inputLabel,
+        'MCP runs are local-only while upload support is under development. Remove --save-run.',
+      ),
+    );
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.mcpUpload',
+      'MCP uploads are not enabled',
+    );
+  }
+  // Fail fast when --save-run cannot authenticate before doing any expensive
+  // local scenario work that would only fail during upload.
+  if (
+    commandFlags.saveRun === true &&
+    resolveCustomUploadUrl(options.env) === null
+  ) {
+    await validateSaveRunAuth({inputLabel, env: options.env, writeStderr});
+  }
+
   const ctx = createRenderContext(options, commandFlags);
   if (
     reporter !== 'json' &&
@@ -249,50 +313,64 @@ export async function runCommandAction(
       jobs: dynoJobs,
     }));
 
-  const execution =
-    reporter === 'json'
-      ? await runStatic({
-          dynos: renderDynos,
-          runOptions,
-          ctx,
-          writeStdout,
-          reporter,
-          configErrorCount: errors.length,
-        })
-      : shouldRenderLive(options, ctx)
-        ? await runLive({dynos: renderDynos, runOptions, ctx, writeStdout})
-        : await runStatic({
+  const abort = new AbortController();
+  const cancel = () => abort.abort();
+  if (usesMcp) {
+    runOptions.signal = abort.signal;
+    process.once('SIGINT', cancel);
+    process.once('SIGTERM', cancel);
+  }
+  try {
+    const execution =
+      reporter === 'json'
+        ? await runStatic({
             dynos: renderDynos,
             runOptions,
             ctx,
             writeStdout,
             reporter,
             configErrorCount: errors.length,
-          });
+          })
+        : shouldRenderLive(options, ctx)
+          ? await runLive({dynos: renderDynos, runOptions, ctx, writeStdout})
+          : await runStatic({
+              dynos: renderDynos,
+              runOptions,
+              ctx,
+              writeStdout,
+              reporter,
+              configErrorCount: errors.length,
+            });
 
-  const {results} = execution;
-  const anyJobFailed = results.some((result) => !result.passed);
-  const runFailed = anyJobFailed || errors.length > 0;
+    const {results} = execution;
+    const anyJobFailed = results.some((result) => !result.passed);
+    const runFailed = anyJobFailed || errors.length > 0;
 
-  if (commandFlags.saveRun === true) {
-    await uploadRun({
-      dynos: dynoGroups
-        .filter(({jobs: dynoJobs}) => dynoJobs.length > 0)
-        .map(({entry, jobs: dynoJobs}) => ({
-          dynoPath: dynoDisplayPath(entry.filePath),
-          name: entry.ir.name ?? null,
-          target: dynoTarget(entry),
-          jobs: dynoJobs,
-        })),
-      results,
-      runFailed,
-      inputPath: inputLabel,
-      ...(options.env === undefined ? {} : {env: options.env}),
-      writeStderr,
-    });
+    if (commandFlags.saveRun === true) {
+      await uploadRun({
+        dynos: dynoGroups
+          .filter(({jobs: dynoJobs}) => dynoJobs.length > 0)
+          .map(({entry, jobs: dynoJobs}) => ({
+            dynoPath: dynoDisplayPath(entry.filePath),
+            name: entry.ir.name ?? null,
+            target: dynoTarget(entry),
+            jobs: dynoJobs,
+          })),
+        results,
+        runFailed,
+        inputPath: inputLabel,
+        ...(options.env === undefined ? {} : {env: options.env}),
+        writeStderr,
+      });
+    }
+
+    return runFailed;
+  } finally {
+    if (usesMcp) {
+      process.off('SIGINT', cancel);
+      process.off('SIGTERM', cancel);
+    }
   }
-
-  return runFailed;
 }
 
 async function validateSaveRunAuth(input: {

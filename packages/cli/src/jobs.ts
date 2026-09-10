@@ -62,14 +62,19 @@ export function buildLocalRunnerJobs(
     permissionMode?: PermissionMode;
     scenarioPatterns?: readonly string[];
     iterations?: number;
+    experimentalMcp?: boolean;
   } = {},
 ): LocalRunnerJob[] {
   const iterations = options.iterations ?? 1;
   const scenarios = filterScenarios(ir.scenarios, options.scenarioPatterns);
-  scenarios.forEach(assertMcpExecutionSupported);
   return scenarios.flatMap((scenario) =>
     selectHarnessConfigs(scenario.harnesses, options.harnesses).flatMap(
       (harness) => {
+        assertMcpExecutionSupported(
+          scenario,
+          harness.id,
+          options.experimentalMcp,
+        );
         return Array.from({length: iterations}, (_, iteration) => {
           const permissionMode = permissionModeForHarness(
             harness,

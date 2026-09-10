@@ -18,6 +18,10 @@ export type HarnessInput = {
   cliMocksEnabled?: boolean;
   /** Optional invocation timeout in milliseconds. */
   timeoutMs?: number;
+  /** Cancel an active invocation and await its cleanup. */
+  signal?: AbortSignal;
+  /** Explicit invocation grants, restricted to declared mock tools. */
+  allowedMcpTools?: readonly {server: string; tool: string}[];
   /** Optional harness-specific model name or alias. */
   model?: string;
   /** Optional permission/sandbox mode for the harness invocation. */
@@ -50,6 +54,21 @@ export type HarnessResult = {
   errorMessage?: string;
 };
 
+/** Sensitive, invocation-local controller connections. Never report these URLs. */
+export type McpServerConnections = Readonly<
+  Record<string, {url: string; tools: readonly string[]}>
+>;
+
+export type PreparedMcpHarness = {
+  run(
+    input: HarnessInput,
+    servers: McpServerConnections,
+  ): Promise<{
+    output: HarnessRunOutput;
+    harnessReady: boolean;
+  }>;
+};
+
 /**
  * A harness drives an agent CLI (Claude Code, Codex, etc.).
  *
@@ -65,6 +84,11 @@ export interface Harness {
 
   /** Best-effort installed executable version for run provenance. */
   version?(): Promise<string | null>;
+
+  /** Resolve executable on the original PATH, before CLI mocks are installed. */
+  prepareMcp?(
+    input: Pick<HarnessInput, 'workDir' | 'env'>,
+  ): Promise<PreparedMcpHarness>;
 
   /**
    * Launch the agent and return raw output. The same adapter instance may run

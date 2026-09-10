@@ -409,3 +409,76 @@ describe('MCP controller', () => {
     request.destroy();
   });
 });
+
+it('declines modern discovery without poisoning a successful legacy fallback', async () => {
+  const controller = await start();
+  const probe = await fetch(controller.urls.linear!, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      'MCP-Protocol-Version': '2026-07-28',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'probe',
+      method: 'server/discover',
+      params: {
+        _meta: {'io.modelcontextprotocol/protocolVersion': '2026-07-28'},
+      },
+    }),
+  });
+  expect(probe.status).toBe(404);
+  expect(await probe.json()).toEqual({
+    jsonrpc: '2.0',
+    id: 'probe',
+    error: {code: -32601, message: 'Method not found'},
+  });
+  await discover(controller.urls.linear!);
+  await rpc(controller.urls.linear!, 'tools/call', {
+    name: 'save',
+    arguments: {id: 'test'},
+  });
+  const observation = await controller.finalize(success);
+  expect(observation.ready).toBe(true);
+  expect(observation.failures).toEqual([]);
+  expect(observation.calls).toHaveLength(1);
+});
+
+it('does not count a modern discovery probe as mock readiness', async () => {
+  const controller = await start();
+  const response = await fetch(controller.urls.linear!, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({jsonrpc: '2.0', id: 1, method: 'server/discover'}),
+  });
+  await response.text();
+  const observation = await controller.finalize(success);
+  expect(observation.ready).toBe(false);
+  expect(observation.failures).toEqual(['not_ready']);
+  expect(observation.calls).toEqual([]);
+});
+
+it('still fails unsupported protocol versions on actual tool requests', async () => {
+  const controller = await start();
+  await discover(controller.urls.linear!);
+  const response = await fetch(controller.urls.linear!, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      'MCP-Protocol-Version': '2026-07-28',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: {name: 'save', arguments: {id: 'test'}},
+    }),
+  });
+  expect(response.status).toBe(400);
+  await response.text();
+  const observation = await controller.finalize(success);
+  expect(observation.failures).toContain('protocol_failed');
+  expect(observation.calls).toEqual([]);
+});

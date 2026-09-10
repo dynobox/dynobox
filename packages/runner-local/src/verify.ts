@@ -7,6 +7,7 @@ export type RunVerifyCommandsOptions = {
   scenario: Pick<IrScenario, 'assertions'>;
   workDir: string;
   env?: Record<string, string>;
+  signal?: AbortSignal;
 };
 
 /**
@@ -23,11 +24,15 @@ export async function runVerifyCommands(
   for (const assertion of collectVerifyCommandAssertions(
     opts.scenario.assertions,
   )) {
+    if (opts.signal?.aborted) break;
     const result = await execaCommand(assertion.command, {
       cwd: opts.workDir,
       env,
       reject: false,
       shell: true,
+      ...(opts.signal === undefined
+        ? {}
+        : {cancelSignal: opts.signal, forceKillAfterDelay: 1000}),
     });
 
     results.push({

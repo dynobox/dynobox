@@ -4,7 +4,7 @@ import type {
   HttpEvent,
 } from '@dynobox/evaluators';
 import type {HarnessId, PermissionMode} from '@dynobox/sdk';
-import type {IrScenario} from '@dynobox/sdk/ir';
+import type {IrScenario, McpCallRecord, McpMockFailure} from '@dynobox/sdk/ir';
 
 import type {
   Harness,
@@ -87,6 +87,10 @@ export type RunJobOptions = {
   scratchRoot?: string;
   env?: Record<string, string>;
   timeoutMs?: number;
+  signal?: AbortSignal;
+  /** Unreleased local MCP execution. Only completed adapters may opt in. */
+  experimentalMcp?: boolean;
+  allowedMcpTools?: readonly {server: string; tool: string}[];
   onProgress?: (event: RunJobProgressEvent) => void;
 };
 
@@ -120,6 +124,18 @@ export type LocalRunnerWarning = {
   };
 };
 
+export type LocalMcpSummary = {
+  ready: boolean;
+  finalized: boolean;
+  failures: readonly (
+    | McpMockFailure
+    | 'configuration_failed'
+    | 'unsupported_version'
+    | 'execution_failed'
+  )[];
+  calls: readonly Omit<McpCallRecord, 'input'>[];
+};
+
 /** Structured result returned by `runJob` for rendering and summaries. */
 export type LocalRunnerResult = {
   jobId: string;
@@ -140,6 +156,8 @@ export type LocalRunnerResult = {
   harnessCliMockCallCount: number;
   /** Complete ordered mock call log, including post-harness verification. */
   cliMockCalls: readonly CliMockCall[];
+  /** Safe MCP evidence. Arguments/responses and runtime URLs are not retained. */
+  mcp?: LocalMcpSummary;
   artifacts: LocalArtifact[];
   assertionResults: AssertionResult[];
   /** Whether post-harness verification produced a lifecycle failure. */
