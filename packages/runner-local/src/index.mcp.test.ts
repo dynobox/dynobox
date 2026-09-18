@@ -8,6 +8,7 @@ import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/st
 import type {Transport} from '@modelcontextprotocol/sdk/shared/transport.js';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
+import {CodexMcpError} from './harnesses/codexMcp.js';
 import type {
   Harness,
   HarnessInput,
@@ -68,15 +69,16 @@ function scenario(overrides: Partial<IrScenario> = {}): IrScenario {
 async function fixture(
   mode: Mode = 'call',
   overrides: Partial<IrScenario> = {},
+  harnessId: 'claude-code' | 'codex' = 'claude-code',
 ) {
   const root = await mkdtemp(join(tmpdir(), 'dynobox-mcp-runner-'));
   roots.push(root);
-  const harness = new McpHarness(mode);
+  const harness = new McpHarness(mode, harnessId);
   const job = {
     id: 'job.linear',
-    harness: 'claude-code' as const,
+    harness: harnessId,
     iteration: 0,
-    scenario: scenario(overrides),
+    scenario: scenario({harnesses: [{id: harnessId}], ...overrides}),
   };
   const options = {
     scratchRoot: root,
@@ -88,6 +90,52 @@ async function fixture(
 }
 
 describe('MCP runner lifecycle', () => {
+  it.each(['call', 'negative', 'no-discovery'] as const)(
+    'runs experimental Codex through the shared lifecycle: %s',
+    async (mode) => {
+      const {job, options, harness} = await fixture(
+        mode,
+        mode === 'call' ? {} : {assertions: [scenario().assertions[1]!]},
+        'codex',
+      );
+      const result = await runJob(job, options);
+      expect(result.status).toBe(
+        mode === 'no-discovery' ? 'harness_failed' : 'passed',
+      );
+      expect(result.harnessVersion).toBe('0.153.4');
+      expect(result.mcp?.ready).toBe(mode !== 'no-discovery');
+      expect(result.mcp?.finalized).toBe(true);
+      expect(harness.normalRuns).toBe(0);
+      await expect(fetch(harness.urls[0]!)).rejects.toThrow();
+    },
+  );
+
+  it('keeps public Codex MCP execution disabled before setup', async () => {
+    const {job, options, harness} = await fixture('negative', {}, 'codex');
+    await expect(
+      runJob(job, {...options, experimentalMcp: false}),
+    ).rejects.toThrow('not enabled');
+    expect(harness.inputs).toEqual([]);
+    expect(harness.preparedEnv).toBeUndefined();
+  });
+
+  it('reports safe Codex preparation failure categories and fails negative assertions', async () => {
+    const {job, options, harness} = await fixture(
+      'negative',
+      {assertions: [scenario().assertions[1]!]},
+      'codex',
+    );
+    vi.spyOn(harness, 'prepareMcp').mockResolvedValue({
+      run: async () => {
+        throw new CodexMcpError('not_ready');
+      },
+    });
+    const result = await runJob(job, options);
+    expect(result.status).toBe('harness_failed');
+    expect(result.mcp?.failures).toContain('not_ready');
+    expect(result.assertionResults).toEqual([]);
+  });
+
   it('evaluates sealed controller evidence and reports only safe call records', async () => {
     const {job, options, harness} = await fixture();
     const result = await runJob(job, options);
@@ -355,13 +403,15 @@ type Mode =
   | 'wait';
 
 class McpHarness implements Harness {
-  readonly id = 'claude-code';
   readonly executable = 'claude';
   readonly urls: string[] = [];
   readonly inputs: HarnessInput[] = [];
   preparedEnv?: Record<string, string>;
   normalRuns = 0;
-  constructor(private readonly mode: Mode) {}
+  constructor(
+    private readonly mode: Mode,
+    readonly id: 'claude-code' | 'codex' = 'claude-code',
+  ) {}
   async prepareMcp(input: Pick<HarnessInput, 'workDir' | 'env'>) {
     this.preparedEnv = {...input.env};
     return {
@@ -416,7 +466,9 @@ class McpHarness implements Harness {
           stdout: 'done',
           stderr: '',
           durationMs: 5,
-          metadata: {mcpHarnessVersion: '2.1.263'},
+          metadata: {
+            mcpHarnessVersion: this.id === 'codex' ? '0.153.4' : '2.1.263',
+          },
         },
       };
     } finally {

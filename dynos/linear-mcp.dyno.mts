@@ -6,6 +6,7 @@ import {
 } from '@dynobox/sdk';
 
 // Run from the repository: pnpm dynolocal run dynos/linear-mcp.dyno.mts
+// Codex: pnpm dynolocal run dynos/linear-mcp.dyno.mts --harness codex --model gpt-5.5 --permission-mode dangerous
 // All Linear tools below are local fixtures; no Linear account is required.
 // This test explicitly uses dangerous permissions for all harness tools.
 const issueMocks = (estimateHours: number, loggedHours: number) =>

@@ -1,5 +1,8 @@
+import {constants, realpathSync} from 'node:fs';
+import {access, realpath} from 'node:fs/promises';
+import {delimiter, resolve} from 'node:path';
+
 import type {PermissionMode} from '@dynobox/sdk';
-import {realpathSync} from 'fs';
 
 import {
   createToolEvent,
@@ -15,6 +18,7 @@ import type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
+  PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
 import {createVersionProbe} from './version.js';
@@ -51,6 +55,42 @@ export class CodexHarness implements Harness {
     return this.probeVersion();
   }
 
+  async prepareMcp(
+    input: Pick<HarnessInput, 'workDir' | 'env'>,
+  ): Promise<PreparedMcpHarness> {
+    const {runCodexWithMcp, CodexMcpError} = await import('./codexMcp.js');
+    const cwd = await realpath(input.workDir);
+    const candidates =
+      this.executable.includes('/') || this.executable.includes('\\')
+        ? [resolve(cwd, this.executable)]
+        : (input.env.PATH ?? process.env.PATH ?? '')
+            .split(delimiter)
+            .map((directory) => resolve(cwd, directory, this.executable));
+    let executable: string | undefined;
+    for (const candidate of candidates) {
+      try {
+        await access(candidate, constants.X_OK);
+        executable = await realpath(candidate);
+        break;
+      } catch {
+        // Continue searching the caller's original PATH.
+      }
+    }
+    if (executable === undefined)
+      throw new CodexMcpError('configuration_failed');
+    const resolvedExecutable = executable;
+    const extraArgs = [...this.extraArgs];
+    return {
+      run: (runInput, servers) =>
+        runCodexWithMcp({
+          executable: resolvedExecutable,
+          input: {...runInput, workDir: cwd},
+          extraArgs,
+          servers,
+        }),
+    };
+  }
+
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
     return runStreamingHarness({
       executable: this.executable,
@@ -76,7 +116,9 @@ export class CodexHarness implements Harness {
       durationMs: raw.durationMs,
       transcript: raw.stdout,
       finalMessage: parsed.finalMessage,
-      toolEvents: parsed.toolEvents,
+      toolEvents: Array.isArray(raw.metadata?.mcpRunToolEvents)
+        ? (raw.metadata.mcpRunToolEvents as ToolEvent[])
+        : parsed.toolEvents,
     };
   }
 }

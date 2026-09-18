@@ -20,6 +20,7 @@ import {
   setupFailureDiagnostic,
 } from './diagnostics.js';
 import {ClaudeCodeMcpError} from './harnesses/claudeCodeMcp.js';
+import {CodexMcpError} from './harnesses/codexMcp.js';
 import type {
   Harness,
   HarnessResult,
@@ -130,10 +131,10 @@ export function assertMcpExecutionSupported(
       (harness === undefined
         ? scenario.harnesses.map((entry) => entry.id)
         : [harness]
-      ).some((id) => id !== 'claude-code')
+      ).some((id) => id !== 'claude-code' && id !== 'codex')
     ) {
       throw new DynoboxConfigError(
-        'MCP mock execution is not enabled for this harness. Use dynolocal with claude-code for experimental local execution.',
+        'MCP mock execution is not enabled for this harness. Use dynolocal with claude-code or codex for experimental local execution.',
       );
     }
     if (
@@ -405,7 +406,9 @@ export async function runJob(
   const mcpFailures = new Set<LocalMcpSummary['failures'][number]>();
   const recordMcpError = (error: unknown) => {
     mcpFailures.add(
-      error instanceof ClaudeCodeMcpError ? error.category : 'execution_failed',
+      error instanceof ClaudeCodeMcpError || error instanceof CodexMcpError
+        ? error.category
+        : 'execution_failed',
     );
     if (error instanceof ClaudeCodeMcpError && error.priorCategory)
       mcpFailures.add(error.priorCategory);

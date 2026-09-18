@@ -59,6 +59,43 @@ fi
     expect(readFileSync(probeLog, 'utf8')).toBe('probe\n');
   });
 
+  it('pins the MCP executable before CLI mock PATH changes', async () => {
+    const root = createScratchRoot();
+    const executable = join(root, 'codex');
+    const marker = join(root, 'pinned');
+    writeFileSync(
+      executable,
+      `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(marker)}, 'resolved'); console.log('codex-cli 0.0.0');\n`,
+      {mode: 0o755},
+    );
+    const prepared = await new CodexHarness().prepareMcp({
+      workDir: root,
+      env: {PATH: root},
+    });
+    await expect(
+      prepared.run(
+        {prompt: 'OK', workDir: root, env: {PATH: '/nonexistent'}},
+        {
+          service: {
+            url: `http://127.0.0.1:1234/${'a'.repeat(48)}`,
+            tools: ['lookup'],
+          },
+        },
+      ),
+    ).rejects.toMatchObject({category: 'unsupported_version'});
+    expect(readFileSync(marker, 'utf8')).toBe('resolved');
+  });
+
+  it('rejects missing MCP executables during preparation', async () => {
+    const root = createScratchRoot();
+    await expect(
+      new CodexHarness({executable: 'missing-codex'}).prepareMcp({
+        workDir: root,
+        env: {PATH: root},
+      }),
+    ).rejects.toMatchObject({category: 'configuration_failed'});
+  });
+
   it('builds non-interactive JSONL arguments', () => {
     expect(buildCodexArgs('Say hello.', [], 'gpt-5.1-codex')).toEqual([
       'exec',

@@ -214,7 +214,7 @@ describe('MCP CLI execution', () => {
         mode === 'upload'
           ? ['--save-run']
           : mode === 'unsupported'
-            ? ['--harness', 'codex']
+            ? ['--harness', 'opencode']
             : [];
       const fetchSpy = vi.spyOn(globalThis, 'fetch');
       const result = await executeCli(['run', path, ...args], options);
