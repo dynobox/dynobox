@@ -1,3 +1,7 @@
+import {constants} from 'node:fs';
+import {access, realpath} from 'node:fs/promises';
+import {delimiter, resolve} from 'node:path';
+
 import type {PermissionMode} from '@dynobox/sdk';
 
 import {
@@ -14,6 +18,7 @@ import type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
+  PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
 import {createVersionProbe} from './version.js';
@@ -52,6 +57,41 @@ export class PiHarness implements Harness {
 
   version(): Promise<string | null> {
     return this.probeVersion();
+  }
+
+  async prepareMcp(
+    input: Pick<HarnessInput, 'workDir' | 'env'>,
+  ): Promise<PreparedMcpHarness> {
+    const {runPiWithMcp, PiMcpError} = await import('./piMcp.js');
+    const cwd = await realpath(input.workDir);
+    const candidates =
+      this.executable.includes('/') || this.executable.includes('\\')
+        ? [resolve(cwd, this.executable)]
+        : (input.env.PATH ?? process.env.PATH ?? '')
+            .split(delimiter)
+            .map((dir) => resolve(cwd, dir, this.executable));
+    let executable: string | undefined;
+    for (const candidate of candidates) {
+      try {
+        await access(candidate, constants.X_OK);
+        executable = await realpath(candidate);
+        break;
+      } catch {
+        /* Continue on the original PATH. */
+      }
+    }
+    if (!executable) throw new PiMcpError('configuration_failed');
+    const pinned = executable;
+    const extraArgs = [...this.extraArgs];
+    return {
+      run: (runInput, servers) =>
+        runPiWithMcp({
+          executable: pinned,
+          input: {...runInput, workDir: cwd},
+          servers,
+          extraArgs,
+        }),
+    };
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {

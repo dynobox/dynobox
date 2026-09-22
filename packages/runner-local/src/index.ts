@@ -28,6 +28,7 @@ import type {
   ToolEvent,
 } from './harnesses/index.js';
 import {OpenCodeMcpError} from './harnesses/opencodeMcp.js';
+import {PiMcpError} from './harnesses/piMcp.js';
 import type {PreparedMcpHarness} from './harnesses/types.js';
 import type {HttpCapture} from './http/proxy.js';
 import {startHttpCapture} from './http/proxy.js';
@@ -133,11 +134,15 @@ export function assertMcpExecutionSupported(
         ? scenario.harnesses.map((entry) => entry.id)
         : [harness]
       ).some(
-        (id) => id !== 'claude-code' && id !== 'codex' && id !== 'opencode',
+        (id) =>
+          id !== 'claude-code' &&
+          id !== 'codex' &&
+          id !== 'opencode' &&
+          id !== 'pi',
       )
     ) {
       throw new DynoboxConfigError(
-        'MCP mock execution is not enabled for this harness. Use dynolocal with claude-code, codex, or opencode for experimental local execution.',
+        'MCP mock execution is not enabled for this harness. Use dynolocal with claude-code, codex, opencode, or pi for experimental local execution.',
       );
     }
     if (
@@ -411,7 +416,8 @@ export async function runJob(
     mcpFailures.add(
       error instanceof ClaudeCodeMcpError ||
         error instanceof CodexMcpError ||
-        error instanceof OpenCodeMcpError
+        error instanceof OpenCodeMcpError ||
+        error instanceof PiMcpError
         ? error.category
         : 'execution_failed',
     );

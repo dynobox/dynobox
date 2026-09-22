@@ -9,6 +9,7 @@ import type {Transport} from '@modelcontextprotocol/sdk/shared/transport.js';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {CodexMcpError} from './harnesses/codexMcp.js';
+import {PiMcpError} from './harnesses/piMcp.js';
 import type {
   Harness,
   HarnessInput,
@@ -69,7 +70,7 @@ function scenario(overrides: Partial<IrScenario> = {}): IrScenario {
 async function fixture(
   mode: Mode = 'call',
   overrides: Partial<IrScenario> = {},
-  harnessId: 'claude-code' | 'codex' | 'opencode' = 'claude-code',
+  harnessId: 'claude-code' | 'codex' | 'opencode' | 'pi' = 'claude-code',
 ) {
   const root = await mkdtemp(join(tmpdir(), 'dynobox-mcp-runner-'));
   roots.push(root);
@@ -90,6 +91,45 @@ async function fixture(
 }
 
 describe('MCP runner lifecycle', () => {
+  it.each(['call', 'negative', 'no-discovery'] as const)(
+    'runs experimental Pi lifecycle: %s',
+    async (mode) => {
+      const {job, options, harness} = await fixture(
+        mode,
+        mode === 'call' ? {} : {assertions: [scenario().assertions[1]!]},
+        'pi',
+      );
+      const result = await runJob(job, options);
+      expect(result.status).toBe(
+        mode === 'no-discovery' ? 'harness_failed' : 'passed',
+      );
+      expect(result.mcp?.ready).toBe(mode !== 'no-discovery');
+      expect(result.mcp?.finalized).toBe(true);
+      expect(harness.normalRuns).toBe(0);
+      await expect(fetch(harness.urls[0]!)).rejects.toThrow();
+      await expect(
+        runJob(job, {...options, experimentalMcp: false}),
+      ).rejects.toThrow('not enabled');
+    },
+  );
+
+  it('maps Pi startup failures and prevents passing negative assertions', async () => {
+    const {job, options, harness} = await fixture(
+      'negative',
+      {assertions: [scenario().assertions[1]!]},
+      'pi',
+    );
+    vi.spyOn(harness, 'prepareMcp').mockResolvedValue({
+      run: async () => {
+        throw new PiMcpError('not_ready');
+      },
+    });
+    const result = await runJob(job, options);
+    expect(result.status).toBe('harness_failed');
+    expect(result.mcp?.failures).toContain('not_ready');
+    expect(result.assertionResults).toEqual([]);
+  });
+
   it.each(['call', 'negative', 'no-discovery'] as const)(
     'runs experimental OpenCode lifecycle: %s',
     async (mode) => {
@@ -428,7 +468,7 @@ class McpHarness implements Harness {
   normalRuns = 0;
   constructor(
     private readonly mode: Mode,
-    readonly id: 'claude-code' | 'codex' | 'opencode' = 'claude-code',
+    readonly id: 'claude-code' | 'codex' | 'opencode' | 'pi' = 'claude-code',
   ) {}
   async prepareMcp(input: Pick<HarnessInput, 'workDir' | 'env'>) {
     this.preparedEnv = {...input.env};
