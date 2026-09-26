@@ -91,7 +91,7 @@ async function fixture(mode = 'call') {
         DYNOBOX_EXPERIMENTAL_MCP: '1',
         MCP_TEST_LOG: log,
         MCP_TEST_MODE: mode,
-      },
+      } as Record<string, string>,
     },
   };
 }
@@ -209,6 +209,9 @@ describe('MCP CLI execution', () => {
     async (mode) => {
       const {path, root, options, log} = await fixture();
       if (mode === 'disabled') options.env.DYNOBOX_EXPERIMENTAL_MCP = '0';
+      // Skip the auth preflight so the MCP upload check is reached.
+      if (mode === 'upload')
+        options.env.DYNOBOX_UPLOAD_URL = 'http://127.0.0.1:9/upload';
       const args =
         mode === 'upload'
           ? ['--save-run']
