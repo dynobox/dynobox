@@ -356,7 +356,7 @@ async function nativeFixture(
                   name: 'lookup',
                   namespace:
                     JSON.stringify(body.input).match(
-                      /mcp__dxb_[a-f0-9]+/,
+                      /mcp__dynobox_service_\d+/,
                     )?.[0] ?? 'mcp__service',
                   arguments: '{"key":"receipt"}',
                   status: 'completed',
@@ -514,10 +514,10 @@ async function nativeFixture(
           workDir: project,
           env: env as Record<string, string>,
           timeoutMs: 20_000,
+          ...(signal ? {signal} : {}),
         },
         servers: {service: {url: controller.urls.service!, tools: ['lookup']}},
         extraArgs: ['--ephemeral'],
-        ...(signal ? {signal} : {}),
       }),
   };
 }

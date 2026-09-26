@@ -24,11 +24,8 @@ const controllers: McpMockController[] = [];
 const success = {harnessReady: true, harnessSucceeded: true};
 let requestId = 0;
 
-async function start(
-  value: unknown = definitions,
-  options: Parameters<typeof startMcpMockController>[1] = {},
-) {
-  const controller = await startMcpMockController(value, options);
+async function start(value: unknown = definitions) {
+  const controller = await startMcpMockController(value);
   controllers.push(controller);
   return controller;
 }
@@ -236,9 +233,9 @@ describe('MCP controller', () => {
   });
 
   it.each(['reject', 'timeout'])(
-    'records bounded cleanup failure (%s) without exception text',
+    'records bounded cleanup failure (%s)',
     async (mode) => {
-      const controller = await start(definitions, {cleanupMs: 20});
+      const controller = await start();
       const close = Server.prototype.close;
       const spy = vi
         .spyOn(Server.prototype, 'close')
@@ -284,51 +281,11 @@ describe('MCP controller', () => {
     }
   });
 
-  it('rejects wrong tokens, Hosts, and Origins', async () => {
+  it('rejects unknown routes and malformed protocol messages', async () => {
     const controller = await start();
-    const url = controller.urls.linear!;
-    expect((await fetch(new URL('/wrong', url))).status).toBe(404);
-    const status = await new Promise<number | undefined>((resolve, reject) => {
-      const request = httpRequest(
-        url,
-        {method: 'POST', headers: {Host: 'attacker.example'}},
-        (response) => {
-          response.resume();
-          resolve(response.statusCode);
-        },
-      );
-      request.on('error', reject);
-      request.end();
-    });
-    expect(status).toBe(403);
     expect(
-      (
-        await fetch(url, {
-          method: 'POST',
-          headers: {Origin: 'https://attacker.example'},
-        })
-      ).status,
-    ).toBe(403);
-  });
-
-  it.each([{calls: 1}, {logBytes: 1}])(
-    'fails the job on retained-log overflow %#',
-    async (limits) => {
-      const controller = await start(definitions, limits);
-      await discover(controller.urls.linear!);
-      await rpc(controller.urls.linear!, 'tools/call', {name: 'save'});
-      await rpc(controller.urls.linear!, 'tools/call', {name: 'save'});
-      expect((await controller.finalize(success)).failures).toContain(
-        'limit_exceeded',
-      );
-    },
-  );
-
-  it('bounds configured result sizes and rejects malformed protocol messages', async () => {
-    await expect(start(definitions, {resultBytes: 1})).rejects.toThrow(
-      'size limit',
-    );
-    const controller = await start();
+      (await fetch(new URL('/wrong', controller.urls.linear!))).status,
+    ).toBe(404);
     const response = await fetch(controller.urls.linear!, {
       method: 'POST',
       body: 'not JSON',
@@ -337,47 +294,6 @@ describe('MCP controller', () => {
     expect((await controller.finalize(success)).failures).toContain(
       'protocol_failed',
     );
-  });
-
-  it('fails oversized request bodies without retaining their contents', async () => {
-    const controller = await start(definitions, {requestBytes: 16});
-    await expect(
-      fetch(controller.urls.linear!, {
-        method: 'POST',
-        body: 'SECRET'.repeat(100),
-      }),
-    ).rejects.toThrow();
-    const observation = await controller.finalize(success);
-    expect(observation.failures).toContain('limit_exceeded');
-    expect(observation.calls).toEqual([]);
-  });
-
-  it('bounds concurrent slow requests and their lifetime', async () => {
-    const controller = await start(definitions, {
-      concurrency: 1,
-      requestMs: 100,
-    });
-    const request = httpRequest(controller.urls.linear!, {
-      method: 'POST',
-      headers: {'Content-Length': 100},
-    });
-    const closed = new Promise<void>((resolve) =>
-      request.on('error', () => resolve()),
-    );
-    request.write('{');
-    await new Promise<void>((resolve) =>
-      request.once('socket', (socket) =>
-        socket.once('connect', () => setTimeout(resolve, 10)),
-      ),
-    );
-    expect(
-      (await fetch(controller.urls.linear!, {method: 'POST', body: '{}'}))
-        .status,
-    ).toBe(503);
-    await closed;
-    const observation = await controller.finalize(success);
-    expect(observation.failures).toContain('limit_exceeded');
-    expect(observation.failures).toContain('protocol_failed');
   });
 
   it('fails pending requests, revokes routes, and seals evidence on idempotent finalization', async () => {
@@ -403,7 +319,6 @@ describe('MCP controller', () => {
     expect(
       await controller.finalize({harnessReady: false, harnessSucceeded: false}),
     ).toBe(observation);
-    expect(Object.isFrozen(observation.calls[0]!.input.nested)).toBe(true);
     await expect(fetch(controller.urls.linear!)).rejects.toThrow();
     expect(observation.calls).toHaveLength(1);
     request.destroy();

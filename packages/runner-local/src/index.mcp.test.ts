@@ -8,10 +8,7 @@ import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/st
 import type {Transport} from '@modelcontextprotocol/sdk/shared/transport.js';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
-import {AntigravityMcpError} from './harnesses/antigravityMcp.js';
-import {ClaudeCodeMcpError} from './harnesses/claudeCodeMcp.js';
-import {CodexMcpError} from './harnesses/codexMcp.js';
-import {PiMcpError} from './harnesses/piMcp.js';
+import {McpHarnessError} from './harnesses/mcpError.js';
 import type {
   Harness,
   HarnessInput,
@@ -104,16 +101,19 @@ describe('MCP runner lifecycle', () => {
     ).toThrow('plugin-provided MCP servers cannot be isolated');
   });
 
-  it('preserves a preparation deadline failure instead of reporting bad configuration', async () => {
+  it('reports the adapter category and reason for preparation failures', async () => {
     const {job, options, harness} = await fixture('negative', {
       assertions: [scenario().assertions[1]!],
     });
     vi.spyOn(harness, 'prepareMcp').mockRejectedValue(
-      new ClaudeCodeMcpError('execution_failed'),
+      new McpHarnessError('timed_out', 'MCP run exceeded its 10ms timeout.'),
     );
     const result = await runJob(job, options);
     expect(result.status).toBe('harness_failed');
-    expect(result.mcp?.failures).toEqual(['execution_failed']);
+    expect(result.mcp?.failures).toEqual(['timed_out']);
+    expect(result.diagnostics).toContain(
+      'MCP preparation failed: MCP run exceeded its 10ms timeout.',
+    );
     expect(result.assertionResults).toEqual([]);
   });
 
@@ -134,7 +134,10 @@ describe('MCP runner lifecycle', () => {
     );
     vi.spyOn(harness, 'prepareMcp').mockResolvedValue({
       run: async () => {
-        throw new AntigravityMcpError('configuration_failed');
+        throw new McpHarnessError(
+          'configuration_failed',
+          'Antigravity config conflict.',
+        );
       },
     });
     const result = await runJob(job, options);
@@ -173,7 +176,7 @@ describe('MCP runner lifecycle', () => {
     );
     vi.spyOn(harness, 'prepareMcp').mockResolvedValue({
       run: async () => {
-        throw new PiMcpError('not_ready');
+        throw new McpHarnessError('not_ready', 'Pi mock not ready.');
       },
     });
     const result = await runJob(job, options);
@@ -237,7 +240,7 @@ describe('MCP runner lifecycle', () => {
     );
     vi.spyOn(harness, 'prepareMcp').mockResolvedValue({
       run: async () => {
-        throw new CodexMcpError('not_ready');
+        throw new McpHarnessError('not_ready', 'Codex mock not ready.');
       },
     });
     const result = await runJob(job, options);
@@ -322,7 +325,7 @@ describe('MCP runner lifecycle', () => {
     expect(harness.urls).toHaveLength(1);
   });
 
-  it('fails cancellation during verify even when an MCP anyOf branch already passed', async () => {
+  it('stops the job on cancellation during verify even when an MCP anyOf branch already passed', async () => {
     const {job, options, harness} = await fixture('call', {
       assertions: [
         {
@@ -354,13 +357,7 @@ describe('MCP runner lifecycle', () => {
     } finally {
       abort.abort();
     }
-    const result = await pending;
-    expect(result.status).toBe('harness_failed');
-    expect(result.mcp).toMatchObject({
-      ready: true,
-      finalized: true,
-      failures: ['execution_failed'],
-    });
+    await expect(pending).rejects.toMatchObject({name: 'AbortError'});
     await expect(fetch(harness.urls[0]!)).rejects.toThrow();
   });
 
@@ -415,7 +412,8 @@ describe('MCP runner lifecycle', () => {
       expect(result.status).toBe('harness_failed');
       expect(result.assertionResults).toEqual([]);
       expect(result.mcp?.failures.length).toBeGreaterThan(0);
-      expect(result.diagnostics.join(' ')).not.toContain('SECRET_ERROR');
+      if (mode === 'failed')
+        expect(result.diagnostics.join(' ')).toContain('SECRET_ERROR');
       await expect(
         readFile(join(result.workDir, 'should-not-exist')),
       ).rejects.toThrow();
@@ -450,27 +448,24 @@ describe('MCP runner lifecycle', () => {
     for (const url of harness.urls) await expect(fetch(url)).rejects.toThrow();
   });
 
-  it.each(['timeout', 'cancel'] as const)(
-    'finalizes listeners on %s',
-    async (mode) => {
-      const {job, options, harness} = await fixture('wait');
-      const abort = new AbortController();
-      const pending = runJob(job, {
-        ...options,
-        signal: abort.signal,
-        timeoutMs: mode === 'timeout' ? 150 : 3000,
-      });
-      if (mode === 'cancel') {
-        await vi.waitFor(() => expect(harness.urls.length).toBe(1));
-        abort.abort();
-      }
-      const result = await pending;
-      expect(result.status).toBe('harness_failed');
-      expect(result.mcp?.finalized).toBe(true);
-      expect(result.mcp?.failures).toContain('not_ready');
-      await expect(fetch(harness.urls[0]!)).rejects.toThrow();
-    },
-  );
+  it('finalizes listeners on timeout', async () => {
+    const {job, options, harness} = await fixture('wait');
+    const result = await runJob(job, {...options, timeoutMs: 150});
+    expect(result.status).toBe('harness_failed');
+    expect(result.mcp?.finalized).toBe(true);
+    expect(result.mcp?.failures).toContain('not_ready');
+    await expect(fetch(harness.urls[0]!)).rejects.toThrow();
+  });
+
+  it('finalizes listeners and propagates cancellation', async () => {
+    const {job, options, harness} = await fixture('wait');
+    const abort = new AbortController();
+    const pending = runJob(job, {...options, signal: abort.signal});
+    await vi.waitFor(() => expect(harness.urls.length).toBe(1));
+    abort.abort();
+    await expect(pending).rejects.toMatchObject({name: 'AbortError'});
+    await expect(fetch(harness.urls[0]!)).rejects.toThrow();
+  });
 
   it('reflects controller cleanup failure before returning an otherwise passing result', async () => {
     const original = controllerModule.startMcpMockController;
@@ -493,11 +488,13 @@ describe('MCP runner lifecycle', () => {
     expect(result.assertionResults).toEqual([]);
   });
 
-  it('rejects an invalid direct-run MCP definition before setup', async () => {
+  it('rejects MCP assertions without mocks before setup', async () => {
     const {job, options, root} = await fixture();
-    job.scenario.mcpMocks = {};
+    delete job.scenario.mcpMocks;
     job.scenario.setup = [`touch ${join(root, 'setup')}`];
-    await expect(runJob(job, options)).rejects.toThrow('Invalid MCP');
+    await expect(runJob(job, options)).rejects.toThrow(
+      'MCP assertions require mcpMocks',
+    );
     await expect(readFile(join(root, 'setup'))).rejects.toThrow();
   });
 });

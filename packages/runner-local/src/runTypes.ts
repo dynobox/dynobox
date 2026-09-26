@@ -132,6 +132,7 @@ export type LocalMcpSummary = {
     | 'configuration_failed'
     | 'unsupported_version'
     | 'execution_failed'
+    | 'timed_out'
   )[];
   calls: readonly Omit<McpCallRecord, 'input'>[];
 };

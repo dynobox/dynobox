@@ -71,10 +71,13 @@ account-installed plugin MCP servers cannot yet be excluded from a CLI run.
 MCP runs cannot be uploaded, and the published CLI does not enable MCP
 execution by default.
 
-Claude Code uses strict MCP configuration; a deployed enterprise
-`managed-mcp.json` prevents its mock run from starting. Antigravity currently
-requires version 1.2.11 and an installed profile without inherited MCP servers,
-plugins, or custom agents. The adapter rejects those sources before it runs a
+Each adapter requires a minimum harness version (Claude Code 2.1.263, Codex
+0.153.4, OpenCode 1.18.26, Pi 0.84.2, Antigravity 1.2.11); newer releases run
+too. MCP jobs follow the same timeout as other jobs and report a `timed_out`
+failure when one expires. Claude Code uses strict MCP configuration; a deployed
+enterprise `managed-mcp.json` prevents its mock run from starting. Antigravity
+requires an installed profile without inherited MCP servers, plugins, or
+custom agents. The adapter rejects those sources before it runs a
 model. In normal headless mode, pass `--allow-mcp-tool server/tool` for each
 mock tool the scenario must call. The adapter puts those scoped grants in a
 temporary Antigravity project record and removes it after the run. Without a

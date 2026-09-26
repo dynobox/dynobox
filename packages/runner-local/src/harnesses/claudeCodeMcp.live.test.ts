@@ -139,7 +139,7 @@ describe.skipIf(!executable)('native Claude Code MCP gates', () => {
     const fixture = await nativeFixture('negative');
     fixture.setMode('hang');
     const abort = new AbortController();
-    fixture.options.signal = abort.signal;
+    fixture.options.input.signal = abort.signal;
     const pending = runClaudeCodeWithMcp(fixture.options);
     const rejected = expect(pending).rejects.toMatchObject({
       category: 'execution_failed',

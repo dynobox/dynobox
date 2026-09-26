@@ -1,5 +1,4 @@
 import {realpathSync} from 'node:fs';
-import {realpath} from 'node:fs/promises';
 
 import type {PermissionMode} from '@dynobox/sdk';
 
@@ -61,21 +60,17 @@ export class AntigravityHarness implements Harness {
   async prepareMcp(
     input: Pick<HarnessInput, 'workDir' | 'env'>,
   ): Promise<PreparedMcpHarness> {
-    const {runAntigravityWithMcp, AntigravityMcpError} =
-      await import('./antigravityMcp.js');
-    const cwd = await realpath(input.workDir);
-    const executable = await resolveMcpExecutable(
+    const {runAntigravityWithMcp} = await import('./antigravityMcp.js');
+    const {executable, workDir} = await resolveMcpExecutable(
       this.executable,
-      cwd,
-      input.env,
+      input,
     );
-    if (!executable) throw new AntigravityMcpError('configuration_failed');
     const extraArgs = [...this.extraArgs];
     return {
       run: (runInput, servers) =>
         runAntigravityWithMcp({
           executable,
-          input: {...runInput, workDir: cwd},
+          input: {...runInput, workDir},
           servers,
           extraArgs,
         }),

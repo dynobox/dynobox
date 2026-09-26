@@ -1,14 +1,11 @@
-import {randomBytes} from 'node:crypto';
-import {realpath} from 'node:fs/promises';
 import {homedir} from 'node:os';
-import {isAbsolute, join, resolve} from 'node:path';
-import {performance} from 'node:perf_hooks';
-import {isDeepStrictEqual} from 'node:util';
+import {join, resolve} from 'node:path';
 
 import {execa} from 'execa';
 
 import {buildCodexArgs, parseCodexJsonLine} from './codex.js';
 import {cachedCodexPluginServers} from './codexMcpPlugins.js';
+import {mcpDeadline, McpHarnessError} from './mcpError.js';
 import {mcpProxyEnv} from './mcpProxyEnv.js';
 import {createToolEvent, isRecord} from './parsing.js';
 import type {
@@ -17,16 +14,27 @@ import type {
   McpServerConnections,
   ToolEvent,
 } from './types.js';
+import {isAtLeastVersion} from './version.js';
 
-// Invocation-local compatibility gate. Native tests must be rerun before changing.
-const SUPPORTED_VERSIONS = new Set(['0.153.4', '0.157.0']);
-const OUTPUT_LIMIT = 8 * 1024 * 1024;
+// Oldest release whose overlay isolation was verified natively.
+const MIN_VERSION = '0.153.4';
+// Features that can attach MCP servers the overlay cannot enumerate.
 const GUARDED_FEATURES = [
   'apps',
   'remote_plugin',
   'skill_mcp_dependency_install',
 ] as const;
 const GUARDS = GUARDED_FEATURES.flatMap((name) => ['--disable', name]);
+// Extra arguments that would change the configuration the overlay is built on.
+const CONFIG_FLAGS = new Set([
+  '-c',
+  '--config',
+  '-p',
+  '--profile',
+  '--enable',
+  '--disable',
+  '--ignore-user-config',
+]);
 type RecordValue = Record<string, unknown>;
 type Plugin = {id: string; servers: string[]};
 type Snapshot = {config: RecordValue; plugins: Plugin[]};
@@ -36,383 +44,326 @@ export type CodexMcpOptions = {
   input: HarnessInput;
   servers: McpServerConnections;
   extraArgs?: readonly string[];
-  signal?: AbortSignal;
 };
 
-export class CodexMcpError extends Error {
-  constructor(
-    readonly category:
-      | 'configuration_failed'
-      | 'unsupported_version'
-      | 'not_ready'
-      | 'execution_failed'
-      | 'cleanup_failed',
-  ) {
-    // Subprocess errors contain private configuration, URLs and credentials.
-    super(`Codex MCP ${category}.`);
-    this.name = 'CodexMcpError';
-  }
-}
-
-/** The controller owns discovery evidence, sealing, route revocation and cleanup. */
+/**
+ * Codex has no strict MCP mode. Read the effective configuration, then launch
+ * with an overlay that disables every inherited MCP server (including plugin
+ * servers) and adds the mocks. Skills and other settings stay intact.
+ */
 export async function runCodexWithMcp(
   options: CodexMcpOptions,
 ): Promise<{output: HarnessRunOutput; harnessReady: true}> {
-  const started = performance.now();
-  const input = {
-    ...options.input,
-    env: {...options.input.env},
-    allowedMcpTools: options.input.allowedMcpTools?.map((tool) => ({...tool})),
+  const started = Date.now();
+  const {input, servers, executable} = options;
+  const remaining = mcpDeadline(input.timeoutMs, input.signal);
+  const extras = options.extraArgs ?? [];
+  for (const arg of extras) {
+    const flag = arg.split('=')[0]!;
+    if (CONFIG_FLAGS.has(flag) || /^-[cp]./.test(arg))
+      throw new McpHarnessError(
+        'configuration_failed',
+        `Codex extra argument ${flag} conflicts with MCP mocking.`,
+      );
+  }
+  const cwd = input.workDir;
+  const env = {...process.env, ...input.env};
+  Object.assign(env, mcpProxyEnv(env));
+  const processOptions = {
+    cwd,
+    env,
+    extendEnv: false,
+    reject: false as const,
+    forceKillAfterDelay: 1000,
+    ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
   };
-  const servers = structuredClone(options.servers);
-  const timeout = input.timeoutMs ?? 120_000;
-  const signal = options.signal ?? input.signal;
-  const remaining = () => {
-    const value = Math.ceil(timeout - (performance.now() - started));
-    if (value <= 0 || signal?.aborted)
-      throw new CodexMcpError('execution_failed');
-    return value;
+  const probe = await execa(executable, [...GUARDS, '--version'], {
+    ...processOptions,
+    stdin: 'ignore',
+    timeout: Math.min(5000, remaining()),
+  });
+  remaining();
+  const version = /^codex-cli (\d+\.\d+\.\d+)/.exec(probe.stdout.trim())?.[1];
+  if (probe.failed || !isAtLeastVersion(version ?? null, MIN_VERSION))
+    throw new McpHarnessError(
+      'unsupported_version',
+      `Codex MCP mocking requires ${MIN_VERSION} or newer (found ${version ?? 'unknown'}).`,
+    );
+
+  // Model, permission and CLI-mock settings must also apply to the config read.
+  const ordinary = buildCodexArgs(
+    '',
+    [],
+    input.model,
+    input.permissionMode,
+    input.cliMocksEnabled ? input.env : undefined,
+  ).slice(1, -1);
+  const configArgs: string[] = [...GUARDS];
+  for (let index = 0; index < ordinary.length; index++) {
+    if (ordinary[index] === '-c') configArgs.push('-c', ordinary[++index]!);
+  }
+  // --sandbox/--model are exec-only flags; represent them as config for reads.
+  if (input.permissionMode === 'dangerous')
+    configArgs.push('-c', 'sandbox_mode="danger-full-access"');
+  if (input.model !== undefined)
+    configArgs.push('-c', `model=${toml(input.model)}`);
+
+  const snapshot = await readSnapshot(
+    executable,
+    configArgs,
+    cwd,
+    env,
+    processOptions,
+    remaining,
+  );
+  const {overlay, logicalNames} = buildOverlay(
+    snapshot,
+    servers,
+    input.allowedMcpTools ?? [],
+  );
+
+  const child = execa(
+    executable,
+    [
+      'exec',
+      ...ordinary,
+      ...extras,
+      ...configArgs,
+      ...overlay,
+      '--',
+      input.prompt,
+    ],
+    {...processOptions, stdin: 'ignore', timeout: remaining()},
+  );
+  let buffer = '';
+  let completed = false;
+  let failure: McpHarnessError | undefined;
+  const toolEvents: ToolEvent[] = [];
+  const emit = (event: ToolEvent) => {
+    toolEvents.push(event);
+    input.onToolEvent?.(event);
+  };
+  const consume = (line: string) => {
+    if (!line.trim() || failure) return;
+    try {
+      const event: unknown = JSON.parse(line);
+      if (!isRecord(event)) return;
+      if (event.type === 'error' || event.type === 'turn.failed')
+        throw new McpHarnessError(
+          'execution_failed',
+          `Codex reported ${event.type}: ${errorText(event)}`,
+        );
+      if (event.type === 'turn.completed') completed = true;
+      const item = event.item;
+      if (
+        event.type === 'item.completed' &&
+        isRecord(item) &&
+        item.type === 'mcp_tool_call'
+      ) {
+        const logical = logicalNames[String(item.server)];
+        if (logical === undefined)
+          throw new McpHarnessError(
+            'not_ready',
+            `Codex called MCP server "${String(item.server)}", which is not a mock.`,
+          );
+        emit(
+          createToolEvent(
+            `mcp__${logical}__${String(item.tool)}`,
+            item.arguments,
+            item.status === 'completed' ? 'success' : 'failure',
+          ),
+        );
+      } else for (const tool of parseCodexJsonLine(line).toolEvents) emit(tool);
+    } catch (error) {
+      failure =
+        error instanceof McpHarnessError
+          ? error
+          : new McpHarnessError(
+              'execution_failed',
+              'Codex emitted unparseable JSON output.',
+            );
+      child.kill();
+    }
+  };
+  child.stdout?.setEncoding('utf8');
+  child.stdout?.on('data', (chunk: string) => {
+    buffer += chunk;
+    let end: number;
+    while ((end = buffer.indexOf('\n')) !== -1) {
+      consume(buffer.slice(0, end));
+      buffer = buffer.slice(end + 1);
+    }
+  });
+  const result = await child;
+  consume(buffer);
+  remaining();
+  if (failure) throw failure;
+  if (result.failed)
+    throw new McpHarnessError(
+      'execution_failed',
+      `Codex exited with code ${result.exitCode ?? 'unknown'}.`,
+    );
+  if (!completed)
+    throw new McpHarnessError(
+      'execution_failed',
+      'Codex exited without completing its turn.',
+    );
+  return {
+    harnessReady: true,
+    output: {
+      exitCode: result.exitCode ?? 1,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      durationMs: Date.now() - started,
+      metadata: {mcpHarnessVersion: version, mcpRunToolEvents: toolEvents},
+    },
+  };
+}
+
+/** Read effective config and every enabled plugin's MCP servers via app-server. */
+async function readSnapshot(
+  executable: string,
+  args: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  processOptions: object,
+  remaining: () => number,
+): Promise<Snapshot> {
+  const child = execa(executable, [...args, 'app-server', '--stdio'], {
+    ...processOptions,
+    timeout: remaining(),
+  });
+  const pending = new Map<
+    number,
+    {method: string; resolve(value: unknown): void; reject(error: Error): void}
+  >();
+  let nextId = 0;
+  let buffer = '';
+  const rejectAll = () => {
+    for (const waiter of pending.values()) {
+      let error = new McpHarnessError(
+        'configuration_failed',
+        `Codex app-server exited during ${waiter.method}.`,
+      );
+      try {
+        remaining();
+      } catch (deadline) {
+        // Report cancellation or timeout rather than the resulting exit.
+        error = deadline as McpHarnessError;
+      }
+      waiter.reject(error);
+    }
+    pending.clear();
+  };
+  child.stdout?.setEncoding('utf8');
+  child.stdout?.on('data', (chunk: string) => {
+    buffer += chunk;
+    let end: number;
+    while ((end = buffer.indexOf('\n')) !== -1) {
+      const line = buffer.slice(0, end);
+      buffer = buffer.slice(end + 1);
+      let message: unknown;
+      try {
+        message = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (!isRecord(message) || typeof message.id !== 'number') continue;
+      const waiter = pending.get(message.id);
+      if (!waiter) continue;
+      pending.delete(message.id);
+      if (message.error !== undefined || !Object.hasOwn(message, 'result'))
+        waiter.reject(
+          new McpHarnessError(
+            'configuration_failed',
+            `Codex app-server ${waiter.method} failed.`,
+          ),
+        );
+      else waiter.resolve(message.result);
+    }
+  });
+  child.then(rejectAll, rejectAll);
+  const rpc = async (method: string, params: object): Promise<RecordValue> => {
+    remaining();
+    const id = ++nextId;
+    const value = await new Promise<unknown>((resolve, reject) => {
+      pending.set(id, {method, resolve, reject});
+      child.stdin!.write(`${JSON.stringify({id, method, params})}\n`);
+    });
+    return isRecord(value) ? value : {};
   };
   try {
-    if (
-      !isAbsolute(options.executable) ||
-      !Number.isSafeInteger(timeout) ||
-      timeout <= 0 ||
-      input.prompt.includes('\0') ||
-      (input.model !== undefined &&
-        (!input.model || /^[-\s]|\0/.test(input.model)))
-    )
-      failConfig();
-    const extras = safeExtraArgs(options.extraArgs ?? []);
-    validateServers(servers);
-    for (const grant of input.allowedMcpTools ?? []) {
-      if (
-        !Object.hasOwn(servers, grant.server) ||
-        !servers[grant.server]!.tools.includes(grant.tool)
-      )
-        failConfig();
-    }
-    const executable = await realpath(options.executable);
-    const cwd = await realpath(input.workDir);
-    const env = {...process.env, ...input.env};
-    Object.assign(env, mcpProxyEnv(env));
-    const processOptions = {
+    await rpc('initialize', {
+      clientInfo: {name: 'dynobox', version: '1'},
+      capabilities: {experimentalApi: true},
+    });
+    const config = record(
+      (await rpc('config/read', {includeLayers: false, cwd})).config,
+    );
+    for (const name of GUARDED_FEATURES)
+      if (record(config.features)[name] !== false)
+        throw new McpHarnessError(
+          'configuration_failed',
+          `Codex feature "${name}" is forced on and could load MCP servers beside the mocks.`,
+        );
+    const catalog = await rpc('plugin/list', {
+      cwds: [cwd],
+      forceRefetch: false,
+    });
+    const codexHome = resolve(
       cwd,
-      env,
-      extendEnv: false,
-      reject: false as const,
-      maxBuffer: OUTPUT_LIMIT,
-      forceKillAfterDelay: 1000,
-      ...(signal === undefined ? {} : {cancelSignal: signal}),
-    };
-    const version = await execa(executable, [...GUARDS, '--version'], {
-      ...processOptions,
-      stdin: 'ignore',
-      timeout: Math.min(5000, remaining()),
-    });
-    const harnessVersion = /^codex-cli (\d+\.\d+\.\d+)$/.exec(
-      version.stdout.trim(),
-    )?.[1];
-    if (
-      version.failed ||
-      harnessVersion === undefined ||
-      !SUPPORTED_VERSIONS.has(harnessVersion)
-    )
-      throw new CodexMcpError('unsupported_version');
-
-    // All policy/model/CLI-mock config used for execution also applies to probes.
-    const ordinary = buildCodexArgs(
-      '',
-      [],
-      input.model,
-      input.permissionMode,
-      input.cliMocksEnabled ? input.env : undefined,
-    ).slice(1, -1);
-    const configArgs: string[] = [...GUARDS];
-    for (let index = 0; index < ordinary.length; index++) {
-      if (ordinary[index] === '-c') configArgs.push('-c', ordinary[++index]!);
-    }
-    // --sandbox/--model are exec-only flags; represent them identically in probes.
-    if (input.permissionMode === 'dangerous')
-      configArgs.push('-c', 'sandbox_mode="danger-full-access"');
-    if (input.model !== undefined)
-      configArgs.push('-c', `model=${toml(input.model)}`);
-
-    const snapshot = async (args: string[]): Promise<Snapshot> => {
-      const child = execa(executable, [...args, 'app-server', '--stdio'], {
-        ...processOptions,
-        timeout: remaining(),
-      });
-      let buffer = '';
-      let nextId = 0;
-      let bytes = 0;
-      const pending = new Map<
-        number,
-        {resolve(value: unknown): void; reject(error: Error): void}
-      >();
-      let ended = false;
-      const rejectPending = () => {
-        ended = true;
-        for (const waiter of pending.values())
-          waiter.reject(
-            new CodexMcpError(
-              signal?.aborted ? 'execution_failed' : 'configuration_failed',
-            ),
-          );
-        pending.clear();
-      };
-      child.stdout?.setEncoding('utf8');
-      child.stdout?.on('data', (chunk: string) => {
-        try {
-          bytes += Buffer.byteLength(chunk);
-          if (bytes > OUTPUT_LIMIT) failConfig();
-          buffer += chunk;
-          let end: number;
-          while ((end = buffer.indexOf('\n')) !== -1) {
-            const event: unknown = JSON.parse(buffer.slice(0, end));
-            buffer = buffer.slice(end + 1);
-            if (!isRecord(event)) failConfig();
-            if (typeof event.id !== 'number') continue;
-            const waiter = pending.get(event.id);
-            if (
-              !waiter ||
-              event.error !== undefined ||
-              !Object.hasOwn(event, 'result')
-            )
-              failConfig();
-            pending.delete(event.id);
-            waiter.resolve(event.result);
-          }
-        } catch {
-          rejectPending();
-          child.kill();
-        }
-      });
-      child.then(rejectPending, rejectPending);
-      const rpc = (method: string, params: object): Promise<unknown> => {
-        remaining();
-        if (ended) failConfig();
-        const id = ++nextId;
-        return new Promise((resolve, reject) => {
-          pending.set(id, {resolve, reject});
-          child.stdin!.write(
-            `${JSON.stringify({id, method, params})}\n`,
-            (error) => {
-              if (error) rejectPending();
-            },
-          );
-        });
-      };
-      try {
-        await rpc('initialize', {
-          clientInfo: {name: 'dynobox', version: '1'},
-          capabilities: {experimentalApi: true},
-        });
-        const requirements = record(await rpc('configRequirements/read', {}));
-        if (!Object.hasOwn(requirements, 'requirements')) failConfig();
-        const featureRequirements = optionalRecord(
-          optionalRecord(requirements.requirements).featureRequirements,
-        );
-        for (const name of GUARDED_FEATURES)
-          if (featureRequirements[name] === true) failConfig();
-        const read = record(
-          await rpc('config/read', {includeLayers: false, cwd}),
-        );
-        const config = record(read.config);
-        for (const name of GUARDED_FEATURES)
-          if (record(config.features)[name] !== false) failConfig();
-        const catalog = record(
-          await rpc('plugin/list', {cwds: [cwd], forceRefetch: false}),
-        );
+      env.CODEX_HOME ?? join(env.HOME ?? homedir(), '.codex'),
+    );
+    const plugins: Plugin[] = [];
+    const seen = new Set<string>();
+    const marketplaces = Array.isArray(catalog.marketplaces)
+      ? catalog.marketplaces
+      : [];
+    for (const marketplace of marketplaces.filter(isRecord)) {
+      const entries = Array.isArray(marketplace.plugins)
+        ? marketplace.plugins
+        : [];
+      for (const plugin of entries.filter(isRecord)) {
         if (
-          !Array.isArray(catalog.marketplaces) ||
-          !Array.isArray(catalog.marketplaceLoadErrors) ||
-          catalog.marketplaceLoadErrors.length
+          !plugin.installed ||
+          !plugin.enabled ||
+          typeof plugin.id !== 'string'
         )
-          failConfig();
-        const plugins: Plugin[] = [];
-        const cachedServers = async (id: string) => {
-          try {
-            return await cachedCodexPluginServers(
-              resolve(
-                cwd,
-                env.CODEX_HOME ?? join(env.HOME ?? homedir(), '.codex'),
-              ),
-              id,
-            );
-          } catch {
-            return failConfig();
-          }
-        };
-        const seen = new Set<string>();
-        for (const value of catalog.marketplaces) {
-          const marketplace = record(value);
-          if (!Array.isArray(marketplace.plugins)) failConfig();
-          for (const item of marketplace.plugins) {
-            const plugin = record(item);
-            if (
-              typeof plugin.installed !== 'boolean' ||
-              typeof plugin.enabled !== 'boolean'
-            )
-              failConfig();
-            if (!plugin.installed || !plugin.enabled) continue;
-            if (
-              typeof plugin.id !== 'string' ||
-              typeof plugin.name !== 'string' ||
-              typeof marketplace.path !== 'string' ||
-              seen.has(plugin.id)
-            )
-              failConfig();
-            seen.add(plugin.id);
-            const detail = record(
-              record(
-                await rpc('plugin/read', {
-                  marketplacePath: marketplace.path,
-                  pluginName: plugin.name,
-                }),
-              ).plugin,
-            );
-            if (
-              !Array.isArray(detail.mcpServers) ||
-              !detail.mcpServers.every((name) => typeof name === 'string')
-            )
-              failConfig();
-            plugins.push({
-              id: plugin.id,
-              servers: [
-                ...new Set([
-                  ...(detail.mcpServers as string[]),
-                  ...(await cachedServers(plugin.id)),
-                ]),
-              ].sort(),
-            });
-          }
-        }
-        // Enabled cached plugins can load even after their marketplace disappears.
-        // Enumerate every cached version without copying transports or credentials.
-        for (const [id, value] of Object.entries(
-          optionalRecord(config.plugins),
-        )) {
-          if (record(value).enabled !== false && !seen.has(id)) {
-            plugins.push({id, servers: await cachedServers(id)});
-          }
-        }
-        return {config, plugins};
-      } finally {
-        child.kill();
-        await child;
-        rejectPending();
+          continue;
+        seen.add(plugin.id);
+        const detail = record(
+          (
+            await rpc('plugin/read', {
+              marketplacePath: marketplace.path,
+              pluginName: plugin.name,
+            })
+          ).plugin,
+        );
+        const listed = Array.isArray(detail.mcpServers)
+          ? detail.mcpServers.map(String)
+          : [];
+        plugins.push({
+          id: plugin.id,
+          servers: [
+            ...new Set([
+              ...listed,
+              ...(await cachedCodexPluginServers(codexHome, plugin.id)),
+            ]),
+          ],
+        });
       }
-    };
-
-    // Unlike `mcp list`, these metadata APIs do not perform OAuth status probes.
-    const initial = await snapshot(configArgs);
-    const {overlay, expected, logicalNames} = buildOverlay(
-      initial,
-      servers,
-      input.allowedMcpTools ?? [],
-    );
-    const launchConfig = [...configArgs, ...overlay];
-    const resolved = await snapshot(launchConfig);
-    verifySnapshot(resolved, initial.plugins, expected);
-
-    // Only after disabling every inherited source may this command query auth
-    // status. It also detects managed allowlists that disable generated servers.
-    const listing = await execa(
-      executable,
-      [...launchConfig, 'mcp', 'list', '--json'],
-      {...processOptions, stdin: 'ignore', timeout: remaining()},
-    );
-    if (listing.failed || !listingMatches(JSON.parse(listing.stdout), expected))
-      throw new CodexMcpError('not_ready');
-
-    const child = execa(
-      executable,
-      ['exec', ...ordinary, ...extras, ...launchConfig, '--', input.prompt],
-      {...processOptions, stdin: 'ignore', timeout: remaining()},
-    );
-    let buffer = '';
-    let completed = false;
-    let failed = false;
-    let bytes = 0;
-    const toolEvents: ToolEvent[] = [];
-    const emit = (event: ToolEvent) => {
-      toolEvents.push(event);
-      input.onToolEvent?.(event);
-    };
-    const consume = (line: string) => {
-      if (!line.trim() || failed) return;
-      try {
-        const event = record(JSON.parse(line));
-        if (event.type === 'error' || event.type === 'turn.failed')
-          throw new CodexMcpError('execution_failed');
-        if (event.type === 'turn.completed') {
-          if (completed) throw new CodexMcpError('execution_failed');
-          completed = true;
-        }
-        if (
-          event.type === 'item.completed' &&
-          isRecord(event.item) &&
-          event.item.type === 'mcp_tool_call'
-        ) {
-          const item = event.item;
-          if (
-            typeof item.server !== 'string' ||
-            !Object.hasOwn(logicalNames, item.server) ||
-            typeof item.tool !== 'string' ||
-            !servers[logicalNames[item.server]!]!.tools.includes(item.tool)
-          )
-            throw new CodexMcpError('not_ready');
-          emit(
-            createToolEvent(
-              `mcp__${logicalNames[item.server]}__${item.tool}`,
-              item.arguments,
-              item.status === 'completed' ? 'success' : 'failure',
-            ),
-          );
-        } else
-          for (const tool of parseCodexJsonLine(line).toolEvents) emit(tool);
-      } catch {
-        failed = true;
-        child.kill();
-      }
-    };
-    child.stdout?.setEncoding('utf8');
-    child.stdout?.on('data', (chunk: string) => {
-      bytes += Buffer.byteLength(chunk);
-      if (bytes > OUTPUT_LIMIT) {
-        failed = true;
-        child.kill();
-        return;
-      }
-      buffer += chunk;
-      let end: number;
-      while ((end = buffer.indexOf('\n')) !== -1) {
-        consume(buffer.slice(0, end));
-        buffer = buffer.slice(end + 1);
-      }
-    });
-    const result = await child;
-    consume(buffer);
-    remaining();
-    if (failed || result.failed) throw new CodexMcpError('execution_failed');
-    if (!completed) throw new CodexMcpError('not_ready');
-    return {
-      harnessReady: true,
-      output: {
-        exitCode: result.exitCode ?? 1,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        durationMs: performance.now() - started,
-        metadata: {
-          mcpHarnessVersion: harnessVersion,
-          mcpRunToolEvents: toolEvents,
-        },
-      },
-    };
-  } catch (error) {
-    if (error instanceof CodexMcpError) throw error;
-    throw new CodexMcpError('execution_failed');
+    }
+    // Enabled cached plugins can load even after their marketplace disappears.
+    for (const [id, value] of Object.entries(record(config.plugins)))
+      if (record(value).enabled !== false && !seen.has(id))
+        plugins.push({
+          id,
+          servers: await cachedCodexPluginServers(codexHome, id),
+        });
+    return {config, plugins};
+  } finally {
+    child.kill();
+    await child;
   }
 }
 
@@ -421,7 +372,8 @@ function buildOverlay(
   servers: McpServerConnections,
   grants: readonly {server: string; tool: string}[],
 ) {
-  const inherited = optionalRecord(snapshot.config.mcp_servers);
+  const inherited = record(snapshot.config.mcp_servers);
+  // Disabling needs a valid transport, but never the inherited one.
   const mcp: RecordValue = Object.fromEntries(
     Object.entries(inherited).map(([name, value]) => [
       name,
@@ -443,35 +395,29 @@ function buildOverlay(
     };
     for (const name of plugin.servers) occupied.add(name);
   }
-  const expected: Record<string, RecordValue> = {};
   const logicalNames: Record<string, string> = {};
   for (const [logical, server] of Object.entries(servers)) {
-    const sources: RecordValue[] = [];
-    if (Object.hasOwn(inherited, logical))
-      sources.push(record(inherited[logical]));
-    for (const plugin of snapshot.plugins)
-      if (plugin.servers.includes(logical)) {
-        const config = optionalRecord(
-          optionalRecord(snapshot.config.plugins)[plugin.id],
-        );
-        sources.push(
-          optionalRecord(optionalRecord(config.mcp_servers)[logical]),
-        );
-      }
-    if (sources.length > 1) failConfig();
-    const policy = sources[0] ?? {};
-    if (policy.enabled === false) throw new CodexMcpError('not_ready');
-    for (const tool of server.tools) {
+    // A same-named inherited server keeps its tool policy for the mock.
+    const policy = record(inherited[logical]);
+    if (policy.enabled === false)
+      throw new McpHarnessError(
+        'not_ready',
+        `Codex config disables MCP server "${logical}".`,
+      );
+    for (const tool of server.tools)
       if (
         (Array.isArray(policy.enabled_tools) &&
           !policy.enabled_tools.includes(tool)) ||
         (Array.isArray(policy.disabled_tools) &&
           policy.disabled_tools.includes(tool))
       )
-        throw new CodexMcpError('not_ready');
-    }
+        throw new McpHarnessError(
+          'not_ready',
+          `Codex config disables MCP tool "${logical}/${tool}".`,
+        );
     let name = logical;
-    while (occupied.has(name)) name = `dxb_${randomBytes(12).toString('hex')}`;
+    for (let suffix = 1; occupied.has(name); suffix++)
+      name = `dynobox_${logical}_${suffix}`;
     occupied.add(name);
     const entry: RecordValue = {
       url: server.url,
@@ -489,15 +435,14 @@ function buildOverlay(
       if (policy[key] !== undefined && policy[key] !== null)
         entry[key] = structuredClone(policy[key]);
     for (const grant of grants.filter((grant) => grant.server === logical)) {
-      const tools = {...optionalRecord(entry.tools)};
+      const tools = {...record(entry.tools)};
       tools[grant.tool] = {
-        ...optionalRecord(tools[grant.tool]),
+        ...record(tools[grant.tool]),
         approval_mode: 'approve',
       };
       entry.tools = tools;
     }
     mcp[name] = entry;
-    expected[name] = entry;
     logicalNames[name] = logical;
   }
   return {
@@ -507,137 +452,24 @@ function buildOverlay(
       '-c',
       `plugins=${toml(plugins)}`,
     ],
-    expected,
     logicalNames,
   };
 }
 
-function verifySnapshot(
-  snapshot: Snapshot,
-  originalPlugins: Plugin[],
-  expected: Record<string, RecordValue>,
-) {
-  if (!isDeepStrictEqual(snapshot.plugins, originalPlugins)) failConfig();
-  for (const plugin of snapshot.plugins) {
-    const config = optionalRecord(
-      optionalRecord(snapshot.config.plugins)[plugin.id],
-    );
-    const servers = optionalRecord(config.mcp_servers);
-    for (const name of plugin.servers)
-      if (optionalRecord(servers[name]).enabled !== false) failConfig();
-  }
-  const actual = optionalRecord(snapshot.config.mcp_servers);
-  for (const [name, value] of Object.entries(actual)) {
-    const entry = record(value);
-    if (!Object.hasOwn(expected, name)) {
-      if (entry.enabled !== false) failConfig();
-      continue;
-    }
-    const wanted = expected[name]!;
-    if (entry.enabled !== true || entry.required !== true)
-      throw new CodexMcpError('not_ready');
-    // Effective defaults are emitted by config/read. Allow only known inert
-    // defaults in addition to exactly the generated transport and copied policy.
-    for (const [key, value] of Object.entries(entry)) {
-      if (Object.hasOwn(wanted, key)) {
-        if (!isDeepStrictEqual(value, wanted[key])) failConfig();
-      } else if (
-        !(value === null || (key === 'environment_id' && value === 'local'))
-      )
-        failConfig();
-    }
-    for (const [key, value] of Object.entries(wanted))
-      if (!isDeepStrictEqual(entry[key], value)) failConfig();
-  }
-  for (const name of Object.keys(expected))
-    if (!Object.hasOwn(actual, name)) throw new CodexMcpError('not_ready');
-}
-
-function listingMatches(value: unknown, expected: Record<string, RecordValue>) {
-  if (!Array.isArray(value)) return false;
-  const seen = new Set<string>();
-  for (const item of value) {
-    if (
-      !isRecord(item) ||
-      typeof item.name !== 'string' ||
-      typeof item.enabled !== 'boolean' ||
-      seen.has(item.name)
-    )
-      return false;
-    seen.add(item.name);
-    if (!item.enabled) {
-      if (Object.hasOwn(expected, item.name)) return false;
-      continue;
-    }
-    if (
-      !Object.hasOwn(expected, item.name) ||
-      item.disabled_reason !== null ||
-      !isRecord(item.transport)
-    )
-      return false;
-    const transport = item.transport;
-    if (
-      transport.type !== 'streamable_http' ||
-      transport.url !== expected[item.name]!.url
-    )
-      return false;
-    for (const [key, value] of Object.entries(transport))
-      if (!['type', 'url'].includes(key) && value !== null) return false;
-  }
-  return Object.keys(expected).every((name) => seen.has(name));
-}
-
-function validateServers(servers: McpServerConnections) {
-  if (Object.keys(servers).length === 0) failConfig();
-  const names = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-  for (const [name, server] of Object.entries(servers)) {
-    const url = new URL(server.url);
-    if (
-      !names.test(name) ||
-      url.protocol !== 'http:' ||
-      url.hostname !== '127.0.0.1' ||
-      !url.port ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash ||
-      !/^\/[a-f0-9]{48}$/.test(url.pathname) ||
-      !server.tools.length ||
-      new Set(server.tools).size !== server.tools.length ||
-      !server.tools.every((tool) => names.test(tool))
-    )
-      failConfig();
-  }
-}
-
-function safeExtraArgs(args: readonly string[]) {
-  // Exec-only, configuration-free flags. All policy/model settings use typed input.
-  if (args.some((arg) => arg !== '--ephemeral') || args.length > 1)
-    failConfig();
-  return [...args];
-}
-
 function record(value: unknown): RecordValue {
-  if (!isRecord(value)) failConfig();
-  return value;
+  return isRecord(value) ? value : {};
 }
-function optionalRecord(value: unknown): RecordValue {
-  return value === undefined || value === null ? {} : record(value);
+
+function errorText(event: RecordValue): string {
+  const error = record(event.error);
+  return String(error.message ?? event.message ?? 'no details');
 }
-function failConfig(): never {
-  throw new CodexMcpError('configuration_failed');
-}
+
 function toml(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(toml).join(',')}]`;
   if (isRecord(value))
     return `{${Object.entries(value)
       .map(([key, item]) => `${JSON.stringify(key)}=${toml(item)}`)
       .join(',')}}`;
-  if (
-    typeof value !== 'string' &&
-    typeof value !== 'boolean' &&
-    !(typeof value === 'number' && Number.isFinite(value))
-  )
-    failConfig();
   return JSON.stringify(value);
 }

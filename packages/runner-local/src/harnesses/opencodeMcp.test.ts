@@ -1,4 +1,4 @@
-import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {mkdtemp, readFile, realpath, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -28,18 +28,14 @@ const args = process.argv.slice(2);
 const mode = process.env.DXB_TEST_MODE;
 appendFileSync(process.env.DXB_TEST_LOG, JSON.stringify({args, cwd: process.cwd(), noProxy: process.env.no_proxy, NO_PROXY: process.env.NO_PROXY, marker: process.env.DXB_TEST_MARKER}) + '\\n');
 if (mode === 'hang') {setInterval(() => {}, 1000);}
-else if (args.includes('--version')) console.log(mode === 'version' ? '9.9.9' : '1.18.26');
+else if (args.includes('--version')) console.log(mode === 'version' ? '1.10.0' : mode === 'newer' ? '1.20.0' : '1.18.26');
 else {
   const config = {mcp: {linear: {type: 'local', command: ['real-server'], environment: {SECRET: 'PRIVATE_SENTINEL'}}, unrelated: {type: 'remote', url: 'https://private.invalid/PRIVATE_SENTINEL', headers: {Authorization: 'PRIVATE_SENTINEL'}}}};
   const inline = JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || '{}');
   config.permission = inline.permission || {};
   for (const [name, entry] of Object.entries(inline.mcp || {})) config.mcp[name] = {...config.mcp[name], ...entry};
-  const injected = Object.keys(config.mcp).find(name => name.startsWith('dxb_'));
-  if (injected && mode === 'managed') config.mcp.unrelated.enabled = true;
-  if (injected && mode === 'credential') config.mcp[injected].headers = {Authorization: 'PRIVATE_SENTINEL'};
-  if (injected && mode === 'missing') delete config.mcp[injected];
-  if (mode === 'malformed') console.log('PRIVATE_SENTINEL invalid JSON');
-  else console.log(JSON.stringify(config));
+  if (mode === 'exit') process.exit(2);
+  console.log(JSON.stringify(config));
 }
 `,
     {mode: 0o700},
@@ -66,7 +62,7 @@ else {
     },
     servers: {
       linear: {
-        url: `http://127.0.0.1:12345/${'a'.repeat(48)}`,
+        url: 'http://127.0.0.1:12345/linear',
         tools: ['get_issue'],
       },
     },
@@ -76,7 +72,7 @@ else {
 
 describe('OpenCode MCP configuration preparation', () => {
   it.each(['--attach', '--dir', '--agent', '--continue', '--session'])(
-    'rejects invocation escapes before any probe: %s',
+    'rejects extra arguments before any probe: %s',
     async (arg) => {
       const {options, log} = await fixture();
       await expect(
@@ -100,6 +96,7 @@ describe('OpenCode MCP configuration preparation', () => {
       },
     });
     const alias = Object.keys(prepared.logicalNames)[0]!;
+    expect(alias).toBe('dynobox_linear_1');
     expect(
       JSON.parse(prepared.env.OPENCODE_CONFIG_CONTENT!).permission,
     ).toEqual({edit: 'deny', [`${alias}_get_issue`]: 'allow'});
@@ -109,17 +106,16 @@ describe('OpenCode MCP configuration preparation', () => {
       action: 'deny',
     });
   });
-  it('disables inherited sources, injects clean aliases and preserves unrelated inline settings', async () => {
+  it('disables inherited sources, aliases name collisions and preserves unrelated inline settings', async () => {
     const {options, log} = await fixture();
     const original = structuredClone(options);
     const prepared = await prepareOpenCodeMcpConfiguration(options);
     expect(options).toEqual(original);
-    expect(prepared.args).toEqual(['--pure']);
     expect(prepared.version).toBe('1.18.26');
     const aliases = Object.keys(prepared.logicalNames);
     expect(aliases).toHaveLength(1);
     expect(prepared.logicalNames[aliases[0]!]).toBe('linear');
-    expect(aliases[0]).toMatch(/^dxb_[a-f0-9]{24}$/);
+    expect(aliases[0]).toBe('dynobox_linear_1');
     const overlay = JSON.parse(prepared.env.OPENCODE_CONFIG_CONTENT!);
     expect(overlay.model).toBe('example/model');
     expect(overlay.permission).toEqual({edit: 'deny'});
@@ -144,10 +140,9 @@ describe('OpenCode MCP configuration preparation', () => {
     expect(probes.map((probe) => probe.args)).toEqual([
       ['--pure', '--version'],
       ['--pure', 'debug', 'config'],
-      ['--pure', 'debug', 'config'],
     ]);
     for (const probe of probes) {
-      expect(probe.cwd).toBe(prepared.cwd);
+      expect(probe.cwd).toBe(await realpath(prepared.cwd));
       expect(probe.marker).toBe('preserved');
       expect(probe.noProxy).toBe(probe.NO_PROXY);
       expect(probe.NO_PROXY.split(',')).toEqual([
@@ -160,54 +155,37 @@ describe('OpenCode MCP configuration preparation', () => {
     }
   });
 
-  it.each(['managed', 'credential', 'missing', 'malformed'])(
-    'fails closed on %s config without leaking raw details',
-    async (mode) => {
-      const {options} = await fixture(mode);
-      const error = await prepareOpenCodeMcpConfiguration(options).catch(
-        (value: unknown) => value,
-      );
-      expect(error).toMatchObject({category: 'configuration_failed'});
-      expect(String(error)).not.toContain('PRIVATE_SENTINEL');
-      expect(String(error)).not.toContain(options.servers.linear.url);
-    },
-  );
-
-  it('rejects unknown CLI versions', async () => {
-    const {options} = await fixture('version');
-    await expect(
-      prepareOpenCodeMcpConfiguration(options),
-    ).rejects.toMatchObject({
-      category: 'unsupported_version',
-    });
+  it('keeps an uncolliding mock under its logical name', async () => {
+    const {options} = await fixture();
+    options.servers = {
+      github: {url: 'http://127.0.0.1:12345/github', tools: ['search']},
+    } as never;
+    const prepared = await prepareOpenCodeMcpConfiguration(options);
+    expect(prepared.logicalNames).toEqual({github: 'github'});
   });
 
-  it.each([
-    'https://real.invalid/mcp',
-    'http://localhost:1234/mcp',
-    `http://127.0.0.1:1234/${'a'.repeat(48)}?secret=PRIVATE_SENTINEL`,
-  ])('rejects non-controller URLs: %s', async (url) => {
-    const {options} = await fixture();
-    options.servers.linear.url = url;
+  it('reports a failed config read with the command', async () => {
+    const {options} = await fixture('exit');
     await expect(
       prepareOpenCodeMcpConfiguration(options),
     ).rejects.toMatchObject({
       category: 'configuration_failed',
+      message: 'opencode debug config exited with code 2.',
     });
   });
 
-  it('keeps concurrent preparations independent', async () => {
-    const {options} = await fixture();
-    const [first, second] = await Promise.all([
-      prepareOpenCodeMcpConfiguration(options),
-      prepareOpenCodeMcpConfiguration(options),
-    ]);
-    expect(Object.keys(first.logicalNames)).not.toEqual(
-      Object.keys(second.logicalNames),
-    );
-    expect(first.env.OPENCODE_CONFIG_CONTENT).not.toBe(
-      second.env.OPENCODE_CONFIG_CONTENT,
-    );
+  it.each([
+    ['version', false],
+    ['newer', true],
+  ])('checks the minimum CLI version (%s)', async (mode, supported) => {
+    const {options} = await fixture(mode);
+    const pending = prepareOpenCodeMcpConfiguration(options);
+    if (supported) expect((await pending).version).toBe('1.20.0');
+    else
+      await expect(pending).rejects.toMatchObject({
+        category: 'unsupported_version',
+        message: expect.stringContaining('1.18.26 or newer'),
+      });
   });
 
   it('bounds hanging probes by the invocation deadline', async () => {
@@ -216,7 +194,7 @@ describe('OpenCode MCP configuration preparation', () => {
     await expect(
       prepareOpenCodeMcpConfiguration(options),
     ).rejects.toMatchObject({
-      category: 'execution_failed',
+      category: 'timed_out',
     });
   });
 
@@ -237,7 +215,7 @@ describe.skipIf(nativeExecutable === undefined)(
   'native OpenCode MCP configuration gate (no model requests)',
   () => {
     it.each([true, false])(
-      'resolves the overlay and checks config side effects (authored schema: %s)',
+      'resolves the overlay against real config sources (authored schema: %s)',
       async (withSchema) => {
         const {options} = await fixture();
         const configPath = join(options.input.workDir, 'opencode.json');
@@ -268,15 +246,11 @@ describe.skipIf(nativeExecutable === undefined)(
             },
           },
         });
-        if (withSchema)
-          expect(Object.values((await pending).logicalNames)).toEqual([
-            'linear',
-          ]);
-        else
-          await expect(pending).rejects.toMatchObject({
-            category: 'configuration_failed',
-          });
-        expect(await readFile(configPath, 'utf8')).toBe(source);
+        const prepared = await pending;
+        expect(Object.values(prepared.logicalNames)).toEqual(['linear']);
+        const overlay = JSON.parse(prepared.env.OPENCODE_CONFIG_CONTENT!);
+        expect(overlay.mcp.linear).toEqual({enabled: false});
+        expect(overlay.mcp.unrelated).toEqual({enabled: false});
       },
     );
   },

@@ -4,7 +4,7 @@ import {join} from 'node:path';
 
 import {afterEach, describe, expect, it} from 'vitest';
 
-import {createVersionProbe, parseVersion} from './version.js';
+import {createVersionProbe, isAtLeastVersion, parseVersion} from './version.js';
 
 const scratchRoots: string[] = [];
 
@@ -84,5 +84,21 @@ describe('parseVersion', () => {
   it('returns null when no version is present', () => {
     expect(parseVersion('version unknown')).toBe(null);
     expect(parseVersion('')).toBe(null);
+  });
+});
+
+describe('isAtLeastVersion', () => {
+  it('accepts equal and newer versions', () => {
+    expect(isAtLeastVersion('2.1.263', '2.1.263')).toBe(true);
+    expect(isAtLeastVersion('2.1.283', '2.1.263')).toBe(true);
+    expect(isAtLeastVersion('2.2.0', '2.1.263')).toBe(true);
+    expect(isAtLeastVersion('1.0.0-beta.1', '1.0.0')).toBe(true);
+  });
+
+  it('rejects older or unparseable versions', () => {
+    expect(isAtLeastVersion('2.1.99', '2.1.263')).toBe(false);
+    expect(isAtLeastVersion('1.9.999', '2.0.0')).toBe(false);
+    expect(isAtLeastVersion('garbage', '1.0.0')).toBe(false);
+    expect(isAtLeastVersion(null, '1.0.0')).toBe(false);
   });
 });

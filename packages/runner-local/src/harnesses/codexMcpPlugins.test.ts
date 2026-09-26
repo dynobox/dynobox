@@ -1,4 +1,4 @@
-import {mkdir, mkdtemp, rm, symlink, writeFile} from 'node:fs/promises';
+import {mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -109,35 +109,12 @@ describe('cached Codex plugin metadata', () => {
     ]);
   });
 
-  it.each(['../escape@market', 'fixture@../market', 'fixture@market@other'])(
-    'rejects unsafe identities %s',
-    async (id) => {
-      const f = await fixture();
-      await expect(cachedCodexPluginServers(f.home, id)).rejects.toThrow(
-        'not supported',
-      );
-    },
-  );
-
-  it('rejects malformed metadata without exposing its contents', async () => {
+  it('ignores malformed metadata that Codex could not load either', async () => {
     const f = await fixture();
     const root = await f.version('1');
-    await writeFile(join(root, '.mcp.json'), 'PRIVATE_SENTINEL');
-    const error = await cachedCodexPluginServers(
-      f.home,
-      'fixture@market',
-    ).catch((error) => error);
-    expect(error).toBeInstanceOf(Error);
-    expect(String(error)).not.toContain('PRIVATE_SENTINEL');
-  });
-
-  it('rejects symlinked MCP metadata outside the plugin root', async () => {
-    const f = await fixture();
-    const root = await f.version('1');
-    await writeFile(join(f.home, 'outside.json'), '{}');
-    await symlink(join(f.home, 'outside.json'), join(root, '.mcp.json'));
-    await expect(
-      cachedCodexPluginServers(f.home, 'fixture@market'),
-    ).rejects.toThrow('not supported');
+    await writeFile(join(root, '.mcp.json'), 'not json');
+    expect(await cachedCodexPluginServers(f.home, 'fixture@market')).toEqual(
+      [],
+    );
   });
 });

@@ -18,13 +18,14 @@ afterEach(async () => {
 
 async function fixture(
   mode: 'call' | 'negative' | 'failed' | 'denied' | 'hang' = 'call',
+  toolName = 'get_issue',
 ) {
   const root = await mkdtemp(join(tmpdir(), 'dynobox-pi-native-'));
   cleanup.push(() => rm(root, {recursive: true, force: true}));
   const controller = await startMcpMockController({
     linear: {
       tools: {
-        get_issue: {
+        [toolName]: {
           inputSchema: {type: 'object'},
           response: {content: [{type: 'text', text: 'fixture-receipt-42'}]},
         },
@@ -52,7 +53,7 @@ async function fixture(
     requests.push(body);
     if (mode === 'hang') return;
     const tool = body.tools?.find((entry: {function?: {name?: string}}) =>
-      entry.function?.name?.endsWith('__get_issue'),
+      entry.function?.name?.startsWith('mcp__'),
     );
     const hasReceipt = JSON.stringify(body.messages).includes(
       'fixture-receipt-42',
@@ -189,7 +190,7 @@ Say fixture.
             : mode === 'failed'
               ? `http://127.0.0.1:1/${'a'.repeat(48)}`
               : controller.urls.linear!,
-        tools: ['get_issue'],
+        tools: [toolName],
       },
     },
   };
@@ -297,13 +298,30 @@ describe.skipIf(!executable)(
       30000,
     );
 
-    it('rejects registration overrides before model execution', async () => {
+    it('rejects tool restrictions that hide mocks before model execution', async () => {
       const f = await fixture('negative');
       await expect(
         runPiWithMcp({...f.options, extraArgs: ['--tools', 'read']}),
-      ).rejects.toMatchObject({category: 'configuration_failed'});
+      ).rejects.toMatchObject({category: 'not_ready'});
       expect(f.requests).toHaveLength(0);
     });
+
+    it('calls tools whose names Pi cannot register directly', async () => {
+      const f = await fixture('call', 'get.issue');
+      const result = await runPiWithMcp(f.options);
+      expect(result.output.metadata?.mcpRunToolEvents).toEqual([
+        expect.objectContaining({rawName: 'mcp__linear__get.issue'}),
+      ]);
+      const observation = await f.controller.finalize({
+        harnessReady: true,
+        harnessSucceeded: true,
+      });
+      expect(observation).toMatchObject({
+        ready: true,
+        failures: [],
+        calls: [{server: 'linear', tool: 'get.issue', category: 'success'}],
+      });
+    }, 30000);
 
     it('keeps default project trust and user skills', async () => {
       const f = await fixture('negative');
@@ -328,7 +346,7 @@ describe.skipIf(!executable)(
           ...f.options,
           input: {...f.options.input, timeoutMs: 2500},
         }),
-      ).rejects.toMatchObject({category: 'execution_failed'});
+      ).rejects.toMatchObject({category: 'timed_out'});
     }, 10000);
 
     it('keeps simultaneous sessions and controller logs independent', async () => {

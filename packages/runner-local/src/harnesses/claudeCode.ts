@@ -1,5 +1,3 @@
-import {realpath} from 'node:fs/promises';
-
 import type {PermissionMode} from '@dynobox/sdk';
 
 import {
@@ -58,26 +56,19 @@ export class ClaudeCodeHarness implements Harness {
   async prepareMcp(
     input: Pick<HarnessInput, 'workDir' | 'env'>,
   ): Promise<PreparedMcpHarness> {
-    const {runClaudeCodeWithMcp, ClaudeCodeMcpError} =
-      await import('./claudeCodeMcp.js');
-    const cwd = await realpath(input.workDir);
-    const executable = await resolveMcpExecutable(
+    const {runClaudeCodeWithMcp} = await import('./claudeCodeMcp.js');
+    const {executable, workDir} = await resolveMcpExecutable(
       this.executable,
-      cwd,
-      input.env,
+      input,
     );
-    if (executable === undefined)
-      throw new ClaudeCodeMcpError('configuration_failed');
-    const resolvedExecutable = executable;
     const extraArgs = [...this.extraArgs];
     return {
       run: (runInput, servers) =>
         runClaudeCodeWithMcp({
-          executable: resolvedExecutable,
-          input: {...runInput, workDir: cwd},
+          executable,
+          input: {...runInput, workDir},
           extraArgs,
           servers,
-          ...(runInput.signal === undefined ? {} : {signal: runInput.signal}),
         }),
     };
   }

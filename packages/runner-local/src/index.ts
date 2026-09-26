@@ -10,7 +10,7 @@ import {
   preEvaluateAnyOfObservationBranches,
 } from '@dynobox/evaluators';
 import {DynoboxConfigError} from '@dynobox/sdk/compiler';
-import {irScenarioSchema, type McpObservation} from '@dynobox/sdk/ir';
+import type {McpObservation} from '@dynobox/sdk/ir';
 import {execa} from 'execa';
 
 import {type CliMockController, startCliMockController} from './cliMocks.js';
@@ -19,17 +19,13 @@ import {
   harnessExitDiagnostic,
   setupFailureDiagnostic,
 } from './diagnostics.js';
-import {AntigravityMcpError} from './harnesses/antigravityMcp.js';
-import {ClaudeCodeMcpError} from './harnesses/claudeCodeMcp.js';
-import {CodexMcpError} from './harnesses/codexMcp.js';
 import type {
   Harness,
   HarnessResult,
   HarnessRunOutput,
   ToolEvent,
 } from './harnesses/index.js';
-import {OpenCodeMcpError} from './harnesses/opencodeMcp.js';
-import {PiMcpError} from './harnesses/piMcp.js';
+import {mcpDeadline, McpHarnessError} from './harnesses/mcpError.js';
 import type {PreparedMcpHarness} from './harnesses/types.js';
 import type {HttpCapture} from './http/proxy.js';
 import {startHttpCapture} from './http/proxy.js';
@@ -152,27 +148,20 @@ export function assertMcpExecutionSupported(
         'MCP mock execution is not enabled for this harness. Use dynolocal with claude-code, codex, opencode, pi, or antigravity for experimental local execution.',
       );
     }
-    if (
-      scenario.mcpMocks === undefined ||
-      !irScenarioSchema.safeParse(scenario).success
-    )
+    if (scenario.mcpMocks === undefined)
       throw new DynoboxConfigError(
-        'Invalid MCP mock scenario or assertion reference.',
+        'MCP assertions require mcpMocks on the scenario.',
       );
   }
 }
 
-function mcpAdapterFailureCategory(
+function mcpFailure(
   error: unknown,
   fallback: LocalMcpSummary['failures'][number],
-): LocalMcpSummary['failures'][number] {
-  return error instanceof AntigravityMcpError ||
-    error instanceof ClaudeCodeMcpError ||
-    error instanceof CodexMcpError ||
-    error instanceof OpenCodeMcpError ||
-    error instanceof PiMcpError
-    ? error.category
-    : fallback;
+): {category: LocalMcpSummary['failures'][number]; message: string} {
+  return error instanceof McpHarnessError
+    ? {category: error.category, message: error.message}
+    : {category: fallback, message: errorMessage(error)};
 }
 
 /**
@@ -223,15 +212,6 @@ export async function runJob(
       throw new DynoboxConfigError(
         'The registered harness does not implement isolated MCP execution.',
       );
-    if (
-      options.timeoutMs !== undefined &&
-      (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs <= 0)
-    )
-      throw new DynoboxConfigError(
-        'MCP execution timeout must be a positive integer.',
-      );
-    // Snapshot definitions/assertions before user setup and asynchronous work.
-    job = {...job, scenario: irScenarioSchema.parse(job.scenario)};
   }
   // --- 1. Work directory ---------------------------------------------------
   const workDir = await createWorkDir(options.scratchRoot);
@@ -266,8 +246,7 @@ export async function runJob(
     workDir,
   };
   if (options.env !== undefined) setupOptions.env = options.env;
-  if (usesMcp && options.signal !== undefined)
-    setupOptions.signal = options.signal;
+  if (options.signal !== undefined) setupOptions.signal = options.signal;
 
   emitProgress(options, {
     type: 'setup.started',
@@ -328,13 +307,8 @@ export async function runJob(
     : Promise.resolve()
         .then(() => harness.version?.() ?? null)
         .catch(() => null);
-  const mcpDeadline = Date.now() + (options.timeoutMs ?? 120_000);
-  const remainingMcpTime = () => {
-    const remaining = mcpDeadline - Date.now();
-    if (remaining <= 0 || options.signal?.aborted)
-      throw new ClaudeCodeMcpError('execution_failed');
-    return remaining;
-  };
+  // One deadline covers MCP preparation, controller start and the harness run.
+  const remainingMcpTime = mcpDeadline(options.timeoutMs, options.signal);
   let preparedMcp: PreparedMcpHarness | undefined;
   if (usesMcp) {
     try {
@@ -344,6 +318,8 @@ export async function runJob(
         env: options.env ?? {},
       });
     } catch (error) {
+      options.signal?.throwIfAborted();
+      const failure = mcpFailure(error, 'configuration_failed');
       emitProgress(options, {
         type: 'harness.completed',
         job,
@@ -359,10 +335,10 @@ export async function runJob(
         mcp: {
           ready: false,
           finalized: false,
-          failures: [mcpAdapterFailureCategory(error, 'configuration_failed')],
+          failures: [failure.category],
           calls: [],
         },
-        diagnostics: ['MCP preparation failed.'],
+        diagnostics: [`MCP preparation failed: ${failure.message}`],
         timing: buildTiming({setupMs}),
       });
     }
@@ -432,10 +408,10 @@ export async function runJob(
   let mcpObservation: McpObservation | undefined;
   let mcpReady = false;
   const mcpFailures = new Set<LocalMcpSummary['failures'][number]>();
-  const recordMcpError = (error: unknown) => {
-    mcpFailures.add(mcpAdapterFailureCategory(error, 'execution_failed'));
-    if (error instanceof ClaudeCodeMcpError && error.priorCategory)
-      mcpFailures.add(error.priorCategory);
+  const recordMcpError = (error: unknown): string => {
+    const failure = mcpFailure(error, 'execution_failed');
+    mcpFailures.add(failure.category);
+    return failure.message;
   };
   const finalizeMcp = async (succeeded: boolean) => {
     if (mcpController === undefined || mcpObservation !== undefined) return;
@@ -453,15 +429,15 @@ export async function runJob(
   try {
     result = await executeHarnessAndVerify(harness);
   } catch (error) {
-    if (!usesMcp) throw error;
-    recordMcpError(error);
+    if (!usesMcp || options.signal?.aborted) throw error;
+    const message = recordMcpError(error);
     result = buildResult(job, {
       status: 'harness_failed',
       workDir,
       setupResult,
       artifacts,
       harnessVersion: await harnessVersion,
-      diagnostics: ['MCP job execution failed.'],
+      diagnostics: [`MCP job execution failed: ${message}`],
       timing: buildTiming({setupMs}),
     });
   } finally {
@@ -596,7 +572,8 @@ export async function runJob(
         );
       }
     } catch (error) {
-      if (usesMcp) recordMcpError(error);
+      options.signal?.throwIfAborted();
+      const mcpMessage = usesMcp ? recordMcpError(error) : undefined;
       await finalizeMcp(false);
       await cliMockController?.finalizePendingCalls();
       const cliMockFailures = cliMockController?.failures() ?? [];
@@ -614,8 +591,8 @@ export async function runJob(
         artifacts,
         harnessVersion: await harnessVersion,
         diagnostics: [
-          usesMcp
-            ? 'MCP harness execution failed.'
+          mcpMessage !== undefined
+            ? `MCP harness execution failed: ${mcpMessage}`
             : `Harness "${harness.id}" failed to run: ${errorMessage(error)}`,
           ...cliMockFailures.map((failure) => failure.message),
         ],
@@ -671,6 +648,13 @@ export async function runJob(
     let harnessResult: HarnessResult;
     try {
       harnessResult = harness.extractResult(harnessOutput);
+      // MCP adapters report tool events under logical mock names.
+      const mcpToolEvents = harnessOutput.metadata?.mcpRunToolEvents;
+      if (Array.isArray(mcpToolEvents))
+        harnessResult = {
+          ...harnessResult,
+          toolEvents: mcpToolEvents as ToolEvent[],
+        };
     } catch (error) {
       emitProgress(options, {
         type: 'harness.completed',
@@ -691,9 +675,7 @@ export async function runJob(
         httpEvents,
         cliMockCalls: cliMockController?.calls() ?? [],
         diagnostics: [
-          usesMcp
-            ? 'MCP harness result extraction failed.'
-            : `Harness "${harness.id}" failed to extract result: ${errorMessage(error)}`,
+          `Harness "${harness.id}" failed to extract result: ${errorMessage(error)}`,
         ],
         timing: buildTiming({
           setupMs,
@@ -722,11 +704,7 @@ export async function runJob(
         harnessResult,
         httpEvents,
         cliMockCalls: cliMockController?.calls() ?? [],
-        diagnostics: [
-          usesMcp
-            ? 'MCP harness exited unsuccessfully.'
-            : harnessExitDiagnostic(harnessResult, harnessOutput),
-        ],
+        diagnostics: [harnessExitDiagnostic(harnessResult, harnessOutput)],
         warnings: [
           ...permissionWarningsFromToolEvents(harnessResult.toolEvents),
           ...permissionWarningsFromHarnessFailure(harnessOutput, harnessResult),
@@ -794,9 +772,7 @@ export async function runJob(
     const verifyOptions: Parameters<typeof runVerifyCommands>[0] = {
       scenario: job.scenario,
       workDir,
-      ...(usesMcp && options.signal !== undefined
-        ? {signal: options.signal}
-        : {}),
+      ...(options.signal === undefined ? {} : {signal: options.signal}),
     };
     // Open a new mock phase so verify traffic is recorded separately from the
     // harness-phase snapshot used above for observation assertions.
@@ -810,11 +786,9 @@ export async function runJob(
     if (options.env !== undefined || cliMockController !== undefined) {
       verifyOptions.env = {...(options.env ?? {}), ...verifyCliMockEnv};
     }
-    if (usesMcp && options.signal?.aborted)
-      throw new ClaudeCodeMcpError('execution_failed');
+    options.signal?.throwIfAborted();
     const verifyCommandResults = await runVerifyCommands(verifyOptions);
-    if (usesMcp && options.signal?.aborted)
-      throw new ClaudeCodeMcpError('execution_failed');
+    options.signal?.throwIfAborted();
     await cliMockController?.finalizePendingCalls();
 
     // --- 11. Verify assertions + pass/fail ---------------------------------

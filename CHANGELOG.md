@@ -8,6 +8,12 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Stop a run on the first SIGINT or SIGTERM: running harness processes are
+  cancelled, no further jobs start, mocks clean up, and the CLI exits with code
+  130. A second signal exits immediately.
+
 ---
 
 ## dynobox@0.13.0 — 2026-08-26

@@ -1,5 +1,4 @@
 import {realpathSync} from 'node:fs';
-import {realpath} from 'node:fs/promises';
 
 import type {PermissionMode} from '@dynobox/sdk';
 import {execa} from 'execa';
@@ -67,22 +66,17 @@ export class OpenCodeHarness implements Harness {
   async prepareMcp(
     input: Pick<HarnessInput, 'workDir' | 'env'>,
   ): Promise<PreparedMcpHarness> {
-    const {runOpenCodeWithMcp, OpenCodeMcpError} =
-      await import('./opencodeMcp.js');
-    const cwd = await realpath(input.workDir);
-    const executable = await resolveMcpExecutable(
+    const {runOpenCodeWithMcp} = await import('./opencodeMcp.js');
+    const {executable, workDir} = await resolveMcpExecutable(
       this.executable,
-      cwd,
-      input.env,
+      input,
     );
-    if (!executable) throw new OpenCodeMcpError('configuration_failed');
-    const pinned = executable;
     const extraArgs = [...this.extraArgs];
     return {
       run: (runInput, servers) =>
         runOpenCodeWithMcp({
-          executable: pinned,
-          input: {...runInput, workDir: cwd},
+          executable,
+          input: {...runInput, workDir},
           servers,
           extraArgs,
         }),
@@ -137,9 +131,7 @@ export class OpenCodeHarness implements Harness {
       durationMs: raw.durationMs,
       transcript: raw.stdout,
       finalMessage: parsed.finalMessage,
-      toolEvents: Array.isArray(raw.metadata?.mcpRunToolEvents)
-        ? (raw.metadata.mcpRunToolEvents as ToolEvent[])
-        : parsed.toolEvents,
+      toolEvents: parsed.toolEvents,
       ...(parsed.errorMessage === undefined
         ? {}
         : {errorMessage: parsed.errorMessage}),

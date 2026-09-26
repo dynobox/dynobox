@@ -30,6 +30,9 @@ export async function runStreamingHarness(
       ? {}
       : {input: options.processInput}),
     ...(input.timeoutMs === undefined ? {} : {timeout: input.timeoutMs}),
+    ...(input.signal === undefined
+      ? {}
+      : {cancelSignal: input.signal, forceKillAfterDelay: 1000}),
   };
 
   const subprocess = execa(options.executable, options.args, execaOptions);

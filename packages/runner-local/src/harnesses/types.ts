@@ -54,7 +54,7 @@ export type HarnessResult = {
   errorMessage?: string;
 };
 
-/** Sensitive, invocation-local controller connections. Never report these URLs. */
+/** Loopback mock server URLs and declared tool names for one invocation. */
 export type McpServerConnections = Readonly<
   Record<string, {url: string; tools: readonly string[]}>
 >;

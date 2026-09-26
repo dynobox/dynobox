@@ -48,6 +48,29 @@ describe('runScenarioExecutions', () => {
     });
   });
 
+  it('starts no further jobs once the run is cancelled', async () => {
+    const plain = scenario('plain');
+    const jobs = [
+      job(plain, 'claude-code', 0),
+      job(plain, 'claude-code', 1),
+      job(scenario('later'), 'claude-code', 0),
+    ];
+    const abort = new AbortController();
+    const starts: string[] = [];
+    const run = runScenarioExecutions(
+      [dyno(jobs)],
+      async (entry) => {
+        starts.push(entry.id);
+        abort.abort();
+        return result(entry);
+      },
+      {},
+      abort.signal,
+    );
+    await expect(run).rejects.toMatchObject({name: 'AbortError'});
+    expect(starts).toEqual([jobs[0]!.id]);
+  });
+
   it('gives different models of the same harness separate lanes', () => {
     const testScenario = scenario('models');
     const executions = buildScenarioExecutions([

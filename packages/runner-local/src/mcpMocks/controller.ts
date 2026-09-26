@@ -1,4 +1,3 @@
-import {randomBytes} from 'node:crypto';
 import {
   createServer,
   type IncomingMessage,
@@ -25,19 +24,9 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 
-const DEFAULT_LIMITS = {
-  requestBytes: 256 * 1024,
-  resultBytes: 256 * 1024,
-  definitionBytes: 4 * 1024 * 1024,
-  logBytes: 8 * 1024 * 1024,
-  calls: 1000,
-  concurrency: 32,
-  connections: 64,
-  requestMs: 5000,
-  cleanupMs: 1000,
-};
+const REQUEST_TIMEOUT_MS = 5000;
+const CLEANUP_TIMEOUT_MS = 1000;
 
-type Limits = typeof DEFAULT_LIMITS;
 type MutableCall = {-readonly [K in keyof McpCallRecord]: McpCallRecord[K]};
 type RequestState = {call?: MutableCall; task: Promise<void>};
 type ToolDefinition = ReturnType<
@@ -46,9 +35,8 @@ type ToolDefinition = ReturnType<
 type ToolResult = Extract<ToolDefinition, {response: unknown}>['response'];
 
 export type McpMockController = {
-  /** Sensitive runtime configuration; never put these URLs in report evidence. */
   readonly urls: Readonly<Record<string, string>>;
-  /** Adapter confirmation must describe the actual child invocation. */
+  /** Seal the call log. Adapter confirmation must describe the actual child invocation. */
   finalize(outcome: {
     harnessReady: boolean;
     harnessSucceeded: boolean;
@@ -58,57 +46,16 @@ export type McpMockController = {
 /** Local fixture-only MCP transport. There is deliberately no forwarding path. */
 export async function startMcpMockController(
   definitions: unknown,
-  options: Partial<Limits> = {},
 ): Promise<McpMockController> {
-  const limits = {...DEFAULT_LIMITS, ...options};
-  if (
-    Object.values(limits).some(
-      (value) => !Number.isSafeInteger(value) || value <= 0,
-    )
-  ) {
-    throw new Error('Invalid MCP controller limits.');
-  }
   const mocks = mcpMocksSchema.parse(definitions);
-  if (byteLength(mocks) > limits.definitionBytes)
-    throw new Error('MCP definition size limit exceeded.');
   const tools = Object.fromEntries(
     Object.entries(mocks).map(([name, server]) => [
       name,
       Object.keys(server.tools),
     ]),
   );
-  for (const server of Object.values(mocks)) {
-    const listed = Object.entries(server.tools).map(([name, tool]) => ({
-      name,
-      inputSchema: tool.inputSchema,
-      ...(tool.description === undefined
-        ? {}
-        : {description: tool.description}),
-    }));
-    if (byteLength({tools: listed}) > limits.resultBytes)
-      throw new Error('MCP tool-list size limit exceeded.');
-    for (const tool of Object.values(server.tools)) {
-      const responses =
-        'response' in tool
-          ? [tool.response]
-          : [
-              ...tool.responses,
-              ...(typeof tool.onExhausted === 'object'
-                ? [tool.onExhausted]
-                : []),
-            ];
-      if (
-        responses.some((response) => byteLength(response) > limits.resultBytes)
-      )
-        throw new Error('MCP response size limit exceeded.');
-    }
-  }
-
   const routes = new Map(
-    Object.keys(mocks).map((name) => [
-      `/${randomBytes(24).toString('hex')}`,
-      name,
-    ]),
+    Object.keys(mocks).map((name) => [`/${encodeURIComponent(name)}`, name]),
   );
   const indexes = new Map<string, number>();
   const calls: MutableCall[] = [];
@@ -117,48 +64,27 @@ export async function startMcpMockController(
   const discovered = new Set<string>();
   const active = new Set<RequestState>();
   const sockets = new Set<Socket>();
-  let logBytes = 0;
   let sealed = false;
   let finalization: Promise<McpObservation> | undefined;
-  let host = '';
 
-  const listener = createServer(
-    {
-      headersTimeout: limits.requestMs,
-      requestTimeout: limits.requestMs,
-      connectionsCheckingInterval: Math.min(limits.requestMs, 1000),
-    },
-    (request, response) => {
-      const name = routes.get(request.url ?? '');
-      if (sealed || name === undefined) return reject(response, 404);
-      if (
-        request.headers.host !== host ||
-        (request.headers.origin !== undefined &&
-          request.headers.origin !== `http://${host}`)
-      )
-        return reject(response, 403);
-      // V1 has no server-initiated events or persistent sessions.
-      if (request.method !== 'POST') return reject(response, 405);
-      if (active.size >= limits.concurrency) {
-        failures.add('limit_exceeded');
-        return reject(response, 503);
-      }
-      const state: RequestState = {task: Promise.resolve()};
-      active.add(state);
-      state.task = handleRequest(name, request, response, state).finally(() =>
-        active.delete(state),
-      );
-    },
-  );
+  const listener = createServer((request, response) => {
+    const name = routes.get(request.url ?? '');
+    if (sealed || name === undefined) return reject(response, 404);
+    // V1 has no server-initiated events or persistent sessions.
+    if (request.method !== 'POST') return reject(response, 405);
+    const state: RequestState = {task: Promise.resolve()};
+    active.add(state);
+    state.task = handleRequest(name, request, response, state).finally(() =>
+      active.delete(state),
+    );
+  });
   listener.on('connection', (socket) => {
-    if (sealed || sockets.size >= limits.connections) {
-      if (!sealed) failures.add('limit_exceeded');
+    if (sealed) {
       socket.destroy();
       return;
     }
     sockets.add(socket);
     socket.on('close', () => sockets.delete(socket));
-    socket.setTimeout(limits.requestMs, () => socket.destroy());
   });
   listener.on('clientError', (_error, socket) => {
     if (!sealed) failures.add('protocol_failed');
@@ -177,7 +103,7 @@ export async function startMcpMockController(
   const address = listener.address();
   if (address === null || typeof address === 'string')
     throw new Error('MCP listener did not bind.');
-  host = `127.0.0.1:${address.port}`;
+  const host = `127.0.0.1:${address.port}`;
 
   async function handleRequest(
     name: string,
@@ -200,19 +126,10 @@ export async function startMcpMockController(
       if (!sealed) failures.add('protocol_failed');
       request.destroy();
       response.destroy();
-    }, limits.requestMs);
+    }, REQUEST_TIMEOUT_MS);
     try {
       const chunks: Buffer[] = [];
-      let bytes = 0;
-      for await (const chunk of request) {
-        bytes += Buffer.byteLength(chunk);
-        if (bytes > limits.requestBytes) {
-          if (!sealed) failures.add('limit_exceeded');
-          request.destroy();
-          return;
-        }
-        chunks.push(Buffer.from(chunk));
-      }
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
       if (sealed) return reject(response, 404);
       const message = JSONRPCMessageSchema.parse(
         JSON.parse(Buffer.concat(chunks).toString('utf8')),
@@ -277,17 +194,8 @@ export async function startMcpMockController(
           input,
           category: 'success',
         };
-        const size = byteLength(record);
-        if (calls.length >= limits.calls || logBytes + size > limits.logBytes) {
-          failures.add('limit_exceeded');
-          throw new McpError(
-            ErrorCode.InternalError,
-            'MCP call log limit exceeded.',
-          );
-        }
         calls.push(record);
         state.call = record;
-        logBytes += size;
         if (!Object.hasOwn(definition.tools, call.params.name)) {
           record.category = 'unknown_tool';
           failures.add('unknown_tool');
@@ -342,7 +250,7 @@ export async function startMcpMockController(
       }
       try {
         if (server !== undefined)
-          await bounded(server.close(), limits.cleanupMs);
+          await bounded(server.close(), CLEANUP_TIMEOUT_MS);
       } catch {
         failures.add('cleanup_failed');
       }
@@ -374,25 +282,23 @@ export async function startMcpMockController(
     try {
       await bounded(
         Promise.all([closed, ...pending.map((state) => state.task)]),
-        limits.cleanupMs,
+        CLEANUP_TIMEOUT_MS,
       );
     } catch {
       failures.add('cleanup_failed');
     }
-    return deepFreeze({
+    return {
       finalized: true,
       ready,
       failures: [...failures],
       tools,
       calls: structuredClone(calls),
-    });
+    };
   }
 
   return {
-    urls: Object.freeze(
-      Object.fromEntries(
-        [...routes].map(([path, name]) => [name, `http://${host}${path}`]),
-      ),
+    urls: Object.fromEntries(
+      [...routes].map(([path, name]) => [name, `http://${host}${path}`]),
     ),
     finalize(outcome) {
       finalization ??= finalize(outcome);
@@ -407,10 +313,6 @@ function reject(response: ServerResponse, status: number): void {
     Connection: 'close',
   });
   response.end('MCP request rejected.');
-}
-
-function byteLength(value: unknown): number {
-  return Buffer.byteLength(JSON.stringify(value));
 }
 
 async function bounded<T>(task: Promise<T>, timeoutMs: number): Promise<T> {
@@ -428,12 +330,4 @@ async function bounded<T>(task: Promise<T>, timeoutMs: number): Promise<T> {
   } finally {
     clearTimeout(timer);
   }
-}
-
-function deepFreeze<T>(value: T): T {
-  if (value !== null && typeof value === 'object') {
-    for (const child of Object.values(value)) deepFreeze(child);
-    Object.freeze(value);
-  }
-  return value;
 }

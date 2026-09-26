@@ -30,3 +30,21 @@ export function parseVersion(output: string): string | null {
     )?.[1] ?? null
   );
 }
+
+/** True when a parsed `major.minor.patch` version is at least `minimum`. */
+export function isAtLeastVersion(
+  version: string | null,
+  minimum: string,
+): boolean {
+  const parse = (value: string) =>
+    value.split(/[-+]/)[0]!.split('.').map(Number);
+  if (version === null) return false;
+  const actual = parse(version);
+  const wanted = parse(minimum);
+  if (actual.some((part) => !Number.isInteger(part))) return false;
+  for (let index = 0; index < wanted.length; index++) {
+    const difference = (actual[index] ?? 0) - wanted[index]!;
+    if (difference !== 0) return difference > 0;
+  }
+  return true;
+}

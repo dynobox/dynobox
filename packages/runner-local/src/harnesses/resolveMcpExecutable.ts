@@ -2,28 +2,33 @@ import {constants} from 'node:fs';
 import {access, realpath} from 'node:fs/promises';
 import {delimiter, resolve} from 'node:path';
 
+import {McpHarnessError} from './mcpError.js';
+
 /**
- * Pin the installed harness before CLI mocks change PATH for the job.
- * Return undefined when no executable on the caller's original PATH is usable.
+ * Pin the installed harness before CLI mocks change PATH for the job, so a
+ * mocked command can never stand in for the harness itself.
  */
 export async function resolveMcpExecutable(
   executable: string,
-  cwd: string,
-  env: Readonly<Record<string, string>>,
-): Promise<string | undefined> {
+  input: {workDir: string; env: Readonly<Record<string, string>>},
+): Promise<{executable: string; workDir: string}> {
+  const workDir = await realpath(input.workDir);
   const candidates =
     executable.includes('/') || executable.includes('\\')
-      ? [resolve(cwd, executable)]
-      : (env.PATH ?? process.env.PATH ?? '')
+      ? [resolve(workDir, executable)]
+      : (input.env.PATH ?? process.env.PATH ?? '')
           .split(delimiter)
-          .map((directory) => resolve(cwd, directory, executable));
+          .map((directory) => resolve(workDir, directory, executable));
   for (const candidate of candidates) {
     try {
       await access(candidate, constants.X_OK);
-      return await realpath(candidate);
+      return {executable: await realpath(candidate), workDir};
     } catch {
       // Continue searching the original PATH.
     }
   }
-  return undefined;
+  throw new McpHarnessError(
+    'configuration_failed',
+    `Could not find the "${executable}" executable on PATH.`,
+  );
 }

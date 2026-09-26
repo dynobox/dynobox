@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 
 import {
+  runStreamingHarness,
   ToolEventLineStream,
   type ToolEventLineStreamOptions,
 } from './runStreamingHarness.js';
@@ -85,5 +86,27 @@ describe('ToolEventLineStream', () => {
     stream.write('keep\nduplicate\n');
 
     expect(events.map((event) => event.input)).toEqual(['keep']);
+  });
+});
+
+describe('runStreamingHarness', () => {
+  it('stops the harness process when the run is cancelled', async () => {
+    const abort = new AbortController();
+    const started = Date.now();
+    const pending = runStreamingHarness({
+      executable: process.execPath,
+      args: ['-e', 'setInterval(() => {}, 1000)'],
+      input: {
+        prompt: '',
+        workDir: process.cwd(),
+        env: {},
+        signal: abort.signal,
+      },
+      parseLine: () => ({toolEvents: []}),
+    });
+    setTimeout(() => abort.abort(), 50);
+    const output = await pending;
+    expect(output.exitCode).not.toBe(0);
+    expect(Date.now() - started).toBeLessThan(5000);
   });
 });

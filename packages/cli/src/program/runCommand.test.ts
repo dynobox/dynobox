@@ -27,7 +27,11 @@ import {
   stripAnsi,
 } from '../testUtils.js';
 import {executeCli} from './execute.js';
-import {configErrorExitCode, runFailureExitCode} from './exitCodes.js';
+import {
+  cancelledExitCode,
+  configErrorExitCode,
+  runFailureExitCode,
+} from './exitCodes.js';
 
 const fixtures = createFixtureSet('runCommand');
 const COMMIT_SKILL_PATH = '/tmp/work/.agents/skills/commit/SKILL.md';
@@ -432,6 +436,24 @@ export default defineDyno({
         },
       ],
     });
+  });
+
+  it('stops the run with exit code 130 on SIGINT', async () => {
+    const harness = createPassingHarness();
+    const run = harness.run.bind(harness);
+    const runSpy = vi.spyOn(harness, 'run').mockImplementation((input) => {
+      process.emit('SIGINT');
+      return run(input);
+    });
+
+    const result = await executeCli(['run', fixtures.validConfigPath], {
+      harnesses: [harness],
+    });
+
+    expect(result.exitCode).toBe(cancelledExitCode);
+    expect(result.stderr).toContain('Run cancelled.');
+    expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(process.listenerCount('SIGINT')).toBe(0);
   });
 
   it('errors before running when --save-run has no token', async () => {

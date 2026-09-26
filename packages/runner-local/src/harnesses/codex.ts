@@ -1,5 +1,4 @@
 import {realpathSync} from 'node:fs';
-import {realpath} from 'node:fs/promises';
 
 import type {PermissionMode} from '@dynobox/sdk';
 
@@ -58,24 +57,19 @@ export class CodexHarness implements Harness {
   async prepareMcp(
     input: Pick<HarnessInput, 'workDir' | 'env'>,
   ): Promise<PreparedMcpHarness> {
-    const {runCodexWithMcp, CodexMcpError} = await import('./codexMcp.js');
-    const cwd = await realpath(input.workDir);
-    const executable = await resolveMcpExecutable(
+    const {runCodexWithMcp} = await import('./codexMcp.js');
+    const {executable, workDir} = await resolveMcpExecutable(
       this.executable,
-      cwd,
-      input.env,
+      input,
     );
-    if (executable === undefined)
-      throw new CodexMcpError('configuration_failed');
-    const resolvedExecutable = executable;
     const extraArgs = [...this.extraArgs];
     return {
       run: (runInput, servers) =>
         runCodexWithMcp({
-          executable: resolvedExecutable,
-          input: {...runInput, workDir: cwd},
-          extraArgs,
+          executable,
+          input: {...runInput, workDir},
           servers,
+          extraArgs,
         }),
     };
   }
@@ -105,9 +99,7 @@ export class CodexHarness implements Harness {
       durationMs: raw.durationMs,
       transcript: raw.stdout,
       finalMessage: parsed.finalMessage,
-      toolEvents: Array.isArray(raw.metadata?.mcpRunToolEvents)
-        ? (raw.metadata.mcpRunToolEvents as ToolEvent[])
-        : parsed.toolEvents,
+      toolEvents: parsed.toolEvents,
     };
   }
 }

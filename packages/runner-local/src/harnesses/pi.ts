@@ -1,5 +1,3 @@
-import {realpath} from 'node:fs/promises';
-
 import type {PermissionMode} from '@dynobox/sdk';
 
 import {
@@ -61,21 +59,17 @@ export class PiHarness implements Harness {
   async prepareMcp(
     input: Pick<HarnessInput, 'workDir' | 'env'>,
   ): Promise<PreparedMcpHarness> {
-    const {runPiWithMcp, PiMcpError} = await import('./piMcp.js');
-    const cwd = await realpath(input.workDir);
-    const executable = await resolveMcpExecutable(
+    const {runPiWithMcp} = await import('./piMcp.js');
+    const {executable, workDir} = await resolveMcpExecutable(
       this.executable,
-      cwd,
-      input.env,
+      input,
     );
-    if (!executable) throw new PiMcpError('configuration_failed');
-    const pinned = executable;
     const extraArgs = [...this.extraArgs];
     return {
       run: (runInput, servers) =>
         runPiWithMcp({
-          executable: pinned,
-          input: {...runInput, workDir: cwd},
+          executable,
+          input: {...runInput, workDir},
           servers,
           extraArgs,
         }),

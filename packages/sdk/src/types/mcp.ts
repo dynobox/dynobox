@@ -53,13 +53,12 @@ export type McpCallCategory =
 export type McpMockFailure =
   | 'unknown_tool'
   | 'exhausted'
-  | 'limit_exceeded'
   | 'protocol_failed'
   | 'pending_calls'
   | 'cleanup_failed'
   | 'not_ready';
 
-/** In-memory evidence only. Never serialize inputs into reports or uploads. */
+/** In-memory evidence; reports carry only the call metadata. */
 export type McpCallRecord = {
   readonly sequence: number;
   readonly server: string;

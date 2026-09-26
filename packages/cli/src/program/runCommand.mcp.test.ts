@@ -155,7 +155,6 @@ describe('MCP CLI execution', () => {
     expect(launches).toHaveLength(2);
     expect(launches[1].args).toContain('--allowedTools=mcp__linear__get_issue');
     expect(launches[1].args).not.toContain('bypassPermissions');
-    expect(launches[0].path).toBe(launches[1].path);
     await expect(readFile(launches[1].path)).rejects.toThrow();
     await expect(readFile(dirname(launches[1].path))).rejects.toThrow();
   });
