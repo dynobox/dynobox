@@ -167,6 +167,14 @@ export async function runAntigravityWithMcp(options: {
         createdAgentsDir ? rmdir(dirname(projectConfig)).catch(() => {}) : {},
       ),
       rm(projectRecord, {force: true}),
+      // Antigravity copies each MCP tool definition here and the model reads
+      // it. The inherited-source check means only mocks can own these names.
+      ...Object.keys(servers).map((name) =>
+        rm(join(home, '.gemini', 'antigravity-cli', 'mcp', name), {
+          recursive: true,
+          force: true,
+        }).catch(() => {}),
+      ),
     ]);
   }
 }

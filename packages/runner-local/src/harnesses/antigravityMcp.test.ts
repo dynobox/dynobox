@@ -177,6 +177,9 @@ describe.skipIf(!executable)(
         await expect(readdir(join(f.work, '.agents'))).rejects.toMatchObject({
           code: 'ENOENT',
         });
+        await expect(
+          readdir(join(f.home, '.gemini', 'antigravity-cli', 'mcp', 'linear')),
+        ).rejects.toMatchObject({code: 'ENOENT'});
       },
     );
 
