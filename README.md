@@ -71,6 +71,12 @@ account-installed plugin MCP servers cannot yet be excluded from a CLI run.
 MCP runs cannot be uploaded, and the published CLI does not enable MCP
 execution by default.
 
+Mock server and tool names can use only letters, digits, `_` and `-`. Models
+see each tool as `mcp__<server>__<tool>`, and that name must be 64 characters
+or fewer. `dynobox validate` rejects other names. A Codex or OpenCode run fails
+if your harness config already has an MCP server with the same name as a mock.
+To use the mock, rename or remove that server.
+
 Each adapter requires a minimum harness version (Claude Code 2.1.263, Codex
 0.153.4, OpenCode 1.18.26, Pi 0.84.2, Antigravity 1.2.11); newer releases run
 too. MCP jobs follow the same timeout as other jobs and report a `timed_out`
