@@ -1,4 +1,11 @@
-import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -36,9 +43,15 @@ async function fixture(
   );
   const requests: Record<string, unknown>[] = [];
   let realContacts = 0;
+  let globalContacts = 0;
   const provider = createServer(async (request, response) => {
     if (request.url === '/real-mcp') {
       realContacts++;
+      response.writeHead(503).end();
+      return;
+    }
+    if (request.url === '/global-mcp') {
+      globalContacts++;
       response.writeHead(503).end();
       return;
     }
@@ -121,6 +134,15 @@ async function fixture(
   const configPath = join(root, 'opencode.json');
   const source = JSON.stringify(config);
   await writeFile(configPath, source);
+  const globalConfigPath = join(root, 'config', 'opencode', 'opencode.json');
+  const globalSource = JSON.stringify({
+    $schema: 'https://opencode.ai/config.json',
+    mcp: {
+      global: {type: 'remote', url: `${base}/global-mcp`, oauth: false},
+    },
+  });
+  await mkdir(join(root, 'config', 'opencode'), {recursive: true});
+  await writeFile(globalConfigPath, globalSource);
   const env = {
     HOME: root,
     XDG_CONFIG_HOME: join(root, 'config'),
@@ -137,6 +159,20 @@ async function fixture(
     join(root, '.agents', 'skills', 'fixture', 'SKILL.md'),
     '---\nname: fixture\ndescription: Native fixture skill\n---\nSay fixture.\n',
   );
+  const pluginMarkers = [
+    join(root, 'project-plugin-loaded'),
+    join(root, 'global-plugin-loaded'),
+  ];
+  for (const [directory, marker] of [
+    [join(root, '.opencode', 'plugins'), pluginMarkers[0]!],
+    [join(root, 'config', 'opencode', 'plugins'), pluginMarkers[1]!],
+  ] as const) {
+    await mkdir(directory, {recursive: true});
+    await writeFile(
+      join(directory, 'probe.js'),
+      `import {writeFileSync} from 'node:fs'; export const Probe = async () => { writeFileSync(${JSON.stringify(marker)}, 'loaded'); return {} };`,
+    );
+  }
   const options = {
     executable: executable!,
     input: {
@@ -164,13 +200,63 @@ async function fixture(
     marker,
     configPath,
     source,
+    globalConfigPath,
+    globalSource,
+    pluginMarkers,
     contacts: () => realContacts,
+    globalContacts: () => globalContacts,
   };
 }
 
 describe.skipIf(!executable)(
   'native OpenCode MCP runtime (local model, no credits)',
   () => {
+    it('loads the planted plugin shape without --pure', async () => {
+      const root = await realpath(
+        await mkdtemp(join(tmpdir(), 'dynobox-opencode-plugin-control-')),
+      );
+      cleanup.push(() => rm(root, {recursive: true, force: true}));
+      const markers = [
+        join(root, 'project-plugin-loaded'),
+        join(root, 'global-plugin-loaded'),
+      ];
+      for (const [directory, marker] of [
+        [join(root, '.opencode', 'plugins'), markers[0]!],
+        [join(root, 'config', 'opencode', 'plugins'), markers[1]!],
+      ] as const) {
+        await mkdir(directory, {recursive: true});
+        await writeFile(
+          join(directory, 'probe.js'),
+          `import {writeFileSync} from 'node:fs'; export const Probe = async () => { writeFileSync(${JSON.stringify(marker)}, 'loaded'); return {} };`,
+        );
+      }
+      const configPath = join(root, 'opencode.json');
+      await writeFile(
+        configPath,
+        JSON.stringify({$schema: 'https://opencode.ai/config.json'}),
+      );
+      const result = await execa(executable!, ['debug', 'config'], {
+        cwd: root,
+        env: {
+          ...process.env,
+          HOME: root,
+          XDG_CONFIG_HOME: join(root, 'config'),
+          XDG_DATA_HOME: join(root, 'data'),
+          XDG_CACHE_HOME: join(root, 'cache'),
+          XDG_STATE_HOME: join(root, 'state'),
+          OPENCODE_CONFIG: configPath,
+          OPENCODE_CONFIG_DIR: root,
+          OPENCODE_DISABLE_MODELS_FETCH: 'true',
+          OPENCODE_DISABLE_AUTOUPDATE: 'true',
+        },
+        timeout: 30000,
+        reject: false,
+      });
+      expect(result.exitCode, result.stderr).toBe(0);
+      for (const marker of markers)
+        expect(await readFile(marker, 'utf8')).toBe('loaded');
+    }, 35000);
+
     it.each(['call', 'negative'] as const)(
       'runs %s with inherited servers excluded',
       async (mode) => {
@@ -192,10 +278,16 @@ describe.skipIf(!executable)(
           mode === 'call' ? 'fixture-receipt-42' : 'No calls needed.',
         );
         expect(f.contacts()).toBe(0);
+        expect(f.globalContacts()).toBe(0);
         await expect(readFile(f.marker)).rejects.toMatchObject({
           code: 'ENOENT',
         });
+        for (const marker of f.pluginMarkers)
+          await expect(readFile(marker)).rejects.toMatchObject({
+            code: 'ENOENT',
+          });
         expect(await readFile(f.configPath, 'utf8')).toBe(f.source);
+        expect(await readFile(f.globalConfigPath, 'utf8')).toBe(f.globalSource);
         expect(f.requests.length).toBeGreaterThan(0);
         expect(JSON.stringify(f.requests)).toContain('Native fixture skill');
         if (mode === 'call') {
@@ -212,6 +304,7 @@ describe.skipIf(!executable)(
             reject: false,
           });
           expect(f.contacts()).toBeGreaterThan(0);
+          expect(f.globalContacts()).toBeGreaterThan(0);
           expect(await readFile(f.marker, 'utf8')).toBe('started');
         }
       },
@@ -240,6 +333,22 @@ describe.skipIf(!executable)(
         category: 'not_ready',
       });
       expect(f.requests).toHaveLength(0);
+    }, 30000);
+
+    it('runs a mock tool with normal permissions', async () => {
+      const f = await fixture('call');
+      const result = await runOpenCodeWithMcp({
+        ...f.options,
+        input: {...f.options.input, permissionMode: 'default'},
+      });
+      const observation = await f.controller.finalize({
+        harnessReady: result.harnessReady,
+        harnessSucceeded: true,
+      });
+      expect(observation).toMatchObject({ready: true, failures: []});
+      expect(observation.calls).toHaveLength(1);
+      expect(f.contacts()).toBe(0);
+      expect(f.globalContacts()).toBe(0);
     }, 30000);
 
     it('keeps simultaneous sessions and controller logs independent', async () => {
