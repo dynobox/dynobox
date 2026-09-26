@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {mkdir, readdir, readFile, rm, writeFile} from 'node:fs/promises';
+import {mkdir, readdir, readFile, rm, rmdir, writeFile} from 'node:fs/promises';
 import {dirname, join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
@@ -86,6 +86,9 @@ export async function runAntigravityWithMcp(options: {
     `${projectId}.json`,
   );
   const projectConfig = join(cwd, '.agents', 'mcp_config.json');
+  // Remove the .agents directory after the run only when this run created it.
+  const createdAgentsDir =
+    (await mkdir(dirname(projectConfig), {recursive: true})) !== undefined;
   try {
     await mkdir(dirname(projectRecord), {recursive: true});
     await writeFile(
@@ -110,7 +113,6 @@ export async function runAntigravityWithMcp(options: {
           : {}),
       }),
     );
-    await mkdir(dirname(projectConfig), {recursive: true});
     await writeFile(
       projectConfig,
       JSON.stringify({
@@ -160,7 +162,10 @@ export async function runAntigravityWithMcp(options: {
     };
   } finally {
     await Promise.all([
-      rm(projectConfig, {force: true}),
+      rm(projectConfig, {force: true}).then(() =>
+        // Keep the directory if the agent wrote other files into it.
+        createdAgentsDir ? rmdir(dirname(projectConfig)).catch(() => {}) : {},
+      ),
       rm(projectRecord, {force: true}),
     ]);
   }

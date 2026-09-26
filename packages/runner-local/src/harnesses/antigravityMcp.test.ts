@@ -173,9 +173,10 @@ describe.skipIf(!executable)(
           new AntigravityHarness().extractResult(result.output).finalMessage,
         ).toContain(mode === 'call' ? 'agy-receipt-42' : 'READY');
         expect(f.requests.length).toBeGreaterThan(0);
-        await expect(
-          readFile(join(f.work, '.agents', 'mcp_config.json')),
-        ).rejects.toMatchObject({code: 'ENOENT'});
+        // The run created .agents, so it removes the whole directory.
+        await expect(readdir(join(f.work, '.agents'))).rejects.toMatchObject({
+          code: 'ENOENT',
+        });
       },
     );
 
