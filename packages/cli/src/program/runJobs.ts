@@ -84,7 +84,7 @@ export function buildScenarioExecutions(
 /**
  * Execute each scenario in order. Harness lanes within a scenario overlap,
  * while iterations and duplicate jobs within one lane remain sequential.
- * An aborted `signal` rejects before the next job starts.
+ * An aborted `signal` rejects before the next job starts and after the last.
  */
 export async function runScenarioExecutions(
   dynos: readonly RunDynoGroup[],
@@ -128,6 +128,8 @@ export async function runScenarioExecutions(
     });
     hooks.scenarioCompleted?.(scenario, scenarioResults);
   }
+  // A job cancelled mid-run can return a failed result instead of rejecting.
+  signal?.throwIfAborted();
 
   const results = resultSlots.map((result, index) => {
     if (result === undefined) {
