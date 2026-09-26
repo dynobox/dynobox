@@ -9,6 +9,7 @@ import {
   buildClaudeCodeArgs,
   parseClaudeCodeStreamJsonLine,
 } from './claudeCode.js';
+import {mcpProxyEnv} from './mcpProxyEnv.js';
 import {isRecord} from './parsing.js';
 import type {HarnessInput, HarnessRunOutput} from './types.js';
 
@@ -89,16 +90,7 @@ export async function runClaudeCodeWithMcp(
     const executable = await realpath(options.executable);
     const cwd = await realpath(input.workDir);
     const env = {...process.env, ...input.env};
-    const noProxy = [
-      ...new Set(
-        [env.NO_PROXY ?? '', env.no_proxy ?? '', '127.0.0.1,localhost,::1']
-          .flatMap((value) => value.split(','))
-          .map((value) => value.trim())
-          .filter(Boolean),
-      ),
-    ].join(',');
-    env.NO_PROXY = noProxy;
-    env.no_proxy = noProxy;
+    Object.assign(env, mcpProxyEnv(env));
     remaining();
     directory = await mkdtemp(join(tmpdir(), 'dynobox-claude-mcp-'));
     const configPath = join(directory, 'mcp.json');

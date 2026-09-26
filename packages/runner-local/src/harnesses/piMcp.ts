@@ -4,6 +4,7 @@ import {isAbsolute, join} from 'node:path';
 
 import {execa} from 'execa';
 
+import {mcpProxyEnv} from './mcpProxyEnv.js';
 import {buildPiArgs, parsePiJson} from './pi.js';
 import type {
   HarnessInput,
@@ -94,16 +95,7 @@ export async function runPiWithMcp(options: {
       ...input.env,
       PI_OFFLINE: '1',
     };
-    const bypass = [
-      ...new Set(
-        [env.NO_PROXY ?? '', env.no_proxy ?? '', '127.0.0.1,localhost,::1']
-          .flatMap((value) => value.split(','))
-          .map((value) => value.trim())
-          .filter(Boolean),
-      ),
-    ].join(',');
-    env.NO_PROXY = bypass;
-    env.no_proxy = bypass;
+    Object.assign(env, mcpProxyEnv(env));
     const processOptions = {
       cwd: await realpath(input.workDir),
       env,

@@ -1,6 +1,5 @@
-import {constants, realpathSync} from 'node:fs';
-import {access, realpath} from 'node:fs/promises';
-import {delimiter, resolve} from 'node:path';
+import {realpathSync} from 'node:fs';
+import {realpath} from 'node:fs/promises';
 
 import type {PermissionMode} from '@dynobox/sdk';
 
@@ -12,6 +11,7 @@ import {
   parseJsonObjectLine,
   textFromContent,
 } from './parsing.js';
+import {resolveMcpExecutable} from './resolveMcpExecutable.js';
 import {runStreamingHarness} from './runStreamingHarness.js';
 import type {
   Harness,
@@ -60,22 +60,11 @@ export class CodexHarness implements Harness {
   ): Promise<PreparedMcpHarness> {
     const {runCodexWithMcp, CodexMcpError} = await import('./codexMcp.js');
     const cwd = await realpath(input.workDir);
-    const candidates =
-      this.executable.includes('/') || this.executable.includes('\\')
-        ? [resolve(cwd, this.executable)]
-        : (input.env.PATH ?? process.env.PATH ?? '')
-            .split(delimiter)
-            .map((directory) => resolve(cwd, directory, this.executable));
-    let executable: string | undefined;
-    for (const candidate of candidates) {
-      try {
-        await access(candidate, constants.X_OK);
-        executable = await realpath(candidate);
-        break;
-      } catch {
-        // Continue searching the caller's original PATH.
-      }
-    }
+    const executable = await resolveMcpExecutable(
+      this.executable,
+      cwd,
+      input.env,
+    );
     if (executable === undefined)
       throw new CodexMcpError('configuration_failed');
     const resolvedExecutable = executable;

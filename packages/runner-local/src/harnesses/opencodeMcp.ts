@@ -6,6 +6,7 @@ import {isDeepStrictEqual} from 'node:util';
 
 import {execa} from 'execa';
 
+import {mcpProxyEnv} from './mcpProxyEnv.js';
 import {parseOpenCodeJson} from './opencode.js';
 import {checkOpenCodeConfigReads} from './opencodeMcpConfig.js';
 import {createToolEvent, isRecord} from './parsing.js';
@@ -86,16 +87,7 @@ export async function prepareOpenCodeMcpConfiguration(options: {
     const env = {...process.env, ...input.env};
     await checkOpenCodeConfigReads(cwd, env);
     env.OPENCODE_CONFIG_CONTENT ??= '{}';
-    const noProxy = [
-      ...new Set(
-        [env.NO_PROXY ?? '', env.no_proxy ?? '', '127.0.0.1,localhost,::1']
-          .flatMap((value) => value.split(','))
-          .map((value) => value.trim())
-          .filter(Boolean),
-      ),
-    ].join(',');
-    env.NO_PROXY = noProxy;
-    env.no_proxy = noProxy;
+    Object.assign(env, mcpProxyEnv(env));
     const probe = async (args: string[], childEnv = env) => {
       const result = await execa(executable, ['--pure', ...args], {
         cwd,
