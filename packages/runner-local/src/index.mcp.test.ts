@@ -8,6 +8,8 @@ import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/st
 import type {Transport} from '@modelcontextprotocol/sdk/shared/transport.js';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
+import {AntigravityMcpError} from './harnesses/antigravityMcp.js';
+import {ClaudeCodeMcpError} from './harnesses/claudeCodeMcp.js';
 import {CodexMcpError} from './harnesses/codexMcp.js';
 import {PiMcpError} from './harnesses/piMcp.js';
 import type {
@@ -16,7 +18,7 @@ import type {
   HarnessRunOutput,
   McpServerConnections,
 } from './harnesses/types.js';
-import {runJob} from './index.js';
+import {assertMcpExecutionSupported, runJob} from './index.js';
 import * as controllerModule from './mcpMocks/controller.js';
 
 const roots: string[] = [];
@@ -70,7 +72,12 @@ function scenario(overrides: Partial<IrScenario> = {}): IrScenario {
 async function fixture(
   mode: Mode = 'call',
   overrides: Partial<IrScenario> = {},
-  harnessId: 'claude-code' | 'codex' | 'opencode' | 'pi' = 'claude-code',
+  harnessId:
+    | 'claude-code'
+    | 'codex'
+    | 'opencode'
+    | 'pi'
+    | 'antigravity' = 'claude-code',
 ) {
   const root = await mkdtemp(join(tmpdir(), 'dynobox-mcp-runner-'));
   roots.push(root);
@@ -91,6 +98,51 @@ async function fixture(
 }
 
 describe('MCP runner lifecycle', () => {
+  it('rejects Cursor MCP mocking with an actionable isolation error', () => {
+    expect(() =>
+      assertMcpExecutionSupported(scenario(), 'cursor', true),
+    ).toThrow('plugin-provided MCP servers cannot be isolated');
+  });
+
+  it('preserves a preparation deadline failure instead of reporting bad configuration', async () => {
+    const {job, options, harness} = await fixture('negative', {
+      assertions: [scenario().assertions[1]!],
+    });
+    vi.spyOn(harness, 'prepareMcp').mockRejectedValue(
+      new ClaudeCodeMcpError('execution_failed'),
+    );
+    const result = await runJob(job, options);
+    expect(result.status).toBe('harness_failed');
+    expect(result.mcp?.failures).toEqual(['execution_failed']);
+    expect(result.assertionResults).toEqual([]);
+  });
+
+  it('runs an experimental Antigravity mock through the shared lifecycle', async () => {
+    const {job, options, harness} = await fixture('call', {}, 'antigravity');
+    const result = await runJob(job, options);
+    expect(result.status).toBe('passed');
+    expect(result.mcp?.ready).toBe(true);
+    expect(result.mcp?.calls).toHaveLength(1);
+    expect(harness.normalRuns).toBe(0);
+  });
+
+  it('reports an Antigravity configuration failure without passing a negative assertion', async () => {
+    const {job, options, harness} = await fixture(
+      'negative',
+      {assertions: [scenario().assertions[1]!]},
+      'antigravity',
+    );
+    vi.spyOn(harness, 'prepareMcp').mockResolvedValue({
+      run: async () => {
+        throw new AntigravityMcpError('configuration_failed');
+      },
+    });
+    const result = await runJob(job, options);
+    expect(result.status).toBe('harness_failed');
+    expect(result.mcp?.failures).toContain('configuration_failed');
+    expect(result.assertionResults).toEqual([]);
+  });
+
   it.each(['call', 'negative', 'no-discovery'] as const)(
     'runs experimental Pi lifecycle: %s',
     async (mode) => {
@@ -468,7 +520,12 @@ class McpHarness implements Harness {
   normalRuns = 0;
   constructor(
     private readonly mode: Mode,
-    readonly id: 'claude-code' | 'codex' | 'opencode' | 'pi' = 'claude-code',
+    readonly id:
+      | 'claude-code'
+      | 'codex'
+      | 'opencode'
+      | 'pi'
+      | 'antigravity' = 'claude-code',
   ) {}
   async prepareMcp(input: Pick<HarnessInput, 'workDir' | 'env'>) {
     this.preparedEnv = {...input.env};

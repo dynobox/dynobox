@@ -63,6 +63,23 @@ npx dynobox run
 Run one `init` command for a harness that is installed and authenticated, then
 run the generated dyno.
 
+MCP tool mocking is experimental and opt-in. In a local source checkout, run
+`pnpm dynolocal run <dyno>`. An isolated build of the CLI package also works
+with `DYNOBOX_EXPERIMENTAL_MCP=1`. Claude Code, Codex, OpenCode, Pi, and
+Antigravity support this path; Cursor is still disabled because
+account-installed plugin MCP servers cannot yet be excluded from a CLI run.
+MCP runs cannot be uploaded, and the published CLI does not enable MCP
+execution by default.
+
+Claude Code uses strict MCP configuration; a deployed enterprise
+`managed-mcp.json` prevents its mock run from starting. Antigravity currently
+requires version 1.2.11 and an installed profile without inherited MCP servers,
+plugins, or custom agents. The adapter rejects those sources before it runs a
+model. In normal headless mode, pass `--allow-mcp-tool server/tool` for each
+mock tool the scenario must call. The adapter puts those scoped grants in a
+temporary Antigravity project record and removes it after the run. Without a
+grant, the CLI denies the call and the dyno fails.
+
 `dynobox init` creates a starter dyno in `dynobox/example.dyno.mjs`.
 `dynobox run` discovers `*.dyno.{mjs,js,ts,mts,yaml,yml}` files below the current
 directory and runs their scenarios against the configured harnesses.

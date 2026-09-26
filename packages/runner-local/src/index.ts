@@ -19,6 +19,7 @@ import {
   harnessExitDiagnostic,
   setupFailureDiagnostic,
 } from './diagnostics.js';
+import {AntigravityMcpError} from './harnesses/antigravityMcp.js';
 import {ClaudeCodeMcpError} from './harnesses/claudeCodeMcp.js';
 import {CodexMcpError} from './harnesses/codexMcp.js';
 import type {
@@ -128,21 +129,27 @@ export function assertMcpExecutionSupported(
           )),
     )
   ) {
+    const harnessIds =
+      harness === undefined
+        ? scenario.harnesses.map((entry) => entry.id)
+        : [harness];
+    if (harnessIds.includes('cursor'))
+      throw new DynoboxConfigError(
+        'MCP mocking is unavailable for Cursor: plugin-provided MCP servers cannot be isolated from this CLI run.',
+      );
     if (
       !experimentalMcp ||
-      (harness === undefined
-        ? scenario.harnesses.map((entry) => entry.id)
-        : [harness]
-      ).some(
+      harnessIds.some(
         (id) =>
           id !== 'claude-code' &&
           id !== 'codex' &&
           id !== 'opencode' &&
-          id !== 'pi',
+          id !== 'pi' &&
+          id !== 'antigravity',
       )
     ) {
       throw new DynoboxConfigError(
-        'MCP mock execution is not enabled for this harness. Use dynolocal with claude-code, codex, opencode, or pi for experimental local execution.',
+        'MCP mock execution is not enabled for this harness. Use dynolocal with claude-code, codex, opencode, pi, or antigravity for experimental local execution.',
       );
     }
     if (
@@ -153,6 +160,19 @@ export function assertMcpExecutionSupported(
         'Invalid MCP mock scenario or assertion reference.',
       );
   }
+}
+
+function mcpAdapterFailureCategory(
+  error: unknown,
+  fallback: LocalMcpSummary['failures'][number],
+): LocalMcpSummary['failures'][number] {
+  return error instanceof AntigravityMcpError ||
+    error instanceof ClaudeCodeMcpError ||
+    error instanceof CodexMcpError ||
+    error instanceof OpenCodeMcpError ||
+    error instanceof PiMcpError
+    ? error.category
+    : fallback;
 }
 
 /**
@@ -323,7 +343,7 @@ export async function runJob(
         workDir,
         env: options.env ?? {},
       });
-    } catch {
+    } catch (error) {
       emitProgress(options, {
         type: 'harness.completed',
         job,
@@ -339,7 +359,7 @@ export async function runJob(
         mcp: {
           ready: false,
           finalized: false,
-          failures: ['configuration_failed'],
+          failures: [mcpAdapterFailureCategory(error, 'configuration_failed')],
           calls: [],
         },
         diagnostics: ['MCP preparation failed.'],
@@ -413,14 +433,7 @@ export async function runJob(
   let mcpReady = false;
   const mcpFailures = new Set<LocalMcpSummary['failures'][number]>();
   const recordMcpError = (error: unknown) => {
-    mcpFailures.add(
-      error instanceof ClaudeCodeMcpError ||
-        error instanceof CodexMcpError ||
-        error instanceof OpenCodeMcpError ||
-        error instanceof PiMcpError
-        ? error.category
-        : 'execution_failed',
-    );
+    mcpFailures.add(mcpAdapterFailureCategory(error, 'execution_failed'));
     if (error instanceof ClaudeCodeMcpError && error.priorCategory)
       mcpFailures.add(error.priorCategory);
   };

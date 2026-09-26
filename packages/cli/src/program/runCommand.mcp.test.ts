@@ -220,7 +220,11 @@ describe('MCP CLI execution', () => {
       const result = await executeCli(['run', path, ...args], options);
       expect(result.exitCode).toBe(configErrorExitCode);
       expect(result.stderr).toContain(
-        mode === 'upload' ? 'local-only' : 'not enabled',
+        mode === 'upload'
+          ? 'local-only'
+          : mode === 'unsupported'
+            ? 'plugin-provided MCP servers cannot be isolated'
+            : 'not enabled',
       );
       await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();
       await expect(readFile(log)).rejects.toThrow();

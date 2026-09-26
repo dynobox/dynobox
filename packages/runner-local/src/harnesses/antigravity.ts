@@ -1,4 +1,5 @@
 import {realpathSync} from 'node:fs';
+import {realpath} from 'node:fs/promises';
 
 import type {PermissionMode} from '@dynobox/sdk';
 
@@ -9,12 +10,14 @@ import {
   type JsonObject,
   parseJsonObjectLine,
 } from './parsing.js';
+import {resolveMcpExecutable} from './resolveMcpExecutable.js';
 import {runStreamingHarness} from './runStreamingHarness.js';
 import type {
   Harness,
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
+  PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
 import {createVersionProbe} from './version.js';
@@ -53,6 +56,30 @@ export class AntigravityHarness implements Harness {
 
   version(): Promise<string | null> {
     return this.probeVersion();
+  }
+
+  async prepareMcp(
+    input: Pick<HarnessInput, 'workDir' | 'env'>,
+  ): Promise<PreparedMcpHarness> {
+    const {runAntigravityWithMcp, AntigravityMcpError} =
+      await import('./antigravityMcp.js');
+    const cwd = await realpath(input.workDir);
+    const executable = await resolveMcpExecutable(
+      this.executable,
+      cwd,
+      input.env,
+    );
+    if (!executable) throw new AntigravityMcpError('configuration_failed');
+    const extraArgs = [...this.extraArgs];
+    return {
+      run: (runInput, servers) =>
+        runAntigravityWithMcp({
+          executable,
+          input: {...runInput, workDir: cwd},
+          servers,
+          extraArgs,
+        }),
+    };
   }
 
   run(input: HarnessInput): Promise<HarnessRunOutput> {
@@ -99,11 +126,12 @@ export function buildAntigravityArgs(
   model?: string,
   permissionMode?: PermissionMode,
   timeoutMs?: number,
+  projectId?: string,
 ): string[] {
   return [
-    '--new-project',
-    '--add-dir',
-    workDir,
+    ...(projectId === undefined
+      ? ['--new-project', '--add-dir', workDir]
+      : ['--project', projectId]),
     '-p',
     prompt,
     '--output-format',

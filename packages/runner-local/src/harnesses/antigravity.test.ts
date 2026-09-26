@@ -132,6 +132,29 @@ fi
     ]);
   });
 
+  it('selects an owned project for an MCP mock run', () => {
+    expect(
+      buildAntigravityArgs(
+        '/tmp/work',
+        'Read the issue.',
+        [],
+        undefined,
+        undefined,
+        90_000,
+        'owned-project-id',
+      ),
+    ).toEqual([
+      '--project',
+      'owned-project-id',
+      '-p',
+      'Read the issue.',
+      '--output-format',
+      'stream-json',
+      '--print-timeout',
+      '90000ms',
+    ]);
+  });
+
   it('ignores stdin and emits completed tool events while streaming', async () => {
     const scratchRoot = createScratchRoot();
     const executable = join(scratchRoot, 'fake-agy');
