@@ -116,7 +116,7 @@ export async function runCodexWithMcp(
     processOptions,
     remaining,
   );
-  const {overlay, logicalNames} = buildOverlay(
+  const {overlay} = buildOverlay(
     snapshot,
     servers,
     input.allowedMcpTools ?? [],
@@ -160,15 +160,15 @@ export async function runCodexWithMcp(
         isRecord(item) &&
         item.type === 'mcp_tool_call'
       ) {
-        const logical = logicalNames[String(item.server)];
-        if (logical === undefined)
+        const server = String(item.server);
+        if (!Object.hasOwn(servers, server))
           throw new McpHarnessError(
             'not_ready',
-            `Codex called MCP server "${String(item.server)}", which is not a mock.`,
+            `Codex called MCP server "${server}", which is not a mock.`,
           );
         emit(
           createToolEvent(
-            `mcp__${logical}__${String(item.tool)}`,
+            `mcp__${server}__${String(item.tool)}`,
             item.arguments,
             item.status === 'completed' ? 'success' : 'failure',
           ),
@@ -395,55 +395,26 @@ function buildOverlay(
     };
     for (const name of plugin.servers) occupied.add(name);
   }
-  const logicalNames: Record<string, string> = {};
-  for (const [logical, server] of Object.entries(servers)) {
-    // A same-named inherited server keeps its tool policy for the mock.
-    const policy = record(inherited[logical]);
-    if (policy.enabled === false)
+  for (const [name, server] of Object.entries(servers)) {
+    // Renaming the mock would show the model a different tool name than
+    // other harnesses, so a name clash fails instead.
+    if (occupied.has(name))
       throw new McpHarnessError(
-        'not_ready',
-        `Codex config disables MCP server "${logical}".`,
+        'configuration_failed',
+        `Codex config already has an MCP server named "${name}"; rename or remove it to use this mock.`,
       );
-    for (const tool of server.tools)
-      if (
-        (Array.isArray(policy.enabled_tools) &&
-          !policy.enabled_tools.includes(tool)) ||
-        (Array.isArray(policy.disabled_tools) &&
-          policy.disabled_tools.includes(tool))
-      )
-        throw new McpHarnessError(
-          'not_ready',
-          `Codex config disables MCP tool "${logical}/${tool}".`,
-        );
-    let name = logical;
-    for (let suffix = 1; occupied.has(name); suffix++)
-      name = `dynobox_${logical}_${suffix}`;
-    occupied.add(name);
     const entry: RecordValue = {
       url: server.url,
       enabled: true,
       required: true,
       startup_timeout_sec: 10,
     };
-    for (const key of [
-      'default_tools_approval_mode',
-      'enabled_tools',
-      'disabled_tools',
-      'tools',
-      'tool_timeout_sec',
-    ])
-      if (policy[key] !== undefined && policy[key] !== null)
-        entry[key] = structuredClone(policy[key]);
-    for (const grant of grants.filter((grant) => grant.server === logical)) {
-      const tools = {...record(entry.tools)};
-      tools[grant.tool] = {
-        ...record(tools[grant.tool]),
-        approval_mode: 'approve',
+    for (const grant of grants.filter((grant) => grant.server === name))
+      entry.tools = {
+        ...record(entry.tools),
+        [grant.tool]: {approval_mode: 'approve'},
       };
-      entry.tools = tools;
-    }
     mcp[name] = entry;
-    logicalNames[name] = logical;
   }
   return {
     overlay: [
@@ -452,7 +423,6 @@ function buildOverlay(
       '-c',
       `plugins=${toml(plugins)}`,
     ],
-    logicalNames,
   };
 }
 

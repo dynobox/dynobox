@@ -30,7 +30,7 @@ appendFileSync(process.env.DXB_TEST_LOG, JSON.stringify({args, cwd: process.cwd(
 if (mode === 'hang') {setInterval(() => {}, 1000);}
 else if (args.includes('--version')) console.log(mode === 'version' ? '1.10.0' : mode === 'newer' ? '1.20.0' : '1.18.26');
 else {
-  const config = {mcp: {linear: {type: 'local', command: ['real-server'], environment: {SECRET: 'PRIVATE_SENTINEL'}}, unrelated: {type: 'remote', url: 'https://private.invalid/PRIVATE_SENTINEL', headers: {Authorization: 'PRIVATE_SENTINEL'}}}};
+  const config = {mcp: {real: {type: 'local', command: ['real-server'], environment: {SECRET: 'PRIVATE_SENTINEL'}}, unrelated: {type: 'remote', url: 'https://private.invalid/PRIVATE_SENTINEL', headers: {Authorization: 'PRIVATE_SENTINEL'}}}};
   const inline = JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || '{}');
   config.permission = inline.permission || {};
   for (const [name, entry] of Object.entries(inline.mcp || {})) config.mcp[name] = {...config.mcp[name], ...entry};
@@ -86,7 +86,7 @@ describe('OpenCode MCP configuration preparation', () => {
     },
   );
 
-  it('maps explicit grants to aliases without changing unrelated denials', async () => {
+  it('maps explicit grants without changing unrelated denials', async () => {
     const {options} = await fixture();
     const prepared = await prepareOpenCodeMcpConfiguration({
       ...options,
@@ -95,38 +95,32 @@ describe('OpenCode MCP configuration preparation', () => {
         allowedMcpTools: [{server: 'linear', tool: 'get_issue'}],
       },
     });
-    const alias = Object.keys(prepared.logicalNames)[0]!;
-    expect(alias).toBe('dynobox_linear_1');
     expect(
       JSON.parse(prepared.env.OPENCODE_CONFIG_CONTENT!).permission,
-    ).toEqual({edit: 'deny', [`${alias}_get_issue`]: 'allow'});
+    ).toEqual({edit: 'deny', linear_get_issue: 'allow'});
     expect(prepared.denials).toContainEqual({
       permission: 'edit',
       pattern: '*',
       action: 'deny',
     });
   });
-  it('disables inherited sources, aliases name collisions and preserves unrelated inline settings', async () => {
+  it('disables inherited sources and preserves unrelated inline settings', async () => {
     const {options, log} = await fixture();
     const original = structuredClone(options);
     const prepared = await prepareOpenCodeMcpConfiguration(options);
     expect(options).toEqual(original);
     expect(prepared.version).toBe('1.18.26');
-    const aliases = Object.keys(prepared.logicalNames);
-    expect(aliases).toHaveLength(1);
-    expect(prepared.logicalNames[aliases[0]!]).toBe('linear');
-    expect(aliases[0]).toBe('dynobox_linear_1');
     const overlay = JSON.parse(prepared.env.OPENCODE_CONFIG_CONTENT!);
     expect(overlay.model).toBe('example/model');
     expect(overlay.permission).toEqual({edit: 'deny'});
-    expect(overlay.mcp.linear).toEqual({enabled: false});
+    expect(overlay.mcp.real).toEqual({enabled: false});
     expect(overlay.mcp.unrelated).toEqual({enabled: false});
     expect(overlay.mcp.inline).toEqual({
       type: 'local',
       command: ['inline-server'],
       enabled: false,
     });
-    expect(overlay.mcp[aliases[0]!]).toEqual({
+    expect(overlay.mcp.linear).toEqual({
       type: 'remote',
       url: options.servers.linear.url,
       enabled: true,
@@ -155,14 +149,21 @@ describe('OpenCode MCP configuration preparation', () => {
     }
   });
 
-  it('keeps an uncolliding mock under its logical name', async () => {
-    const {options} = await fixture();
-    options.servers = {
-      github: {url: 'http://127.0.0.1:12345/github', tools: ['search']},
-    } as never;
-    const prepared = await prepareOpenCodeMcpConfiguration(options);
-    expect(prepared.logicalNames).toEqual({github: 'github'});
-  });
+  it.each(['real', 'inline'])(
+    'fails when the config already has a server named %s',
+    async (name) => {
+      const {options} = await fixture();
+      options.servers = {
+        [name]: {url: 'http://127.0.0.1:12345/x', tools: ['search']},
+      } as never;
+      await expect(
+        prepareOpenCodeMcpConfiguration(options),
+      ).rejects.toMatchObject({
+        category: 'configuration_failed',
+        message: expect.stringContaining(`MCP server named "${name}"`),
+      });
+    },
+  );
 
   it('reports a failed config read with the command', async () => {
     const {options} = await fixture('exit');
@@ -222,7 +223,7 @@ describe.skipIf(nativeExecutable === undefined)(
         const source = JSON.stringify({
           ...(withSchema ? {$schema: 'https://opencode.ai/config.json'} : {}),
           mcp: {
-            linear: {type: 'local', command: [process.execPath, '--version']},
+            real: {type: 'local', command: [process.execPath, '--version']},
             unrelated: {type: 'remote', url: 'http://127.0.0.1:1/mcp'},
           },
         });
@@ -247,9 +248,9 @@ describe.skipIf(nativeExecutable === undefined)(
           },
         });
         const prepared = await pending;
-        expect(Object.values(prepared.logicalNames)).toEqual(['linear']);
         const overlay = JSON.parse(prepared.env.OPENCODE_CONFIG_CONTENT!);
-        expect(overlay.mcp.linear).toEqual({enabled: false});
+        expect(overlay.mcp.real).toEqual({enabled: false});
+        expect(overlay.mcp.linear).toMatchObject({enabled: true});
         expect(overlay.mcp.unrelated).toEqual({enabled: false});
       },
     );

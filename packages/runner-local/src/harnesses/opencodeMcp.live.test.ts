@@ -119,7 +119,7 @@ async function fixture(
       },
     },
     mcp: {
-      linear: {
+      real_linear: {
         type: 'local',
         command: [
           process.execPath,

@@ -139,31 +139,19 @@ describe('Codex MCP adapter', () => {
     expect(run.output.metadata?.mcpHarnessVersion).toBe('0.999.0');
   });
 
-  it('aliases name collisions without copying the inherited transport and preserves MCP policy', async () => {
-    const f = await fixture('tool', {
-      service: {
-        command: '/original',
-        args: ['PRIVATE_SENTINEL'],
-        env: {KEY: 'PRIVATE_SENTINEL'},
-        enabled: true,
-        default_tools_approval_mode: 'prompt',
-        tools: {lookup: {approval_mode: 'approve'}},
-      },
+  it('fails before execution when the user config has a same-named server', async () => {
+    const f = await fixture('success', {
+      service: {command: '/original', args: ['PRIVATE_SENTINEL']},
     });
-    const events: unknown[] = [];
-    f.options.input.onToolEvent = (event) => events.push(event);
-    const run = await runCodexWithMcp(f.options);
-    expect(run.output.metadata?.mcpRunToolEvents).toEqual(events);
+    await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
+      category: 'configuration_failed',
+      message: expect.stringContaining(
+        'already has an MCP server named "service"',
+      ),
+    });
     const calls = await f.invocations();
+    expect(calls.some((call) => call.args[0] === 'exec')).toBe(false);
     expect(JSON.stringify(calls)).not.toContain('PRIVATE_SENTINEL');
-    const overlay = calls
-      .at(-1)!
-      .args.find((arg) => arg.startsWith('mcp_servers='))!;
-    expect(overlay).toContain('"dynobox_service_1"');
-    expect(overlay).toContain('"default_tools_approval_mode"="prompt"');
-    expect(overlay).toContain('"approval_mode"="approve"');
-    expect(JSON.stringify(events)).toContain('mcp__service__lookup');
-    expect(JSON.stringify(events)).not.toContain('dynobox_');
   });
 
   it.each([
@@ -207,20 +195,6 @@ describe('Codex MCP adapter', () => {
         ).toBe(false);
     },
   );
-
-  it.each([
-    {enabled: false},
-    {disabled_tools: ['lookup']},
-    {enabled_tools: ['other']},
-  ])('preserves inherited exclusions %j', async (policy) => {
-    const f = await fixture('success', {
-      service: {command: '/original', ...policy},
-    });
-    await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
-      category: 'not_ready',
-    });
-    expect(await f.invocations()).toHaveLength(2);
-  });
 
   it('uses explicit dangerous mode and CLI mock settings consistently during preflight and execution', async () => {
     const f = await fixture();

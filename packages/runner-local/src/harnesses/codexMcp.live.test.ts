@@ -206,35 +206,6 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
     expect(JSON.stringify(fixture.requests)).toContain('PLUGIN_SKILL_SENTINEL');
     await fixture.assertNoSentinels();
   }, 30_000);
-
-  it.each(['server', 'tool'] as const)(
-    'preserves inherited %s denial',
-    async (kind) => {
-      const fixture = await nativeFixture('negative');
-      const text = await readFile(fixture.configFile, 'utf8');
-      await writeFile(
-        fixture.configFile,
-        text.replace(
-          '[mcp_servers.service]',
-          `[mcp_servers.service]\n${kind === 'server' ? 'enabled = false' : 'disabled_tools = ["lookup"]'}`,
-        ),
-      );
-      await expect(fixture.mockRun()).rejects.toMatchObject({
-        category: 'not_ready',
-      });
-      expect(fixture.requests).toEqual([]);
-      expect(
-        (
-          await fixture.controller.finalize({
-            harnessReady: false,
-            harnessSucceeded: false,
-          })
-        ).ready,
-      ).toBe(false);
-      await fixture.assertNoSentinels();
-    },
-    30_000,
-  );
 });
 
 async function listen(server: Server) {
@@ -354,10 +325,7 @@ async function nativeFixture(
                   type: 'function_call',
                   call_id: 'call_fixture',
                   name: 'lookup',
-                  namespace:
-                    JSON.stringify(body.input).match(
-                      /mcp__dynobox_service_\d+/,
-                    )?.[0] ?? 'mcp__service',
+                  namespace: 'mcp__service',
                   arguments: '{"key":"receipt"}',
                   status: 'completed',
                 },
@@ -403,7 +371,7 @@ async function nativeFixture(
   const configFile = join(configDir, 'config.toml');
   await writeFile(
     configFile,
-    `model = "gpt-5.4"\nmodel_provider = "fixture"\napproval_policy = "never"\nsandbox_mode = "read-only"\n[model_providers.fixture]\nname = "fixture"\nbase_url = ${JSON.stringify(modelUrl)}\nwire_api = "responses"\nenv_key = "DYNOBOX_SYNTHETIC_KEY"\n[projects.${JSON.stringify(project)}]\ntrust_level = "trusted"\n[mcp_servers.service]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ${JSON.stringify(stdio('user').args)}\nstartup_timeout_sec = 1\ndefault_tools_approval_mode = "approve"\n[mcp_servers.inherited_http]\nurl = ${JSON.stringify(`${sentinelUrl}/user`)}\nstartup_timeout_sec = 1\n`,
+    `model = "gpt-5.4"\nmodel_provider = "fixture"\napproval_policy = "never"\nsandbox_mode = "read-only"\n[model_providers.fixture]\nname = "fixture"\nbase_url = ${JSON.stringify(modelUrl)}\nwire_api = "responses"\nenv_key = "DYNOBOX_SYNTHETIC_KEY"\n[projects.${JSON.stringify(project)}]\ntrust_level = "trusted"\n[mcp_servers.user_sentinel]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ${JSON.stringify(stdio('user').args)}\nstartup_timeout_sec = 1\n[mcp_servers.inherited_http]\nurl = ${JSON.stringify(`${sentinelUrl}/user`)}\nstartup_timeout_sec = 1\n`,
   );
   await writeFile(
     join(project, '.codex', 'config.toml'),
@@ -514,6 +482,7 @@ async function nativeFixture(
           workDir: project,
           env: env as Record<string, string>,
           timeoutMs: 20_000,
+          allowedMcpTools: [{server: 'service', tool: 'lookup'}],
           ...(signal ? {signal} : {}),
         },
         servers: {service: {url: controller.urls.service!, tools: ['lookup']}},

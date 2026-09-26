@@ -19,7 +19,6 @@ export type OpenCodeMcpConfiguration = {
   executable: string;
   cwd: string;
   env: Record<string, string | undefined>;
-  logicalNames: Record<string, string>;
   version: string | null;
   denials: {permission: string; pattern: string; action: 'deny'}[];
 };
@@ -30,7 +29,7 @@ const toolId = (server: string, tool: string) =>
 
 /**
  * Build the launch environment: every inherited MCP server is disabled in an
- * inline config overlay and the mocks are added, keeping logical tool policy.
+ * inline config overlay and the mocks are added under their own names.
  */
 export async function prepareOpenCodeMcpConfiguration(options: {
   executable: string;
@@ -86,26 +85,26 @@ export async function prepareOpenCodeMcpConfiguration(options: {
       {...record(record(inline.mcp)[name]), enabled: false},
     ]),
   );
-  const logicalNames: Record<string, string> = {};
   const usedPrefixes = new Set([...occupied].map((name) => toolId(name, '')));
-  for (const [logical, server] of Object.entries(servers)) {
-    let alias = logical;
-    for (let suffix = 1; usedPrefixes.has(toolId(alias, '')); suffix++)
-      alias = `dynobox_${logical}_${suffix}`;
-    usedPrefixes.add(toolId(alias, ''));
-    mcp[alias] = {
+  for (const [name, server] of Object.entries(servers)) {
+    // Renaming the mock would show the model a different tool name than
+    // other harnesses, so a name clash fails instead.
+    if (usedPrefixes.has(toolId(name, '')))
+      throw new McpHarnessError(
+        'configuration_failed',
+        `OpenCode config already has an MCP server named "${name}"; rename or remove it to use this mock.`,
+      );
+    mcp[name] = {
       type: 'remote',
       url: server.url,
       enabled: true,
       oauth: false,
       timeout: 10_000,
     };
-    logicalNames[alias] = logical;
   }
-  const permission = aliasPermissions(
+  const permission = mockPermissions(
     initial,
     servers,
-    logicalNames,
     input.allowedMcpTools ?? [],
   );
   const launchEnv = {
@@ -116,7 +115,6 @@ export async function prepareOpenCodeMcpConfiguration(options: {
     executable,
     cwd,
     env: launchEnv,
-    logicalNames,
     version,
     denials: collectDenials(initial),
   };
@@ -145,14 +143,12 @@ function collectDenials(config: Config) {
 }
 
 /**
- * Carry the user's policy for logical tool ids over to aliased ids, fail when
- * a mock tool is denied (a denied tool would pass negative assertions), and
- * apply explicit `--allow-mcp-tool` grants.
+ * Fail when a mock tool is denied (a denied tool would pass negative
+ * assertions) and apply explicit `--allow-mcp-tool` grants.
  */
-function aliasPermissions(
+function mockPermissions(
   initial: Config,
   servers: McpServerConnections,
-  aliases: Record<string, string>,
   grants: readonly {server: string; tool: string}[],
 ) {
   const permission = {...record(initial.permission)};
@@ -167,39 +163,30 @@ function aliasPermissions(
     initial,
     ...Object.values(record(initial.agent)).map(record),
   ];
-  for (const [alias, logical] of Object.entries(aliases)) {
-    if (record(record(initial.mcp)[logical]).enabled === false)
-      throw new McpHarnessError(
-        'not_ready',
-        `OpenCode config disables MCP server "${logical}".`,
-      );
-    for (const tool of servers[logical]!.tools) {
-      const original = toolId(logical, tool);
+  for (const [server, {tools}] of Object.entries(servers)) {
+    for (const tool of tools) {
+      const id = toolId(server, tool);
       const denied = new McpHarnessError(
         'not_ready',
-        `OpenCode config denies MCP tool "${original}".`,
+        `OpenCode config denies MCP tool "${id}".`,
       );
-      let policy: unknown;
       for (const source of sources) {
         for (const [pattern, value] of Object.entries(record(source.tools)))
-          if (match(pattern, original) && value === false) throw denied;
+          if (match(pattern, id) && value === false) throw denied;
         for (const [pattern, value] of Object.entries(
           record(source.permission),
-        )) {
-          if (!match(pattern, original)) continue;
+        ))
           if (
-            value === 'deny' ||
-            (isRecord(value) && Object.values(value).includes('deny'))
+            match(pattern, id) &&
+            (value === 'deny' ||
+              (isRecord(value) && Object.values(value).includes('deny')))
           )
             throw denied;
-          if (source === initial) policy = value;
-        }
       }
       if (
-        grants.some((grant) => grant.server === logical && grant.tool === tool)
+        grants.some((grant) => grant.server === server && grant.tool === tool)
       )
-        policy = 'allow';
-      if (policy !== undefined) permission[toolId(alias, tool)] = policy;
+        permission[id] = 'allow';
     }
   }
   return permission;
@@ -294,7 +281,7 @@ export async function runOpenCodeWithMcp(options: {
     // OpenCode can report "Failed to get tools" immediately after
     // initialization without sending tools/list. Retry only discovery, before
     // any model invocation.
-    for (const name of Object.keys(prepared.logicalNames)) {
+    for (const name of Object.keys(servers)) {
       for (
         let attempt = 0;
         attempt < 2 &&
@@ -308,11 +295,11 @@ export async function runOpenCodeWithMcp(options: {
     }
     for (const [name, state] of Object.entries(status)) {
       const current = record(state).status;
-      if (Object.hasOwn(prepared.logicalNames, name)) {
+      if (Object.hasOwn(servers, name)) {
         if (current !== 'connected')
           throw new McpHarnessError(
             'not_ready',
-            `OpenCode reports MCP mock server "${prepared.logicalNames[name]}" as ${String(current)}.`,
+            `OpenCode reports MCP mock server "${name}" as ${String(current)}.`,
           );
       } else if (current !== 'disabled')
         throw new McpHarnessError(
@@ -320,13 +307,13 @@ export async function runOpenCodeWithMcp(options: {
           `OpenCode left inherited MCP server "${name}" ${String(current)}.`,
         );
     }
-    const missing = Object.keys(prepared.logicalNames).find(
+    const missing = Object.keys(servers).find(
       (name) => !Object.hasOwn(status, name),
     );
     if (missing !== undefined)
       throw new McpHarnessError(
         'not_ready',
-        `OpenCode did not load MCP mock server "${prepared.logicalNames[missing]}".`,
+        `OpenCode did not load MCP mock server "${missing}".`,
       );
     const session = record(
       await request('/session', {
@@ -385,18 +372,18 @@ export async function runOpenCodeWithMcp(options: {
     const stdout = lines.join('\n');
     const parsed = parseOpenCodeJson(
       stdout,
-      Object.keys(prepared.logicalNames).map((name) => `${name}_`),
+      Object.keys(servers).map((name) => `${name}_`),
     );
     if (parsed.errorMessage)
       throw new McpHarnessError('execution_failed', parsed.errorMessage);
     const toolEvents = parsed.toolEvents.map((event) => {
-      for (const [alias, logical] of Object.entries(prepared.logicalNames)) {
-        const tool = servers[logical]!.tools.find(
-          (name) => toolId(alias, name) === event.rawName,
+      for (const [server, {tools}] of Object.entries(servers)) {
+        const tool = tools.find(
+          (name) => toolId(server, name) === event.rawName,
         );
         if (tool !== undefined)
           return createToolEvent(
-            `mcp__${logical}__${tool}`,
+            `mcp__${server}__${tool}`,
             event.input,
             event.status,
           );
