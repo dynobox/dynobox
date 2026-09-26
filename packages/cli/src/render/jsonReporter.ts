@@ -114,15 +114,14 @@ function jobRecord(
       const matchedBranchIndex = assertion.passed
         ? anyOfMatchedBranch(assertion.evidence)
         : undefined;
+      const mcp = mcpEvidence(assertion.evidence);
       return {
         assertionId: assertion.assertionId,
         ...(label === undefined ? {} : {label}),
         type: assertion.type,
         passed: assertion.passed,
         message: assertion.message,
-        ...(mcpEvidence(assertion.evidence) === undefined
-          ? {}
-          : {mcp: mcpEvidence(assertion.evidence)}),
+        ...(mcp === undefined ? {} : {mcp}),
         ...(schema === REPORT_SCHEMA || assertion.type !== 'anyOf'
           ? {}
           : {
