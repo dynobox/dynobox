@@ -1,3 +1,5 @@
+import {setTimeout as delay} from 'node:timers/promises';
+
 import {execa} from 'execa';
 
 import {mcpDeadline, McpHarnessError} from './mcpError.js';
@@ -340,13 +342,42 @@ export async function runOpenCodeWithMcp(options: {
         modelID: input.model.slice(slash + 1),
       };
     }
-    const completed = record(
-      await request(`/session/${String(session.id)}/message`, {
-        parts: [{type: 'text', text: input.prompt}],
-        ...(model ? {model} : {}),
-      }),
-    );
+    // `opencode run` auto-rejects permission requests, but serve waits for a
+    // reply. Reject them the same way so an `ask` rule cannot stall the run.
+    let prompting = true;
+    const rejected = new Set<string>();
+    const rejectPermissions = (async () => {
+      while (prompting) {
+        const pending = await request('/permission').catch(() => []);
+        for (const value of Array.isArray(pending) ? pending : []) {
+          const permission = record(value);
+          rejected.add(String(permission.permission));
+          await request(`/permission/${String(permission.id)}/reply`, {
+            reply: 'reject',
+          }).catch(() => {});
+        }
+        await delay(200);
+      }
+    })();
+    let completed: Config;
+    try {
+      completed = record(
+        await request(`/session/${String(session.id)}/message`, {
+          parts: [{type: 'text', text: input.prompt}],
+          ...(model ? {model} : {}),
+        }),
+      );
+    } finally {
+      prompting = false;
+      await rejectPermissions;
+    }
     const info = record(completed.info);
+    // A rejected permission ends the OpenCode turn early.
+    if (rejected.size > 0 && info.finish !== 'stop')
+      throw new McpHarnessError(
+        'execution_failed',
+        `OpenCode stopped after it rejected an "ask" permission for ${[...rejected].join(', ')}. Use --allow-mcp-tool for mock tools, or allow the tool in the OpenCode config.`,
+      );
     if (info.error || info.finish !== 'stop')
       throw new McpHarnessError(
         'execution_failed',

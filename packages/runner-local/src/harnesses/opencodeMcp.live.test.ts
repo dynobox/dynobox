@@ -24,7 +24,7 @@ afterEach(async () => {
 });
 
 async function fixture(
-  mode: 'call' | 'negative' | 'failed' | 'denied' = 'call',
+  mode: 'call' | 'negative' | 'failed' | 'denied' | 'ask' = 'call',
 ) {
   const root = await mkdtemp(join(tmpdir(), 'dynobox-opencode-native-'));
   cleanup.push(() => rm(root, {recursive: true, force: true}));
@@ -66,7 +66,10 @@ async function fixture(
       'fixture-receipt-42',
     );
     const call =
-      mode === 'call' && !hasReceipt && !!tool && requests.length < 10;
+      (mode === 'call' || mode === 'ask') &&
+      !hasReceipt &&
+      !!tool &&
+      requests.length < 10;
     const delta = call
       ? {
           tool_calls: [
@@ -130,6 +133,7 @@ async function fixture(
       remote: {type: 'remote', url: `${base}/real-mcp`, oauth: false},
     },
     ...(mode === 'denied' ? {permission: {linear_get_issue: 'deny'}} : {}),
+    ...(mode === 'ask' ? {permission: {linear_get_issue: 'ask'}} : {}),
   };
   const configPath = join(root, 'opencode.json');
   const source = JSON.stringify(config);
@@ -333,6 +337,26 @@ describe.skipIf(!executable)(
         category: 'not_ready',
       });
       expect(f.requests).toHaveLength(0);
+    }, 30000);
+
+    it('rejects an ask permission like opencode run instead of waiting', async () => {
+      const f = await fixture('ask');
+      await expect(
+        runOpenCodeWithMcp({
+          ...f.options,
+          input: {...f.options.input, permissionMode: 'default'},
+        }),
+      ).rejects.toMatchObject({
+        category: 'execution_failed',
+        message: expect.stringContaining(
+          '"ask" permission for linear_get_issue',
+        ),
+      });
+      const observation = await f.controller.finalize({
+        harnessReady: true,
+        harnessSucceeded: true,
+      });
+      expect(observation.calls).toHaveLength(0);
     }, 30000);
 
     it('runs a mock tool with normal permissions', async () => {
