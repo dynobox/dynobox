@@ -5,7 +5,11 @@ import {pathToFileURL} from 'node:url';
 
 import {execa} from 'execa';
 
-import {buildAntigravityArgs, parseAntigravityJson} from './antigravity.js';
+import {
+  buildAntigravityArgs,
+  parseAntigravityJson,
+  removeDynoboxProjectRecords,
+} from './antigravity.js';
 import {mcpDeadline, McpHarnessError} from './mcpError.js';
 import {mcpProxyEnv} from './mcpProxyEnv.js';
 import {isRecord} from './parsing.js';
@@ -40,6 +44,7 @@ export async function runAntigravityWithMcp(options: {
       'Antigravity MCP mocking requires HOME to locate its config.',
     );
   await assertNoInheritedMcpSources(cwd, home);
+  await removeDynoboxProjectRecords(home);
 
   const env = {
     ...process.env,

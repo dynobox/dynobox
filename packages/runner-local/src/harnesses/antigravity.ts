@@ -1,4 +1,7 @@
 import {realpathSync} from 'node:fs';
+import {readdir, readFile, rm, stat} from 'node:fs/promises';
+import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
 
 import type {PermissionMode} from '@dynobox/sdk';
 
@@ -77,23 +80,30 @@ export class AntigravityHarness implements Harness {
     };
   }
 
-  run(input: HarnessInput): Promise<HarnessRunOutput> {
+  async run(input: HarnessInput): Promise<HarnessRunOutput> {
     const workDir = realpathSync(input.workDir);
-    return runStreamingHarness({
-      executable: this.executable,
-      args: buildAntigravityArgs(
-        workDir,
-        input.prompt,
-        this.extraArgs,
-        input.model,
-        input.permissionMode,
-        input.timeoutMs,
-      ),
-      input,
-      cwd: workDir,
-      stdin: 'ignore',
-      parseLine: parseAntigravityJsonLine,
-    });
+    const home = input.env.HOME ?? process.env.HOME;
+    await removeDynoboxProjectRecords(home);
+    try {
+      return await runStreamingHarness({
+        executable: this.executable,
+        args: buildAntigravityArgs(
+          workDir,
+          input.prompt,
+          this.extraArgs,
+          input.model,
+          input.permissionMode,
+          input.timeoutMs,
+        ),
+        input,
+        cwd: workDir,
+        stdin: 'ignore',
+        parseLine: parseAntigravityJsonLine,
+      });
+    } finally {
+      // `--new-project` leaves a record for this work directory behind.
+      await removeDynoboxProjectRecords(home, workDir);
+    }
   }
 
   extractResult(raw: HarnessRunOutput): HarnessResult {
@@ -113,6 +123,53 @@ export class AntigravityHarness implements Harness {
 
 /** AGY print mode defaults to 5m; other harnesses have no inner cap. */
 const DEFAULT_ANTIGRAVITY_PRINT_TIMEOUT = '30m';
+
+// Records this old cannot belong to a run that is still active.
+const STALE_PROJECT_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Best effort: Antigravity keeps a project record for every run in the real
+ * HOME. Remove dynobox records that are over a day old (from interrupted
+ * runs), plus the record for `workDir` when given.
+ */
+export async function removeDynoboxProjectRecords(
+  home: string | undefined,
+  workDir?: string,
+): Promise<void> {
+  if (!home) return;
+  const directory = join(home, '.gemini', 'config', 'projects');
+  const folder =
+    workDir === undefined ? undefined : pathToFileURL(workDir).href;
+  const names = await readdir(directory).catch(() => [] as string[]);
+  await Promise.all(
+    names.map(async (name) => {
+      const path = join(directory, name);
+      try {
+        const record: unknown = JSON.parse(await readFile(path, 'utf8'));
+        if (
+          !isRecord(record) ||
+          typeof record.name !== 'string' ||
+          !record.name.startsWith('dynobox-')
+        )
+          return;
+        const resources = isRecord(record.projectResources)
+          ? record.projectResources.resources
+          : undefined;
+        const ownsWorkDir =
+          folder !== undefined &&
+          Array.isArray(resources) &&
+          resources.some(
+            (resource) => isRecord(resource) && resource.folderUri === folder,
+          );
+        const stale =
+          Date.now() - (await stat(path)).mtimeMs > STALE_PROJECT_MS;
+        if (ownsWorkDir || stale) await rm(path, {force: true});
+      } catch {
+        // Skip records that are unreadable or already gone.
+      }
+    }),
+  );
+}
 
 export function buildAntigravityArgs(
   workDir: string,
