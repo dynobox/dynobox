@@ -9,6 +9,7 @@ import {execa} from 'execa';
 
 import {buildCodexArgs, parseCodexJsonLine} from './codex.js';
 import {cachedCodexPluginServers} from './codexMcpPlugins.js';
+import {mcpProxyEnv} from './mcpProxyEnv.js';
 import {createToolEvent, isRecord} from './parsing.js';
 import type {
   HarnessInput,
@@ -18,7 +19,7 @@ import type {
 } from './types.js';
 
 // Invocation-local compatibility gate. Native tests must be rerun before changing.
-const CANDIDATE_VERSION = '0.153.4';
+const SUPPORTED_VERSIONS = new Set(['0.153.4', '0.157.0']);
 const OUTPUT_LIMIT = 8 * 1024 * 1024;
 const GUARDED_FEATURES = [
   'apps',
@@ -94,16 +95,7 @@ export async function runCodexWithMcp(
     const executable = await realpath(options.executable);
     const cwd = await realpath(input.workDir);
     const env = {...process.env, ...input.env};
-    const noProxy = [
-      ...new Set(
-        [env.NO_PROXY ?? '', env.no_proxy ?? '', '127.0.0.1,localhost,::1']
-          .flatMap((value) => value.split(','))
-          .map((value) => value.trim())
-          .filter(Boolean),
-      ),
-    ].join(',');
-    env.NO_PROXY = noProxy;
-    env.no_proxy = noProxy;
+    Object.assign(env, mcpProxyEnv(env));
     const processOptions = {
       cwd,
       env,
@@ -118,9 +110,13 @@ export async function runCodexWithMcp(
       stdin: 'ignore',
       timeout: Math.min(5000, remaining()),
     });
+    const harnessVersion = /^codex-cli (\d+\.\d+\.\d+)$/.exec(
+      version.stdout.trim(),
+    )?.[1];
     if (
       version.failed ||
-      version.stdout.trim() !== `codex-cli ${CANDIDATE_VERSION}`
+      harnessVersion === undefined ||
+      !SUPPORTED_VERSIONS.has(harnessVersion)
     )
       throw new CodexMcpError('unsupported_version');
 
@@ -409,7 +405,7 @@ export async function runCodexWithMcp(
         stderr: result.stderr,
         durationMs: performance.now() - started,
         metadata: {
-          mcpHarnessVersion: CANDIDATE_VERSION,
+          mcpHarnessVersion: harnessVersion,
           mcpRunToolEvents: toolEvents,
         },
       },
