@@ -3,26 +3,11 @@ import {dirname} from 'node:path';
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
-import {piToolAliases, runPiWithMcp} from './piMcp.js';
+import {piToolNames, runPiWithMcp} from './piMcp.js';
 
 const mocks = vi.hoisted(() => ({execa: vi.fn()}));
 vi.mock('execa', () => ({execa: mocks.execa}));
 
-const toolStart = (name: string) =>
-  JSON.stringify({
-    type: 'tool_execution_start',
-    toolCallId: 'call-1',
-    toolName: name,
-    args: {id: 'A-1'},
-  });
-const toolEnd = (name: string) =>
-  JSON.stringify({
-    type: 'tool_execution_end',
-    toolCallId: 'call-1',
-    toolName: name,
-    result: {content: []},
-    isError: false,
-  });
 const finalMessage = JSON.stringify({
   type: 'message_end',
   message: {
@@ -152,44 +137,42 @@ describe('Pi MCP launch contract', () => {
     expect(mocks.execa).not.toHaveBeenCalled();
   });
 
-  it('registers Pi-incompatible names under aliases and reports logical names', async () => {
-    const servers = {
-      'linear.v2': {url: 'http://127.0.0.1:1/linear.v2', tools: ['get.issue']},
-      long: {url: 'http://127.0.0.1:1/long', tools: ['t'.repeat(80)]},
-    };
-    const aliases = piToolAliases(servers);
-    const dotted = aliases['mcp__linear.v2__get.issue']!;
-    expect(dotted).toMatch(/^mcp__[a-f0-9]{24}$/);
-    expect(aliases[`mcp__long__${'t'.repeat(80)}`]).toMatch(
-      /^[a-zA-Z0-9_-]{1,64}$/,
-    );
-    mocks.execa.mockImplementation(async (_executable, args) => {
-      if (args[0] === '--version') return {stdout: '0.84.2', failed: false};
-      return {
-        failed: false,
-        stderr: '',
-        stdout: [toolStart(dotted), toolEnd(dotted), finalMessage].join('\n'),
-      };
-    });
-    const events: unknown[] = [];
-    const result = await runPiWithMcp({
-      ...options(),
-      servers,
-      input: {...options().input, onToolEvent: (event) => events.push(event)},
-    });
-    expect(events).toEqual([
-      expect.objectContaining({rawName: 'mcp__linear.v2__get.issue'}),
-    ]);
-    expect(result.output.metadata?.mcpRunToolEvents).toEqual(events);
-  });
-
-  it('keeps compatible names unchanged', () => {
+  it('keeps the portable mcp__server__tool names', () => {
     expect(
-      piToolAliases({
+      piToolNames({
         linear: {url: 'http://127.0.0.1:1/linear', tools: ['get_issue']},
       }),
-    ).toEqual({mcp__linear__get_issue: 'mcp__linear__get_issue'});
+    ).toEqual(['mcp__linear__get_issue']);
   });
+
+  it.each([
+    [
+      {'linear.v2': {url: 'http://127.0.0.1:1/x', tools: ['get_issue']}},
+      /"linear\.v2\/get_issue".*at most 64/,
+    ],
+    [
+      {linear: {url: 'http://127.0.0.1:1/x', tools: ['t'.repeat(80)]}},
+      /at most 64/,
+    ],
+    [
+      {
+        a__b: {url: 'http://127.0.0.1:1/x', tools: ['c']},
+        a: {url: 'http://127.0.0.1:1/y', tools: ['b__c']},
+      },
+      /already used/,
+    ],
+  ])(
+    'rejects names Pi cannot register before launch %#',
+    async (servers, message) => {
+      await expect(runPiWithMcp({...options(), servers})).rejects.toMatchObject(
+        {
+          category: 'configuration_failed',
+          message: expect.stringMatching(message),
+        },
+      );
+      expect(mocks.execa).not.toHaveBeenCalled();
+    },
+  );
 
   it('does not launch after cancellation', async () => {
     const f = options();

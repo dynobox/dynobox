@@ -306,22 +306,14 @@ describe.skipIf(!executable)(
       expect(f.requests).toHaveLength(0);
     });
 
-    it('calls tools whose names Pi cannot register directly', async () => {
+    it('rejects tool names Pi cannot register before model execution', async () => {
       const f = await fixture('call', 'get.issue');
-      const result = await runPiWithMcp(f.options);
-      expect(result.output.metadata?.mcpRunToolEvents).toEqual([
-        expect.objectContaining({rawName: 'mcp__linear__get.issue'}),
-      ]);
-      const observation = await f.controller.finalize({
-        harnessReady: true,
-        harnessSucceeded: true,
+      await expect(runPiWithMcp(f.options)).rejects.toMatchObject({
+        category: 'configuration_failed',
+        message: expect.stringContaining('"linear/get.issue"'),
       });
-      expect(observation).toMatchObject({
-        ready: true,
-        failures: [],
-        calls: [{server: 'linear', tool: 'get.issue', category: 'success'}],
-      });
-    }, 30000);
+      expect(f.requests).toHaveLength(0);
+    });
 
     it('keeps default project trust and user skills', async () => {
       const f = await fixture('negative');

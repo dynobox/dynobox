@@ -1,4 +1,3 @@
-import {createHash} from 'node:crypto';
 import {mkdtemp, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -7,7 +6,6 @@ import {execa} from 'execa';
 
 import {mcpDeadline, McpHarnessError} from './mcpError.js';
 import {mcpProxyEnv} from './mcpProxyEnv.js';
-import {createToolEvent} from './parsing.js';
 import {buildPiArgs, parsePiJson} from './pi.js';
 import type {
   HarnessInput,
@@ -39,7 +37,7 @@ export async function runPiWithMcp(options: {
         `Pi extra argument ${flag} conflicts with MCP mocking.`,
       );
   }
-  const aliases = piToolAliases(servers);
+  const tools = piToolNames(servers);
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...input.env,
@@ -70,7 +68,7 @@ export async function runPiWithMcp(options: {
   const directory = await mkdtemp(join(tmpdir(), 'dynobox-pi-mcp-'));
   try {
     const bridge = join(directory, 'bridge.mjs');
-    await writeFile(bridge, piBridgeSource(servers, aliases));
+    await writeFile(bridge, piBridgeSource(servers, tools));
     const result = await execa(
       executable,
       buildPiArgs(
@@ -101,16 +99,7 @@ export async function runPiWithMcp(options: {
         'execution_failed',
         parsed.errorMessage ?? 'Pi finished without a final message.',
       );
-    const logical = new Map(
-      Object.entries(aliases).map(([name, alias]) => [alias, name]),
-    );
-    const toolEvents = parsed.toolEvents.map((event) => {
-      const name = logical.get(event.rawName);
-      return name === undefined
-        ? event
-        : createToolEvent(name, event.input, event.status, event.message);
-    });
-    for (const event of toolEvents) input.onToolEvent?.(event);
+    for (const event of parsed.toolEvents) input.onToolEvent?.(event);
     return {
       harnessReady: true,
       output: {
@@ -118,7 +107,7 @@ export async function runPiWithMcp(options: {
         stdout: result.stdout,
         stderr: result.stderr,
         durationMs: Date.now() - started,
-        metadata: {mcpHarnessVersion: version, mcpRunToolEvents: toolEvents},
+        metadata: {mcpHarnessVersion: version},
       },
     };
   } finally {
@@ -127,38 +116,41 @@ export async function runPiWithMcp(options: {
 }
 
 /**
- * Pi tool names must match ^[a-zA-Z0-9_-]{1,64}$. Keep the portable
- * `mcp__server__tool` name when it fits and fall back to a stable hash.
- * Keys are logical names; values are the names registered with Pi.
+ * Pi registers each mock as `mcp__<server>__<tool>`, and Pi tool names must
+ * match ^[a-zA-Z0-9_-]{1,64}$. Reject names Pi cannot register rather than
+ * renaming them, so the model sees the same tool names on every harness.
  */
-export function piToolAliases(
-  servers: McpServerConnections,
-): Record<string, string> {
-  const aliases: Record<string, string> = {};
-  const used = new Set<string>();
+export function piToolNames(servers: McpServerConnections): string[] {
+  const names = new Set<string>();
   for (const [server, {tools}] of Object.entries(servers))
     for (const tool of tools) {
-      const logical = `mcp__${server}__${tool}`;
-      let alias = logical;
-      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(alias) || used.has(alias))
-        alias = `mcp__${createHash('sha256').update(`${server}\0${tool}`).digest('hex').slice(0, 24)}`;
-      used.add(alias);
-      aliases[logical] = alias;
+      const name = `mcp__${server}__${tool}`;
+      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name))
+        throw new McpHarnessError(
+          'configuration_failed',
+          `Pi cannot register MCP mock tool "${server}/${tool}": "${name}" must be at most 64 letters, digits, "_" or "-".`,
+        );
+      if (names.has(name))
+        throw new McpHarnessError(
+          'configuration_failed',
+          `Pi cannot register MCP mock tool "${server}/${tool}": "${name}" is already used by another mock.`,
+        );
+      names.add(name);
     }
-  return aliases;
+  return [...names];
 }
 
 // Loaded only by Pi. Transport dependencies resolve from runner-local,
 // including when the runner is bundled into dist/index.js.
 function piBridgeSource(
   servers: McpServerConnections,
-  aliases: Record<string, string>,
+  tools: readonly string[],
 ): string {
   return `
 import {Client} from ${JSON.stringify(import.meta.resolve('@modelcontextprotocol/sdk/client/index.js'))};
 import {StreamableHTTPClientTransport} from ${JSON.stringify(import.meta.resolve('@modelcontextprotocol/sdk/client/streamableHttp.js'))};
 const servers = ${JSON.stringify(servers)};
-const aliases = ${JSON.stringify(aliases)};
+const tools = ${JSON.stringify(tools)};
 const notReady = (reason) => {
   console.error(${JSON.stringify(NOT_READY_MARKER)} + ' ' + reason);
   process.exit(1);
@@ -176,8 +168,8 @@ export default async function(pi) {
     }
     const listing = await client.listTools();
     for (const tool of listing.tools) {
-      const name = aliases['mcp__' + server + '__' + tool.name];
-      if (name === undefined) continue;
+      const name = 'mcp__' + server + '__' + tool.name;
+      if (!tools.includes(name)) continue;
       pi.registerTool({name, label: server + '/' + tool.name,
         description: tool.description || server + '/' + tool.name,
         parameters: tool.inputSchema,
@@ -191,8 +183,8 @@ export default async function(pi) {
   }
   pi.on('session_start', () => {
     const active = pi.getActiveTools();
-    const missing = Object.entries(aliases).find(([, name]) => !active.includes(name));
-    if (missing) notReady('Pi did not activate MCP mock tool "' + missing[0] + '".');
+    const missing = tools.find((name) => !active.includes(name));
+    if (missing) notReady('Pi did not activate MCP mock tool "' + missing + '".');
   });
   pi.on('session_shutdown', () => Promise.all(clients.map((client) => client.close())));
 }

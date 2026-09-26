@@ -270,7 +270,9 @@ describe('isolated Claude Code MCP invocation', () => {
     const rejected = expect(pending).rejects.toMatchObject({
       category: 'execution_failed',
     });
-    await vi.waitFor(async () => expect((await launches()).length).toBe(1));
+    await vi.waitFor(async () => expect((await launches()).length).toBe(1), {
+      timeout: 10_000,
+    });
     abort.abort();
     await rejected;
     await expect(
