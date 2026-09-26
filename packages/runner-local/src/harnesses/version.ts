@@ -46,5 +46,6 @@ export function isAtLeastVersion(
     const difference = (actual[index] ?? 0) - wanted[index]!;
     if (difference !== 0) return difference > 0;
   }
-  return true;
+  // A prerelease (e.g. 1.0.0-beta) comes before its release.
+  return !version.split('+')[0]!.includes('-');
 }
