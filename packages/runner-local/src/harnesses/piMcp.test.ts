@@ -145,35 +145,6 @@ describe('Pi MCP launch contract', () => {
     ).toEqual(['mcp__linear__get_issue']);
   });
 
-  it.each([
-    [
-      {'linear.v2': {url: 'http://127.0.0.1:1/x', tools: ['get_issue']}},
-      /"linear\.v2\/get_issue".*at most 64/,
-    ],
-    [
-      {linear: {url: 'http://127.0.0.1:1/x', tools: ['t'.repeat(80)]}},
-      /at most 64/,
-    ],
-    [
-      {
-        a__b: {url: 'http://127.0.0.1:1/x', tools: ['c']},
-        a: {url: 'http://127.0.0.1:1/y', tools: ['b__c']},
-      },
-      /already used/,
-    ],
-  ])(
-    'rejects names Pi cannot register before launch %#',
-    async (servers, message) => {
-      await expect(runPiWithMcp({...options(), servers})).rejects.toMatchObject(
-        {
-          category: 'configuration_failed',
-          message: expect.stringMatching(message),
-        },
-      );
-      expect(mocks.execa).not.toHaveBeenCalled();
-    },
-  );
-
   it('does not launch after cancellation', async () => {
     const f = options();
     await expect(

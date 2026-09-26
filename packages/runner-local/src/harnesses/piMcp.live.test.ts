@@ -18,14 +18,13 @@ afterEach(async () => {
 
 async function fixture(
   mode: 'call' | 'negative' | 'failed' | 'denied' | 'hang' = 'call',
-  toolName = 'get_issue',
 ) {
   const root = await mkdtemp(join(tmpdir(), 'dynobox-pi-native-'));
   cleanup.push(() => rm(root, {recursive: true, force: true}));
   const controller = await startMcpMockController({
     linear: {
       tools: {
-        [toolName]: {
+        get_issue: {
           inputSchema: {type: 'object'},
           response: {content: [{type: 'text', text: 'fixture-receipt-42'}]},
         },
@@ -190,7 +189,7 @@ Say fixture.
             : mode === 'failed'
               ? `http://127.0.0.1:1/${'a'.repeat(48)}`
               : controller.urls.linear!,
-        tools: [toolName],
+        tools: ['get_issue'],
       },
     },
   };
@@ -303,15 +302,6 @@ describe.skipIf(!executable)(
       await expect(
         runPiWithMcp({...f.options, extraArgs: ['--tools', 'read']}),
       ).rejects.toMatchObject({category: 'not_ready'});
-      expect(f.requests).toHaveLength(0);
-    });
-
-    it('rejects tool names Pi cannot register before model execution', async () => {
-      const f = await fixture('call', 'get.issue');
-      await expect(runPiWithMcp(f.options)).rejects.toMatchObject({
-        category: 'configuration_failed',
-        message: expect.stringContaining('"linear/get.issue"'),
-      });
       expect(f.requests).toHaveLength(0);
     });
 

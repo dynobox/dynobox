@@ -46,8 +46,13 @@ describe('MCP definitions', () => {
     {},
     {linear: {tools: {}}},
     {'bad name': mocks.linear},
-    {['a'.repeat(129)]: mocks.linear},
+    {'linear.v2': mocks.linear},
+    {linear: {tools: {'get.issue': tool}}},
     {linear: {tools: {'-bad': tool}}},
+    // mcp__linear__ plus 52 characters exceeds the 64-character tool name.
+    {linear: {tools: {['t'.repeat(52)]: tool}}},
+    // Both become mcp__a__b__c.
+    {a__b: {tools: {c: tool}}, a: {tools: {b__c: tool}}},
     {linear: {tools: {save_issue: {...tool, responses: [response]}}}},
     {linear: {tools: {save_issue: {...tool, onExhausted: 'error'}}}},
     {linear: {tools: {save_issue: {inputSchema, responses: []}}}},
@@ -76,7 +81,8 @@ describe('MCP definitions', () => {
     const value = {
       Linear: mocks.linear,
       linear: mocks.linear,
-      ['a'.repeat(128)]: mocks.linear,
+      // mcp__linear__ plus 51 characters is exactly 64.
+      server: {tools: {['t'.repeat(51)]: tool}},
     };
     expect(mcpMocksSchema.parse(value)).toEqual(value);
   });

@@ -56,9 +56,13 @@ export const mcpJsonObjectSchema = z
 export const mcpNameSchema = z
   .string()
   .regex(
-    /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/,
-    'Expected a portable MCP name (1–128 letters, digits, dots, underscores, or hyphens, starting with a letter or digit).',
+    /^[A-Za-z0-9][A-Za-z0-9_-]*$/,
+    'Expected a portable MCP name (letters, digits, underscores, or hyphens, starting with a letter or digit).',
   );
+
+// Harnesses expose mocks to models as `mcp__<server>__<tool>`, and model APIs
+// only register tool names matching this pattern.
+const MAX_TOOL_NAME_LENGTH = 64;
 
 export const mcpInputMatcherSchema = mcpJsonObjectSchema.refine(
   (value) => Object.keys(value).length > 0,
@@ -130,7 +134,27 @@ export const mcpMocksSchema = z.preprocess(
     .refine(
       (value) => Object.keys(value).length > 0,
       'Declare at least one MCP mock server.',
-    ),
+    )
+    .superRefine((value, ctx) => {
+      const names = new Set<string>();
+      for (const [server, {tools}] of Object.entries(value))
+        for (const tool of Object.keys(tools)) {
+          const name = `mcp__${server}__${tool}`;
+          if (name.length > MAX_TOOL_NAME_LENGTH)
+            ctx.addIssue({
+              code: 'custom',
+              path: [server, 'tools', tool],
+              message: `MCP tool "${server}/${tool}" is exposed to models as "${name}", which exceeds ${MAX_TOOL_NAME_LENGTH} characters.`,
+            });
+          if (names.has(name))
+            ctx.addIssue({
+              code: 'custom',
+              path: [server, 'tools', tool],
+              message: `MCP tool "${server}/${tool}" is exposed to models as "${name}", which another mock tool already uses.`,
+            });
+          names.add(name);
+        }
+    }),
 );
 
 type AssertionReference = {

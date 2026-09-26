@@ -115,29 +115,11 @@ export async function runPiWithMcp(options: {
   }
 }
 
-/**
- * Pi registers each mock as `mcp__<server>__<tool>`, and Pi tool names must
- * match ^[a-zA-Z0-9_-]{1,64}$. Reject names Pi cannot register rather than
- * renaming them, so the model sees the same tool names on every harness.
- */
+/** Pi registers each mock under the `mcp__<server>__<tool>` name. */
 export function piToolNames(servers: McpServerConnections): string[] {
-  const names = new Set<string>();
-  for (const [server, {tools}] of Object.entries(servers))
-    for (const tool of tools) {
-      const name = `mcp__${server}__${tool}`;
-      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name))
-        throw new McpHarnessError(
-          'configuration_failed',
-          `Pi cannot register MCP mock tool "${server}/${tool}": "${name}" must be at most 64 letters, digits, "_" or "-".`,
-        );
-      if (names.has(name))
-        throw new McpHarnessError(
-          'configuration_failed',
-          `Pi cannot register MCP mock tool "${server}/${tool}": "${name}" is already used by another mock.`,
-        );
-      names.add(name);
-    }
-  return [...names];
+  return Object.entries(servers).flatMap(([server, {tools}]) =>
+    tools.map((tool) => `mcp__${server}__${tool}`),
+  );
 }
 
 // Loaded only by Pi. Transport dependencies resolve from runner-local,
