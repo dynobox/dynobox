@@ -227,9 +227,17 @@ function startupProblem(
   names: readonly string[],
   tools: ReadonlySet<string>,
 ): string | undefined {
+  const loaded = (
+    Array.isArray(event.mcp_servers) ? event.mcp_servers : []
+  ).filter(isRecord);
+  // Strict config should load only the mocks; any other server breaks isolation.
+  const inherited = loaded.find(
+    (server) => !names.includes(String(server.name)),
+  );
+  if (inherited !== undefined)
+    return `Claude Code loaded MCP server "${String(inherited.name)}", which is not a mock.`;
   const connected = new Set(
-    (Array.isArray(event.mcp_servers) ? event.mcp_servers : [])
-      .filter(isRecord)
+    loaded
       .filter((server) => server.status === 'connected')
       .map((server) => server.name),
   );

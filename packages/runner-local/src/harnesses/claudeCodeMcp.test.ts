@@ -163,24 +163,28 @@ describe('isolated Claude Code MCP invocation', () => {
     await expect(launches()).rejects.toThrow();
   });
 
-  it.each(['failed', 'denied', 'missing-server', 'missing-tool', 'no-init'])(
-    'fails readiness and cleans config for %s',
-    async (mode) => {
-      const {options, launches, controller} = await fixture(mode);
-      await expect(runClaudeCodeWithMcp(options)).rejects.toMatchObject({
-        category: 'not_ready',
-      });
-      await expect(
-        fs.stat(dirname((await launches())[0].path)),
-      ).rejects.toThrow();
-      const observation = await controller.finalize({
-        harnessReady: false,
-        harnessSucceeded: false,
-      });
-      expect(observation.ready).toBe(false);
-      expect(observation.failures).toContain('not_ready');
-    },
-  );
+  it.each([
+    'failed',
+    'denied',
+    'missing-server',
+    'missing-tool',
+    'no-init',
+    'extra-server',
+  ])('fails readiness and cleans config for %s', async (mode) => {
+    const {options, launches, controller} = await fixture(mode);
+    await expect(runClaudeCodeWithMcp(options)).rejects.toMatchObject({
+      category: 'not_ready',
+    });
+    await expect(
+      fs.stat(dirname((await launches())[0].path)),
+    ).rejects.toThrow();
+    const observation = await controller.finalize({
+      harnessReady: false,
+      harnessSucceeded: false,
+    });
+    expect(observation.ready).toBe(false);
+    expect(observation.failures).toContain('not_ready');
+  });
 
   it('cannot use startup listings as controller discovery evidence', async () => {
     const {options, controller} = await fixture('no-discovery');
@@ -316,6 +320,7 @@ if (mode !== 'no-discovery') {
 const init = {type: 'system', subtype: 'init', mcp_servers: [{name: 'service', status: 'connected'}], tools: ['Read', 'mcp__service__lookup']};
 if (mode === 'failed' || mode === 'denied') init.mcp_servers[0].status = mode;
 if (mode === 'missing-server') init.mcp_servers = [];
+if (mode === 'extra-server') init.mcp_servers.push({name: 'claude.ai Linear', status: 'connected'});
 if (mode === 'missing-tool') init.tools = ['Read'];
 if (mode !== 'no-init') console.log(JSON.stringify(init));
 let result = 'No tools called.';
