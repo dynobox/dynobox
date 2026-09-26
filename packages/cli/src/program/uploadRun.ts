@@ -19,10 +19,11 @@ import {
   type RunUploadV4 as RunUploadPayloadV4,
   RunUploadV4,
 } from '@dynobox/run-schema';
-import type {
-  LocalRunnerJob,
-  LocalRunnerResult,
-  ToolEvent,
+import {
+  type LocalRunnerJob,
+  type LocalRunnerResult,
+  scenarioUsesMcp,
+  type ToolEvent,
 } from '@dynobox/runner-local';
 import type {TextMatcher} from '@dynobox/sdk';
 import type {IrAssertion} from '@dynobox/sdk/ir';
@@ -192,16 +193,7 @@ function assertNoMcpUpload(
   if (
     input.results.some((result) => result.mcp !== undefined) ||
     input.dynos.some((dyno) =>
-      dyno.jobs.some(
-        (job) =>
-          job.scenario.mcpMocks !== undefined ||
-          job.scenario.assertions.some(
-            (assertion) =>
-              assertion.type.startsWith('mcp.') ||
-              (assertion.type === 'anyOf' &&
-                assertion.steps.some((step) => step.type.startsWith('mcp.'))),
-          ),
-      ),
+      dyno.jobs.some((job) => scenarioUsesMcp(job.scenario)),
     )
   ) {
     throw new Error(

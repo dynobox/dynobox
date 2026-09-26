@@ -106,25 +106,28 @@ export {
 export {runVerifyCommands} from './verify.js';
 export type {HttpEvent} from '@dynobox/evaluators';
 
+/** True when a scenario declares MCP mocks or asserts on MCP calls. */
+export function scenarioUsesMcp(scenario: LocalRunnerJob['scenario']): boolean {
+  const isMcp = (type: string) =>
+    type === 'mcp.called' || type === 'mcp.notCalled';
+  return (
+    scenario.mcpMocks !== undefined ||
+    scenario.assertions.some(
+      (assertion) =>
+        isMcp(assertion.type) ||
+        (assertion.type === 'anyOf' &&
+          assertion.steps.some((step) => isMcp(step.type))),
+    )
+  );
+}
+
 /** Reject unsupported MCP runs before scheduling or creating a workspace. */
 export function assertMcpExecutionSupported(
   scenario: LocalRunnerJob['scenario'],
   harness?: LocalRunnerJob['harness'],
   experimentalMcp = false,
 ): void {
-  if (
-    scenario.mcpMocks !== undefined ||
-    scenario.assertions.some(
-      (assertion) =>
-        assertion.type === 'mcp.called' ||
-        assertion.type === 'mcp.notCalled' ||
-        (assertion.type === 'anyOf' &&
-          assertion.steps.some(
-            (step) =>
-              step.type === 'mcp.called' || step.type === 'mcp.notCalled',
-          )),
-    )
-  ) {
+  if (scenarioUsesMcp(scenario)) {
     const harnessIds =
       harness === undefined
         ? scenario.harnesses.map((entry) => entry.id)
