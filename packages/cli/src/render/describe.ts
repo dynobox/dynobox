@@ -23,6 +23,9 @@ const SHELL_PREVIEW_MAX = 42;
  * `sequence.inOrder(2 steps)`, `artifact.exists(README.md)`.
  */
 export function describeAssertion(assertion: IrAssertion): string {
+  if (assertion.type === 'mcp.called' || assertion.type === 'mcp.notCalled') {
+    return `${assertion.type}(${assertion.server}, ${assertion.tool}${assertion.input === undefined ? '' : ', with input matcher'})`;
+  }
   if (assertion.type === 'tool.called') {
     if (assertion.command !== undefined) {
       return `tool.called(${assertion.tool}, ${describeShellMatcher(assertion.command)})`;
@@ -109,6 +112,9 @@ export function describeAssertion(assertion: IrAssertion): string {
  * `expected  …` lines.
  */
 export function describeExpectation(assertion: IrAssertion): string {
+  if (assertion.type === 'mcp.called' || assertion.type === 'mcp.notCalled') {
+    return `${assertion.type === 'mcp.called' ? 'at least one' : 'no'} ${assertion.server}.${assertion.tool} mock call${assertion.input === undefined ? '' : ' matching the expected input'}`;
+  }
   if (assertion.type === 'tool.notCalled') {
     if (assertion.command !== undefined) {
       return `no ${describeShellMatcherExpectation(assertion.command)}`;
