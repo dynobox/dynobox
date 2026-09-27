@@ -1,6 +1,12 @@
 import {z} from 'zod';
 
 import {
+  mcpInputMatcherSchema,
+  mcpMocksSchema,
+  mcpNameSchema,
+  validateMcpReferences,
+} from '../schema/mcpMocks.js';
+import {
   isToolAssertionKind,
   SHELL_COMMAND_MATCHER_SHAPE_MESSAGE,
   TOOL_MATCHER_MESSAGES,
@@ -15,7 +21,7 @@ import type {CliMockHandlerContext, CliMockResponse} from '../types/config.js';
 import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/httpMethod.js';
 
-export const IR_VERSION = '0.3' as const;
+export const IR_VERSION = '0.4' as const;
 
 export const irVersionSchema = z.literal(IR_VERSION);
 
@@ -108,6 +114,22 @@ const irAssertionBaseSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1).optional(),
 });
+
+const mcpAssertionShape = {
+  server: mcpNameSchema,
+  tool: mcpNameSchema,
+  input: mcpInputMatcherSchema.optional(),
+};
+const irMcpCalledNodeSchema = z
+  .object({type: z.literal('mcp.called'), ...mcpAssertionShape})
+  .strict();
+const irMcpNotCalledNodeSchema = z
+  .object({type: z.literal('mcp.notCalled'), ...mcpAssertionShape})
+  .strict();
+const irMcpCalledSchema = irMcpCalledNodeSchema.merge(irAssertionBaseSchema);
+const irMcpNotCalledSchema = irMcpNotCalledNodeSchema.merge(
+  irAssertionBaseSchema,
+);
 
 const irHttpCalledAssertionNodeSchema = z.object({
   type: z.literal('http.called'),
@@ -292,6 +314,8 @@ function validateIrSequenceStep(
 
 const irAssertionNodeSchema = z
   .discriminatedUnion('type', [
+    irMcpCalledNodeSchema,
+    irMcpNotCalledNodeSchema,
     irHttpCalledAssertionNodeSchema,
     irHttpNotCalledAssertionNodeSchema,
     irToolCalledAssertionNodeSchema,
@@ -332,6 +356,8 @@ const irAnyOfAssertionSchema = irAssertionBaseSchema.merge(
 
 export const irAssertionSchema = z
   .discriminatedUnion('type', [
+    irMcpCalledSchema,
+    irMcpNotCalledSchema,
     irHttpCalledAssertionSchema,
     irHttpNotCalledAssertionSchema,
     irToolCalledAssertionSchema,
@@ -374,19 +400,22 @@ export const irAssertionSchema = z
     }
   });
 
-export const irScenarioSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  prompt: z.string().min(1),
-  harnesses: z.array(irHarnessConfigSchema).min(1),
-  setup: z.array(z.string().min(1)),
-  fixtures: z.array(z.string().min(1)),
-  cliMocks: z
-    .record(cliMockExecutableSchema, irCliMockConfigSchema)
-    .default({}),
-  endpoints: z.array(irEndpointSchema),
-  assertions: z.array(irAssertionSchema),
-});
+export const irScenarioSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    prompt: z.string().min(1),
+    harnesses: z.array(irHarnessConfigSchema).min(1),
+    setup: z.array(z.string().min(1)),
+    fixtures: z.array(z.string().min(1)),
+    cliMocks: z
+      .record(cliMockExecutableSchema, irCliMockConfigSchema)
+      .default({}),
+    mcpMocks: mcpMocksSchema.optional(),
+    endpoints: z.array(irEndpointSchema),
+    assertions: z.array(irAssertionSchema),
+  })
+  .superRefine(validateMcpReferences);
 
 export const irSchema = z.object({
   version: irVersionSchema,

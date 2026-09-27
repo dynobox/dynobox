@@ -1,5 +1,5 @@
 import type {ToolEvent} from '@dynobox/sdk';
-import type {IrAssertion} from '@dynobox/sdk/ir';
+import type {IrAssertion, McpObservation} from '@dynobox/sdk/ir';
 
 export type {ToolEvent} from '@dynobox/sdk';
 
@@ -88,6 +88,7 @@ export type ArtifactUnchangedEvidence = {
 
 /** Inputs available when evaluating one scenario's compiled assertions. */
 export type EvaluationInput = {
+  mcpObservation?: McpObservation | undefined;
   assertions: readonly IrAssertion[];
   toolEvents: readonly ToolEvent[];
   httpEvents?: readonly HttpEvent[] | undefined;
