@@ -21,6 +21,7 @@
   "dependencies": {
     "@dynobox/evaluators": "workspace:*",
     "@dynobox/sdk": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "execa": "^9.6.1",
     "mockttp": "^4.4.1"
   },
