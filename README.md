@@ -63,6 +63,35 @@ npx dynobox run
 Run one `init` command for a harness that is installed and authenticated, then
 run the generated dyno.
 
+MCP tool mocking is experimental. Run `dynobox run <dyno>`, or use
+`pnpm dynolocal run <dyno>` in a local source checkout. Claude Code, Codex,
+OpenCode, Pi, and Antigravity support this path; Cursor is still disabled because
+account-installed plugin MCP servers cannot yet be excluded from a CLI run.
+MCP runs cannot be uploaded.
+
+Mock server and tool names can use only letters, digits, `_` and `-`. Models
+see each tool as `mcp__<server>__<tool>`, and that name must be 64 characters
+or fewer. `dynobox validate` rejects other names. A Codex or OpenCode run fails
+if your harness config already has an MCP server with the same name as a mock.
+To use the mock, rename or remove that server. OpenCode also fails when two
+mocks would share one OpenCode tool id, such as server `a` with tool `b_c` and
+server `a_b` with tool `c`.
+
+Dynobox allows the mock tools declared by each scenario for that job. No
+separate permission flag is needed. If a harness still refuses a mock call,
+the job fails, so a `mcp.notCalled` assertion cannot pass on a refused call.
+
+Each adapter requires a minimum harness version (Claude Code 2.1.263, Codex
+0.153.4, OpenCode 1.18.26, Pi 0.84.2, Antigravity 1.2.11); newer releases run
+too. MCP jobs follow the same timeout as other jobs and report a `timed_out`
+failure when one expires. Claude Code uses strict MCP configuration; a deployed
+enterprise `managed-mcp.json` prevents its mock run from starting. Antigravity
+requires an installed profile without inherited MCP servers, plugins, or
+custom agents. The adapter rejects those sources before it runs a
+model. The adapter puts the declared mock tools in a temporary Antigravity
+project record and removes it after the run. Antigravity keeps mock tool
+definitions in your home directory, so its MCP jobs run one at a time.
+
 `dynobox init` creates a starter dyno in `dynobox/example.dyno.mjs`.
 `dynobox run` discovers `*.dyno.{mjs,js,ts,mts,yaml,yml}` files below the current
 directory and runs their scenarios against the configured harnesses.
@@ -134,7 +163,7 @@ When a check fails, the output shows what was expected and what was observed.
 | Commands     | `command.called`, `command.notCalled`                        | Did it execute the expected shell command?                  |
 | Files        | `artifact.exists`, `artifact.contains`, `artifact.unchanged` | Did it create, change, or preserve the right files?         |
 | Skills       | `skill.referenced`                                           | Did it reference the required skill instructions?           |
-| Network*     | `http.called`, `http.notCalled`                              | Did a proxy-aware child process call the expected endpoint? |
+| Network\*    | `http.called`, `http.notCalled`                              | Did a proxy-aware child process call the expected endpoint? |
 | Response     | `transcript.contains`, `finalMessage.contains`               | Did the interaction contain required information?           |
 | Logic        | `sequence.inOrder`, `anyOf`                                  | Did the observed behavior follow an accepted path or order? |
 | Verification | `verify.command`                                             | Does the completed work pass a custom executable check?     |
