@@ -1,3 +1,4 @@
+import {existsSync} from 'node:fs';
 import {
   mkdir,
   mkdtemp,
@@ -31,7 +32,9 @@ async function fixture(
     | 'denied'
     | 'ask'
     | 'ask-continue'
-    | 'question' = 'call',
+    | 'question'
+    | 'ask-bash'
+    | 'ask-subagent' = 'call',
 ) {
   const root = await mkdtemp(join(tmpdir(), 'dynobox-opencode-native-'));
   cleanup.push(() => rm(root, {recursive: true, force: true}));
@@ -51,6 +54,8 @@ async function fixture(
   const requests: Record<string, unknown>[] = [];
   let realContacts = 0;
   let globalContacts = 0;
+  let bashCalled = false;
+  let taskCalled = false;
   const provider = createServer(async (request, response) => {
     if (request.url === '/real-mcp') {
       realContacts++;
@@ -67,21 +72,58 @@ async function fixture(
     const body = JSON.parse(Buffer.concat(chunks).toString());
     requests.push(body);
     const tool = body.tools?.find((entry: {function?: {name?: string}}) =>
-      mode === 'question'
-        ? entry.function?.name === 'question'
+      mode === 'question' || mode === 'ask-bash'
+        ? entry.function?.name === (mode === 'question' ? 'question' : 'bash')
         : entry.function?.name?.endsWith('_get_issue'),
     );
     const hasReceipt = JSON.stringify(body.messages).includes(
       'fixture-receipt-42',
     );
+    // The parent delegates to a subagent, which runs an `ask`-gated command.
+    let delegated: {name: string; arguments: string} | undefined;
+    if (mode === 'ask-subagent') {
+      const names: unknown[] = (body.tools ?? []).map(
+        (entry: {function?: {name?: string}}) => entry.function?.name,
+      );
+      const inSubagent = (
+        body.messages as {role: string; content: unknown}[]
+      ).some(
+        (message) =>
+          message.role === 'user' &&
+          JSON.stringify(message.content).includes('SUBAGENT_RUN_TOUCH'),
+      );
+      if (inSubagent && !bashCalled && names.includes('bash')) {
+        bashCalled = true;
+        delegated = {
+          name: 'bash',
+          arguments: JSON.stringify({
+            command: 'touch bash-ran',
+            description: 'Mark the run',
+          }),
+        };
+      } else if (!inSubagent && !taskCalled && names.includes('task')) {
+        taskCalled = true;
+        delegated = {
+          name: 'task',
+          arguments: JSON.stringify({
+            description: 'Mark the run',
+            prompt: 'SUBAGENT_RUN_TOUCH',
+            subagent_type: 'general',
+          }),
+        };
+      }
+    }
     const call =
-      (mode === 'call' ||
+      delegated !== undefined ||
+      ((mode === 'call' ||
         mode === 'ask' ||
         mode === 'ask-continue' ||
-        mode === 'question') &&
-      !hasReceipt &&
-      !!tool &&
-      requests.length < 10;
+        mode === 'question' ||
+        (mode === 'ask-bash' && !bashCalled)) &&
+        !hasReceipt &&
+        !!tool &&
+        requests.length < 10);
+    if (call && mode === 'ask-bash') bashCalled = true;
     const delta = call
       ? {
           tool_calls: [
@@ -89,12 +131,17 @@ async function fixture(
               index: 0,
               id: 'call_fixture',
               type: 'function',
-              function: {
+              function: delegated ?? {
                 name: tool?.function.name ?? 'missing',
                 arguments:
                   mode === 'question'
                     ? '{"questions":[{"question":"Which issue?","header":"Issue","options":[{"label":"DYNO-1","description":"First"}]}]}'
-                    : '{"id":"DYNO-1"}',
+                    : mode === 'ask-bash'
+                      ? JSON.stringify({
+                          command: 'touch bash-ran',
+                          description: 'Mark the run',
+                        })
+                      : '{"id":"DYNO-1"}',
               },
             },
           ],
@@ -150,6 +197,9 @@ async function fixture(
     ...(mode === 'denied' ? {permission: {linear_get_issue: 'deny'}} : {}),
     ...(mode === 'ask' || mode === 'ask-continue'
       ? {permission: {linear_get_issue: 'ask'}}
+      : {}),
+    ...(mode === 'ask-bash' || mode === 'ask-subagent'
+      ? {permission: {bash: 'ask'}}
       : {}),
     // The model keeps going after a denial and can still finish with "stop".
     ...(mode === 'ask-continue'
@@ -408,6 +458,36 @@ describe.skipIf(!executable)(
         },
       });
       expect(result.harnessReady).toBe(true);
+    }, 30000);
+
+    it.each([
+      ['default', false],
+      ['dangerous', true],
+    ] as const)(
+      'treats an "ask" rule for a non-mock tool like opencode run in %s mode',
+      async (permissionMode, runs) => {
+        const f = await fixture('ask-bash');
+        const result = await runOpenCodeWithMcp({
+          ...f.options,
+          input: {...f.options.input, permissionMode},
+        });
+        expect(result.harnessReady).toBe(true);
+        // Default mode rejects the command; dangerous mode approves it.
+        expect(existsSync(join(f.options.input.workDir, 'bash-ran'))).toBe(
+          runs,
+        );
+      },
+      30000,
+    );
+
+    it('approves a subagent "ask" in dangerous mode like opencode run --auto', async () => {
+      const f = await fixture('ask-subagent');
+      const result = await runOpenCodeWithMcp({
+        ...f.options,
+        input: {...f.options.input, permissionMode: 'dangerous'},
+      });
+      expect(result.harnessReady).toBe(true);
+      expect(existsSync(join(f.options.input.workDir, 'bash-ran'))).toBe(true);
     }, 30000);
 
     it('runs a mock tool with normal permissions', async () => {

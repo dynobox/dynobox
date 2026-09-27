@@ -34,10 +34,23 @@ const WORKSPACE_FLAGS = new Set([
   '--conversation',
 ]);
 
-// Runs in this process using each tool definition directory. Antigravity keys
-// the directory by server name only, so it is removed after the last
-// concurrent run using it finishes.
-const activeToolDirs = new Map<string, number>();
+// Antigravity keeps each MCP tool definition in HOME, keyed only by server
+// name, and concurrent agy processes rewrite it under each other; a run could
+// then start without the mock tool. Runs that share a HOME take turns.
+const homeTurns = new Map<string, Promise<void>>();
+
+function inTurn<T>(home: string, run: () => Promise<T>): Promise<T> {
+  const result = (homeTurns.get(home) ?? Promise.resolve()).then(run);
+  const settled = result.then(
+    () => {},
+    () => {},
+  );
+  homeTurns.set(home, settled);
+  void settled.then(() => {
+    if (homeTurns.get(home) === settled) homeTurns.delete(home);
+  });
+  return result;
+}
 
 /**
  * Antigravity has no flag to ignore inherited MCP sources, so the run uses the
@@ -70,145 +83,141 @@ export async function runAntigravityWithMcp(options: {
   await assertNoInheritedMcpSources(cwd, home);
   await removeDynoboxProjectRecords(home);
 
-  const env = {
-    ...process.env,
-    ...input.env,
-    HOME: home,
-    ...mcpProxyEnv({...process.env, ...input.env}),
-  };
-  const processOptions = {
-    cwd,
-    env,
-    extendEnv: false,
-    reject: false as const,
-    stdin: 'ignore' as const,
-    forceKillAfterDelay: 1000,
-    ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
-  };
-  const probe = await execa(executable, ['--version'], {
-    ...processOptions,
-    timeout: Math.min(5000, remaining()),
-  });
-  remaining();
-  const version = requireMcpVersion('Antigravity', MIN_VERSION, probe);
-  const plugins = await execa(executable, ['plugin', 'list'], {
-    ...processOptions,
-    timeout: Math.min(5000, remaining()),
-  });
-  if (plugins.failed || plugins.stdout.trim() !== 'No imported plugins.')
-    throw new McpHarnessError(
-      'configuration_failed',
-      'Antigravity has imported plugins that could load other MCP servers; remove them to use MCP mocks.',
-    );
-
-  const projectId = randomUUID();
-  const projectRecord = join(
-    home,
-    '.gemini',
-    'config',
-    'projects',
-    `${projectId}.json`,
-  );
-  const projectConfig = join(cwd, '.agents', 'mcp_config.json');
-  // Remove the .agents directory after the run only when this run created it.
-  const createdAgentsDir =
-    (await mkdir(dirname(projectConfig), {recursive: true})) !== undefined;
-  // Antigravity copies each MCP tool definition here and the model reads it.
-  // The inherited-source check means only mocks can own these names.
-  const toolDirs = Object.keys(servers).map((name) =>
-    join(home, '.gemini', 'antigravity-cli', 'mcp', name),
-  );
-  for (const dir of toolDirs)
-    activeToolDirs.set(dir, (activeToolDirs.get(dir) ?? 0) + 1);
-  try {
-    await mkdir(dirname(projectRecord), {recursive: true});
-    await writeFile(
-      projectRecord,
-      JSON.stringify({
-        id: projectId,
-        name: `dynobox-${projectId}`,
-        projectResources: {
-          resources: [{folderUri: pathToFileURL(cwd).href}],
-        },
-        ...(input.allowedMcpTools?.length
-          ? {
-              permissionGrants: {
-                permissionGrants: {
-                  allow: input.allowedMcpTools.map(
-                    ({server, tool}) => `mcp(${server}/${tool})`,
-                  ),
-                },
-                v2Migrated: true,
-              },
-            }
-          : {}),
-      }),
-    );
-    await writeFile(
-      projectConfig,
-      JSON.stringify({
-        mcpServers: Object.fromEntries(
-          Object.entries(servers).map(([name, server]) => [
-            name,
-            {serverUrl: server.url},
-          ]),
-        ),
-      }),
-    );
-    const result = await execa(
-      executable,
-      buildAntigravityArgs(
-        cwd,
-        input.prompt,
-        options.extraArgs ?? [],
-        input.model,
-        input.permissionMode,
-        input.timeoutMs === undefined ? undefined : remaining(),
-        projectId,
-      ),
-      {...processOptions, timeout: remaining()},
-    );
-    remaining();
-    if (result.failed)
-      throw new McpHarnessError(
-        'execution_failed',
-        `Antigravity exited with code ${result.exitCode ?? 'unknown'}.`,
-      );
-    const parsed = parseAntigravityJson(result.stdout);
-    if (parsed.terminalFailure || !parsed.finalMessage)
-      throw new McpHarnessError(
-        'execution_failed',
-        parsed.errorMessage ?? 'Antigravity finished without a final message.',
-      );
-    for (const event of parsed.toolEvents) input.onToolEvent?.(event);
-    return {
-      harnessReady: true,
-      version,
-      output: {
-        exitCode: 0,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        durationMs: Date.now() - started,
-      },
+  return inTurn(home, async () => {
+    const env = {
+      ...process.env,
+      ...input.env,
+      HOME: home,
+      ...mcpProxyEnv({...process.env, ...input.env}),
     };
-  } finally {
-    const released = toolDirs.filter((dir) => {
-      const count = (activeToolDirs.get(dir) ?? 1) - 1;
-      if (count > 0) activeToolDirs.set(dir, count);
-      else activeToolDirs.delete(dir);
-      return count === 0;
+    const processOptions = {
+      cwd,
+      env,
+      extendEnv: false,
+      reject: false as const,
+      stdin: 'ignore' as const,
+      forceKillAfterDelay: 1000,
+      ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
+    };
+    const probe = await execa(executable, ['--version'], {
+      ...processOptions,
+      timeout: Math.min(5000, remaining()),
     });
-    await Promise.all([
-      rm(projectConfig, {force: true}).then(() =>
-        // Keep the directory if the agent wrote other files into it.
-        createdAgentsDir ? rmdir(dirname(projectConfig)).catch(() => {}) : {},
-      ),
-      rm(projectRecord, {force: true}),
-      ...released.map((dir) =>
-        rm(dir, {recursive: true, force: true}).catch(() => {}),
-      ),
-    ]);
-  }
+    remaining();
+    const version = requireMcpVersion('Antigravity', MIN_VERSION, probe);
+    const plugins = await execa(executable, ['plugin', 'list'], {
+      ...processOptions,
+      timeout: Math.min(5000, remaining()),
+    });
+    if (plugins.failed || plugins.stdout.trim() !== 'No imported plugins.')
+      throw new McpHarnessError(
+        'configuration_failed',
+        'Antigravity has imported plugins that could load other MCP servers; remove them to use MCP mocks.',
+      );
+
+    const projectId = randomUUID();
+    const projectRecord = join(
+      home,
+      '.gemini',
+      'config',
+      'projects',
+      `${projectId}.json`,
+    );
+    const projectConfig = join(cwd, '.agents', 'mcp_config.json');
+    // Remove the .agents directory after the run only when this run created it.
+    const createdAgentsDir =
+      (await mkdir(dirname(projectConfig), {recursive: true})) !== undefined;
+    // Antigravity copies each MCP tool definition here and the model reads it.
+    // The inherited-source check means only mocks can own these names, and
+    // taking turns means no other run in this process is using them.
+    const toolDirs = Object.keys(servers).map((name) =>
+      join(home, '.gemini', 'antigravity-cli', 'mcp', name),
+    );
+    try {
+      await mkdir(dirname(projectRecord), {recursive: true});
+      await writeFile(
+        projectRecord,
+        JSON.stringify({
+          id: projectId,
+          name: `dynobox-${projectId}`,
+          projectResources: {
+            resources: [{folderUri: pathToFileURL(cwd).href}],
+          },
+          ...(input.allowedMcpTools?.length
+            ? {
+                permissionGrants: {
+                  permissionGrants: {
+                    allow: input.allowedMcpTools.map(
+                      ({server, tool}) => `mcp(${server}/${tool})`,
+                    ),
+                  },
+                  v2Migrated: true,
+                },
+              }
+            : {}),
+        }),
+      );
+      await writeFile(
+        projectConfig,
+        JSON.stringify({
+          mcpServers: Object.fromEntries(
+            Object.entries(servers).map(([name, server]) => [
+              name,
+              {serverUrl: server.url},
+            ]),
+          ),
+        }),
+      );
+      const result = await execa(
+        executable,
+        buildAntigravityArgs(
+          cwd,
+          input.prompt,
+          options.extraArgs ?? [],
+          input.model,
+          input.permissionMode,
+          input.timeoutMs === undefined ? undefined : remaining(),
+          projectId,
+        ),
+        {...processOptions, timeout: remaining()},
+      );
+      remaining();
+      if (result.failed)
+        throw new McpHarnessError(
+          'execution_failed',
+          `Antigravity exited with code ${result.exitCode ?? 'unknown'}.`,
+        );
+      const parsed = parseAntigravityJson(result.stdout);
+      if (parsed.terminalFailure || !parsed.finalMessage)
+        throw new McpHarnessError(
+          'execution_failed',
+          parsed.errorMessage ??
+            'Antigravity finished without a final message.',
+        );
+      for (const event of parsed.toolEvents) input.onToolEvent?.(event);
+      return {
+        harnessReady: true,
+        version,
+        output: {
+          exitCode: 0,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          durationMs: Date.now() - started,
+        },
+      };
+    } finally {
+      await Promise.all([
+        rm(projectConfig, {force: true}).then(() =>
+          // Keep the directory if the agent wrote other files into it.
+          createdAgentsDir ? rmdir(dirname(projectConfig)).catch(() => {}) : {},
+        ),
+        rm(projectRecord, {force: true}),
+        ...toolDirs.map((dir) =>
+          rm(dir, {recursive: true, force: true}).catch(() => {}),
+        ),
+      ]);
+    }
+  });
 }
 
 async function assertNoInheritedMcpSources(

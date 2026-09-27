@@ -138,8 +138,13 @@ export async function prepareOpenCodeMcpConfiguration(options: {
   };
 }
 
+/**
+ * Config rules for a dangerous-mode session, in order after its `*` allow.
+ * Like `opencode run --auto`, an `ask` rule is approved rather than asked.
+ */
 function collectDenials(config: Config) {
   const denials: OpenCodeMcpConfiguration['denials'] = [];
+  const auto = (action: string) => (action === 'ask' ? 'allow' : action);
   for (const source of [
     config,
     asRecord(asRecord(config.agent)[String(config.default_agent ?? 'build')]),
@@ -151,11 +156,11 @@ function collectDenials(config: Config) {
       asRecord(source.permission),
     )) {
       if (typeof value === 'string')
-        denials.push({permission, pattern: '*', action: value});
+        denials.push({permission, pattern: '*', action: auto(value)});
       else if (isRecord(value))
         for (const [pattern, action] of Object.entries(value))
           if (typeof action === 'string')
-            denials.push({permission, pattern, action});
+            denials.push({permission, pattern, action: auto(action)});
     }
   }
   return denials;
@@ -390,8 +395,11 @@ export async function runOpenCodeWithMcp(options: {
         modelID: input.model.slice(slash + 1),
       };
     }
-    // `opencode run` auto-rejects permission requests, but serve waits for a
-    // reply. Reject them the same way so an `ask` rule cannot stall the run.
+    // serve waits for a reply to each permission request. Answer the way
+    // `opencode run` does so an `ask` rule cannot stall the run: reject, or
+    // approve once under --auto. Subagent sessions do not inherit the
+    // session's `*` allow rule, so their requests arrive here too.
+    const approve = input.permissionMode === 'dangerous';
     let prompting = true;
     const rejected = new Set<string>();
     const rejectPermissions = (async () => {
@@ -399,9 +407,9 @@ export async function runOpenCodeWithMcp(options: {
         const pending = await request('/permission').catch(() => []);
         for (const value of Array.isArray(pending) ? pending : []) {
           const permission = asRecord(value);
-          rejected.add(String(permission.permission));
+          if (!approve) rejected.add(String(permission.permission));
           await request(`/permission/${String(permission.id)}/reply`, {
-            reply: 'reject',
+            reply: approve ? 'once' : 'reject',
           }).catch(() => {});
         }
         await delay(200);
@@ -421,21 +429,21 @@ export async function runOpenCodeWithMcp(options: {
     }
     const info = asRecord(completed.info);
     // A rejected mock call never reaches the mock, so it would otherwise let
-    // a negative assertion pass. Other rejections end the turn early.
+    // a negative assertion pass.
     const mockIds = new Set(
       Object.entries(servers).flatMap(([server, {tools}]) =>
         tools.map((tool) => toolId(server, tool)),
       ),
     );
-    if (
-      rejected.size > 0 &&
-      (info.finish !== 'stop' || [...rejected].some((id) => mockIds.has(id)))
-    )
+    const rejectedMocks = [...rejected].filter((id) => mockIds.has(id));
+    if (rejectedMocks.length > 0)
       throw new McpHarnessError(
         'execution_failed',
-        `OpenCode rejected an "ask" permission for ${[...rejected].join(', ')}. Check the OpenCode permission settings.`,
+        `OpenCode rejected an "ask" permission for ${rejectedMocks.join(', ')}. Allow the tool in the OpenCode config, including any agent-level permission rules.`,
       );
-    if (info.error || info.finish !== 'stop')
+    // Like `opencode run`, another rejected permission ends the turn without
+    // failing it; the assertions judge the result.
+    if (info.error || (info.finish !== 'stop' && rejected.size === 0))
       throw new McpHarnessError(
         'execution_failed',
         `OpenCode finished with ${info.error ? JSON.stringify(info.error) : String(info.finish)}.`,

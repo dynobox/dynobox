@@ -89,7 +89,8 @@ enterprise `managed-mcp.json` prevents its mock run from starting. Antigravity
 requires an installed profile without inherited MCP servers, plugins, or
 custom agents. The adapter rejects those sources before it runs a
 model. The adapter puts the declared mock tools in a temporary Antigravity
-project record and removes it after the run.
+project record and removes it after the run. Antigravity keeps mock tool
+definitions in your home directory, so its MCP jobs run one at a time.
 
 `dynobox init` creates a starter dyno in `dynobox/example.dyno.mjs`.
 `dynobox run` discovers `*.dyno.{mjs,js,ts,mts,yaml,yml}` files below the current
@@ -162,7 +163,7 @@ When a check fails, the output shows what was expected and what was observed.
 | Commands     | `command.called`, `command.notCalled`                        | Did it execute the expected shell command?                  |
 | Files        | `artifact.exists`, `artifact.contains`, `artifact.unchanged` | Did it create, change, or preserve the right files?         |
 | Skills       | `skill.referenced`                                           | Did it reference the required skill instructions?           |
-| Network*     | `http.called`, `http.notCalled`                              | Did a proxy-aware child process call the expected endpoint? |
+| Network\*    | `http.called`, `http.notCalled`                              | Did a proxy-aware child process call the expected endpoint? |
 | Response     | `transcript.contains`, `finalMessage.contains`               | Did the interaction contain required information?           |
 | Logic        | `sequence.inOrder`, `anyOf`                                  | Did the observed behavior follow an accepted path or order? |
 | Verification | `verify.command`                                             | Does the completed work pass a custom executable check?     |

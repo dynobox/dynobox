@@ -396,14 +396,14 @@ describe.skipIf(!executable)(
   },
 );
 
-it('keeps shared tool definitions until the last concurrent run ends', async () => {
+it('runs sharing a HOME take turns, even after one fails', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-fake-'));
   cleanup.push(() => rm(root, {recursive: true, force: true}));
   const home = join(root, 'home');
   const toolDir = join(home, '.gemini', 'antigravity-cli', 'mcp', 'linear');
   const fake = join(root, 'fake-agy');
-  // The slow run checks its tool definitions still exist after the fast run
-  // has finished and cleaned up.
+  // Each run reports whether another was active or had removed its tool
+  // definitions while it ran.
   await writeFile(
     fake,
     `#!/bin/sh
@@ -411,9 +411,14 @@ case "$1" in
   --version) echo 1.2.11; exit 0 ;;
   plugin) echo 'No imported plugins.'; exit 0 ;;
 esac
+reply=kept
+touch '${root}'/active-$$
 mkdir -p '${toolDir}'
-case "$*" in *slow*) sleep 1 ;; esac
-if [ -d '${toolDir}' ]; then reply=kept; else reply=removed; fi
+case "$*" in *fail*) rm -f '${root}'/active-$$; exit 1 ;; esac
+sleep 0.3
+for other in '${root}'/active-*; do [ "$other" = '${root}'/active-$$ ] || reply=overlap; done
+[ -d '${toolDir}' ] || reply=removed
+rm -f '${root}'/active-$$
 printf '{"event":"result","result":{"status":"SUCCESS","response":"%s"}}\\n' "$reply"
 `,
     {mode: 0o755},
@@ -428,9 +433,15 @@ printf '{"event":"result","result":{"status":"SUCCESS","response":"%s"}}\\n' "$r
     });
     return new AntigravityHarness().extractResult(output).finalMessage;
   };
-  expect(await Promise.all([run('slow'), run('fast')])).toEqual([
-    'kept',
-    'kept',
+  const [first, failed, last] = await Promise.allSettled([
+    run('first'),
+    run('fail'),
+    run('last'),
+  ]);
+  expect(failed).toMatchObject({status: 'rejected'});
+  expect([first, last]).toEqual([
+    {status: 'fulfilled', value: 'kept'},
+    {status: 'fulfilled', value: 'kept'},
   ]);
   await expect(readdir(toolDir)).rejects.toMatchObject({code: 'ENOENT'});
 });

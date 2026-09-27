@@ -109,7 +109,12 @@ describe('OpenCode MCP configuration preparation', () => {
   it('honors the last matching permission rule and ignores other agents', async () => {
     const {options} = await fixture();
     options.input.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
-      permission: {'*': 'deny', linear_get_issue: 'allow'},
+      permission: {
+        '*': 'deny',
+        linear_get_issue: 'allow',
+        bash: 'ask',
+        edit: {'*.md': 'ask'},
+      },
       agent: {review: {permission: {linear_get_issue: 'deny'}}},
     });
     const prepared = await prepareOpenCodeMcpConfiguration(options);
@@ -119,9 +124,12 @@ describe('OpenCode MCP configuration preparation', () => {
       '*': 'deny',
       linear_get_issue: 'allow',
     });
+    // Dangerous-mode session rules approve `ask`, like `opencode run --auto`.
     expect(prepared.denials).toEqual([
       {permission: '*', pattern: '*', action: 'deny'},
       {permission: 'linear_get_issue', pattern: '*', action: 'allow'},
+      {permission: 'bash', pattern: '*', action: 'allow'},
+      {permission: 'edit', pattern: '*.md', action: 'allow'},
     ]);
   });
 
