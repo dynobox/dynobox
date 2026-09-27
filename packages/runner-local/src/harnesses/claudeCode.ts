@@ -8,7 +8,7 @@ import {
   parseJsonObjectLine,
   textFromContent,
 } from './parsing.js';
-import {resolveMcpExecutable} from './resolveMcpExecutable.js';
+import {prepareMcpHarness} from './resolveMcpExecutable.js';
 import {runStreamingHarness} from './runStreamingHarness.js';
 import type {
   Harness,
@@ -57,20 +57,12 @@ export class ClaudeCodeHarness implements Harness {
     input: Pick<HarnessInput, 'workDir' | 'env'>,
   ): Promise<PreparedMcpHarness> {
     const {runClaudeCodeWithMcp} = await import('./claudeCodeMcp.js');
-    const {executable, workDir} = await resolveMcpExecutable(
+    return prepareMcpHarness(
       this.executable,
+      this.extraArgs,
       input,
+      runClaudeCodeWithMcp,
     );
-    const extraArgs = [...this.extraArgs];
-    return {
-      run: (runInput, servers) =>
-        runClaudeCodeWithMcp({
-          executable,
-          input: {...runInput, workDir},
-          extraArgs,
-          servers,
-        }),
-    };
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {

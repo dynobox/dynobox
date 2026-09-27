@@ -16,7 +16,7 @@ afterEach(async () => {
   );
 });
 
-async function fixture(mode = 'call') {
+async function fixture(mode = 'call', mixed = false) {
   const root = await mkdtemp(join(tmpdir(), 'dynobox-cli-mcp-'));
   roots.push(root);
   const path = join(root, 'linear.dyno.yaml');
@@ -76,6 +76,15 @@ async function fixture(mode = 'call') {
             },
           ],
         },
+        ...(mixed
+          ? [
+              {
+                name: 'Plain',
+                prompt: 'Reply.',
+                assertions: [{type: 'finalMessage.contains', text: 'done'}],
+              },
+            ]
+          : []),
       ],
     }),
   );
@@ -88,7 +97,6 @@ async function fixture(mode = 'call') {
       harnesses: [new ClaudeCodeHarness({executable})],
       timeoutMs: 3000,
       env: {
-        DYNOBOX_EXPERIMENTAL_MCP: '1',
         MCP_TEST_LOG: log,
         MCP_TEST_MODE: mode,
       } as Record<string, string>,
@@ -100,14 +108,7 @@ describe('MCP CLI execution', () => {
   it('runs a YAML dyno through Claude preparation, controller, assertions and v3 JSON', async () => {
     const {path, options, log} = await fixture();
     const result = await executeCli(
-      [
-        'run',
-        path,
-        '--reporter',
-        'json',
-        '--allow-mcp-tool',
-        'linear/get_issue',
-      ],
+      ['run', path, '--reporter', 'json'],
       options,
     );
     expect(result.exitCode).toBe(0);
@@ -153,7 +154,12 @@ describe('MCP CLI execution', () => {
       .split('\n')
       .map((line) => JSON.parse(line));
     expect(launches).toHaveLength(2);
-    expect(launches[1].args).toContain('--allowedTools=mcp__linear__get_issue');
+    const grants = launches[1].args.indexOf('--allowedTools');
+    expect(launches[1].args.slice(grants, grants + 3)).toEqual([
+      '--allowedTools',
+      'mcp__linear__get_issue',
+      'mcp__linear__save_issue',
+    ]);
     expect(launches[1].args).not.toContain('bypassPermissions');
     await expect(readFile(launches[1].path)).rejects.toThrow();
     await expect(readFile(dirname(launches[1].path))).rejects.toThrow();
@@ -189,26 +195,39 @@ describe('MCP CLI execution', () => {
     );
   });
 
-  it.each(['linear/missing', 'unknown/get_issue', 'linear/get_issue/extra'])(
-    'rejects undeclared grant %s',
-    async (grant) => {
-      const {path, root, options, log} = await fixture();
-      const result = await executeCli(
-        ['run', path, '--allow-mcp-tool', grant],
-        options,
-      );
-      expect(result.exitCode).toBe(configErrorExitCode);
-      expect(result.stderr).toContain('must name a declared mock server/tool');
-      await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();
-      await expect(readFile(log)).rejects.toThrow();
-    },
-  );
+  it('grants only the declared MCP tools in a run that mixes scenarios', async () => {
+    const {path, options, log} = await fixture('call', true);
+    const result = await executeCli(
+      ['run', path, '--reporter', 'json'],
+      options,
+    );
+    expect(result.stderr).toBe('');
+    expect(result.exitCode).toBe(0);
+    const jobs = result.stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+      .slice(0, -1); // The last line is the run summary.
+    expect(jobs.map((job) => job.status)).toEqual(['passed', 'passed']);
+    const launches = (await readFile(log, 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    const grants = launches[1].args.indexOf('--allowedTools');
+    expect(launches[1].args.slice(grants, grants + 3)).toEqual([
+      '--allowedTools',
+      'mcp__linear__get_issue',
+      'mcp__linear__save_issue',
+    ]);
+    expect(
+      launches[2].args.some((arg: string) => arg.startsWith('--allowedTools')),
+    ).toBe(false);
+  });
 
-  it.each(['disabled', 'unsupported', 'upload'] as const)(
+  it.each(['unsupported', 'upload'] as const)(
     'rejects %s before setup or invocation',
     async (mode) => {
       const {path, root, options, log} = await fixture();
-      if (mode === 'disabled') options.env.DYNOBOX_EXPERIMENTAL_MCP = '0';
       // Skip the auth preflight so the MCP upload check is reached.
       if (mode === 'upload')
         options.env.DYNOBOX_UPLOAD_URL = 'http://127.0.0.1:9/upload';
@@ -224,9 +243,7 @@ describe('MCP CLI execution', () => {
       expect(result.stderr).toContain(
         mode === 'upload'
           ? 'local-only'
-          : mode === 'unsupported'
-            ? 'plugin-provided MCP servers cannot be isolated'
-            : 'not enabled',
+          : 'plugin-provided MCP servers cannot be isolated',
       );
       await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();
       await expect(readFile(log)).rejects.toThrow();
@@ -241,6 +258,7 @@ const args = process.argv.slice(2);
 const path = args[args.indexOf('--mcp-config') + 1];
 appendFileSync(process.env.MCP_TEST_LOG, JSON.stringify({args, path}) + '\\n');
 if (args.includes('--version')) {console.log('2.1.263 (Claude Code)'); process.exit(0);}
+if (!args.includes('--mcp-config')) {console.log(JSON.stringify({type: 'result', subtype: 'success', is_error: false, result: 'done'})); process.exit(0);}
 const config = JSON.parse(readFileSync(path, 'utf8'));
 const url = config.mcpServers.linear.url;
 let id = 0;

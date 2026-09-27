@@ -88,9 +88,6 @@ export type RunJobOptions = {
   env?: Record<string, string>;
   timeoutMs?: number;
   signal?: AbortSignal;
-  /** Unreleased local MCP execution. Only completed adapters may opt in. */
-  experimentalMcp?: boolean;
-  allowedMcpTools?: readonly {server: string; tool: string}[];
   onProgress?: (event: RunJobProgressEvent) => void;
 };
 

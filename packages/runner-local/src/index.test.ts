@@ -96,7 +96,7 @@ describe('MCP adapter availability', () => {
       ],
     },
   ])(
-    'rejects MCP execution before setup or harness invocation %#',
+    'rejects invalid or unsupported MCP execution before setup %#',
     async (scenario) => {
       const scratchRoot = createScratchRoot();
       const marker = join(scratchRoot, 'setup-ran');
@@ -106,7 +106,11 @@ describe('MCP adapter availability', () => {
           scratchRoot,
           harnesses: [harness],
         }),
-      ).rejects.toThrow('MCP mock execution is not enabled');
+      ).rejects.toThrow(
+        'mcpMocks' in scenario
+          ? 'does not implement isolated MCP execution'
+          : 'MCP assertions require mcpMocks on the scenario',
+      );
       expect(existsSync(marker)).toBe(false);
       expect(harness.inputs).toEqual([]);
     },

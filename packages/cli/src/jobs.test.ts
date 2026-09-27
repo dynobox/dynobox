@@ -5,7 +5,7 @@ import {describe, expect, it} from 'vitest';
 import {buildLocalRunnerJobs} from './jobs.js';
 
 describe('buildLocalRunnerJobs', () => {
-  it('rejects MCP scenarios before scheduling until an adapter is enabled', () => {
+  it('schedules MCP scenarios for supported harnesses', () => {
     const ir = compile(
       defineDyno({
         scenarios: [
@@ -26,9 +26,7 @@ describe('buildLocalRunnerJobs', () => {
         ],
       }),
     );
-    expect(() => buildLocalRunnerJobs(ir)).toThrow(
-      'MCP mock execution is not enabled',
-    );
+    expect(buildLocalRunnerJobs(ir)).toHaveLength(1);
     expect(buildLocalRunnerJobs(ir, {scenarioPatterns: ['unrelated']})).toEqual(
       [],
     );

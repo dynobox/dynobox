@@ -1,17 +1,17 @@
+import {request as httpRequest} from 'node:http';
 import {setTimeout as delay} from 'node:timers/promises';
 
 import {execa} from 'execa';
 
-import {mcpDeadline, McpHarnessError} from './mcpError.js';
+import {mcpDeadline, McpHarnessError, requireMcpVersion} from './mcpError.js';
 import {mcpProxyEnv} from './mcpProxyEnv.js';
 import {parseOpenCodeJson} from './opencode.js';
-import {createToolEvent, isRecord} from './parsing.js';
+import {asRecord, createToolEvent, isRecord} from './parsing.js';
 import type {
   HarnessInput,
-  HarnessRunOutput,
+  McpHarnessRun,
   McpServerConnections,
 } from './types.js';
-import {isAtLeastVersion, parseVersion} from './version.js';
 
 // Oldest release whose `--pure` + inline-config isolation was verified natively.
 const MIN_VERSION = '1.18.26';
@@ -22,7 +22,7 @@ export type OpenCodeMcpConfiguration = {
   cwd: string;
   env: Record<string, string | undefined>;
   version: string | null;
-  denials: {permission: string; pattern: string; action: 'deny'}[];
+  denials: {permission: string; pattern: string; action: string}[];
 };
 
 /** OpenCode tool ids are `<server>_<tool>` with other characters replaced. */
@@ -67,27 +67,37 @@ export async function prepareOpenCodeMcpConfiguration(options: {
       );
     return result.stdout;
   };
-  const version = parseVersion(await probe(['--version']));
-  if (!isAtLeastVersion(version, MIN_VERSION))
-    throw new McpHarnessError(
-      'unsupported_version',
-      `OpenCode MCP mocking requires ${MIN_VERSION} or newer (found ${version ?? 'unknown'}).`,
-    );
+  const version = requireMcpVersion('OpenCode', MIN_VERSION, {
+    failed: false,
+    stdout: await probe(['--version']),
+  });
 
   // Do not use `mcp list` here: it can connect to inherited real servers.
-  const initial = record(JSON.parse(await probe(['debug', 'config'])));
-  const inline = record(JSON.parse(env.OPENCODE_CONFIG_CONTENT ?? '{}'));
+  const initial = asRecord(JSON.parse(await probe(['debug', 'config'])));
+  const inline = asRecord(JSON.parse(env.OPENCODE_CONFIG_CONTENT ?? '{}'));
   const occupied = new Set([
-    ...Object.keys(record(initial.mcp)),
-    ...Object.keys(record(inline.mcp)),
+    ...Object.keys(asRecord(initial.mcp)),
+    ...Object.keys(asRecord(inline.mcp)),
   ]);
   const mcp: Config = Object.fromEntries(
     [...occupied].map((name) => [
       name,
-      {...record(record(inline.mcp)[name]), enabled: false},
+      {...asRecord(asRecord(inline.mcp)[name]), enabled: false},
     ]),
   );
   const usedPrefixes = new Set([...occupied].map((name) => toolId(name, '')));
+  const mockTools = new Map<string, string>();
+  for (const [name, {tools}] of Object.entries(servers))
+    for (const tool of tools) {
+      const id = toolId(name, tool);
+      const other = mockTools.get(id);
+      if (other !== undefined)
+        throw new McpHarnessError(
+          'configuration_failed',
+          `OpenCode names both mcp__${other} and mcp__${name}__${tool} "${id}"; rename one to use these mocks.`,
+        );
+      mockTools.set(id, `${name}__${tool}`);
+    }
   for (const [name, server] of Object.entries(servers)) {
     // Renaming the mock would show the model a different tool name than
     // other harnesses, so a name clash fails instead.
@@ -111,7 +121,13 @@ export async function prepareOpenCodeMcpConfiguration(options: {
   );
   const launchEnv = {
     ...env,
-    OPENCODE_CONFIG_CONTENT: JSON.stringify({...inline, mcp, permission}),
+    OPENCODE_CONFIG_CONTENT: JSON.stringify({
+      ...inline,
+      mcp,
+      // `opencode serve` offers a question tool that `opencode run` does not;
+      // an unanswered question would stall the run.
+      permission: {...permission, question: 'deny'},
+    }),
   };
   return {
     executable,
@@ -126,34 +142,35 @@ function collectDenials(config: Config) {
   const denials: OpenCodeMcpConfiguration['denials'] = [];
   for (const source of [
     config,
-    ...Object.values(record(config.agent)).map(record),
+    asRecord(asRecord(config.agent)[String(config.default_agent ?? 'build')]),
   ]) {
-    for (const [permission, value] of Object.entries(
-      record(source.permission),
-    )) {
-      if (value === 'deny')
-        denials.push({permission, pattern: '*', action: 'deny'});
-      else if (isRecord(value))
-        for (const [pattern, action] of Object.entries(value))
-          if (action === 'deny') denials.push({permission, pattern, action});
-    }
-    for (const [permission, value] of Object.entries(record(source.tools)))
+    for (const [permission, value] of Object.entries(asRecord(source.tools)))
       if (value === false)
         denials.push({permission, pattern: '*', action: 'deny'});
+    for (const [permission, value] of Object.entries(
+      asRecord(source.permission),
+    )) {
+      if (typeof value === 'string')
+        denials.push({permission, pattern: '*', action: value});
+      else if (isRecord(value))
+        for (const [pattern, action] of Object.entries(value))
+          if (typeof action === 'string')
+            denials.push({permission, pattern, action});
+    }
   }
   return denials;
 }
 
 /**
  * Fail when a mock tool is denied (a denied tool would pass negative
- * assertions) and apply explicit `--allow-mcp-tool` grants.
+ * assertions) and apply grants for declared mock tools.
  */
 function mockPermissions(
   initial: Config,
   servers: McpServerConnections,
   grants: readonly {server: string; tool: string}[],
 ) {
-  const permission = {...record(initial.permission)};
+  const permission = {...asRecord(initial.permission)};
   const match = (pattern: string, name: string) =>
     new RegExp(
       `^${pattern
@@ -161,10 +178,9 @@ function mockPermissions(
         .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
         .join('.*')}$`,
     ).test(name);
-  const sources = [
-    initial,
-    ...Object.values(record(initial.agent)).map(record),
-  ];
+  const selectedAgent = asRecord(
+    asRecord(initial.agent)[String(initial.default_agent ?? 'build')],
+  );
   for (const [server, {tools}] of Object.entries(servers)) {
     for (const tool of tools) {
       const id = toolId(server, tool);
@@ -172,23 +188,27 @@ function mockPermissions(
         'not_ready',
         `OpenCode config denies MCP tool "${id}".`,
       );
-      for (const source of sources) {
-        for (const [pattern, value] of Object.entries(record(source.tools)))
-          if (match(pattern, id) && value === false) throw denied;
+      const granted = grants.some(
+        (grant) => grant.server === server && grant.tool === tool,
+      );
+      let action: string | undefined;
+      for (const [index, source] of [initial, selectedAgent].entries()) {
+        if (index === 1 && granted) action = 'allow';
+        for (const [pattern, value] of Object.entries(asRecord(source.tools)))
+          if (match(pattern, id) && value === false) action = 'deny';
         for (const [pattern, value] of Object.entries(
-          record(source.permission),
-        ))
-          if (
-            match(pattern, id) &&
-            (value === 'deny' ||
-              (isRecord(value) && Object.values(value).includes('deny')))
-          )
-            throw denied;
+          asRecord(source.permission),
+        )) {
+          if (!match(pattern, id)) continue;
+          if (typeof value === 'string') action = value;
+          else if (isRecord(value))
+            for (const [nestedPattern, nestedAction] of Object.entries(value))
+              if (match(nestedPattern, id) && typeof nestedAction === 'string')
+                action = nestedAction;
+        }
       }
-      if (
-        grants.some((grant) => grant.server === server && grant.tool === tool)
-      )
-        permission[id] = 'allow';
+      if (action === 'deny') throw denied;
+      if (granted) permission[id] = 'allow';
     }
   }
   return permission;
@@ -203,7 +223,7 @@ export async function runOpenCodeWithMcp(options: {
   input: HarnessInput;
   servers: McpServerConnections;
   extraArgs?: readonly string[];
-}): Promise<{output: HarnessRunOutput; harnessReady: true}> {
+}): Promise<McpHarnessRun> {
   const started = Date.now();
   const {input, servers} = options;
   const remaining = mcpDeadline(input.timeoutMs, input.signal);
@@ -216,12 +236,19 @@ export async function runOpenCodeWithMcp(options: {
     ...options,
     remaining,
   });
+  // The adapter's own requests carry no credentials, and `opencode run` never
+  // needed them, so this private server runs without basic auth.
+  const {
+    OPENCODE_SERVER_PASSWORD: _password,
+    OPENCODE_SERVER_USERNAME: _username,
+    ...serveEnv
+  } = prepared.env;
   const child = execa(
     prepared.executable,
     ['--pure', 'serve', '--hostname', '127.0.0.1', '--port', '0'],
     {
       cwd: prepared.cwd,
-      env: prepared.env,
+      env: serveEnv,
       extendEnv: false,
       stdin: 'ignore',
       reject: false,
@@ -252,34 +279,49 @@ export async function runOpenCodeWithMcp(options: {
         }
       }, reject);
     });
+    // node:http rather than fetch: fetch caps a response at 300s, and the
+    // message request stays open for the whole model turn.
     const request = async (path: string, body?: unknown): Promise<unknown> => {
-      let response: Response;
-      try {
-        response = await fetch(`${base}${path}`, {
-          headers: {
-            'Content-Type': 'application/json',
-            'x-opencode-directory': encodeURIComponent(prepared.cwd),
-          },
-          ...(body === undefined
-            ? {}
-            : {method: 'POST', body: JSON.stringify(body)}),
-          signal: AbortSignal.any([
-            AbortSignal.timeout(remaining()),
-            ...(input.signal ? [input.signal] : []),
-          ]),
-        });
-      } catch (error) {
+      const {status, text} = await new Promise<{status: number; text: string}>(
+        (resolve, reject) => {
+          const outgoing = httpRequest(
+            `${base}${path}`,
+            {
+              method: body === undefined ? 'GET' : 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-opencode-directory': encodeURIComponent(prepared.cwd),
+              },
+              signal: AbortSignal.any([
+                AbortSignal.timeout(remaining()),
+                ...(input.signal ? [input.signal] : []),
+              ]),
+            },
+            (response) => {
+              let text = '';
+              response.setEncoding('utf8');
+              response.on('data', (chunk: string) => (text += chunk));
+              response.on('end', () =>
+                resolve({status: response.statusCode ?? 0, text}),
+              );
+              response.on('error', reject);
+            },
+          );
+          outgoing.on('error', reject);
+          outgoing.end(body === undefined ? undefined : JSON.stringify(body));
+        },
+      ).catch((error: unknown) => {
         remaining();
         throw error;
-      }
-      if (!response.ok)
+      });
+      if (status < 200 || status >= 300)
         throw new McpHarnessError(
           'execution_failed',
-          `OpenCode ${path} returned HTTP ${response.status}.`,
+          `OpenCode ${path} returned HTTP ${status}.`,
         );
-      return response.json();
+      return JSON.parse(text);
     };
-    let status = record(await request('/mcp'));
+    let status = asRecord(await request('/mcp'));
     // OpenCode can report "Failed to get tools" immediately after
     // initialization without sending tools/list. Retry only discovery, before
     // any model invocation.
@@ -287,16 +329,16 @@ export async function runOpenCodeWithMcp(options: {
       for (
         let attempt = 0;
         attempt < 2 &&
-        record(status[name]).status === 'failed' &&
-        record(status[name]).error === 'Failed to get tools';
+        asRecord(status[name]).status === 'failed' &&
+        asRecord(status[name]).error === 'Failed to get tools';
         attempt++
       ) {
         await request(`/mcp/${name}/connect`, {});
-        status = record(await request('/mcp'));
+        status = asRecord(await request('/mcp'));
       }
     }
     for (const [name, state] of Object.entries(status)) {
-      const current = record(state).status;
+      const current = asRecord(state).status;
       if (Object.hasOwn(servers, name)) {
         if (current !== 'connected')
           throw new McpHarnessError(
@@ -317,13 +359,19 @@ export async function runOpenCodeWithMcp(options: {
         'not_ready',
         `OpenCode did not load MCP mock server "${missing}".`,
       );
-    const session = record(
+    const session = asRecord(
       await request('/session', {
         ...(input.permissionMode === 'dangerous'
           ? {
               permission: [
                 {permission: '*', pattern: '*', action: 'allow'},
                 ...prepared.denials,
+                ...(input.allowedMcpTools ?? []).map(({server, tool}) => ({
+                  permission: toolId(server, tool),
+                  pattern: '*',
+                  action: 'allow',
+                })),
+                {permission: 'question', pattern: '*', action: 'deny'},
               ],
             }
           : {}),
@@ -350,7 +398,7 @@ export async function runOpenCodeWithMcp(options: {
       while (prompting) {
         const pending = await request('/permission').catch(() => []);
         for (const value of Array.isArray(pending) ? pending : []) {
-          const permission = record(value);
+          const permission = asRecord(value);
           rejected.add(String(permission.permission));
           await request(`/permission/${String(permission.id)}/reply`, {
             reply: 'reject',
@@ -361,7 +409,7 @@ export async function runOpenCodeWithMcp(options: {
     })();
     let completed: Config;
     try {
-      completed = record(
+      completed = asRecord(
         await request(`/session/${String(session.id)}/message`, {
           parts: [{type: 'text', text: input.prompt}],
           ...(model ? {model} : {}),
@@ -371,12 +419,21 @@ export async function runOpenCodeWithMcp(options: {
       prompting = false;
       await rejectPermissions;
     }
-    const info = record(completed.info);
-    // A rejected permission ends the OpenCode turn early.
-    if (rejected.size > 0 && info.finish !== 'stop')
+    const info = asRecord(completed.info);
+    // A rejected mock call never reaches the mock, so it would otherwise let
+    // a negative assertion pass. Other rejections end the turn early.
+    const mockIds = new Set(
+      Object.entries(servers).flatMap(([server, {tools}]) =>
+        tools.map((tool) => toolId(server, tool)),
+      ),
+    );
+    if (
+      rejected.size > 0 &&
+      (info.finish !== 'stop' || [...rejected].some((id) => mockIds.has(id)))
+    )
       throw new McpHarnessError(
         'execution_failed',
-        `OpenCode stopped after it rejected an "ask" permission for ${[...rejected].join(', ')}. Use --allow-mcp-tool for mock tools, or allow the tool in the OpenCode config.`,
+        `OpenCode rejected an "ask" permission for ${[...rejected].join(', ')}. Check the OpenCode permission settings.`,
       );
     if (info.error || info.finish !== 'stop')
       throw new McpHarnessError(
@@ -386,10 +443,10 @@ export async function runOpenCodeWithMcp(options: {
     const messages = await request(`/session/${String(session.id)}/message`);
     const lines: string[] = [];
     for (const message of Array.isArray(messages) ? messages : []) {
-      const entry = record(message);
-      if (record(entry.info).role !== 'assistant') continue;
+      const entry = asRecord(message);
+      if (asRecord(entry.info).role !== 'assistant') continue;
       for (const value of Array.isArray(entry.parts) ? entry.parts : []) {
-        const part = record(value);
+        const part = asRecord(value);
         const type =
           part.type === 'tool'
             ? 'tool_use'
@@ -424,15 +481,13 @@ export async function runOpenCodeWithMcp(options: {
     for (const event of toolEvents) input.onToolEvent?.(event);
     return {
       harnessReady: true,
+      version: prepared.version,
+      toolEvents,
       output: {
         exitCode: 0,
         stdout,
         stderr: '',
         durationMs: Date.now() - started,
-        metadata: {
-          mcpHarnessVersion: prepared.version,
-          mcpRunToolEvents: toolEvents,
-        },
       },
     };
   } catch (error) {
@@ -446,8 +501,4 @@ export async function runOpenCodeWithMcp(options: {
     child.kill();
     await child;
   }
-}
-
-function record(value: unknown): Config {
-  return isRecord(value) ? value : {};
 }

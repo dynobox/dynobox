@@ -186,7 +186,18 @@ export async function startMcpMockController(
       server.setRequestHandler(CallToolRequestSchema, (call) => {
         if (sealed)
           throw new McpError(ErrorCode.InternalError, 'MCP mock is closed.');
-        const input = mcpJsonObjectSchema.parse(call.params.arguments ?? {});
+        const parsed = mcpJsonObjectSchema.safeParse(
+          call.params.arguments ?? {},
+        );
+        if (!parsed.success) {
+          // The model did call a tool, so a negative assertion must not pass.
+          failures.add('protocol_failed');
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'Invalid tool arguments.',
+          );
+        }
+        const input = parsed.data;
         const record: MutableCall = {
           sequence: calls.length + 1,
           server: name,
@@ -268,13 +279,15 @@ export async function startMcpMockController(
       for (const state of pending)
         if (state.call !== undefined) state.call.category = 'transport_failed';
     }
+    const discoveredAll = Object.keys(mocks).every(
+      (name) => initialized.has(name) && discovered.has(name),
+    );
     const ready =
-      outcome.harnessReady &&
-      outcome.harnessSucceeded &&
-      Object.keys(mocks).every(
-        (name) => initialized.has(name) && discovered.has(name),
-      );
-    if (!ready) failures.add('not_ready');
+      outcome.harnessReady && outcome.harnessSucceeded && discoveredAll;
+    // A harness that failed after discovery reports its own failure; calling
+    // it not_ready too would point at startup.
+    if (!discoveredAll || (outcome.harnessSucceeded && !outcome.harnessReady))
+      failures.add('not_ready');
     const closed = new Promise<void>((resolve, reject) =>
       listener.close((error) => (error ? reject(error) : resolve())),
     );

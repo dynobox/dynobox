@@ -10,18 +10,34 @@ import {
   parseAntigravityJson,
   removeDynoboxProjectRecords,
 } from './antigravity.js';
-import {mcpDeadline, McpHarnessError} from './mcpError.js';
+import {mcpDeadline, McpHarnessError, requireMcpVersion} from './mcpError.js';
 import {mcpProxyEnv} from './mcpProxyEnv.js';
-import {isRecord} from './parsing.js';
+import {asRecord, isRecord} from './parsing.js';
 import type {
   HarnessInput,
-  HarnessRunOutput,
+  McpHarnessRun,
   McpServerConnections,
 } from './types.js';
-import {isAtLeastVersion, parseVersion} from './version.js';
 
 // Oldest release whose project-scoped MCP config was verified natively.
 const MIN_VERSION = '1.2.11';
+
+// Extra arguments that change the workspace, project or agent, and with it the
+// MCP sources Antigravity loads beside the mocks.
+const WORKSPACE_FLAGS = new Set([
+  '--add-dir',
+  '--project',
+  '--new-project',
+  '--agent',
+  '--continue',
+  '-c',
+  '--conversation',
+]);
+
+// Runs in this process using each tool definition directory. Antigravity keys
+// the directory by server name only, so it is removed after the last
+// concurrent run using it finishes.
+const activeToolDirs = new Map<string, number>();
 
 /**
  * Antigravity has no flag to ignore inherited MCP sources, so the run uses the
@@ -32,9 +48,17 @@ export async function runAntigravityWithMcp(options: {
   input: HarnessInput;
   servers: McpServerConnections;
   extraArgs?: readonly string[];
-}): Promise<{output: HarnessRunOutput; harnessReady: true}> {
+}): Promise<McpHarnessRun> {
   const started = Date.now();
   const {input, servers, executable} = options;
+  for (const arg of options.extraArgs ?? []) {
+    const flag = arg.split('=')[0]!;
+    if (WORKSPACE_FLAGS.has(flag))
+      throw new McpHarnessError(
+        'configuration_failed',
+        `Antigravity extra argument ${flag} conflicts with MCP mocking.`,
+      );
+  }
   const remaining = mcpDeadline(input.timeoutMs, input.signal);
   const cwd = input.workDir;
   const home = input.env.HOME ?? process.env.HOME;
@@ -66,12 +90,7 @@ export async function runAntigravityWithMcp(options: {
     timeout: Math.min(5000, remaining()),
   });
   remaining();
-  const version = parseVersion(probe.stdout);
-  if (probe.failed || !isAtLeastVersion(version, MIN_VERSION))
-    throw new McpHarnessError(
-      'unsupported_version',
-      `Antigravity MCP mocking requires ${MIN_VERSION} or newer (found ${version ?? 'unknown'}).`,
-    );
+  const version = requireMcpVersion('Antigravity', MIN_VERSION, probe);
   const plugins = await execa(executable, ['plugin', 'list'], {
     ...processOptions,
     timeout: Math.min(5000, remaining()),
@@ -94,6 +113,13 @@ export async function runAntigravityWithMcp(options: {
   // Remove the .agents directory after the run only when this run created it.
   const createdAgentsDir =
     (await mkdir(dirname(projectConfig), {recursive: true})) !== undefined;
+  // Antigravity copies each MCP tool definition here and the model reads it.
+  // The inherited-source check means only mocks can own these names.
+  const toolDirs = Object.keys(servers).map((name) =>
+    join(home, '.gemini', 'antigravity-cli', 'mcp', name),
+  );
+  for (const dir of toolDirs)
+    activeToolDirs.set(dir, (activeToolDirs.get(dir) ?? 0) + 1);
   try {
     await mkdir(dirname(projectRecord), {recursive: true});
     await writeFile(
@@ -137,7 +163,7 @@ export async function runAntigravityWithMcp(options: {
         options.extraArgs ?? [],
         input.model,
         input.permissionMode,
-        remaining(),
+        input.timeoutMs === undefined ? undefined : remaining(),
         projectId,
       ),
       {...processOptions, timeout: remaining()},
@@ -157,28 +183,29 @@ export async function runAntigravityWithMcp(options: {
     for (const event of parsed.toolEvents) input.onToolEvent?.(event);
     return {
       harnessReady: true,
+      version,
       output: {
         exitCode: 0,
         stdout: result.stdout,
         stderr: result.stderr,
         durationMs: Date.now() - started,
-        metadata: {mcpHarnessVersion: version},
       },
     };
   } finally {
+    const released = toolDirs.filter((dir) => {
+      const count = (activeToolDirs.get(dir) ?? 1) - 1;
+      if (count > 0) activeToolDirs.set(dir, count);
+      else activeToolDirs.delete(dir);
+      return count === 0;
+    });
     await Promise.all([
       rm(projectConfig, {force: true}).then(() =>
         // Keep the directory if the agent wrote other files into it.
         createdAgentsDir ? rmdir(dirname(projectConfig)).catch(() => {}) : {},
       ),
       rm(projectRecord, {force: true}),
-      // Antigravity copies each MCP tool definition here and the model reads
-      // it. The inherited-source check means only mocks can own these names.
-      ...Object.keys(servers).map((name) =>
-        rm(join(home, '.gemini', 'antigravity-cli', 'mcp', name), {
-          recursive: true,
-          force: true,
-        }).catch(() => {}),
+      ...released.map((dir) =>
+        rm(dir, {recursive: true, force: true}).catch(() => {}),
       ),
     ]);
   }
@@ -220,13 +247,29 @@ async function assertNoInheritedMcpSources(
     join(home, '.gemini', 'antigravity-cli', 'agents'),
   ];
   for (let directory = cwd; ; directory = dirname(directory)) {
-    const config = join(directory, '.agents', 'mcp_config.json');
-    if ((await readFile(config).catch(() => undefined)) !== undefined)
-      throw inherited(config);
-    directories.push(
-      join(directory, '.agents', 'plugins'),
-      join(directory, '.agents', 'agents'),
-    );
+    // Antigravity reads workspace customizations from each of these names.
+    for (const name of ['.agents', '.agent', '_agents', '_agent']) {
+      const config = join(directory, name, 'mcp_config.json');
+      if ((await readFile(config).catch(() => undefined)) !== undefined)
+        throw inherited(config);
+      // plugins.json can list plugin directories that carry MCP servers.
+      const pluginList = join(directory, name, 'plugins.json');
+      const source = await readFile(pluginList, 'utf8').catch(() => undefined);
+      if (source !== undefined) {
+        let entries: unknown;
+        try {
+          entries = asRecord(JSON.parse(source)).entries;
+        } catch {
+          throw inherited(pluginList);
+        }
+        if (!Array.isArray(entries) || entries.length > 0)
+          throw inherited(pluginList);
+      }
+      directories.push(
+        join(directory, name, 'plugins'),
+        join(directory, name, 'agents'),
+      );
+    }
     if (dirname(directory) === directory) break;
   }
   for (const directory of directories)

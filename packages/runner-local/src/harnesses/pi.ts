@@ -8,7 +8,7 @@ import {
   parseJsonObjectLine,
   textFromContent,
 } from './parsing.js';
-import {resolveMcpExecutable} from './resolveMcpExecutable.js';
+import {prepareMcpHarness} from './resolveMcpExecutable.js';
 import {runStreamingHarness} from './runStreamingHarness.js';
 import type {
   Harness,
@@ -60,20 +60,12 @@ export class PiHarness implements Harness {
     input: Pick<HarnessInput, 'workDir' | 'env'>,
   ): Promise<PreparedMcpHarness> {
     const {runPiWithMcp} = await import('./piMcp.js');
-    const {executable, workDir} = await resolveMcpExecutable(
+    return prepareMcpHarness(
       this.executable,
+      this.extraArgs,
       input,
+      runPiWithMcp,
     );
-    const extraArgs = [...this.extraArgs];
-    return {
-      run: (runInput, servers) =>
-        runPiWithMcp({
-          executable,
-          input: {...runInput, workDir},
-          servers,
-          extraArgs,
-        }),
-    };
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {

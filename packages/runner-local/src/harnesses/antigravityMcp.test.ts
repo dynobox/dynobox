@@ -395,3 +395,102 @@ describe.skipIf(!executable)(
     });
   },
 );
+
+it('keeps shared tool definitions until the last concurrent run ends', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-fake-'));
+  cleanup.push(() => rm(root, {recursive: true, force: true}));
+  const home = join(root, 'home');
+  const toolDir = join(home, '.gemini', 'antigravity-cli', 'mcp', 'linear');
+  const fake = join(root, 'fake-agy');
+  // The slow run checks its tool definitions still exist after the fast run
+  // has finished and cleaned up.
+  await writeFile(
+    fake,
+    `#!/bin/sh
+case "$1" in
+  --version) echo 1.2.11; exit 0 ;;
+  plugin) echo 'No imported plugins.'; exit 0 ;;
+esac
+mkdir -p '${toolDir}'
+case "$*" in *slow*) sleep 1 ;; esac
+if [ -d '${toolDir}' ]; then reply=kept; else reply=removed; fi
+printf '{"event":"result","result":{"status":"SUCCESS","response":"%s"}}\\n' "$reply"
+`,
+    {mode: 0o755},
+  );
+  const run = async (prompt: string) => {
+    const work = join(root, prompt);
+    await mkdir(work);
+    const {output} = await runAntigravityWithMcp({
+      executable: fake,
+      input: {workDir: work, env: {HOME: home}, prompt},
+      servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
+    });
+    return new AntigravityHarness().extractResult(output).finalMessage;
+  };
+  expect(await Promise.all([run('slow'), run('fast')])).toEqual([
+    'kept',
+    'kept',
+  ]);
+  await expect(readdir(toolDir)).rejects.toMatchObject({code: 'ENOENT'});
+});
+
+it.each([['--add-dir', '/elsewhere'], ['--project=other'], ['-c']])(
+  'rejects workspace-changing extra arguments %j before any process starts',
+  async (...extraArgs) => {
+    const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-args-'));
+    cleanup.push(() => rm(root, {recursive: true, force: true}));
+    await expect(
+      runAntigravityWithMcp({
+        executable: join(root, 'missing-agy'),
+        input: {workDir: root, env: {HOME: root}, prompt: 'Reply.'},
+        servers: {
+          linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']},
+        },
+        extraArgs,
+      }),
+    ).rejects.toMatchObject({category: 'configuration_failed'});
+  },
+);
+
+it.each([
+  ['.agent/mcp_config.json', '{"mcpServers":{}}'],
+  ['_agents/mcp_config.json', '{"mcpServers":{}}'],
+  ['_agent/mcp_config.json', '{"mcpServers":{}}'],
+  ['.agents/plugins.json', '{"entries":[{"path":"./plugin"}]}'],
+])(
+  'rejects workspace MCP source %s before any process starts',
+  async (file, source) => {
+    const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-sources-'));
+    cleanup.push(() => rm(root, {recursive: true, force: true}));
+    await mkdir(join(root, file, '..'), {recursive: true});
+    await writeFile(join(root, file), source);
+    await expect(
+      runAntigravityWithMcp({
+        executable: join(root, 'missing-agy'),
+        input: {workDir: root, env: {HOME: root}, prompt: 'Reply.'},
+        servers: {
+          linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']},
+        },
+      }),
+    ).rejects.toMatchObject({
+      category: 'configuration_failed',
+      message: expect.stringContaining(join(root, file)),
+    });
+  },
+);
+
+it('allows an empty workspace plugin list', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-sources-'));
+  cleanup.push(() => rm(root, {recursive: true, force: true}));
+  await mkdir(join(root, '.agents'));
+  await writeFile(join(root, '.agents', 'plugins.json'), '{"entries":[]}');
+  // Passing the source check reaches the version probe of a missing binary.
+  await expect(
+    runAntigravityWithMcp({
+      executable: join(root, 'missing-agy'),
+      input: {workDir: root, env: {HOME: root}, prompt: 'Reply.'},
+      servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
+    }),
+  ).rejects.toMatchObject({category: 'unsupported_version'});
+});

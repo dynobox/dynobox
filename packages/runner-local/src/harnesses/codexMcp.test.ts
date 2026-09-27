@@ -44,7 +44,9 @@ if (args.includes('app-server')) {
     const request = JSON.parse(line);
     let result = {};
     if (request.method === 'config/read') result = {config};
-    if (request.method === 'plugin/list') result = {marketplaces: [], marketplaceLoadErrors: []};
+    if (request.method === 'plugin/list') result = {marketplaces: mode === 'exit-between-rpcs' ? [{path: '/m', plugins: ['a', 'b'].map(name => ({id: name + '@m', name, installed: true, enabled: true}))}] : [], marketplaceLoadErrors: []};
+    // Exit right after answering, so the next request goes to a dead server.
+    if (request.method === 'plugin/read' && mode === 'exit-between-rpcs') return process.stdout.write(JSON.stringify({id: request.id, result: {plugin: {}}}) + '\\n', () => process.exit(0));
     console.log(JSON.stringify({id: request.id, result}));
   });
 } else if (mode === 'hang') {setInterval(() => {}, 1000);}
@@ -52,6 +54,7 @@ else {
   console.log(JSON.stringify({type: 'thread.started', thread_id: 'fixture'}));
   console.log(JSON.stringify({type: 'turn.started'}));
   if (mode === 'bad-json') console.log('PRIVATE_SENTINEL');
+  if (mode === 'reconnect') console.log(JSON.stringify({type: 'error', message: 'Reconnecting... 1/5'}));
   if (mode === 'failed-turn') console.log(JSON.stringify({type: 'turn.failed', error: {message: 'PRIVATE_SENTINEL'}}));
   if (mode === 'tool') console.log(JSON.stringify({type: 'item.completed', item: {type: 'mcp_tool_call', server: enabled[0][0], tool: 'lookup', arguments: {key: 'receipt'}, status: 'completed'}}));
   console.log(JSON.stringify({type: 'item.completed', item: {type: 'agent_message', text: 'OK'}}));
@@ -105,10 +108,7 @@ describe('Codex MCP adapter', () => {
     f.options.input.env.DXB_ENV_MARKER = 'preserved';
     const run = await runCodexWithMcp(f.options);
     expect(run.harnessReady).toBe(true);
-    expect(run.output.metadata).toEqual({
-      mcpHarnessVersion: '0.153.4',
-      mcpRunToolEvents: [],
-    });
+    expect(run).toMatchObject({version: '0.153.4', toolEvents: []});
     const calls = await f.invocations();
     expect(calls).toHaveLength(3);
     for (const call of calls) {
@@ -133,10 +133,25 @@ describe('Codex MCP adapter', () => {
     expect(calls[2]!.args.slice(-2)).toEqual(['--', 'Reply OK.']);
   });
 
+  it('fails when app-server exits during plugin reads', async () => {
+    const f = await fixture('exit-between-rpcs');
+    delete f.options.input.timeoutMs;
+    await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
+      category: 'configuration_failed',
+      message: expect.stringContaining('exited during plugin/read'),
+    });
+  }, 10_000);
+
+  it('recovers from a transient error event when the turn completes', async () => {
+    const f = await fixture('reconnect');
+    const run = await runCodexWithMcp(f.options);
+    expect(run.harnessReady).toBe(true);
+  });
+
   it('accepts newer Codex releases', async () => {
     const f = await fixture('newer');
     const run = await runCodexWithMcp(f.options);
-    expect(run.output.metadata?.mcpHarnessVersion).toBe('0.999.0');
+    expect(run.version).toBe('0.999.0');
   });
 
   it('fails before execution when the user config has a same-named server', async () => {
@@ -157,6 +172,9 @@ describe('Codex MCP adapter', () => {
   it.each([
     ['--profile', 'other'],
     ['-pother'],
+    ['-C', '/elsewhere'],
+    ['--cd=/elsewhere'],
+    ['-C/elsewhere'],
     ['-c', 'mcp_servers={}'],
     ['--config=mcp_servers={}'],
     ['--ignore-user-config'],

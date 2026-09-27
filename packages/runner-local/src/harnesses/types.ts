@@ -20,7 +20,7 @@ export type HarnessInput = {
   timeoutMs?: number;
   /** Cancel an active invocation and await its cleanup. */
   signal?: AbortSignal;
-  /** Explicit invocation grants, restricted to declared mock tools. */
+  /** Grants for the mock tools declared by this job. */
   allowedMcpTools?: readonly {server: string; tool: string}[];
   /** Optional harness-specific model name or alias. */
   model?: string;
@@ -59,14 +59,21 @@ export type McpServerConnections = Readonly<
   Record<string, {url: string; tools: readonly string[]}>
 >;
 
+/** Result of one MCP adapter invocation. */
+export type McpHarnessRun = {
+  output: HarnessRunOutput;
+  harnessReady: boolean;
+  /** Version reported by the harness under the MCP launch configuration. */
+  version: string | null;
+  /** Tool events under logical mock names, replacing extracted events. */
+  toolEvents?: SdkToolEvent[];
+};
+
 export type PreparedMcpHarness = {
   run(
     input: HarnessInput,
     servers: McpServerConnections,
-  ): Promise<{
-    output: HarnessRunOutput;
-    harnessReady: boolean;
-  }>;
+  ): Promise<McpHarnessRun>;
 };
 
 /**

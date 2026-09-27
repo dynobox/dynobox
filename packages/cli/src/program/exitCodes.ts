@@ -11,5 +11,5 @@ export const configErrorExitCode = 1;
 /** At least one job ran to completion but did not pass. */
 export const runFailureExitCode = 1;
 
-/** The run was cancelled by SIGINT/SIGTERM (conventional 128 + SIGINT). */
+/** Exit code used when a run is cancelled (matches the convention for SIGINT). */
 export const cancelledExitCode = 130;

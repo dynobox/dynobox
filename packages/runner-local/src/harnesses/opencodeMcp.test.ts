@@ -33,6 +33,8 @@ else {
   const config = {mcp: {real: {type: 'local', command: ['real-server'], environment: {SECRET: 'PRIVATE_SENTINEL'}}, unrelated: {type: 'remote', url: 'https://private.invalid/PRIVATE_SENTINEL', headers: {Authorization: 'PRIVATE_SENTINEL'}}}};
   const inline = JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || '{}');
   config.permission = inline.permission || {};
+  config.agent = inline.agent || {};
+  config.default_agent = inline.default_agent;
   for (const [name, entry] of Object.entries(inline.mcp || {})) config.mcp[name] = {...config.mcp[name], ...entry};
   if (mode === 'exit') process.exit(2);
   console.log(JSON.stringify(config));
@@ -97,12 +99,66 @@ describe('OpenCode MCP configuration preparation', () => {
     });
     expect(
       JSON.parse(prepared.env.OPENCODE_CONFIG_CONTENT!).permission,
-    ).toEqual({edit: 'deny', linear_get_issue: 'allow'});
+    ).toEqual({edit: 'deny', linear_get_issue: 'allow', question: 'deny'});
     expect(prepared.denials).toContainEqual({
       permission: 'edit',
       pattern: '*',
       action: 'deny',
     });
+  });
+  it('honors the last matching permission rule and ignores other agents', async () => {
+    const {options} = await fixture();
+    options.input.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+      permission: {'*': 'deny', linear_get_issue: 'allow'},
+      agent: {review: {permission: {linear_get_issue: 'deny'}}},
+    });
+    const prepared = await prepareOpenCodeMcpConfiguration(options);
+    expect(
+      JSON.parse(prepared.env.OPENCODE_CONFIG_CONTENT!).permission,
+    ).toMatchObject({
+      '*': 'deny',
+      linear_get_issue: 'allow',
+    });
+    expect(prepared.denials).toEqual([
+      {permission: '*', pattern: '*', action: 'deny'},
+      {permission: 'linear_get_issue', pattern: '*', action: 'allow'},
+    ]);
+  });
+
+  it('lets an explicit grant override a matching deny', async () => {
+    const {options} = await fixture();
+    options.input.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+      permission: {'*': 'deny'},
+    });
+    const prepared = await prepareOpenCodeMcpConfiguration({
+      ...options,
+      input: {
+        ...options.input,
+        allowedMcpTools: [{server: 'linear', tool: 'get_issue'}],
+      },
+    });
+    expect(
+      JSON.parse(prepared.env.OPENCODE_CONFIG_CONTENT!).permission,
+    ).toMatchObject({
+      '*': 'deny',
+      linear_get_issue: 'allow',
+    });
+  });
+
+  it('rejects a selected agent denial that takes precedence over a grant', async () => {
+    const {options} = await fixture();
+    options.input.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+      agent: {build: {permission: {linear_get_issue: 'deny'}}},
+    });
+    await expect(
+      prepareOpenCodeMcpConfiguration({
+        ...options,
+        input: {
+          ...options.input,
+          allowedMcpTools: [{server: 'linear', tool: 'get_issue'}],
+        },
+      }),
+    ).rejects.toMatchObject({category: 'not_ready'});
   });
   it('disables inherited sources and preserves unrelated inline settings', async () => {
     const {options, log} = await fixture();
@@ -112,7 +168,7 @@ describe('OpenCode MCP configuration preparation', () => {
     expect(prepared.version).toBe('1.18.26');
     const overlay = JSON.parse(prepared.env.OPENCODE_CONFIG_CONTENT!);
     expect(overlay.model).toBe('example/model');
-    expect(overlay.permission).toEqual({edit: 'deny'});
+    expect(overlay.permission).toEqual({edit: 'deny', question: 'deny'});
     expect(overlay.mcp.real).toEqual({enabled: false});
     expect(overlay.mcp.unrelated).toEqual({enabled: false});
     expect(overlay.mcp.inline).toEqual({
@@ -164,6 +220,20 @@ describe('OpenCode MCP configuration preparation', () => {
       });
     },
   );
+
+  it('fails when two mocks map to the same OpenCode tool id', async () => {
+    const {options} = await fixture();
+    options.servers = {
+      a: {url: 'http://127.0.0.1:12345/a', tools: ['b_c']},
+      a_b: {url: 'http://127.0.0.1:12345/a_b', tools: ['c']},
+    } as never;
+    await expect(
+      prepareOpenCodeMcpConfiguration(options),
+    ).rejects.toMatchObject({
+      category: 'configuration_failed',
+      message: expect.stringContaining('"a_b_c"'),
+    });
+  });
 
   it('reports a failed config read with the command', async () => {
     const {options} = await fixture('exit');

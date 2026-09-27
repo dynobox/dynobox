@@ -5,16 +5,16 @@ import {execa} from 'execa';
 
 import {buildCodexArgs, parseCodexJsonLine} from './codex.js';
 import {cachedCodexPluginServers} from './codexMcpPlugins.js';
-import {mcpDeadline, McpHarnessError} from './mcpError.js';
+import {mcpDeadline, McpHarnessError, requireMcpVersion} from './mcpError.js';
 import {mcpProxyEnv} from './mcpProxyEnv.js';
-import {createToolEvent, isRecord} from './parsing.js';
+import {asRecord, createToolEvent, isRecord} from './parsing.js';
+import {lineSplitter} from './runStreamingHarness.js';
 import type {
   HarnessInput,
-  HarnessRunOutput,
+  McpHarnessRun,
   McpServerConnections,
   ToolEvent,
 } from './types.js';
-import {isAtLeastVersion} from './version.js';
 
 // Oldest release whose overlay isolation was verified natively.
 const MIN_VERSION = '0.153.4';
@@ -26,7 +26,10 @@ const GUARDED_FEATURES = [
 ] as const;
 const GUARDS = GUARDED_FEATURES.flatMap((name) => ['--disable', name]);
 // Extra arguments that would change the configuration the overlay is built on.
+// -C/--cd moves the project whose config Codex loads away from the snapshot's.
 const CONFIG_FLAGS = new Set([
+  '-C',
+  '--cd',
   '-c',
   '--config',
   '-p',
@@ -53,14 +56,14 @@ export type CodexMcpOptions = {
  */
 export async function runCodexWithMcp(
   options: CodexMcpOptions,
-): Promise<{output: HarnessRunOutput; harnessReady: true}> {
+): Promise<McpHarnessRun> {
   const started = Date.now();
   const {input, servers, executable} = options;
   const remaining = mcpDeadline(input.timeoutMs, input.signal);
   const extras = options.extraArgs ?? [];
   for (const arg of extras) {
     const flag = arg.split('=')[0]!;
-    if (CONFIG_FLAGS.has(flag) || /^-[cp]./.test(arg))
+    if (CONFIG_FLAGS.has(flag) || /^-[cpC]./.test(arg))
       throw new McpHarnessError(
         'configuration_failed',
         `Codex extra argument ${flag} conflicts with MCP mocking.`,
@@ -83,12 +86,12 @@ export async function runCodexWithMcp(
     timeout: Math.min(5000, remaining()),
   });
   remaining();
-  const version = /^codex-cli (\d+\.\d+\.\d+)/.exec(probe.stdout.trim())?.[1];
-  if (probe.failed || !isAtLeastVersion(version ?? null, MIN_VERSION))
-    throw new McpHarnessError(
-      'unsupported_version',
-      `Codex MCP mocking requires ${MIN_VERSION} or newer (found ${version ?? 'unknown'}).`,
-    );
+  const version = requireMcpVersion(
+    'Codex',
+    MIN_VERSION,
+    probe,
+    (stdout) => /^codex-cli (\d+\.\d+\.\d+)/.exec(stdout.trim())?.[1] ?? null,
+  );
 
   // Model, permission and CLI-mock settings must also apply to the config read.
   const ordinary = buildCodexArgs(
@@ -135,8 +138,8 @@ export async function runCodexWithMcp(
     ],
     {...processOptions, stdin: 'ignore', timeout: remaining()},
   );
-  let buffer = '';
   let completed = false;
+  let lastError: string | undefined;
   let failure: McpHarnessError | undefined;
   const toolEvents: ToolEvent[] = [];
   const emit = (event: ToolEvent) => {
@@ -148,7 +151,10 @@ export async function runCodexWithMcp(
     try {
       const event: unknown = JSON.parse(line);
       if (!isRecord(event)) return;
-      if (event.type === 'error' || event.type === 'turn.failed')
+      // Codex also reports recoverable problems (stream reconnects) as
+      // `error` events; only a failed or unfinished turn is fatal.
+      if (event.type === 'error') lastError = errorText(event);
+      if (event.type === 'turn.failed')
         throw new McpHarnessError(
           'execution_failed',
           `Codex reported ${event.type}: ${errorText(event)}`,
@@ -165,6 +171,16 @@ export async function runCodexWithMcp(
           throw new McpHarnessError(
             'not_ready',
             `Codex called MCP server "${server}", which is not a mock.`,
+          );
+        // A call refused for approval never reaches the mock, so it would
+        // otherwise let a negative assertion pass.
+        if (
+          item.status !== 'completed' &&
+          /approval/i.test(String(asRecord(item.error).message))
+        )
+          throw new McpHarnessError(
+            'execution_failed',
+            `Codex refused mock tool mcp__${server}__${String(item.tool)} without approval. Check the Codex permission settings.`,
           );
         emit(
           createToolEvent(
@@ -185,17 +201,11 @@ export async function runCodexWithMcp(
       child.kill();
     }
   };
+  const lines = lineSplitter(consume);
   child.stdout?.setEncoding('utf8');
-  child.stdout?.on('data', (chunk: string) => {
-    buffer += chunk;
-    let end: number;
-    while ((end = buffer.indexOf('\n')) !== -1) {
-      consume(buffer.slice(0, end));
-      buffer = buffer.slice(end + 1);
-    }
-  });
+  child.stdout?.on('data', (chunk: string) => lines.write(chunk));
   const result = await child;
-  consume(buffer);
+  lines.flush();
   remaining();
   if (failure) throw failure;
   if (result.failed)
@@ -206,16 +216,17 @@ export async function runCodexWithMcp(
   if (!completed)
     throw new McpHarnessError(
       'execution_failed',
-      'Codex exited without completing its turn.',
+      `Codex exited without completing its turn${lastError === undefined ? '' : ` (last error: ${lastError})`}.`,
     );
   return {
     harnessReady: true,
+    version,
+    toolEvents,
     output: {
       exitCode: result.exitCode ?? 1,
       stdout: result.stdout,
       stderr: result.stderr,
       durationMs: Date.now() - started,
-      metadata: {mcpHarnessVersion: version, mcpRunToolEvents: toolEvents},
     },
   };
 }
@@ -238,55 +249,54 @@ async function readSnapshot(
     {method: string; resolve(value: unknown): void; reject(error: Error): void}
   >();
   let nextId = 0;
-  let buffer = '';
-  const rejectAll = () => {
-    for (const waiter of pending.values()) {
-      let error = new McpHarnessError(
-        'configuration_failed',
-        `Codex app-server exited during ${waiter.method}.`,
-      );
-      try {
-        remaining();
-      } catch (deadline) {
-        // Report cancellation or timeout rather than the resulting exit.
-        error = deadline as McpHarnessError;
-      }
-      waiter.reject(error);
+  let exited = false;
+  const exitError = (method: string) => {
+    try {
+      remaining();
+    } catch (deadline) {
+      // Report cancellation or timeout rather than the resulting exit.
+      return deadline as McpHarnessError;
     }
+    return new McpHarnessError(
+      'configuration_failed',
+      `Codex app-server exited during ${method}.`,
+    );
+  };
+  const rejectAll = () => {
+    exited = true;
+    for (const waiter of pending.values())
+      waiter.reject(exitError(waiter.method));
     pending.clear();
   };
-  child.stdout?.setEncoding('utf8');
-  child.stdout?.on('data', (chunk: string) => {
-    buffer += chunk;
-    let end: number;
-    while ((end = buffer.indexOf('\n')) !== -1) {
-      const line = buffer.slice(0, end);
-      buffer = buffer.slice(end + 1);
-      let message: unknown;
-      try {
-        message = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      if (!isRecord(message) || typeof message.id !== 'number') continue;
-      const waiter = pending.get(message.id);
-      if (!waiter) continue;
-      pending.delete(message.id);
-      if (message.error !== undefined || !Object.hasOwn(message, 'result'))
-        waiter.reject(
-          new McpHarnessError(
-            'configuration_failed',
-            `Codex app-server ${waiter.method} failed.`,
-          ),
-        );
-      else waiter.resolve(message.result);
+  const lines = lineSplitter((line) => {
+    let message: unknown;
+    try {
+      message = JSON.parse(line);
+    } catch {
+      return;
     }
+    if (!isRecord(message) || typeof message.id !== 'number') return;
+    const waiter = pending.get(message.id);
+    if (!waiter) return;
+    pending.delete(message.id);
+    if (message.error !== undefined || !Object.hasOwn(message, 'result'))
+      waiter.reject(
+        new McpHarnessError(
+          'configuration_failed',
+          `Codex app-server ${waiter.method} failed.`,
+        ),
+      );
+    else waiter.resolve(message.result);
   });
+  child.stdout?.setEncoding('utf8');
+  child.stdout?.on('data', (chunk: string) => lines.write(chunk));
   child.then(rejectAll, rejectAll);
   const rpc = async (method: string, params: object): Promise<RecordValue> => {
     remaining();
     const id = ++nextId;
     const value = await new Promise<unknown>((resolve, reject) => {
+      // A request written after exit would never get a reply.
+      if (exited) return reject(exitError(method));
       pending.set(id, {method, resolve, reject});
       child.stdin!.write(`${JSON.stringify({id, method, params})}\n`);
     });
@@ -297,11 +307,11 @@ async function readSnapshot(
       clientInfo: {name: 'dynobox', version: '1'},
       capabilities: {experimentalApi: true},
     });
-    const config = record(
+    const config = asRecord(
       (await rpc('config/read', {includeLayers: false, cwd})).config,
     );
     for (const name of GUARDED_FEATURES)
-      if (record(config.features)[name] !== false)
+      if (asRecord(config.features)[name] !== false)
         throw new McpHarnessError(
           'configuration_failed',
           `Codex feature "${name}" is forced on and could load MCP servers beside the mocks.`,
@@ -331,7 +341,7 @@ async function readSnapshot(
         )
           continue;
         seen.add(plugin.id);
-        const detail = record(
+        const detail = asRecord(
           (
             await rpc('plugin/read', {
               marketplacePath: marketplace.path,
@@ -354,8 +364,8 @@ async function readSnapshot(
       }
     }
     // Enabled cached plugins can load even after their marketplace disappears.
-    for (const [id, value] of Object.entries(record(config.plugins)))
-      if (record(value).enabled !== false && !seen.has(id))
+    for (const [id, value] of Object.entries(asRecord(config.plugins)))
+      if (asRecord(value).enabled !== false && !seen.has(id))
         plugins.push({
           id,
           servers: await cachedCodexPluginServers(codexHome, id),
@@ -372,26 +382,34 @@ function buildOverlay(
   servers: McpServerConnections,
   grants: readonly {server: string; tool: string}[],
 ) {
-  const inherited = record(snapshot.config.mcp_servers);
+  const inherited = asRecord(snapshot.config.mcp_servers);
   // Disabling needs a valid transport, but never the inherited one.
   const mcp: RecordValue = Object.fromEntries(
     Object.entries(inherited).map(([name, value]) => [
       name,
       {
         enabled: false,
-        ...(typeof record(value).command === 'string'
+        ...(typeof asRecord(value).command === 'string'
           ? {command: process.execPath}
           : {url: 'http://127.0.0.1:1'}),
       },
     ]),
   );
-  const plugins: RecordValue = {};
+  // Start from the effective plugins table so each plugin keeps its own
+  // settings (such as `enabled`) whether Codex merges or replaces the table.
+  const plugins: RecordValue = {...asRecord(snapshot.config.plugins)};
   const occupied = new Set(Object.keys(inherited));
   for (const plugin of snapshot.plugins) {
+    const current = asRecord(plugins[plugin.id]);
     plugins[plugin.id] = {
-      mcp_servers: Object.fromEntries(
-        plugin.servers.map((name) => [name, {enabled: false}]),
-      ),
+      ...current,
+      enabled: true,
+      mcp_servers: {
+        ...asRecord(current.mcp_servers),
+        ...Object.fromEntries(
+          plugin.servers.map((name) => [name, {enabled: false}]),
+        ),
+      },
     };
     for (const name of plugin.servers) occupied.add(name);
   }
@@ -411,7 +429,7 @@ function buildOverlay(
     };
     for (const grant of grants.filter((grant) => grant.server === name))
       entry.tools = {
-        ...record(entry.tools),
+        ...asRecord(entry.tools),
         [grant.tool]: {approval_mode: 'approve'},
       };
     mcp[name] = entry;
@@ -426,19 +444,17 @@ function buildOverlay(
   };
 }
 
-function record(value: unknown): RecordValue {
-  return isRecord(value) ? value : {};
-}
-
 function errorText(event: RecordValue): string {
-  const error = record(event.error);
+  const error = asRecord(event.error);
   return String(error.message ?? event.message ?? 'no details');
 }
 
 function toml(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(toml).join(',')}]`;
   if (isRecord(value))
+    // TOML has no null; an absent key means the same.
     return `{${Object.entries(value)
+      .filter(([, item]) => item !== null && item !== undefined)
       .map(([key, item]) => `${JSON.stringify(key)}=${toml(item)}`)
       .join(',')}}`;
   return JSON.stringify(value);

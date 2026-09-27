@@ -171,11 +171,5 @@ export function buildRunJobOptions(options: ExecuteCliOptions): RunJobOptions {
     runOptions.scratchRoot = options.scratchRoot;
   if (options.env !== undefined) runOptions.env = options.env;
   if (options.timeoutMs !== undefined) runOptions.timeoutMs = options.timeoutMs;
-  if (
-    (options.env?.DYNOBOX_EXPERIMENTAL_MCP ??
-      process.env.DYNOBOX_EXPERIMENTAL_MCP) === '1'
-  )
-    runOptions.experimentalMcp = true;
-
   return runOptions;
 }

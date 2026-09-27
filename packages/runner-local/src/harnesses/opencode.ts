@@ -10,7 +10,7 @@ import {
   type JsonObject,
   parseJsonObjectLine,
 } from './parsing.js';
-import {resolveMcpExecutable} from './resolveMcpExecutable.js';
+import {prepareMcpHarness} from './resolveMcpExecutable.js';
 import {runStreamingHarness} from './runStreamingHarness.js';
 import type {
   Harness,
@@ -67,20 +67,12 @@ export class OpenCodeHarness implements Harness {
     input: Pick<HarnessInput, 'workDir' | 'env'>,
   ): Promise<PreparedMcpHarness> {
     const {runOpenCodeWithMcp} = await import('./opencodeMcp.js');
-    const {executable, workDir} = await resolveMcpExecutable(
+    return prepareMcpHarness(
       this.executable,
+      this.extraArgs,
       input,
+      runOpenCodeWithMcp,
     );
-    const extraArgs = [...this.extraArgs];
-    return {
-      run: (runInput, servers) =>
-        runOpenCodeWithMcp({
-          executable,
-          input: {...runInput, workDir},
-          servers,
-          extraArgs,
-        }),
-    };
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {

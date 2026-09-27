@@ -46,7 +46,7 @@ it('blocks MCP upload entry points before serialization or network access', asyn
         dynoPath: 'linear.dyno.mts',
         name: null,
         target: 'linear',
-        jobs: buildLocalRunnerJobs(ir, {experimentalMcp: true}),
+        jobs: buildLocalRunnerJobs(ir),
       },
     ],
     results: [],

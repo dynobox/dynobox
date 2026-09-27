@@ -12,7 +12,7 @@ import {
   type JsonObject,
   parseJsonObjectLine,
 } from './parsing.js';
-import {resolveMcpExecutable} from './resolveMcpExecutable.js';
+import {prepareMcpHarness} from './resolveMcpExecutable.js';
 import {runStreamingHarness} from './runStreamingHarness.js';
 import type {
   Harness,
@@ -64,20 +64,12 @@ export class AntigravityHarness implements Harness {
     input: Pick<HarnessInput, 'workDir' | 'env'>,
   ): Promise<PreparedMcpHarness> {
     const {runAntigravityWithMcp} = await import('./antigravityMcp.js');
-    const {executable, workDir} = await resolveMcpExecutable(
+    return prepareMcpHarness(
       this.executable,
+      this.extraArgs,
       input,
+      runAntigravityWithMcp,
     );
-    const extraArgs = [...this.extraArgs];
-    return {
-      run: (runInput, servers) =>
-        runAntigravityWithMcp({
-          executable,
-          input: {...runInput, workDir},
-          servers,
-          extraArgs,
-        }),
-    };
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
@@ -127,6 +119,11 @@ const DEFAULT_ANTIGRAVITY_PRINT_TIMEOUT = '30m';
 // Records this old cannot belong to a run that is still active.
 const STALE_PROJECT_MS = 24 * 60 * 60 * 1000;
 
+// Names dynobox creates: `dynobox-job-*` work dirs (named after the folder)
+// and `dynobox-<uuid>` MCP projects. Other `dynobox-*` names are the user's.
+const DYNOBOX_PROJECT_NAME =
+  /^dynobox-(?:job-|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$)/;
+
 /**
  * Best effort: Antigravity keeps a project record for every run in the real
  * HOME. Remove dynobox records that are over a day old (from interrupted
@@ -149,7 +146,7 @@ export async function removeDynoboxProjectRecords(
         if (
           !isRecord(record) ||
           typeof record.name !== 'string' ||
-          !record.name.startsWith('dynobox-')
+          !DYNOBOX_PROJECT_NAME.test(record.name)
         )
           return;
         const resources = isRecord(record.projectResources)

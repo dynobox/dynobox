@@ -8,15 +8,15 @@ import {
   buildClaudeCodeArgs,
   parseClaudeCodeStreamJsonLine,
 } from './claudeCode.js';
-import {mcpDeadline, McpHarnessError} from './mcpError.js';
+import {mcpDeadline, McpHarnessError, requireMcpVersion} from './mcpError.js';
 import {mcpProxyEnv} from './mcpProxyEnv.js';
 import {isRecord} from './parsing.js';
+import {lineSplitter} from './runStreamingHarness.js';
 import type {
   HarnessInput,
-  HarnessRunOutput,
+  McpHarnessRun,
   McpServerConnections,
 } from './types.js';
-import {isAtLeastVersion, parseVersion} from './version.js';
 
 // Oldest release whose `--strict-mcp-config` isolation was verified natively.
 const MIN_VERSION = '2.1.263';
@@ -34,7 +34,7 @@ export type ClaudeCodeMcpOptions = {
 
 export async function runClaudeCodeWithMcp(
   options: ClaudeCodeMcpOptions,
-): Promise<{output: HarnessRunOutput; harnessReady: true}> {
+): Promise<McpHarnessRun> {
   const started = Date.now();
   const {input, servers, executable} = options;
   const remaining = mcpDeadline(input.timeoutMs, input.signal);
@@ -67,12 +67,7 @@ export async function runClaudeCodeWithMcp(
     timeout: Math.min(5000, remaining()),
   });
   remaining();
-  const version = parseVersion(probe.stdout);
-  if (probe.failed || !isAtLeastVersion(version, MIN_VERSION))
-    throw new McpHarnessError(
-      'unsupported_version',
-      `Claude Code MCP mocking requires ${MIN_VERSION} or newer (found ${version ?? 'unknown'}).`,
-    );
+  const version = requireMcpVersion('Claude Code', MIN_VERSION, probe);
 
   const directory = await mkdtemp(join(tmpdir(), 'dynobox-claude-mcp-'));
   try {
@@ -101,7 +96,6 @@ export async function runClaudeCodeWithMcp(
       ],
       {...processOptions, timeout: remaining()},
     );
-    let buffer = '';
     let ready = false;
     let completed = false;
     let failure: McpHarnessError | undefined;
@@ -117,6 +111,24 @@ export async function runClaudeCodeWithMcp(
           ready = true;
         }
         if (event.type === 'result') {
+          // A denied call never reaches the mock, so it would otherwise let
+          // a negative assertion pass.
+          const denied = (
+            Array.isArray(event.permission_denials)
+              ? event.permission_denials
+              : []
+          )
+            .map((denial) => (isRecord(denial) ? denial.tool_name : undefined))
+            .find(
+              (name) =>
+                typeof name === 'string' &&
+                names.some((server) => name.startsWith(`mcp__${server}__`)),
+            );
+          if (denied !== undefined)
+            throw new McpHarnessError(
+              'execution_failed',
+              `Claude Code denied permission for mock tool ${String(denied)}. Check the Claude Code permission settings.`,
+            );
           if (event.is_error !== false || event.subtype !== 'success')
             throw new McpHarnessError(
               'execution_failed',
@@ -137,17 +149,11 @@ export async function runClaudeCodeWithMcp(
         child.kill();
       }
     };
+    const lines = lineSplitter(consume);
     child.stdout?.setEncoding('utf8');
-    child.stdout?.on('data', (chunk: string) => {
-      buffer += chunk;
-      let newline: number;
-      while ((newline = buffer.indexOf('\n')) !== -1) {
-        consume(buffer.slice(0, newline));
-        buffer = buffer.slice(newline + 1);
-      }
-    });
+    child.stdout?.on('data', (chunk: string) => lines.write(chunk));
     const result = await child;
-    consume(buffer);
+    lines.flush();
     remaining();
     if (failure) throw failure;
     if (result.failed)
@@ -167,12 +173,12 @@ export async function runClaudeCodeWithMcp(
       );
     return {
       harnessReady: true,
+      version,
       output: {
         exitCode: result.exitCode ?? 1,
         stdout: result.stdout,
         stderr: result.stderr,
         durationMs: Date.now() - started,
-        metadata: {mcpHarnessVersion: version},
       },
     };
   } finally {
@@ -181,8 +187,8 @@ export async function runClaudeCodeWithMcp(
 }
 
 /**
- * Reject flags that load other MCP servers and fold `--allow-mcp-tool` grants
- * into any `--allowedTools` list the harness already passes.
+ * Reject flags that load other MCP servers and fold declared mock tools into
+ * any `--allowedTools` list the harness already passes.
  */
 function mergeExtraArgs(
   args: readonly string[],
@@ -209,15 +215,26 @@ function mergeExtraArgs(
         'Claude Code extra arguments pass --allowedTools more than once.',
       );
     const value = equal === -1 ? args[++index] : arg.slice(equal + 1);
-    if (value === undefined)
+    if (value === undefined || value.length === 0)
       throw new McpHarnessError(
         'configuration_failed',
         `Claude Code extra argument ${flag} is missing a value.`,
       );
-    result.push(`${flag}=${[value, ...grants].join(',')}`);
+    if (grants.length === 0) {
+      result.push(...(equal === -1 ? [flag, value] : [arg]));
+    } else if (equal === -1) {
+      // This flag accepts several space-separated tools. Keep subsequent
+      // values attached to it instead of turning them into prompt arguments.
+      result.push(flag, value);
+      while (args[index + 1] !== undefined && !args[index + 1]!.startsWith('-'))
+        result.push(args[++index]!);
+      result.push(...grants);
+    } else {
+      result.push(flag, value, ...grants);
+    }
     merged = true;
   }
-  if (!merged) result.push(`--allowedTools=${grants.join(',')}`);
+  if (!merged) result.push('--allowedTools', ...grants);
   return result;
 }
 

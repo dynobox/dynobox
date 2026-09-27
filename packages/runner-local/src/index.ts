@@ -125,7 +125,6 @@ export function scenarioUsesMcp(scenario: LocalRunnerJob['scenario']): boolean {
 export function assertMcpExecutionSupported(
   scenario: LocalRunnerJob['scenario'],
   harness?: LocalRunnerJob['harness'],
-  experimentalMcp = false,
 ): void {
   if (scenarioUsesMcp(scenario)) {
     const harnessIds =
@@ -137,7 +136,6 @@ export function assertMcpExecutionSupported(
         'MCP mocking is unavailable for Cursor: plugin-provided MCP servers cannot be isolated from this CLI run.',
       );
     if (
-      !experimentalMcp ||
       harnessIds.some(
         (id) =>
           id !== 'claude-code' &&
@@ -148,7 +146,7 @@ export function assertMcpExecutionSupported(
       )
     ) {
       throw new DynoboxConfigError(
-        'MCP mock execution is not enabled for this harness. Use dynolocal with claude-code, codex, opencode, pi, or antigravity for experimental local execution.',
+        'MCP mocking is unsupported for this harness. Use claude-code, codex, opencode, pi, or antigravity.',
       );
     }
     if (scenario.mcpMocks === undefined)
@@ -190,23 +188,14 @@ export async function runJob(
   job: LocalRunnerJob,
   options: RunJobOptions = {},
 ): Promise<LocalRunnerResult> {
-  assertMcpExecutionSupported(
-    job.scenario,
-    job.harness,
-    options.experimentalMcp,
-  );
+  assertMcpExecutionSupported(job.scenario, job.harness);
   const usesMcp = job.scenario.mcpMocks !== undefined;
-  for (const permission of options.allowedMcpTools ?? []) {
-    const mocks = job.scenario.mcpMocks;
-    if (
-      mocks === undefined ||
-      !Object.hasOwn(mocks, permission.server) ||
-      !Object.hasOwn(mocks[permission.server]!.tools, permission.tool)
-    )
-      throw new DynoboxConfigError(
-        'MCP tool permissions must name a declared mock server/tool.',
-      );
-  }
+  // Only tools declared by this job receive permission to run.
+  const mocks = job.scenario.mcpMocks;
+  const allowedMcpTools = Object.entries(mocks ?? {}).flatMap(
+    ([server, definition]) =>
+      Object.keys(definition.tools).map((tool) => ({server, tool})),
+  );
   if (usesMcp) {
     if (
       !options.harnesses?.find((candidate) => candidate.id === job.harness)
@@ -410,6 +399,7 @@ export async function runJob(
   let mcpController: McpMockController | undefined;
   let mcpObservation: McpObservation | undefined;
   let mcpReady = false;
+  let mcpToolEvents: ToolEvent[] | undefined;
   const mcpFailures = new Set<LocalMcpSummary['failures'][number]>();
   const recordMcpError = (error: unknown): string => {
     const failure = mcpFailure(error, 'execution_failed');
@@ -523,9 +513,7 @@ export async function runJob(
         ...cliMockEnv,
       };
       const harnessInput = {
-        ...(options.allowedMcpTools === undefined
-          ? {}
-          : {allowedMcpTools: options.allowedMcpTools}),
+        ...(allowedMcpTools.length === 0 ? {} : {allowedMcpTools}),
         ...(options.signal === undefined ? {} : {signal: options.signal}),
         prompt: job.scenario.prompt,
         workDir,
@@ -559,14 +547,16 @@ export async function runJob(
           ]),
         );
         const run = await preparedMcp.run(
-          {...harnessInput, timeoutMs: remainingMcpTime()},
+          // Without a job timeout the adapter keeps its own defaults.
+          options.timeoutMs === undefined
+            ? harnessInput
+            : {...harnessInput, timeoutMs: remainingMcpTime()},
           servers,
         );
         harnessOutput = run.output;
         mcpReady = run.harnessReady;
-        const version = harnessOutput.metadata?.mcpHarnessVersion;
-        if (typeof version === 'string')
-          harnessVersion = Promise.resolve(version);
+        mcpToolEvents = run.toolEvents;
+        harnessVersion = Promise.resolve(run.version);
       } else {
         harnessOutput = await harness.run(
           options.timeoutMs === undefined
@@ -652,12 +642,8 @@ export async function runJob(
     try {
       harnessResult = harness.extractResult(harnessOutput);
       // MCP adapters report tool events under logical mock names.
-      const mcpToolEvents = harnessOutput.metadata?.mcpRunToolEvents;
-      if (Array.isArray(mcpToolEvents))
-        harnessResult = {
-          ...harnessResult,
-          toolEvents: mcpToolEvents as ToolEvent[],
-        };
+      if (mcpToolEvents !== undefined)
+        harnessResult = {...harnessResult, toolEvents: mcpToolEvents};
     } catch (error) {
       emitProgress(options, {
         type: 'harness.completed',

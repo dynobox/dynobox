@@ -99,7 +99,6 @@ export type RunCommandFlags = {
   debug?: boolean;
   reporter?: string;
   saveRun?: boolean;
-  allowMcpTool?: string[];
   scenario?: string[];
   iterations?: string;
   permissionMode?: string;
@@ -217,9 +216,6 @@ export async function runCommandAction(
             scenarioPatterns,
             iterations,
           ),
-          ...(runOptions.experimentalMcp === undefined
-            ? {}
-            : {experimentalMcp: runOptions.experimentalMcp}),
         }),
       };
     } catch (error) {
@@ -251,37 +247,6 @@ export async function runCommandAction(
     );
   }
   const usesMcp = jobs.some((job) => job.scenario.mcpMocks !== undefined);
-  if (commandFlags.allowMcpTool?.length) {
-    runOptions.allowedMcpTools = commandFlags.allowMcpTool.map((value) => {
-      const [server, tool, extra] = value.split('/');
-      if (
-        !server ||
-        !tool ||
-        extra !== undefined ||
-        jobs.some((job) => {
-          const mocks = job.scenario.mcpMocks;
-          return (
-            mocks === undefined ||
-            !Object.hasOwn(mocks, server) ||
-            !Object.hasOwn(mocks[server]!.tools, tool)
-          );
-        })
-      ) {
-        writeStderr(
-          renderRunConfigErrorMessage(
-            inputLabel,
-            '--allow-mcp-tool must name a declared mock server/tool in every selected job.',
-          ),
-        );
-        throw new CommanderError(
-          configErrorExitCode,
-          'dynobox.mcpPermission',
-          'invalid MCP tool permission',
-        );
-      }
-      return {server, tool};
-    });
-  }
   if (usesMcp && commandFlags.saveRun === true) {
     writeStderr(
       renderRunConfigErrorMessage(
@@ -315,16 +280,17 @@ export async function runCommandAction(
     }));
 
   // Stop scheduling and cancel running jobs on the first signal so mocks and
-  // controllers clean up; a second signal falls back to Node's default exit.
+  // controllers clean up; a second signal exits at once. The listener stays
+  // installed until the run ends: execa's signal-exit handler re-raises the
+  // signal, killing the process before cleanup, once no other listener is left.
   const abort = new AbortController();
   const cancel = () => {
+    if (abort.signal.aborted) process.exit(cancelledExitCode);
     abort.abort();
-    process.off('SIGINT', cancel);
-    process.off('SIGTERM', cancel);
   };
   runOptions.signal = abort.signal;
-  process.once('SIGINT', cancel);
-  process.once('SIGTERM', cancel);
+  process.on('SIGINT', cancel);
+  process.on('SIGTERM', cancel);
   try {
     const execution =
       reporter === 'json'

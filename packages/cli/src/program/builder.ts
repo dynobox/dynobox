@@ -88,12 +88,6 @@ export function buildProgram(input: BuildProgramInput): Command {
     .option('--config <path>', 'path to dyno.config.json')
     .option('--save-run', 'upload a compact run summary after execution')
     .option(
-      '--allow-mcp-tool <server/tool>',
-      'allow a declared experimental MCP mock tool for this invocation; repeat for multiple tools',
-      collectOption,
-      [] as string[],
-    )
-    .option(
       '--permission-mode <mode>',
       `override harness permission mode (values: ${PERMISSION_MODES.join(', ')})`,
     )

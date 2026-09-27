@@ -441,8 +441,12 @@ export default defineDyno({
   it('stops the run with exit code 130 on SIGINT', async () => {
     const harness = createPassingHarness();
     const run = harness.run.bind(harness);
+    let listenersAfterSignal = 0;
     const runSpy = vi.spyOn(harness, 'run').mockImplementation((input) => {
       process.emit('SIGINT');
+      // Staying installed keeps execa's signal-exit handler from re-raising
+      // the signal and killing the process before cleanup.
+      listenersAfterSignal = process.listenerCount('SIGINT');
       return run(input);
     });
 
@@ -453,6 +457,7 @@ export default defineDyno({
     expect(result.exitCode).toBe(cancelledExitCode);
     expect(result.stderr).toContain('Run cancelled.');
     expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(listenersAfterSignal).toBe(1);
     expect(process.listenerCount('SIGINT')).toBe(0);
   });
 

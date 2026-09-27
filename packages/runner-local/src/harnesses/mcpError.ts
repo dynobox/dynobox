@@ -1,3 +1,5 @@
+import {isAtLeastVersion, parseVersion} from './version.js';
+
 export type McpHarnessFailure =
   | 'configuration_failed'
   | 'unsupported_version'
@@ -35,10 +37,25 @@ export function mcpDeadline(
       throw new McpHarnessError('execution_failed', 'MCP run was cancelled.');
     const remaining = deadline - Date.now();
     if (remaining <= 0)
-      throw new McpHarnessError(
-        'timed_out',
-        `MCP run exceeded its ${timeoutMs}ms timeout.`,
-      );
+      // Adapters get the job's remaining budget, not the configured
+      // timeout, so the message names no number.
+      throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');
     return remaining;
   };
+}
+
+/** Return the probed version, or fail when it is below the adapter minimum. */
+export function requireMcpVersion(
+  label: string,
+  minVersion: string,
+  probe: {failed: boolean; stdout: string},
+  parse: (stdout: string) => string | null = parseVersion,
+): string {
+  const version = probe.failed ? null : parse(probe.stdout);
+  if (version === null || !isAtLeastVersion(version, minVersion))
+    throw new McpHarnessError(
+      'unsupported_version',
+      `${label} MCP mocking requires ${minVersion} or newer (found ${version ?? 'unknown'}).`,
+    );
+  return version;
 }

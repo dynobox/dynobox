@@ -4,15 +4,14 @@ import {join} from 'node:path';
 
 import {execa} from 'execa';
 
-import {mcpDeadline, McpHarnessError} from './mcpError.js';
+import {mcpDeadline, McpHarnessError, requireMcpVersion} from './mcpError.js';
 import {mcpProxyEnv} from './mcpProxyEnv.js';
 import {buildPiArgs, parsePiJson} from './pi.js';
 import type {
   HarnessInput,
-  HarnessRunOutput,
+  McpHarnessRun,
   McpServerConnections,
 } from './types.js';
-import {isAtLeastVersion, parseVersion} from './version.js';
 
 // Oldest release whose `--no-extensions` isolation was verified natively.
 const MIN_VERSION = '0.84.2';
@@ -25,7 +24,7 @@ export async function runPiWithMcp(options: {
   input: HarnessInput;
   servers: McpServerConnections;
   extraArgs?: readonly string[];
-}): Promise<{output: HarnessRunOutput; harnessReady: true}> {
+}): Promise<McpHarnessRun> {
   const started = Date.now();
   const {input, servers, executable} = options;
   const remaining = mcpDeadline(input.timeoutMs, input.signal);
@@ -58,12 +57,7 @@ export async function runPiWithMcp(options: {
     timeout: Math.min(5000, remaining()),
   });
   remaining();
-  const version = parseVersion(probe.stdout);
-  if (probe.failed || !isAtLeastVersion(version, MIN_VERSION))
-    throw new McpHarnessError(
-      'unsupported_version',
-      `Pi MCP mocking requires ${MIN_VERSION} or newer (found ${version ?? 'unknown'}).`,
-    );
+  const version = requireMcpVersion('Pi', MIN_VERSION, probe);
 
   const directory = await mkdtemp(join(tmpdir(), 'dynobox-pi-mcp-'));
   try {
@@ -102,12 +96,12 @@ export async function runPiWithMcp(options: {
     for (const event of parsed.toolEvents) input.onToolEvent?.(event);
     return {
       harnessReady: true,
+      version,
       output: {
         exitCode: 0,
         stdout: result.stdout,
         stderr: result.stderr,
         durationMs: Date.now() - started,
-        metadata: {mcpHarnessVersion: version},
       },
     };
   } finally {

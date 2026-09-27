@@ -202,6 +202,24 @@ describe('MCP controller', () => {
     expect(observation.calls[0]!.category).toBe('unknown_tool');
   });
 
+  it('fails the run when call arguments are not JSON-only', async () => {
+    const controller = await start();
+    await discover(controller.urls.linear!);
+    // 1e400 parses to Infinity, which the JSON-only argument check rejects.
+    const response = await fetch(controller.urls.linear!, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: `{"jsonrpc":"2.0","id":${++requestId},"method":"tools/call","params":{"name":"save","arguments":{"id":1e400}}}`,
+    });
+    expect(((await response.json()) as {error?: unknown}).error).toBeDefined();
+    expect((await controller.finalize(success)).failures).toContain(
+      'protocol_failed',
+    );
+  });
+
   it('requires discovery of every mock and adapter confirmation for a negative-only run', async () => {
     const controller = await start({
       linear: definitions.linear,

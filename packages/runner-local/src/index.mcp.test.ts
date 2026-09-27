@@ -88,7 +88,6 @@ async function fixture(
   const options = {
     scratchRoot: root,
     harnesses: [harness],
-    experimentalMcp: true,
     timeoutMs: 3000,
   };
   return {root, harness, job, options};
@@ -96,9 +95,9 @@ async function fixture(
 
 describe('MCP runner lifecycle', () => {
   it('rejects Cursor MCP mocking with an actionable isolation error', () => {
-    expect(() =>
-      assertMcpExecutionSupported(scenario(), 'cursor', true),
-    ).toThrow('plugin-provided MCP servers cannot be isolated');
+    expect(() => assertMcpExecutionSupported(scenario(), 'cursor')).toThrow(
+      'plugin-provided MCP servers cannot be isolated',
+    );
   });
 
   it('reports the adapter category and reason for preparation failures', async () => {
@@ -162,9 +161,6 @@ describe('MCP runner lifecycle', () => {
       expect(result.mcp?.finalized).toBe(true);
       expect(harness.normalRuns).toBe(0);
       await expect(fetch(harness.urls[0]!)).rejects.toThrow();
-      await expect(
-        runJob(job, {...options, experimentalMcp: false}),
-      ).rejects.toThrow('not enabled');
     },
   );
 
@@ -198,9 +194,6 @@ describe('MCP runner lifecycle', () => {
         mode === 'no-discovery' ? 'harness_failed' : 'passed',
       );
       expect(result.harnessVersion).toBe('1.18.26');
-      await expect(
-        runJob(job, {...options, experimentalMcp: false}),
-      ).rejects.toThrow('not enabled');
     },
   );
   it.each(['call', 'negative', 'no-discovery'] as const)(
@@ -222,15 +215,6 @@ describe('MCP runner lifecycle', () => {
       await expect(fetch(harness.urls[0]!)).rejects.toThrow();
     },
   );
-
-  it('keeps public Codex MCP execution disabled before setup', async () => {
-    const {job, options, harness} = await fixture('negative', {}, 'codex');
-    await expect(
-      runJob(job, {...options, experimentalMcp: false}),
-    ).rejects.toThrow('not enabled');
-    expect(harness.inputs).toEqual([]);
-    expect(harness.preparedEnv).toBeUndefined();
-  });
 
   it('reports safe Codex preparation failure categories and fails negative assertions', async () => {
     const {job, options, harness} = await fixture(
@@ -254,6 +238,10 @@ describe('MCP runner lifecycle', () => {
     const result = await runJob(job, options);
     expect(result.status).toBe('passed');
     expect(result.harnessVersion).toBe('2.1.263');
+    expect(harness.inputs[0]?.allowedMcpTools).toEqual([
+      {server: 'linear', tool: 'get_issue'},
+      {server: 'linear', tool: 'save_issue'},
+    ]);
     expect(
       result.assertionResults.map((assertion) => assertion.passed),
     ).toEqual([true, true]);
@@ -453,7 +441,8 @@ describe('MCP runner lifecycle', () => {
     const result = await runJob(job, {...options, timeoutMs: 150});
     expect(result.status).toBe('harness_failed');
     expect(result.mcp?.finalized).toBe(true);
-    expect(result.mcp?.failures).toContain('not_ready');
+    // Mocks were discovered, so the timeout is not reported as not_ready.
+    expect(result.mcp?.failures).not.toContain('not_ready');
     await expect(fetch(harness.urls[0]!)).rejects.toThrow();
   });
 
@@ -573,20 +562,13 @@ class McpHarness implements Harness {
       }
       return {
         harnessReady: this.mode !== 'not-ready',
-        output: {
-          exitCode: 0,
-          stdout: 'done',
-          stderr: '',
-          durationMs: 5,
-          metadata: {
-            mcpHarnessVersion:
-              this.id === 'codex'
-                ? '0.153.4'
-                : this.id === 'opencode'
-                  ? '1.18.26'
-                  : '2.1.263',
-          },
-        },
+        version:
+          this.id === 'codex'
+            ? '0.153.4'
+            : this.id === 'opencode'
+              ? '1.18.26'
+              : '2.1.263',
+        output: {exitCode: 0, stdout: 'done', stderr: '', durationMs: 5},
       };
     } finally {
       await client.close();

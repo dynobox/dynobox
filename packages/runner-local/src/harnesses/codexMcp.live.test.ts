@@ -82,6 +82,33 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
     );
   }, 40_000);
 
+  it('fails a run whose mock call is refused for approval', async () => {
+    const fixture = await nativeFixture('call');
+    await expect(
+      runCodexWithMcp({
+        executable: executable!,
+        input: {
+          prompt: 'Use service lookup once, then reply OK.',
+          workDir: fixture.project,
+          env: fixture.env as Record<string, string>,
+          timeoutMs: 20_000,
+        },
+        servers: {
+          service: {url: fixture.controller.urls.service!, tools: ['lookup']},
+        },
+        extraArgs: ['--ephemeral'],
+      }),
+    ).rejects.toMatchObject({
+      category: 'execution_failed',
+      message: expect.stringContaining('mcp__service__lookup'),
+    });
+    const observation = await fixture.controller.finalize({
+      harnessReady: true,
+      harnessSucceeded: false,
+    });
+    expect(observation.calls).toEqual([]);
+  }, 40_000);
+
   it('discovers mocks during a negative-only run', async () => {
     const fixture = await nativeFixture('negative');
     const {output: result} = await fixture.mockRun();

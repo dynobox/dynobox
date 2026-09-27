@@ -10,9 +10,17 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Enable local MCP mock runs without an experimental environment flag. Each
+  scenario grants its declared mock tools automatically, and MCP runs remain
+  ineligible for upload.
 - Stop a run on the first SIGINT or SIGTERM: running harness processes are
   cancelled, no further jobs start, mocks clean up, and the CLI exits with code
   130. A second signal exits immediately.
+
+### `@dynobox/runner-local`
+
+- Isolate MCP mock runs from inherited harness servers and report refused mock
+  calls as failures, so negative call assertions cannot pass on a refusal.
 
 ---
 

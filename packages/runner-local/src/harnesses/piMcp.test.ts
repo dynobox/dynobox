@@ -46,7 +46,7 @@ describe('Pi MCP launch contract', () => {
     async (version) => {
       mocks.execa.mockResolvedValueOnce({stdout: version, failed: false});
       const result = await runPiWithMcp(options());
-      expect(result.output.metadata?.mcpHarnessVersion).toBe(version);
+      expect(result.version).toBe(version);
     },
   );
 

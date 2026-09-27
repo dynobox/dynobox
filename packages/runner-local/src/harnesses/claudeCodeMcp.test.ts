@@ -88,7 +88,7 @@ describe('isolated Claude Code MCP invocation', () => {
     const result = await runClaudeCodeWithMcp(options);
     const [launch] = await launches();
     expect(result.harnessReady).toBe(true);
-    expect(result.output.metadata?.mcpHarnessVersion).toBe('2.1.263');
+    expect(result.version).toBe('2.1.263');
     expect(launch.config).toEqual({
       mcpServers: {service: {type: 'http', url: controller.urls.service}},
     });
@@ -115,7 +115,7 @@ describe('isolated Claude Code MCP invocation', () => {
   it('accepts newer Claude Code releases', async () => {
     const {options} = await fixture('newer');
     const result = await runClaudeCodeWithMcp(options);
-    expect(result.output.metadata?.mcpHarnessVersion).toBe('2.1.283');
+    expect(result.version).toBe('2.1.283');
   });
 
   it('adds bypass permissions only when explicitly requested', async () => {
@@ -128,12 +128,15 @@ describe('isolated Claude Code MCP invocation', () => {
   });
 
   it.each([
-    [[], '--allowedTools=mcp__service__lookup'],
+    [[], ['--allowedTools', 'mcp__service__lookup']],
     [
       ['--allowedTools', 'Read,Bash'],
-      '--allowedTools=Read,Bash,mcp__service__lookup',
+      ['--allowedTools', 'Read,Bash', 'mcp__service__lookup'],
     ],
-    [['--allowed-tools=Read'], '--allowed-tools=Read,mcp__service__lookup'],
+    [
+      ['--allowed-tools=Read'],
+      ['--allowed-tools', 'Read', 'mcp__service__lookup'],
+    ],
   ])(
     'merges MCP tool grants into existing allow lists: %j',
     async (extraArgs, expected) => {
@@ -142,12 +145,39 @@ describe('isolated Claude Code MCP invocation', () => {
       options.input.allowedMcpTools = [{server: 'service', tool: 'lookup'}];
       await runClaudeCodeWithMcp(options);
       const args: string[] = (await launches())[0].args;
-      expect(args).toContain(expected);
+      expect(
+        args.slice(
+          args.indexOf(expected[0]!),
+          args.indexOf(expected[0]!) + expected.length,
+        ),
+      ).toEqual(expected);
       expect(
         args.filter((arg) => /^--allowed-?[tT]ools/.test(arg)),
       ).toHaveLength(1);
     },
   );
+
+  it('keeps a multi-value allowedTools list attached to the flag', async () => {
+    const {options, launches} = await fixture();
+    options.extraArgs = ['--allowedTools', 'Bash', 'Read', '--max-turns', '5'];
+    options.input.allowedMcpTools = [{server: 'service', tool: 'lookup'}];
+    await runClaudeCodeWithMcp(options);
+    const args: string[] = (await launches())[0].args;
+    expect(
+      args.slice(args.indexOf('--allowedTools'), args.indexOf('--max-turns')),
+    ).toEqual(['--allowedTools', 'Bash', 'Read', 'mcp__service__lookup']);
+    expect(args.slice(-2)).toEqual(['--', options.input.prompt]);
+  });
+
+  it('preserves a spaced allowedTools list when no grant is needed', async () => {
+    const {options, launches} = await fixture();
+    options.extraArgs = ['--allowedTools', 'Bash', 'Read', '--max-turns', '5'];
+    await runClaudeCodeWithMcp(options);
+    const args: string[] = (await launches())[0].args;
+    expect(
+      args.slice(args.indexOf('--allowedTools'), args.indexOf('--max-turns')),
+    ).toEqual(['--allowedTools', 'Bash', 'Read']);
+  });
 
   it.each([
     [['--mcp-config', 'other.json']],
@@ -182,8 +212,9 @@ describe('isolated Claude Code MCP invocation', () => {
       harnessReady: false,
       harnessSucceeded: false,
     });
+    // The adapter reported not_ready; the controller saw discovery succeed.
     expect(observation.ready).toBe(false);
-    expect(observation.failures).toContain('not_ready');
+    expect(observation.failures).toEqual([]);
   });
 
   it('cannot use startup listings as controller discovery evidence', async () => {
@@ -248,6 +279,11 @@ describe('isolated Claude Code MCP invocation', () => {
     ['unsupported', 'unsupported_version', /requires 2\.1\.263 or newer/],
     ['exit', 'execution_failed', /exited with code 1/],
     ['result-error', 'execution_failed', /unsuccessful result/],
+    [
+      'permission-denied',
+      'execution_failed',
+      /denied permission for mock tool mcp__service__lookup/,
+    ],
     ['malformed', 'execution_failed', /unparseable/],
     ['hang', 'timed_out', /timeout/],
   ])(
@@ -325,5 +361,5 @@ if (mode === 'missing-tool') init.tools = ['Read'];
 if (mode !== 'no-init') console.log(JSON.stringify(init));
 let result = 'No tools called.';
 if (mode === 'call') result = JSON.stringify(await rpc('tools/call', {name: 'lookup', arguments: {literal: 'value'}}));
-console.log(JSON.stringify({type: 'result', subtype: 'success', is_error: mode === 'result-error', result}));
+console.log(JSON.stringify({type: 'result', subtype: 'success', is_error: mode === 'result-error', result, permission_denials: mode === 'permission-denied' ? [{tool_name: 'mcp__service__lookup', tool_use_id: 't1', tool_input: {}}] : []}));
 `;

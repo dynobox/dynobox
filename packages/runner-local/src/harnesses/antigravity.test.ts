@@ -385,13 +385,21 @@ describe('removeDynoboxProjectRecords', () => {
     record('own.json', 'dynobox-job-a', workDir);
     record('prefix.json', 'dynobox-job-ab', `${workDir}b`);
     record('recent.json', 'dynobox-job-y', join(home, 'y'));
+    record(
+      'mcp.json',
+      'dynobox-0b8e6c2a-3f1d-4c5e-9a7b-1d2e3f4a5b6c',
+      join(home, 'm'),
+      true,
+    );
     record('user.json', 'My project', join(home, 'user'), true);
+    record('docs.json', 'dynobox-docs', join(home, 'dynobox-docs'), true);
     writeFileSync(join(projects, 'broken.json'), '{');
 
     await removeDynoboxProjectRecords(home, workDir);
 
     expect(readdirSync(projects).sort()).toEqual([
       'broken.json',
+      'docs.json',
       'prefix.json',
       'recent.json',
       'user.json',

@@ -124,15 +124,36 @@ describe.skipIf(!executable)('native Claude Code MCP gates', () => {
     await expect(runClaudeCodeWithMcp(fixture.options)).rejects.toMatchObject({
       category: 'not_ready',
     });
+    // The adapter reported not_ready; the controller saw discovery succeed.
     expect(
       await fixture.controller.finalize({
         harnessReady: false,
         harnessSucceeded: false,
       }),
-    ).toMatchObject({ready: false, failures: ['not_ready'], calls: []});
+    ).toMatchObject({ready: false, failures: [], calls: []});
     expect(JSON.stringify(fixture.requests)).not.toContain(
       'MCP_FIXTURE_RECEIPT',
     );
+  }, 30_000);
+
+  it('fails a run whose mock call is denied at call time', async () => {
+    const fixture = await nativeFixture('call');
+    await writeFile(
+      join(fixture.options.input.workDir, '.claude', 'settings.json'),
+      JSON.stringify({}),
+    );
+    await expect(runClaudeCodeWithMcp(fixture.options)).rejects.toMatchObject({
+      category: 'execution_failed',
+      message: expect.stringContaining('mcp__service__lookup'),
+    });
+    expect(
+      (
+        await fixture.controller.finalize({
+          harnessReady: true,
+          harnessSucceeded: false,
+        })
+      ).calls,
+    ).toEqual([]);
   }, 30_000);
 
   it('cancels a native invocation after startup', async () => {
