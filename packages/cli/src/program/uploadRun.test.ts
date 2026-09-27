@@ -5,9 +5,68 @@ import {join} from 'node:path';
 
 import {RunUploadV4} from '@dynobox/run-schema';
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
-import {describe, expect, it} from 'vitest';
+import {defineDyno} from '@dynobox/sdk';
+import {compile} from '@dynobox/sdk/compiler';
+import {describe, expect, it, vi} from 'vitest';
 
-import {buildRunUploadPayload, collectGitMetadata} from './uploadRun.js';
+import {buildLocalRunnerJobs} from '../jobs.js';
+import {
+  buildRunUploadPayload,
+  collectGitMetadata,
+  uploadRun,
+} from './uploadRun.js';
+
+it('blocks MCP upload entry points before serialization or network access', async () => {
+  const ir = compile(
+    defineDyno({
+      harnesses: ['claude-code'],
+      scenarios: [
+        {
+          name: 'MCP',
+          prompt: 'Read',
+          mcpMocks: {
+            linear: {
+              tools: {
+                get_issue: {
+                  inputSchema: {type: 'object'},
+                  response: {
+                    content: [{type: 'text', text: 'PRIVATE_RESPONSE'}],
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+    }),
+  );
+  const input = {
+    dynos: [
+      {
+        dynoPath: 'linear.dyno.mts',
+        name: null,
+        target: 'linear',
+        jobs: buildLocalRunnerJobs(ir),
+      },
+    ],
+    results: [],
+    runFailed: false,
+    inputPath: '.',
+    git: null,
+  };
+  expect(() => buildRunUploadPayload(input)).toThrow(
+    'MCP uploads are not enabled',
+  );
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  try {
+    await expect(uploadRun({...input, writeStderr: () => {}})).rejects.toThrow(
+      'MCP uploads are not enabled',
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  } finally {
+    fetchSpy.mockRestore();
+  }
+});
 
 describe('collectGitMetadata', () => {
   it('collects revision, branch, identity, and dirty state', async () => {

@@ -27,7 +27,11 @@ import {
   stripAnsi,
 } from '../testUtils.js';
 import {executeCli} from './execute.js';
-import {configErrorExitCode, runFailureExitCode} from './exitCodes.js';
+import {
+  cancelledExitCode,
+  configErrorExitCode,
+  runFailureExitCode,
+} from './exitCodes.js';
 
 const fixtures = createFixtureSet('runCommand');
 const COMMIT_SKILL_PATH = '/tmp/work/.agents/skills/commit/SKILL.md';
@@ -367,6 +371,28 @@ describe('dynobox run — upload', () => {
     expect(payload).toMatchObject({schemaVersion: 4});
   });
 
+  it('removes run signal handlers before uploading', async () => {
+    let listenersDuringUpload: [number, number] | undefined;
+    stubFetch(async () => {
+      listenersDuringUpload = [
+        process.listenerCount('SIGINT'),
+        process.listenerCount('SIGTERM'),
+      ];
+      return Response.json({id: 'run-1'});
+    });
+
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--save-run'],
+      {
+        env: {DYNOBOX_UPLOAD_URL: 'https://uploads.example/run-hook'},
+        harnesses: [createPassingHarness()],
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(listenersDuringUpload).toEqual([0, 0]);
+  });
+
   it('only uploads dynos with jobs after scenario filtering', async () => {
     const dir = join(fixtures.dir, 'filtered-upload');
     mkdirSync(dir, {recursive: true});
@@ -432,6 +458,29 @@ export default defineDyno({
         },
       ],
     });
+  });
+
+  it('stops the run with exit code 130 on SIGINT', async () => {
+    const harness = createPassingHarness();
+    const run = harness.run.bind(harness);
+    let listenersAfterSignal = 0;
+    const runSpy = vi.spyOn(harness, 'run').mockImplementation((input) => {
+      process.emit('SIGINT');
+      // Staying installed keeps execa's signal-exit handler from re-raising
+      // the signal and killing the process before cleanup.
+      listenersAfterSignal = process.listenerCount('SIGINT');
+      return run(input);
+    });
+
+    const result = await executeCli(['run', fixtures.validConfigPath], {
+      harnesses: [harness],
+    });
+
+    expect(result.exitCode).toBe(cancelledExitCode);
+    expect(result.stderr).toContain('Run cancelled.');
+    expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(listenersAfterSignal).toBe(1);
+    expect(process.listenerCount('SIGINT')).toBe(0);
   });
 
   it('errors before running when --save-run has no token', async () => {
