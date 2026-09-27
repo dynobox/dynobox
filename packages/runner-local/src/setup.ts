@@ -21,6 +21,7 @@ export type RunSetupOptions = {
   commands: readonly string[];
   workDir: string;
   env?: Record<string, string>;
+  signal?: AbortSignal;
 };
 
 export type RunFixturesOptions = {
@@ -38,11 +39,15 @@ export async function runSetup(opts: RunSetupOptions): Promise<SetupResult> {
     opts.env === undefined ? process.env : {...process.env, ...opts.env};
 
   for (const command of opts.commands) {
+    if (opts.signal?.aborted) return {success: false, logs};
     const result = await execaCommand(command, {
       cwd: opts.workDir,
       env,
       reject: false,
       shell: true,
+      ...(opts.signal === undefined
+        ? {}
+        : {cancelSignal: opts.signal, forceKillAfterDelay: 1000}),
     });
     const exitCode = result.exitCode ?? 1;
 
@@ -65,12 +70,14 @@ export async function runScenarioSetup(opts: {
   scenario: Pick<IrScenario, 'setup'>;
   workDir: string;
   env?: Record<string, string>;
+  signal?: AbortSignal;
 }): Promise<SetupResult> {
   const setupOptions: RunSetupOptions = {
     commands: opts.scenario.setup,
     workDir: opts.workDir,
   };
   if (opts.env !== undefined) setupOptions.env = opts.env;
+  if (opts.signal !== undefined) setupOptions.signal = opts.signal;
   return runSetup(setupOptions);
 }
 
