@@ -30,6 +30,9 @@ export async function runStreamingHarness(
       ? {}
       : {input: options.processInput}),
     ...(input.timeoutMs === undefined ? {} : {timeout: input.timeoutMs}),
+    ...(input.signal === undefined
+      ? {}
+      : {cancelSignal: input.signal, forceKillAfterDelay: 1000}),
   };
 
   const subprocess = execa(options.executable, options.args, execaOptions);
@@ -73,34 +76,39 @@ export type ToolEventLineStreamOptions = {
   shouldEmit?: (event: ToolEvent, line: string) => boolean;
 };
 
+/** Split streamed text into `\n` or `\r\n` terminated lines. */
+export function lineSplitter(onLine: (line: string) => void): {
+  write(chunk: string): void;
+  flush(): void;
+} {
+  let buffer = '';
+  return {
+    write(chunk) {
+      buffer += chunk;
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop()!;
+      for (const line of lines) onLine(line);
+    },
+    flush() {
+      const rest = buffer;
+      buffer = '';
+      if (rest.length > 0) onLine(rest);
+    },
+  };
+}
+
 export class ToolEventLineStream {
-  private buffer = '';
   private lineNumber = 0;
+  private readonly lines = lineSplitter((line) => this.parseLine(line));
 
   constructor(private readonly options: ToolEventLineStreamOptions) {}
 
   write(chunk: string): void {
-    this.buffer += chunk;
-
-    while (true) {
-      const newlineIndex = this.buffer.search(/\r?\n/);
-      if (newlineIndex === -1) return;
-
-      const line = this.buffer.slice(0, newlineIndex);
-      const newlineLength =
-        this.buffer[newlineIndex] === '\r' &&
-        this.buffer[newlineIndex + 1] === '\n'
-          ? 2
-          : 1;
-      this.buffer = this.buffer.slice(newlineIndex + newlineLength);
-      this.parseLine(line);
-    }
+    this.lines.write(chunk);
   }
 
   flush(): void {
-    if (this.buffer.trim().length === 0) return;
-    this.parseLine(this.buffer);
-    this.buffer = '';
+    this.lines.flush();
   }
 
   private parseLine(rawLine: string): void {
