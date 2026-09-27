@@ -30,6 +30,31 @@ describe('PiHarness', () => {
     expect(new PiHarness().id).toBe('pi');
   });
 
+  it('pins the MCP executable before the CLI mock PATH changes', async () => {
+    const root = createScratchRoot();
+    const executable = join(root, 'pi');
+    const marker = join(root, 'pinned');
+    writeFileSync(
+      executable,
+      `#!/bin/sh\nprintf pinned > '${marker}'\nprintf 'unsupported-version'\n`,
+      {mode: 0o755},
+    );
+    const harness = new PiHarness();
+    const prepared = await harness.prepareMcp({
+      workDir: root,
+      env: {PATH: root},
+    });
+    await expect(
+      prepared.run(
+        {workDir: root, env: {PATH: '/nonexistent'}, prompt: 'Hello'},
+        {
+          linear: {url: 'http://127.0.0.1:1234/mock', tools: ['get_issue']},
+        },
+      ),
+    ).rejects.toMatchObject({category: 'unsupported_version'});
+    expect(readFileSync(marker, 'utf8')).toBe('pinned');
+  });
+
   it('captures a custom executable version once', async () => {
     const scratchRoot = createScratchRoot();
     const executable = join(scratchRoot, 'fake-pi');
