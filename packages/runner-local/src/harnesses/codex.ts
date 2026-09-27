@@ -1,5 +1,6 @@
+import {realpathSync} from 'node:fs';
+
 import type {PermissionMode} from '@dynobox/sdk';
-import {realpathSync} from 'fs';
 
 import {
   createToolEvent,
@@ -9,12 +10,14 @@ import {
   parseJsonObjectLine,
   textFromContent,
 } from './parsing.js';
+import {prepareMcpHarness} from './resolveMcpExecutable.js';
 import {runStreamingHarness} from './runStreamingHarness.js';
 import type {
   Harness,
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
+  PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
 import {createVersionProbe} from './version.js';
@@ -49,6 +52,18 @@ export class CodexHarness implements Harness {
 
   version(): Promise<string | null> {
     return this.probeVersion();
+  }
+
+  async prepareMcp(
+    input: Pick<HarnessInput, 'workDir' | 'env'>,
+  ): Promise<PreparedMcpHarness> {
+    const {runCodexWithMcp} = await import('./codexMcp.js');
+    return prepareMcpHarness(
+      this.executable,
+      this.extraArgs,
+      input,
+      runCodexWithMcp,
+    );
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
