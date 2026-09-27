@@ -19,10 +19,11 @@ import {
   type RunUploadV4 as RunUploadPayloadV4,
   RunUploadV4,
 } from '@dynobox/run-schema';
-import type {
-  LocalRunnerJob,
-  LocalRunnerResult,
-  ToolEvent,
+import {
+  type LocalRunnerJob,
+  type LocalRunnerResult,
+  scenarioUsesMcp,
+  type ToolEvent,
 } from '@dynobox/runner-local';
 import type {TextMatcher} from '@dynobox/sdk';
 import type {IrAssertion} from '@dynobox/sdk/ir';
@@ -83,6 +84,7 @@ export type UploadRunInput = {
 };
 
 export async function uploadRun(input: UploadRunInput): Promise<void> {
+  assertNoMcpUpload(input);
   const customUploadUrl = resolveCustomUploadUrl(input.env);
   const token =
     customUploadUrl === null
@@ -148,6 +150,7 @@ export function buildRunUploadPayload(input: {
   inputPath: string;
   git: RunUploadGitV4 | null;
 }): RunUploadPayloadV4 {
+  assertNoMcpUpload(input);
   const allJobs = input.dynos.flatMap((dyno) => dyno.jobs);
   if (input.results.length !== allJobs.length) {
     throw new Error(
@@ -182,6 +185,21 @@ export function buildRunUploadPayload(input: {
     },
     dynos,
   };
+}
+
+function assertNoMcpUpload(
+  input: Pick<UploadRunInput, 'dynos' | 'results'>,
+): void {
+  if (
+    input.results.some((result) => result.mcp !== undefined) ||
+    input.dynos.some((dyno) =>
+      dyno.jobs.some((job) => scenarioUsesMcp(job.scenario)),
+    )
+  ) {
+    throw new Error(
+      'MCP uploads are not enabled. Run locally without --save-run.',
+    );
+  }
 }
 
 function buildRunUploadDyno(

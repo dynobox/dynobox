@@ -6,7 +6,10 @@
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 
 import {buildRunMatrix} from '../jobs.js';
-import {anyOfMatchedBranch} from '../util/assertionBranch.js';
+import {
+  anyOfBranchResults,
+  anyOfMatchedBranch,
+} from '../util/assertionBranch.js';
 import type {DebugLogPaths} from '../util/transcript.js';
 
 const REPORT_SCHEMA = 'dynobox.report.v2';
@@ -20,6 +23,7 @@ export type RenderJsonRunOutputInput = {
 };
 
 export function renderJsonRunOutput(input: RenderJsonRunOutputInput): string {
+  const schema = reportSchema(input);
   const records = [
     ...input.results.map((result, index) => {
       const job = input.jobs[index];
@@ -27,6 +31,7 @@ export function renderJsonRunOutput(input: RenderJsonRunOutputInput): string {
         result,
         job,
         job === undefined ? undefined : input.debugLogPaths?.get(job),
+        schema,
       );
     }),
     summaryRecord(input),
@@ -39,9 +44,10 @@ function jobRecord(
   result: LocalRunnerResult,
   job: LocalRunnerJob | undefined,
   debugLogPaths: DebugLogPaths | undefined,
+  schema: string,
 ) {
   return {
-    schema: REPORT_SCHEMA,
+    schema,
     type: 'job',
     jobId: result.jobId,
     scenario: {
@@ -85,17 +91,55 @@ function jobRecord(
       cliMockCallCount: result.cliMockCalls.length,
       harnessCliMockCallCount: result.harnessCliMockCallCount,
     },
+    ...(result.mcp === undefined
+      ? {}
+      : {
+          mcp: {
+            ready: result.mcp.ready,
+            finalized: result.mcp.finalized,
+            failures: [...result.mcp.failures],
+            callCount: result.mcp.calls.length,
+            calls: result.mcp.calls.map(
+              ({sequence, server, tool, category}) => ({
+                sequence,
+                server,
+                tool,
+                category,
+              }),
+            ),
+          },
+        }),
     assertions: result.assertionResults.map((assertion) => {
       const label = jobAssertionLabel(job, assertion.assertionId);
       const matchedBranchIndex = assertion.passed
         ? anyOfMatchedBranch(assertion.evidence)
         : undefined;
+      const mcp = mcpEvidence(assertion.evidence);
       return {
         assertionId: assertion.assertionId,
         ...(label === undefined ? {} : {label}),
         type: assertion.type,
         passed: assertion.passed,
         message: assertion.message,
+        ...(mcp === undefined ? {} : {mcp}),
+        ...(schema === REPORT_SCHEMA || assertion.type !== 'anyOf'
+          ? {}
+          : {
+              mcpBranches: anyOfBranchResults(assertion.evidence)?.flatMap(
+                (branch, index) => {
+                  const evidence = mcpEvidence(branch.evidence);
+                  return evidence === undefined
+                    ? []
+                    : [
+                        {
+                          branchIndex: index + 1,
+                          passed: branch.passed,
+                          ...evidence,
+                        },
+                      ];
+                },
+              ),
+            }),
         ...(matchedBranchIndex === undefined ? {} : {matchedBranchIndex}),
       };
     }),
@@ -122,7 +166,7 @@ function summaryRecord(input: RenderJsonRunOutputInput) {
   const matrix = buildRunMatrix(input.jobs, input.results);
 
   return {
-    schema: REPORT_SCHEMA,
+    schema: reportSchema(input),
     type: 'summary',
     status: failedCount === 0 && configErrorCount === 0 ? 'passed' : 'failed',
     totals: {
@@ -162,5 +206,41 @@ function summaryRecord(input: RenderJsonRunOutputInput) {
     warningJobs: input.results
       .filter((result) => result.warnings.length > 0)
       .map((result) => result.jobId),
+  };
+}
+
+function reportSchema(input: RenderJsonRunOutputInput): string {
+  return input.jobs.some((job) => job.scenario.mcpMocks !== undefined) ||
+    input.results.some((result) => result.mcp !== undefined)
+    ? 'dynobox.report.v3'
+    : REPORT_SCHEMA;
+}
+
+function mcpEvidence(value: unknown) {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('kind' in value) ||
+    value.kind !== 'mcp'
+  )
+    return undefined;
+  const evidence = value as Record<string, unknown>;
+  if (
+    typeof evidence.server !== 'string' ||
+    typeof evidence.tool !== 'string' ||
+    typeof evidence.hasInput !== 'boolean' ||
+    typeof evidence.callCount !== 'number' ||
+    typeof evidence.matchCount !== 'number'
+  )
+    return undefined;
+  return {
+    server: evidence.server,
+    tool: evidence.tool,
+    hasInput: evidence.hasInput,
+    callCount: evidence.callCount,
+    matchCount: evidence.matchCount,
+    ...(evidence.failure === undefined
+      ? {}
+      : {failure: 'observation_unavailable'}),
   };
 }

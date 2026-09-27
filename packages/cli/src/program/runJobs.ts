@@ -84,11 +84,13 @@ export function buildScenarioExecutions(
 /**
  * Execute each scenario in order. Harness lanes within a scenario overlap,
  * while iterations and duplicate jobs within one lane remain sequential.
+ * An aborted `signal` rejects before the next job starts and after the last.
  */
 export async function runScenarioExecutions(
   dynos: readonly RunDynoGroup[],
   execute: (job: LocalRunnerJob) => Promise<LocalRunnerResult>,
   hooks: RunExecutionHooks = {},
+  signal?: AbortSignal,
 ): Promise<RunExecutionResult> {
   const startedAt = Date.now();
   const executions = buildScenarioExecutions(dynos);
@@ -97,10 +99,13 @@ export async function runScenarioExecutions(
   });
 
   for (const scenario of executions) {
+    // A cancelled run starts no further jobs, with or without MCP mocks.
+    signal?.throwIfAborted();
     hooks.scenarioStarted?.(scenario);
     const laneOutcomes = await Promise.allSettled(
       scenario.harnessLanes.map(async (lane) => {
         for (const entry of lane.jobs) {
+          signal?.throwIfAborted();
           hooks.jobStarted?.(entry, scenario);
           const result = await execute(entry.job);
           resultSlots[entry.index] = result;
@@ -123,6 +128,8 @@ export async function runScenarioExecutions(
     });
     hooks.scenarioCompleted?.(scenario, scenarioResults);
   }
+  // A job cancelled mid-run can return a failed result instead of rejecting.
+  signal?.throwIfAborted();
 
   const results = resultSlots.map((result, index) => {
     if (result === undefined) {
