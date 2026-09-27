@@ -46,6 +46,7 @@
   ],
   "dependencies": {
     "@dynobox/sdk": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "commander": "^14.0.3",
     "execa": "^9.6.1",
     "mockttp": "^4.4.1",

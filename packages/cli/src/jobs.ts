@@ -4,6 +4,7 @@
  */
 
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
+import {assertMcpExecutionSupported} from '@dynobox/runner-local';
 import type {HarnessId, PermissionMode} from '@dynobox/sdk';
 import type {
   Ir,
@@ -68,6 +69,7 @@ export function buildLocalRunnerJobs(
   return scenarios.flatMap((scenario) =>
     selectHarnessConfigs(scenario.harnesses, options.harnesses).flatMap(
       (harness) => {
+        assertMcpExecutionSupported(scenario, harness.id);
         return Array.from({length: iterations}, (_, iteration) => {
           const permissionMode = permissionModeForHarness(
             harness,
