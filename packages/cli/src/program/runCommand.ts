@@ -281,8 +281,8 @@ export async function runCommandAction(
 
   // Stop scheduling and cancel running jobs on the first signal so mocks and
   // controllers clean up; a second signal exits at once. The listener stays
-  // installed until the run ends: execa's signal-exit handler re-raises the
-  // signal, killing the process before cleanup, once no other listener is left.
+  // installed until job execution ends: execa's signal-exit handler re-raises
+  // the signal, killing the process before cleanup, once no other listener is left.
   const abort = new AbortController();
   const cancel = () => {
     if (abort.signal.aborted) process.exit(cancelledExitCode);
@@ -316,6 +316,11 @@ export async function runCommandAction(
     const {results} = execution;
     const anyJobFailed = results.some((result) => !result.passed);
     const runFailed = anyJobFailed || errors.length > 0;
+
+    // Upload does not use the run controller. Restore normal signal handling
+    // so Ctrl-C can interrupt a stalled upload instead of aborting finished jobs.
+    process.off('SIGINT', cancel);
+    process.off('SIGTERM', cancel);
 
     if (commandFlags.saveRun === true) {
       await uploadRun({

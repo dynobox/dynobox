@@ -15,7 +15,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   ineligible for upload.
 - Stop a run on the first SIGINT or SIGTERM: running harness processes are
   cancelled, no further jobs start, mocks clean up, and the CLI exits with code
-  130. A second signal exits immediately.
+  130. A second signal exits immediately. Once jobs finish, restore normal
+  signal handling so Ctrl-C can interrupt a `--save-run` upload.
 
 ### `@dynobox/runner-local`
 

@@ -371,6 +371,28 @@ describe('dynobox run — upload', () => {
     expect(payload).toMatchObject({schemaVersion: 4});
   });
 
+  it('removes run signal handlers before uploading', async () => {
+    let listenersDuringUpload: [number, number] | undefined;
+    stubFetch(async () => {
+      listenersDuringUpload = [
+        process.listenerCount('SIGINT'),
+        process.listenerCount('SIGTERM'),
+      ];
+      return Response.json({id: 'run-1'});
+    });
+
+    const result = await executeCli(
+      ['run', fixtures.validConfigPath, '--save-run'],
+      {
+        env: {DYNOBOX_UPLOAD_URL: 'https://uploads.example/run-hook'},
+        harnesses: [createPassingHarness()],
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(listenersDuringUpload).toEqual([0, 0]);
+  });
+
   it('only uploads dynos with jobs after scenario filtering', async () => {
     const dir = join(fixtures.dir, 'filtered-upload');
     mkdirSync(dir, {recursive: true});
