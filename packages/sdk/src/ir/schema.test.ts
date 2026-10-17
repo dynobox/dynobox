@@ -156,6 +156,23 @@ describe('irAssertionSchema tool matcher validation', () => {
   });
 });
 
+describe('irAssertionSchema MCP assertions', () => {
+  it.each(['mcp.called', 'mcp.notCalled'])(
+    'rejects unknown keys on %s',
+    (type) => {
+      const result = irAssertionSchema.safeParse({
+        id: 'assertion.test.0',
+        type,
+        server: 'linear',
+        tool: 'save',
+        inptu: {title: 'typo'},
+      });
+
+      expect(result.success).toBe(false);
+    },
+  );
+});
+
 describe('irScenarioSchema cliMocks validation', () => {
   const scenario = {
     id: 'scenario.cli-mocks',

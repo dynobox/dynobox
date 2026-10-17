@@ -8,6 +8,15 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Apply timeout and cancellation limits during MCP preparation. Reject MCP mock
+  requests larger than 10 MiB.
+- Stop harness, setup, and verification child processes on POSIX systems when a job is
+  cancelled, including children that ignore SIGTERM.
+- Skip directories during MCP harness executable lookup. Preserve symlink paths
+  that point to executable files.
+
 ---
 
 ## dynobox@0.13.0 — 2026-08-26
