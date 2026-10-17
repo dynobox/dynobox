@@ -1,6 +1,15 @@
-import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
 
 import {afterEach, describe, expect, it} from 'vitest';
 
@@ -9,6 +18,7 @@ import {
   buildAntigravityArgs,
   parseAntigravityJson,
   parseAntigravityJsonLine,
+  removeDynoboxProjectRecords,
 } from './antigravity.js';
 import type {HarnessRunOutput, ToolEvent} from './types.js';
 
@@ -125,6 +135,29 @@ fi
       '/tmp/work',
       '-p',
       'Say hello.',
+      '--output-format',
+      'stream-json',
+      '--print-timeout',
+      '90000ms',
+    ]);
+  });
+
+  it('selects an owned project for an MCP mock run', () => {
+    expect(
+      buildAntigravityArgs(
+        '/tmp/work',
+        'Read the issue.',
+        [],
+        undefined,
+        undefined,
+        90_000,
+        'owned-project-id',
+      ),
+    ).toEqual([
+      '--project',
+      'owned-project-id',
+      '-p',
+      'Read the issue.',
       '--output-format',
       'stream-json',
       '--print-timeout',
@@ -320,5 +353,61 @@ JSONL
         }),
       ).toolEvents,
     ).toEqual([]);
+  });
+});
+
+describe('removeDynoboxProjectRecords', () => {
+  it('removes old dynobox records and the work dir record, keeping others', async () => {
+    const home = createScratchRoot();
+    const projects = join(home, '.gemini', 'config', 'projects');
+    mkdirSync(projects, {recursive: true});
+    const workDir = join(home, 'dynobox-job-a');
+    const record = (
+      file: string,
+      name: string,
+      folder: string,
+      old = false,
+    ) => {
+      const path = join(projects, file);
+      writeFileSync(
+        path,
+        JSON.stringify({
+          id: file,
+          name,
+          projectResources: {
+            resources: [{folderUri: pathToFileURL(folder).href}],
+          },
+        }),
+      );
+      if (old) utimesSync(path, new Date(0), new Date(0));
+    };
+    record('old.json', 'dynobox-job-x', join(home, 'x'), true);
+    record('own.json', 'dynobox-job-a', workDir);
+    record('prefix.json', 'dynobox-job-ab', `${workDir}b`);
+    record('recent.json', 'dynobox-job-y', join(home, 'y'));
+    record(
+      'mcp.json',
+      'dynobox-0b8e6c2a-3f1d-4c5e-9a7b-1d2e3f4a5b6c',
+      join(home, 'm'),
+      true,
+    );
+    record('user.json', 'My project', join(home, 'user'), true);
+    record('docs.json', 'dynobox-docs', join(home, 'dynobox-docs'), true);
+    writeFileSync(join(projects, 'broken.json'), '{');
+
+    await removeDynoboxProjectRecords(home, workDir);
+
+    expect(readdirSync(projects).sort()).toEqual([
+      'broken.json',
+      'docs.json',
+      'prefix.json',
+      'recent.json',
+      'user.json',
+    ]);
+  });
+
+  it('ignores a missing HOME or projects directory', async () => {
+    await removeDynoboxProjectRecords(undefined);
+    await removeDynoboxProjectRecords(createScratchRoot());
   });
 });

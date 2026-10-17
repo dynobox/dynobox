@@ -137,7 +137,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.5
-        version: 4.1.5(@types/node@22.19.17)(jsdom@29.1.1)(vite@8.1.5(@types/node@22.19.17)(esbuild@0.27.7)(tsx@4.23.1)(yaml@2.8.4))
+        version: 4.1.5(@types/node@22.19.17)(jsdom@29.1.1)(vite@8.1.5(@types/node@22.19.17)(esbuild@0.28.1)(tsx@4.23.1)(yaml@2.8.4))
 
   packages/evaluators:
     dependencies:
@@ -206,7 +206,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.5
-        version: 4.1.5(@types/node@22.19.17)(jsdom@29.1.1)(vite@8.1.5(@types/node@22.19.17)(esbuild@0.28.1)(tsx@4.23.1)(yaml@2.8.4))
+        version: 4.1.5(@types/node@22.19.17)(jsdom@29.1.1)(vite@8.1.5(@types/node@22.19.17)(esbuild@0.27.7)(tsx@4.23.1)(yaml@2.8.4))
 
   packages/sdk:
     dependencies:
@@ -2432,8 +2432,8 @@ packages:
   hastscript@9.0.1:
     resolution: {integrity: sha512-g7df9rMFX/SPi34tyGCyUBREQoKkapwdY/T04Qn9TDWfHhAYt4/I0gMVirzK5wEzeUqIjEB+LXC/ypb7Aqno5w==}
 
-  hono@4.13.9:
-    resolution: {integrity: sha512-7dMkQmZoC4E6F7AtaQSPhlWAdnBti+j7rreMZl8QB4jFiEhP9TWbGWUMi8WYzBCgmgulxuvLQupKqo+Co6Omyg==}
+  hono@4.13.7:
+    resolution: {integrity: sha512-c8/gF9ac8Y78/agExVocyLevgR+JlpNB444Py0FSX8pJoPdYUfUzRcXtYEYGwt6l19qIlVZPN5Mfsw9jFShmQQ==}
     engines: {node: '>=16.9.0'}
 
   html-encoding-sniffer@6.0.0:
@@ -4414,9 +4414,9 @@ snapshots:
     dependencies:
       graphql: 16.14.0
 
-  '@hono/node-server@2.1.1(hono@4.13.9)':
+  '@hono/node-server@2.1.1(hono@4.13.7)':
     dependencies:
-      hono: 4.13.9
+      hono: 4.13.7
 
   '@httptoolkit/httpolyglot@3.1.0':
     dependencies:
@@ -4596,7 +4596,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.30.0(zod@4.4.3)':
     dependencies:
-      '@hono/node-server': 2.1.1(hono@4.13.9)
+      '@hono/node-server': 2.1.1(hono@4.13.7)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -4606,7 +4606,7 @@ snapshots:
       eventsource-parser: 3.1.1
       express: 5.2.1
       express-rate-limit: 8.7.0(express@5.2.1)
-      hono: 4.13.9
+      hono: 4.13.7
       jose: 6.2.12
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -6157,7 +6157,7 @@ snapshots:
       property-information: 7.2.0
       space-separated-tokens: 2.0.2
 
-  hono@4.13.9: {}
+  hono@4.13.7: {}
 
   html-encoding-sniffer@6.0.0:
     dependencies:
