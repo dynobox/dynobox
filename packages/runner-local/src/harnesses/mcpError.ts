@@ -44,33 +44,41 @@ export function mcpDeadline(
   };
 }
 
-/** Stop waiting for preparation when its budget expires or the job is cancelled. */
+/**
+ * Stop waiting for preparation when its budget expires or the job is
+ * cancelled. `prepare` receives a signal that aborts once the wait ends, so
+ * adapters can stop probes the job no longer needs.
+ */
 export async function awaitMcpPreparation<T>(
-  prepare: () => Promise<T>,
+  prepare: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number | undefined,
   signal?: AbortSignal,
 ): Promise<T> {
   signal?.throwIfAborted();
+  const stop = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let cancel: (() => void) | undefined;
+  const cancel = () => stop.abort(signal!.reason);
   try {
     const interrupted = new Promise<never>((_resolve, reject) => {
-      cancel = () => reject(signal!.reason);
+      stop.signal.addEventListener('abort', () => reject(stop.signal.reason), {
+        once: true,
+      });
       signal?.addEventListener('abort', cancel, {once: true});
       if (timeoutMs !== undefined) {
         timer = setTimeout(
           () =>
-            reject(
+            stop.abort(
               new McpHarnessError('timed_out', 'MCP run exceeded its timeout.'),
             ),
           timeoutMs,
         );
       }
     });
-    return await Promise.race([prepare(), interrupted]);
+    return await Promise.race([prepare(stop.signal), interrupted]);
   } finally {
     clearTimeout(timer);
-    if (cancel !== undefined) signal?.removeEventListener('abort', cancel);
+    signal?.removeEventListener('abort', cancel);
+    stop.abort();
   }
 }
 

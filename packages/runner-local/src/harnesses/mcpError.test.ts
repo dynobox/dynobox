@@ -32,3 +32,14 @@ it('does not start preparation after cancellation', async () => {
   ).rejects.toBe(failure);
   expect(prepare).not.toHaveBeenCalled();
 });
+
+it('aborts the preparation signal when its budget expires', async () => {
+  let prepareSignal: AbortSignal | undefined;
+  await expect(
+    awaitMcpPreparation((signal) => {
+      prepareSignal = signal;
+      return new Promise<never>(() => {});
+    }, 10),
+  ).rejects.toThrow('MCP run exceeded its timeout.');
+  expect(prepareSignal?.aborted).toBe(true);
+});

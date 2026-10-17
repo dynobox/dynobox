@@ -92,9 +92,12 @@ export interface Harness {
   /** Best-effort installed executable version for run provenance. */
   version?(): Promise<string | null>;
 
-  /** Resolve executable on the original PATH, before CLI mocks are installed. */
+  /**
+   * Resolve executable on the original PATH, before CLI mocks are installed.
+   * `signal` aborts when the job stops waiting for preparation.
+   */
   prepareMcp?(
-    input: Pick<HarnessInput, 'workDir' | 'env'>,
+    input: Pick<HarnessInput, 'workDir' | 'env' | 'signal'>,
   ): Promise<PreparedMcpHarness>;
 
   /**
