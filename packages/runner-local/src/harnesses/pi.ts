@@ -8,12 +8,14 @@ import {
   parseJsonObjectLine,
   textFromContent,
 } from './parsing.js';
+import {prepareMcpHarness} from './resolveMcpExecutable.js';
 import {runStreamingHarness} from './runStreamingHarness.js';
 import type {
   Harness,
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
+  PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
 import {createVersionProbe} from './version.js';
@@ -52,6 +54,18 @@ export class PiHarness implements Harness {
 
   version(): Promise<string | null> {
     return this.probeVersion();
+  }
+
+  async prepareMcp(
+    input: Pick<HarnessInput, 'workDir' | 'env'>,
+  ): Promise<PreparedMcpHarness> {
+    const {runPiWithMcp} = await import('./piMcp.js');
+    return prepareMcpHarness(
+      this.executable,
+      this.extraArgs,
+      input,
+      runPiWithMcp,
+    );
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
