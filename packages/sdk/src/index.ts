@@ -14,6 +14,7 @@ export {command} from './command/index.js';
 export {dyno} from './dyno/index.js';
 export {finalMessage} from './final-message/index.js';
 export {http} from './http/index.js';
+export {mcp} from './mcp/index.js';
 export {sequence} from './sequence/index.js';
 export {skill} from './skill/index.js';
 export {tool} from './tool/index.js';
@@ -32,6 +33,8 @@ export type {
   Endpoint,
   FileToolKind,
   FinalMessageContainsAssertion,
+  McpCalledAssertion,
+  McpNotCalledAssertion,
   NotCalledAssertion,
   SequenceInOrderAssertion,
   SequenceStepAssertion,
@@ -67,4 +70,13 @@ export {
   type PermissionMode,
 } from './types/harness.js';
 export {HTTP_METHODS, type HttpMethod} from './types/httpMethod.js';
+export type {
+  JsonObject,
+  JsonValue,
+  McpInputSchema,
+  McpMockServer,
+  McpMockTool,
+  McpToolResult,
+  ScenarioMcpMocks,
+} from './types/mcp.js';
 export {verify} from './verify/index.js';

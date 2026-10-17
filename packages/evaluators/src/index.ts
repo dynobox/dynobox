@@ -13,6 +13,7 @@ import {
   evaluateCommandNotCalledAssertion,
 } from './commandAssertions.js';
 import {evaluateHttpCalled, evaluateHttpNotCalled} from './httpAssertions.js';
+import {evaluateMcpAssertion} from './mcpAssertions.js';
 import {passed, unsupportedAssertionResult} from './results.js';
 import {evaluateSkillReferenced} from './skillAssertions.js';
 import {evaluateTextContains} from './textAssertions.js';
@@ -138,6 +139,9 @@ function evaluateAssertion(
   assertion: IrAssertion,
   input: EvaluationInput,
 ): AssertionResult {
+  if (assertion.type === 'mcp.called' || assertion.type === 'mcp.notCalled') {
+    return evaluateMcpAssertion(assertion, input.mcpObservation);
+  }
   if (assertion.type === 'tool.called') {
     return evaluateToolCalledAssertion(assertion, input.toolEvents);
   }
