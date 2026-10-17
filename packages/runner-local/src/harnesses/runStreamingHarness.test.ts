@@ -1,4 +1,4 @@
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 
 import {
   runStreamingHarness,
@@ -90,6 +90,45 @@ describe('ToolEventLineStream', () => {
 });
 
 describe('runStreamingHarness', () => {
+  it.each([false, true])(
+    'stops harness children on cancellation (ignore SIGTERM: %s)',
+    async (ignoreTerm) => {
+      const abort = new AbortController();
+      let childStarted!: (pid: number) => void;
+      const started = new Promise<number>((resolve) => {
+        childStarted = resolve;
+      });
+      const child = `${ignoreTerm ? 'process.on("SIGTERM", () => {});' : ''}
+        console.log(process.pid); setTimeout(() => {}, 3000);`;
+      const parent = `require("node:child_process").spawn(
+        process.execPath, ["-e", ${JSON.stringify(child)}], {stdio: "inherit"}
+      ); setTimeout(() => {}, 3000);`;
+      const pending = runStreamingHarness({
+        executable: process.execPath,
+        args: ['-e', parent],
+        input: {
+          prompt: '',
+          workDir: process.cwd(),
+          env: {},
+          signal: abort.signal,
+          onToolEvent: (event) => childStarted(Number(event.input)),
+        },
+        parseLine: (line) => ({
+          toolEvents: [
+            {kind: 'unknown', rawName: 'child.started', input: line},
+          ],
+        }),
+      });
+      const childPid = await started;
+      const cancelledAt = Date.now();
+      abort.abort();
+      const output = await pending;
+      expect(output.exitCode).not.toBe(0);
+      expect(Date.now() - cancelledAt).toBeLessThan(2500);
+      await vi.waitFor(() => expect(() => process.kill(childPid, 0)).toThrow());
+    },
+  );
+
   it('stops the harness process when the run is cancelled', async () => {
     const abort = new AbortController();
     const started = Date.now();

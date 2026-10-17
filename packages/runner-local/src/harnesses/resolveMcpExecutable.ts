@@ -1,5 +1,5 @@
 import {constants} from 'node:fs';
-import {access, realpath} from 'node:fs/promises';
+import {access, realpath, stat} from 'node:fs/promises';
 import {delimiter, resolve} from 'node:path';
 
 import {McpHarnessError} from './mcpError.js';
@@ -27,6 +27,7 @@ export async function resolveMcpExecutable(
           .map((directory) => resolve(workDir, directory, executable));
   for (const candidate of candidates) {
     try {
+      if (!(await stat(candidate)).isFile()) continue;
       await access(candidate, constants.X_OK);
       // Keep symlinks: multicall shims (Volta, mise) dispatch on argv[0].
       return {executable: candidate, workDir};

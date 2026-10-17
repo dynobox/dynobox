@@ -1,5 +1,6 @@
 import {execa} from 'execa';
 
+import {cancelProcessGroupOnAbort} from '../processGroup.js';
 import type {HarnessInput, HarnessRunOutput, ToolEvent} from './types.js';
 
 export type ParsedToolEventLine = {
@@ -25,6 +26,7 @@ export async function runStreamingHarness(
     cwd: options.cwd ?? input.workDir,
     env: {...process.env, ...input.env},
     reject: false,
+    detached: input.signal !== undefined && process.platform !== 'win32',
     ...(options.stdin === undefined ? {} : {stdin: options.stdin}),
     ...(options.processInput === undefined
       ? {}
@@ -36,6 +38,7 @@ export async function runStreamingHarness(
   };
 
   const subprocess = execa(options.executable, options.args, execaOptions);
+  const cleanup = cancelProcessGroupOnAbort(subprocess, input.signal);
   const stdoutChunks: string[] = [];
   const stderrChunks: string[] = [];
   const streamParser = new ToolEventLineStream({
@@ -57,17 +60,21 @@ export async function runStreamingHarness(
     stderrChunks.push(chunk.toString());
   });
 
-  const result = await subprocess;
-  streamParser.flush();
-  const stdout = result.stdout ?? '';
-  const stderr = result.stderr ?? '';
+  try {
+    const result = await subprocess;
+    streamParser.flush();
+    const stdout = result.stdout ?? '';
+    const stderr = result.stderr ?? '';
 
-  return {
-    exitCode: result.exitCode ?? 1,
-    stdout: stdout.length === 0 ? stdoutChunks.join('') : stdout,
-    stderr: stderr.length === 0 ? stderrChunks.join('') : stderr,
-    durationMs: result.durationMs,
-  };
+    return {
+      exitCode: result.exitCode ?? 1,
+      stdout: stdout.length === 0 ? stdoutChunks.join('') : stdout,
+      stderr: stderr.length === 0 ? stderrChunks.join('') : stderr,
+      durationMs: result.durationMs,
+    };
+  } finally {
+    cleanup();
+  }
 }
 
 export type ToolEventLineStreamOptions = {
