@@ -10,6 +10,10 @@ export async function runShellCommand(options: {
   signal?: AbortSignal;
 }) {
   const {signal} = options;
+  // execa still spawns when already cancelled, and a fast command can finish
+  // before the kill lands.
+  if (signal?.aborted)
+    return {exitCode: 1, stdout: '', stderr: '', durationMs: 0};
   const ownsProcessGroup = signal !== undefined && process.platform !== 'win32';
   const subprocess = execaCommand(options.command, {
     cwd: options.workDir,
