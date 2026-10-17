@@ -26,6 +26,7 @@ import {
 
 const REQUEST_TIMEOUT_MS = 5000;
 const CLEANUP_TIMEOUT_MS = 1000;
+const MAX_REQUEST_BYTES = 10 * 1024 * 1024;
 
 type MutableCall = {-readonly [K in keyof McpCallRecord]: McpCallRecord[K]};
 type RequestState = {call?: MutableCall; task: Promise<void>};
@@ -129,7 +130,18 @@ export async function startMcpMockController(
     }, REQUEST_TIMEOUT_MS);
     try {
       const chunks: Buffer[] = [];
-      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      let requestBytes = 0;
+      for await (const chunk of request) {
+        const buffer = Buffer.from(chunk);
+        requestBytes += buffer.length;
+        if (requestBytes > MAX_REQUEST_BYTES) {
+          failures.add('protocol_failed');
+          reject(response, 413);
+          await finished;
+          return;
+        }
+        chunks.push(buffer);
+      }
       if (sealed) return reject(response, 404);
       const message = JSONRPCMessageSchema.parse(
         JSON.parse(Buffer.concat(chunks).toString('utf8')),

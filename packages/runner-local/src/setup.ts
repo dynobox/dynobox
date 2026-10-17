@@ -1,7 +1,8 @@
 import {cp} from 'node:fs/promises';
 
 import type {IrScenario} from '@dynobox/sdk/ir';
-import {execaCommand} from 'execa';
+
+import {runShellCommand} from './runShellCommand.js';
 
 export type SetupCommandLog = {
   command: string;
@@ -40,14 +41,11 @@ export async function runSetup(opts: RunSetupOptions): Promise<SetupResult> {
 
   for (const command of opts.commands) {
     if (opts.signal?.aborted) return {success: false, logs};
-    const result = await execaCommand(command, {
-      cwd: opts.workDir,
+    const result = await runShellCommand({
+      command,
+      workDir: opts.workDir,
       env,
-      reject: false,
-      shell: true,
-      ...(opts.signal === undefined
-        ? {}
-        : {cancelSignal: opts.signal, forceKillAfterDelay: 1000}),
+      ...(opts.signal === undefined ? {} : {signal: opts.signal}),
     });
     const exitCode = result.exitCode ?? 1;
 

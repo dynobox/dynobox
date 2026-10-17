@@ -139,25 +139,32 @@ describe('runScenarioSetup', () => {
   });
 });
 
-it('cancels active setup and skips subsequent commands', async () => {
-  const workDir = createWorkDir();
-  const abort = new AbortController();
-  const pending = runScenarioSetup({
-    workDir,
-    signal: abort.signal,
-    scenario: {
-      setup: [
-        `exec node -e 'require("node:fs").writeFileSync("started", "yes"); setInterval(() => {}, 1000)'`,
-        'touch should-not-run',
-      ],
-    },
-  });
-  await vi.waitFor(() =>
-    expect(existsSync(join(workDir, 'started'))).toBe(true),
-  );
-  abort.abort();
-  const result = await pending;
-  expect(result.success).toBe(false);
-  expect(result.logs).toHaveLength(1);
-  expect(existsSync(join(workDir, 'should-not-run'))).toBe(false);
-});
+it.each([false, true])(
+  'cancels setup children (ignore SIGTERM: %s) and skips subsequent commands',
+  async (ignoreTerm) => {
+    const workDir = createWorkDir();
+    const abort = new AbortController();
+    const pending = runScenarioSetup({
+      workDir,
+      signal: abort.signal,
+      scenario: {
+        setup: [
+          `node -e '${ignoreTerm ? 'process.on("SIGTERM", () => {});' : ''} require("node:fs").writeFileSync("started", String(process.pid)); setTimeout(() => {}, 3000)'; true`,
+          'touch should-not-run',
+        ],
+      },
+    });
+    await vi.waitFor(() =>
+      expect(existsSync(join(workDir, 'started'))).toBe(true),
+    );
+    const cancelledAt = Date.now();
+    abort.abort();
+    const result = await pending;
+    expect(Date.now() - cancelledAt).toBeLessThan(2500);
+    expect(result.success).toBe(false);
+    expect(result.logs).toHaveLength(1);
+    expect(existsSync(join(workDir, 'should-not-run'))).toBe(false);
+    const childPid = Number(readFileSync(join(workDir, 'started'), 'utf8'));
+    await vi.waitFor(() => expect(() => process.kill(childPid, 0)).toThrow());
+  },
+);

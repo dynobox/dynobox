@@ -25,7 +25,11 @@ import type {
   HarnessRunOutput,
   ToolEvent,
 } from './harnesses/index.js';
-import {mcpDeadline, McpHarnessError} from './harnesses/mcpError.js';
+import {
+  awaitMcpPreparation,
+  mcpDeadline,
+  McpHarnessError,
+} from './harnesses/mcpError.js';
 import type {PreparedMcpHarness} from './harnesses/types.js';
 import type {HttpCapture} from './http/proxy.js';
 import {startHttpCapture} from './http/proxy.js';
@@ -304,11 +308,11 @@ export async function runJob(
   let preparedMcp: PreparedMcpHarness | undefined;
   if (usesMcp) {
     try {
-      remainingMcpTime();
-      preparedMcp = await harness.prepareMcp!({
-        workDir,
-        env: options.env ?? {},
-      });
+      preparedMcp = await awaitMcpPreparation(
+        () => harness.prepareMcp!({workDir, env: options.env ?? {}}),
+        options.timeoutMs === undefined ? undefined : remainingMcpTime(),
+        options.signal,
+      );
     } catch (error) {
       options.signal?.throwIfAborted();
       const failure = mcpFailure(error, 'configuration_failed');

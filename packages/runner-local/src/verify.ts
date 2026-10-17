@@ -1,7 +1,8 @@
 import type {VerifyCommandResult} from '@dynobox/evaluators';
 import {collectVerifyCommandAssertions} from '@dynobox/evaluators';
 import type {IrScenario} from '@dynobox/sdk/ir';
-import {execaCommand} from 'execa';
+
+import {runShellCommand} from './runShellCommand.js';
 
 export type RunVerifyCommandsOptions = {
   scenario: Pick<IrScenario, 'assertions'>;
@@ -25,14 +26,11 @@ export async function runVerifyCommands(
     opts.scenario.assertions,
   )) {
     if (opts.signal?.aborted) break;
-    const result = await execaCommand(assertion.command, {
-      cwd: opts.workDir,
+    const result = await runShellCommand({
+      command: assertion.command,
+      workDir: opts.workDir,
       env,
-      reject: false,
-      shell: true,
-      ...(opts.signal === undefined
-        ? {}
-        : {cancelSignal: opts.signal, forceKillAfterDelay: 1000}),
+      ...(opts.signal === undefined ? {} : {signal: opts.signal}),
     });
 
     results.push({

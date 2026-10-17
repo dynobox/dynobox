@@ -44,6 +44,36 @@ export function mcpDeadline(
   };
 }
 
+/** Stop waiting for preparation when its budget expires or the job is cancelled. */
+export async function awaitMcpPreparation<T>(
+  prepare: () => Promise<T>,
+  timeoutMs: number | undefined,
+  signal?: AbortSignal,
+): Promise<T> {
+  signal?.throwIfAborted();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let cancel: (() => void) | undefined;
+  try {
+    const interrupted = new Promise<never>((_resolve, reject) => {
+      cancel = () => reject(signal!.reason);
+      signal?.addEventListener('abort', cancel, {once: true});
+      if (timeoutMs !== undefined) {
+        timer = setTimeout(
+          () =>
+            reject(
+              new McpHarnessError('timed_out', 'MCP run exceeded its timeout.'),
+            ),
+          timeoutMs,
+        );
+      }
+    });
+    return await Promise.race([prepare(), interrupted]);
+  } finally {
+    clearTimeout(timer);
+    if (cancel !== undefined) signal?.removeEventListener('abort', cancel);
+  }
+}
+
 /** Return the probed version, or fail when it is below the adapter minimum. */
 export function requireMcpVersion(
   label: string,

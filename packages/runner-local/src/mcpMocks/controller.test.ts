@@ -314,6 +314,55 @@ describe('MCP controller', () => {
     );
   });
 
+  it('accepts a request at the 10 MiB limit', async () => {
+    const controller = await start();
+    await discover(controller.urls.linear!);
+    const message = JSON.stringify({
+      jsonrpc: '2.0',
+      id: ++requestId,
+      method: 'tools/call',
+      params: {name: 'save', arguments: {id: 'boundary'}},
+    });
+    const response = await fetch(controller.urls.linear!, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: message + ' '.repeat(10 * 1024 * 1024 - Buffer.byteLength(message)),
+    });
+    expect(response.status).toBe(200);
+    await response.json();
+    const observation = await controller.finalize(success);
+    expect(observation.failures).toEqual([]);
+    expect(observation.calls).toHaveLength(1);
+  });
+
+  it('rejects an oversized streaming request before its body ends', async () => {
+    const controller = await start();
+    await discover(controller.urls.linear!);
+    const request = httpRequest(controller.urls.linear!, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+    });
+    request.on('error', () => {});
+    try {
+      const rejected = new Promise<number | undefined>((resolve) => {
+        request.once('response', (response) => {
+          response.resume();
+          response.once('end', () => resolve(response.statusCode));
+        });
+      });
+      request.write(Buffer.alloc(10 * 1024 * 1024 + 1, ' '));
+      expect(await rejected).toBe(413);
+    } finally {
+      request.destroy();
+    }
+    const observation = await controller.finalize(success);
+    expect(observation.failures).toContain('protocol_failed');
+    expect(observation.calls).toEqual([]);
+  });
+
   it('fails pending requests, revokes routes, and seals evidence on idempotent finalization', async () => {
     const controller = await start();
     await discover(controller.urls.linear!);
