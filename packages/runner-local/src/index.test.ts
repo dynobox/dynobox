@@ -329,6 +329,42 @@ class CommandHarness implements Harness {
   }
 }
 
+describe('runJob cancellation', () => {
+  it('rejects instead of reporting setup_failed when setup is cancelled', async () => {
+    const abort = new AbortController();
+    const harness = new RecordingHarness();
+    await expect(
+      runJob(createJob({setup: ['sleep 5']}), {
+        scratchRoot: createScratchRoot(),
+        harnesses: [harness],
+        signal: abort.signal,
+        onProgress: (event) => {
+          if (event.type === 'setup.started')
+            abort.abort(new Error('cancel setup'));
+        },
+      }),
+    ).rejects.toThrow('cancel setup');
+    expect(harness.inputs).toEqual([]);
+  });
+
+  it('rejects instead of reporting harness_failed when the harness is cancelled', async () => {
+    const abort = new AbortController();
+    const harness = new RecordingHarness(
+      {exitCode: 1, stdout: '', stderr: '', durationMs: 1},
+      [],
+      async () => null,
+      () => abort.abort(new Error('cancel harness')),
+    );
+    await expect(
+      runJob(createJob(), {
+        scratchRoot: createScratchRoot(),
+        harnesses: [harness],
+        signal: abort.signal,
+      }),
+    ).rejects.toThrow('cancel harness');
+  });
+});
+
 describe('runJob', () => {
   it('creates a work directory under scratchRoot and returns it as an artifact', async () => {
     const scratchRoot = createScratchRoot();

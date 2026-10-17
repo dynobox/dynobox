@@ -250,6 +250,10 @@ export async function runJob(
     commandCount: job.scenario.setup.length,
   });
   const commandSetupResult = await runScenarioSetup(setupOptions);
+
+  // A cancelled setup command exits non-zero; report cancellation, not failure.
+  options.signal?.throwIfAborted();
+
   const setupResult: SetupResult = {
     success: commandSetupResult.success,
     logs: [...fixturesResult.logs, ...commandSetupResult.logs],
@@ -309,7 +313,8 @@ export async function runJob(
   if (usesMcp) {
     try {
       preparedMcp = await awaitMcpPreparation(
-        () => harness.prepareMcp!({workDir, env: options.env ?? {}}),
+        (signal) =>
+          harness.prepareMcp!({workDir, env: options.env ?? {}, signal}),
         options.timeoutMs === undefined ? undefined : remainingMcpTime(),
         options.signal,
       );
@@ -601,6 +606,9 @@ export async function runJob(
         }),
       });
     }
+    // execa resolves (reject: false) when cancelled; report cancellation, not
+    // a harness exit code.
+    options.signal?.throwIfAborted();
 
     // --- 8. Seal MCP evidence before verification can mutate the workspace.
     await finalizeMcp(harnessOutput.exitCode === 0);
