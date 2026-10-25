@@ -1,6 +1,6 @@
 import {expect, it} from 'vitest';
 
-import {mcpProxyEnv} from './mcpProxyEnv.js';
+import {mcpProxyEnv} from './proxyEnv.js';
 
 it('preserves both proxy bypass lists and adds loopback only once', () => {
   expect(

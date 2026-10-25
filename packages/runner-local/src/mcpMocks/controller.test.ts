@@ -25,7 +25,7 @@ const success = {harnessReady: true, harnessSucceeded: true};
 let requestId = 0;
 
 async function start(value: unknown = definitions) {
-  const controller = await startMcpMockController(value);
+  const controller = await startMcpMockController(value as never);
   controllers.push(controller);
   return controller;
 }

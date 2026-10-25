@@ -1,6 +1,6 @@
 import {expect, it, vi} from 'vitest';
 
-import {awaitMcpPreparation} from './mcpError.js';
+import {awaitMcpPreparation} from './errors.js';
 
 it('returns prepared output and removes the cancellation listener', async () => {
   const abort = new AbortController();
