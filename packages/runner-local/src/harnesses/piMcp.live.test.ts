@@ -23,6 +23,7 @@ async function fixture(
   cleanup.push(() => rm(root, {recursive: true, force: true}));
   const controller = await startMcpMockController({
     linear: {
+      instructions: 'MCP_SERVER_INSTRUCTIONS: use issue IDs for Linear tools.',
       tools: {
         get_issue: {
           inputSchema: {type: 'object'},
@@ -235,6 +236,7 @@ describe.skipIf(!executable)(
         expect(await readFile(f.configPath, 'utf8')).toBe(f.source);
         expect(f.requests.length).toBeGreaterThan(0);
         expect(JSON.stringify(f.requests)).toContain('Native fixture skill');
+        expect(JSON.stringify(f.requests)).toContain('MCP_SERVER_INSTRUCTIONS');
         expect(JSON.stringify(f.requests)).toContain(
           'project-fixture skill marker',
         );

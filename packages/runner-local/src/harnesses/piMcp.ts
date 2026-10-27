@@ -4,9 +4,14 @@ import {join} from 'node:path';
 
 import {execa} from 'execa';
 
-import {mcpDeadline, McpHarnessError, requireMcpVersion} from './mcpError.js';
-import {mcpProxyEnv} from './mcpProxyEnv.js';
-import {buildPiArgs, parsePiJson} from './pi.js';
+import {
+  mcpDeadline,
+  McpHarnessError,
+  requireMcpVersion,
+} from '../mcpMocks/errors.js';
+import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
+import {buildPiArgs, parsePiJson, parsePiJsonLine} from './pi.js';
+import {runStreamingHarness} from './runStreamingHarness.js';
 import type {
   HarnessInput,
   McpHarnessRun,
@@ -63,16 +68,24 @@ export async function runPiWithMcp(options: {
   try {
     const bridge = join(directory, 'bridge.mjs');
     await writeFile(bridge, piBridgeSource(servers, tools));
-    const result = await execa(
+    const toolInputs = new Map<string, unknown>();
+    const result = await runStreamingHarness({
       executable,
-      buildPiArgs(
+      args: buildPiArgs(
         input.prompt,
         [...(options.extraArgs ?? []), '--no-extensions', '-e', bridge],
         input.model,
         input.permissionMode,
       ),
-      {...processOptions, timeout: remaining()},
-    );
+      input: {
+        ...input,
+        env: {...input.env, PI_OFFLINE: '1', ...mcpProxyEnv(env)},
+        timeoutMs: remaining(),
+      },
+      stdin: 'ignore',
+      parseLine: (line, lineNumber) =>
+        parsePiJsonLine(line, lineNumber, toolInputs),
+    });
     remaining();
     const notReady = result.stderr
       .split('\n')
@@ -82,7 +95,7 @@ export async function runPiWithMcp(options: {
         'not_ready',
         notReady.slice(NOT_READY_MARKER.length).trim(),
       );
-    if (result.failed)
+    if (result.exitCode !== 0)
       throw new McpHarnessError(
         'execution_failed',
         `Pi exited with code ${result.exitCode ?? 'unknown'}.`,
@@ -93,7 +106,6 @@ export async function runPiWithMcp(options: {
         'execution_failed',
         parsed.errorMessage ?? 'Pi finished without a final message.',
       );
-    for (const event of parsed.toolEvents) input.onToolEvent?.(event);
     return {
       harnessReady: true,
       version,
@@ -133,6 +145,7 @@ const notReady = (reason) => {
 };
 export default async function(pi) {
   const clients = [];
+  const instructions = [];
   for (const [server, connection] of Object.entries(servers)) {
     const client = new Client({name: 'dynobox-pi', version: '1.0.0'});
     client.onerror = () => notReady('Lost connection to MCP mock server "' + server + '".');
@@ -142,6 +155,8 @@ export default async function(pi) {
     } catch {
       notReady('Could not connect to MCP mock server "' + server + '".');
     }
+    const guidance = client.getInstructions();
+    if (guidance) instructions.push('MCP server ' + server + ':\\n' + guidance);
     const listing = await client.listTools();
     for (const tool of listing.tools) {
       const name = 'mcp__' + server + '__' + tool.name;
@@ -157,6 +172,9 @@ export default async function(pi) {
       });
     }
   }
+  if (instructions.length) pi.on('before_agent_start', (event) => ({
+    systemPrompt: event.systemPrompt + '\\n\\n' + instructions.join('\\n\\n')
+  }));
   pi.on('session_start', () => {
     const active = pi.getActiveTools();
     const missing = tools.find((name) => !active.includes(name));
