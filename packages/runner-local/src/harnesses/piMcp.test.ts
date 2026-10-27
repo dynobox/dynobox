@@ -1,8 +1,11 @@
 import {access} from 'node:fs/promises';
 import {dirname} from 'node:path';
+import {PassThrough} from 'node:stream';
+import {pathToFileURL} from 'node:url';
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
+import {startMcpMockController} from '../mcpMocks/controller.js';
 import {piToolNames, runPiWithMcp} from './piMcp.js';
 
 const mocks = vi.hoisted(() => ({execa: vi.fn()}));
@@ -35,7 +38,7 @@ beforeEach(() => {
   mocks.execa.mockReset().mockImplementation(async (_executable, args) => {
     if (args[0] === '--version') return {stdout: '0.84.2', failed: false};
     bridge = args[args.indexOf('-e') + 1];
-    return {stdout: finalMessage, stderr: '', failed: false};
+    return {stdout: finalMessage, stderr: '', failed: false, exitCode: 0};
   });
 });
 afterEach(() => vi.clearAllMocks());
@@ -109,6 +112,7 @@ describe('Pi MCP launch contract', () => {
       if (args[0] === '--version') return {stdout: '0.84.2', failed: false};
       return {
         failed: false,
+        exitCode: 0,
         stderr: '',
         stdout: JSON.stringify({
           type: 'message_end',
@@ -143,6 +147,115 @@ describe('Pi MCP launch contract', () => {
         linear: {url: 'http://127.0.0.1:1/linear', tools: ['get_issue']},
       }),
     ).toEqual(['mcp__linear__get_issue']);
+  });
+
+  it.each([0, 1])(
+    'streams tool events before exit code %s',
+    async (exitCode) => {
+      const stdout = new PassThrough();
+      let finish!: (result: object) => void;
+      const child = Object.assign(
+        new Promise<object>((resolve) => {
+          finish = resolve;
+        }),
+        {stdout},
+      );
+      mocks.execa.mockImplementation((_executable, args) =>
+        args[0] === '--version'
+          ? Promise.resolve({stdout: '0.84.2', failed: false})
+          : child,
+      );
+      const onToolEvent = vi.fn();
+      const f = options();
+      const pending = runPiWithMcp({
+        ...f,
+        input: {...f.input, onToolEvent},
+      }).then(
+        (result) => ({result}),
+        (error: unknown) => ({error}),
+      );
+      const lines =
+        [
+          JSON.stringify({
+            type: 'tool_execution_start',
+            toolCallId: 'call-1',
+            args: {id: 'DYNO-1'},
+          }),
+          JSON.stringify({
+            type: 'tool_execution_end',
+            toolCallId: 'call-1',
+            toolName: 'mcp__linear__get_issue',
+            isError: false,
+          }),
+          finalMessage,
+        ].join('\n') + '\n';
+      try {
+        await vi.waitFor(() =>
+          expect(stdout.listenerCount('data')).toBeGreaterThan(0),
+        );
+        stdout.write(lines);
+        expect(onToolEvent).toHaveBeenCalledWith(
+          expect.objectContaining({
+            rawName: 'mcp__linear__get_issue',
+            input: {id: 'DYNO-1'},
+          }),
+        );
+      } finally {
+        finish({exitCode, stdout: lines, stderr: '', durationMs: 1});
+      }
+      const outcome = await pending;
+      if (exitCode === 0)
+        expect(outcome).toHaveProperty('result.harnessReady', true);
+      else expect(outcome).toHaveProperty('error.category', 'execution_failed');
+      expect(onToolEvent).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('adds server instructions to the existing system prompt', async () => {
+    const controller = await startMcpMockController({
+      linear: {
+        instructions: 'Use issue IDs when calling Linear.',
+        tools: {
+          get_issue: {inputSchema: {type: 'object'}, response: {content: []}},
+        },
+      },
+    });
+    const handlers = new Map<
+      string,
+      (event: {systemPrompt: string}) => unknown
+    >();
+    mocks.execa.mockImplementation(async (_executable, args) => {
+      if (args[0] === '--version') return {stdout: '0.84.2', failed: false};
+      const extension = await import(
+        pathToFileURL(args[args.indexOf('-e') + 1]).href
+      );
+      await extension.default({
+        registerTool: vi.fn(),
+        on: (
+          name: string,
+          handler: (event: {systemPrompt: string}) => unknown,
+        ) => handlers.set(name, handler),
+      });
+      await handlers.get('session_shutdown')?.({systemPrompt: ''});
+      return {stdout: finalMessage, stderr: '', exitCode: 0};
+    });
+    try {
+      const f = options();
+      await runPiWithMcp({
+        ...f,
+        servers: {linear: {url: controller.urls.linear!, tools: ['get_issue']}},
+      });
+      expect(
+        handlers.get('before_agent_start')?.({
+          systemPrompt: 'Existing instructions.',
+        }),
+      ).toEqual({
+        systemPrompt:
+          'Existing instructions.\n\nMCP server linear:\nUse issue IDs when calling Linear.',
+      });
+    } finally {
+      await controller.finalize({harnessReady: true, harnessSucceeded: true});
+    }
   });
 
   it('does not launch after cancellation', async () => {
