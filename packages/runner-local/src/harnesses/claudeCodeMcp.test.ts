@@ -5,11 +5,11 @@ import {dirname, join} from 'node:path';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {startMcpMockController} from '../mcpMocks/controller.js';
+import {McpHarnessError} from '../mcpMocks/errors.js';
 import {
   type ClaudeCodeMcpOptions,
   runClaudeCodeWithMcp,
 } from './claudeCodeMcp.js';
-import {McpHarnessError} from './mcpError.js';
 
 const roots: string[] = [];
 const controllers: Awaited<ReturnType<typeof startMcpMockController>>[] = [];
@@ -19,7 +19,7 @@ const definitions = (text = 'fixture') => ({
     tools: {
       lookup: {
         inputSchema: {type: 'object'},
-        response: {content: [{type: 'text', text}]},
+        response: {content: [{type: 'text' as const, text}]},
       },
     },
   },

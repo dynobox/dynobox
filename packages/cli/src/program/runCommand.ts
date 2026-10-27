@@ -155,15 +155,6 @@ export async function runCommandAction(
   );
   const scenarioPatterns = validateScenarioFilters(commandFlags.scenario);
 
-  // Fail fast when --save-run cannot authenticate before doing any expensive
-  // local scenario work that would only fail during upload.
-  if (
-    commandFlags.saveRun === true &&
-    resolveCustomUploadUrl(options.env) === null
-  ) {
-    await validateSaveRunAuth({inputLabel, env: options.env, writeStderr});
-  }
-
   const {files, configPath: appliedConfigPath} = await discoverOrFail(
     configPath,
     resolvedInputPath,
@@ -259,6 +250,15 @@ export async function runCommandAction(
       'dynobox.mcpUpload',
       'MCP uploads are not enabled',
     );
+  }
+
+  // Reject unsupported uploads before authenticating, while still checking
+  // authentication before setup or harness execution for supported uploads.
+  if (
+    commandFlags.saveRun === true &&
+    resolveCustomUploadUrl(options.env) === null
+  ) {
+    await validateSaveRunAuth({inputLabel, env: options.env, writeStderr});
   }
 
   const ctx = createRenderContext(options, commandFlags);

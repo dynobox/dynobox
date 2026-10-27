@@ -11,7 +11,7 @@ import {delimiter, join} from 'node:path';
 
 import {afterEach, expect, it} from 'vitest';
 
-import {resolveMcpExecutable} from './resolveMcpExecutable.js';
+import {resolveMcpExecutable} from './resolveExecutable.js';
 
 const roots: string[] = [];
 afterEach(async () => {

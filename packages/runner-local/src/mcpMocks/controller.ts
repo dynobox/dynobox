@@ -7,6 +7,7 @@ import type {Socket} from 'node:net';
 
 import type {McpInputSchema} from '@dynobox/sdk';
 import {
+  type IrScenario,
   type McpCallRecord,
   mcpJsonObjectSchema,
   type McpMockFailure,
@@ -46,7 +47,7 @@ export type McpMockController = {
 
 /** Local fixture-only MCP transport. There is deliberately no forwarding path. */
 export async function startMcpMockController(
-  definitions: unknown,
+  definitions: NonNullable<IrScenario['mcpMocks']>,
 ): Promise<McpMockController> {
   const mocks = mcpMocksSchema.parse(definitions);
   const tools = Object.fromEntries(
@@ -149,6 +150,7 @@ export async function startMcpMockController(
       if (!('method' in message))
         throw new Error('Unexpected client response.');
       method = message.method;
+      // TODO: Update this pattern -
       // Modern clients probe before falling back to the legacy handshake. The
       // pinned SDK rejects their newer protocol header before method dispatch.
       // Decline only this unsupported discovery RPC; it establishes no readiness

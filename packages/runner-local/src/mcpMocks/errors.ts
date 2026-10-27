@@ -1,4 +1,6 @@
-import {isAtLeastVersion, parseVersion} from './version.js';
+import {errorMessage} from '../diagnostics.js';
+import {isAtLeastVersion, parseVersion} from '../harnesses/version.js';
+import type {LocalMcpSummary} from '../runTypes.js';
 
 export type McpHarnessFailure =
   | 'configuration_failed'
@@ -96,4 +98,14 @@ export function requireMcpVersion(
       `${label} MCP mocking requires ${minVersion} or newer (found ${version ?? 'unknown'}).`,
     );
   return version;
+}
+
+/** Category and message for an MCP error, with `fallback` for unknown errors. */
+export function mcpFailure(
+  error: unknown,
+  fallback: LocalMcpSummary['failures'][number],
+): {category: LocalMcpSummary['failures'][number]; message: string} {
+  return error instanceof McpHarnessError
+    ? {category: error.category, message: error.message}
+    : {category: fallback, message: errorMessage(error)};
 }

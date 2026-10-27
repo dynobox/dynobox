@@ -2,13 +2,13 @@ import {constants} from 'node:fs';
 import {access, realpath, stat} from 'node:fs/promises';
 import {delimiter, resolve} from 'node:path';
 
-import {McpHarnessError} from './mcpError.js';
 import type {
   HarnessInput,
   McpHarnessRun,
   McpServerConnections,
   PreparedMcpHarness,
-} from './types.js';
+} from '../harnesses/types.js';
+import {McpHarnessError} from './errors.js';
 
 /**
  * Pin the installed harness before CLI mocks change PATH for the job, so a

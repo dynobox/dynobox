@@ -5,11 +5,15 @@ import {join} from 'node:path';
 import {execa} from 'execa';
 
 import {
+  mcpDeadline,
+  McpHarnessError,
+  requireMcpVersion,
+} from '../mcpMocks/errors.js';
+import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
+import {
   buildClaudeCodeArgs,
   parseClaudeCodeStreamJsonLine,
 } from './claudeCode.js';
-import {mcpDeadline, McpHarnessError, requireMcpVersion} from './mcpError.js';
-import {mcpProxyEnv} from './mcpProxyEnv.js';
 import {isRecord} from './parsing.js';
 import {lineSplitter} from './runStreamingHarness.js';
 import type {

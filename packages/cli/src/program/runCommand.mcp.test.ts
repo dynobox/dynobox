@@ -224,32 +224,31 @@ describe('MCP CLI execution', () => {
     ).toBe(false);
   });
 
-  it.each(['unsupported', 'upload'] as const)(
-    'rejects %s before setup or invocation',
-    async (mode) => {
-      const {path, root, options, log} = await fixture();
-      // Skip the auth preflight so the MCP upload check is reached.
-      if (mode === 'upload')
-        options.env.DYNOBOX_UPLOAD_URL = 'http://127.0.0.1:9/upload';
-      const args =
-        mode === 'upload'
-          ? ['--save-run']
-          : mode === 'unsupported'
-            ? ['--harness', 'cursor']
-            : [];
-      const fetchSpy = vi.spyOn(globalThis, 'fetch');
-      const result = await executeCli(['run', path, ...args], options);
-      expect(result.exitCode).toBe(configErrorExitCode);
-      expect(result.stderr).toContain(
-        mode === 'upload'
-          ? 'local-only'
-          : 'plugin-provided MCP servers cannot be isolated',
-      );
-      await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();
-      await expect(readFile(log)).rejects.toThrow();
-      expect(fetchSpy).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    'unsupported',
+    'custom-upload',
+    'upload-no-token',
+    'upload-with-token',
+  ] as const)('rejects %s before setup or invocation', async (mode) => {
+    const {path, root, options, log} = await fixture();
+    const upload = mode !== 'unsupported';
+    options.env.HOME = join(root, 'missing-home');
+    options.env.DYNOBOX_TOKEN =
+      mode === 'upload-with-token' ? 'test-token' : '';
+    options.env.DYNOBOX_UPLOAD_URL = '';
+    if (mode === 'custom-upload')
+      options.env.DYNOBOX_UPLOAD_URL = 'http://127.0.0.1:9/upload';
+    const args = upload ? ['--save-run'] : ['--harness', 'cursor'];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const result = await executeCli(['run', path, ...args], options);
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(result.stderr).toContain(
+      upload ? 'local-only' : 'plugin-provided MCP servers cannot be isolated',
+    );
+    await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();
+    await expect(readFile(log)).rejects.toThrow();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });
 
 const CHILD = `#!${process.execPath}

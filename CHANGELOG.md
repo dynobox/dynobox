@@ -10,6 +10,7 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Reject MCP uploads with the local-only error before checking authentication.
 - Apply timeout and cancellation limits during MCP preparation. Reject MCP mock
   requests larger than 10 MiB.
 - Stop harness, setup, and verification child processes on POSIX systems when a job is
