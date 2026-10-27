@@ -24,11 +24,29 @@ async function fixture(mode = 'success') {
     executable,
     `#!${process.execPath}
 import {appendFileSync} from 'node:fs';
+import {createServer} from 'node:http';
 const args = process.argv.slice(2);
 const mode = process.env.DXB_TEST_MODE;
 appendFileSync(process.env.DXB_TEST_LOG, JSON.stringify({args, cwd: process.cwd(), noProxy: process.env.no_proxy, NO_PROXY: process.env.NO_PROXY, marker: process.env.DXB_TEST_MARKER}) + '\\n');
 if (mode === 'hang') {setInterval(() => {}, 1000);}
 else if (args.includes('--version')) console.log(mode === 'version' ? '1.10.0' : mode === 'newer' ? '1.20.0' : '1.18.26');
+else if (args.includes('serve')) {
+  const server = createServer(async (request, response) => {
+    let body = '';
+    for await (const chunk of request) body += chunk;
+    let result = {};
+    if (request.url === '/mcp') result = {linear: {status: 'connected'}};
+    if (request.url === '/session') {
+      appendFileSync(process.env.DXB_TEST_LOG + '.session', body);
+      result = {id: 'test'};
+    }
+    if (request.url === '/permission' || request.method === 'GET' && request.url.endsWith('/message')) result = [];
+    if (request.method === 'POST' && request.url.endsWith('/message')) result = {info: {finish: 'stop'}};
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify(result));
+  });
+  server.listen(0, '127.0.0.1', () => console.log('http://127.0.0.1:' + server.address().port));
+}
 else {
   const config = {mcp: {real: {type: 'local', command: ['real-server'], environment: {SECRET: 'PRIVATE_SENTINEL'}}, unrelated: {type: 'remote', url: 'https://private.invalid/PRIVATE_SENTINEL', headers: {Authorization: 'PRIVATE_SENTINEL'}}}};
   const inline = JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || '{}');
@@ -152,6 +170,50 @@ describe('OpenCode MCP configuration preparation', () => {
       linear_get_issue: 'allow',
     });
   });
+
+  it('appends an existing tool grant after matching wildcard rules', async () => {
+    const {options} = await fixture();
+    options.input.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+      permission: {linear_get_issue: 'ask', '*': 'deny'},
+    });
+    const prepared = await prepareOpenCodeMcpConfiguration({
+      ...options,
+      input: {
+        ...options.input,
+        allowedMcpTools: [{server: 'linear', tool: 'get_issue'}],
+      },
+    });
+    const rules = Object.entries(
+      JSON.parse(prepared.env.OPENCODE_CONFIG_CONTENT!).permission,
+    );
+    expect(
+      rules.findIndex(([name]) => name === 'linear_get_issue'),
+    ).toBeGreaterThan(rules.findIndex(([name]) => name === '*'));
+    expect(rules).toContainEqual(['linear_get_issue', 'allow']);
+  });
+
+  it.each(['default', 'dangerous'] as const)(
+    'denies questions after agent and wildcard rules in %s mode',
+    async (permissionMode) => {
+      const {options, log} = await fixture();
+      options.input.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+        permission: {question: 'allow', '*': 'allow'},
+        agent: {build: {permission: {question: 'allow'}}},
+      });
+      await runOpenCodeWithMcp({
+        ...options,
+        input: {...options.input, prompt: 'OK', permissionMode},
+      });
+      const session = JSON.parse(await readFile(log + '.session', 'utf8'));
+      expect(session.permission.at(-1)).toEqual({
+        permission: 'question',
+        pattern: '*',
+        action: 'deny',
+      });
+      if (permissionMode === 'default')
+        expect(session.permission).toHaveLength(1);
+    },
+  );
 
   it('rejects a selected agent denial that takes precedence over a grant', async () => {
     const {options} = await fixture();

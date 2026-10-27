@@ -3,8 +3,12 @@ import {setTimeout as delay} from 'node:timers/promises';
 
 import {execa} from 'execa';
 
-import {mcpDeadline, McpHarnessError, requireMcpVersion} from './mcpError.js';
-import {mcpProxyEnv} from './mcpProxyEnv.js';
+import {
+  mcpDeadline,
+  McpHarnessError,
+  requireMcpVersion,
+} from '../mcpMocks/errors.js';
+import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
 import {parseOpenCodeJson} from './opencode.js';
 import {asRecord, createToolEvent, isRecord} from './parsing.js';
 import type {
@@ -213,7 +217,10 @@ function mockPermissions(
         }
       }
       if (action === 'deny') throw denied;
-      if (granted) permission[id] = 'allow';
+      if (granted) {
+        delete permission[id];
+        permission[id] = 'allow';
+      }
     }
   }
   return permission;
@@ -366,9 +373,9 @@ export async function runOpenCodeWithMcp(options: {
       );
     const session = asRecord(
       await request('/session', {
-        ...(input.permissionMode === 'dangerous'
-          ? {
-              permission: [
+        permission: [
+          ...(input.permissionMode === 'dangerous'
+            ? [
                 {permission: '*', pattern: '*', action: 'allow'},
                 ...prepared.denials,
                 ...(input.allowedMcpTools ?? []).map(({server, tool}) => ({
@@ -376,10 +383,10 @@ export async function runOpenCodeWithMcp(options: {
                   pattern: '*',
                   action: 'allow',
                 })),
-                {permission: 'question', pattern: '*', action: 'deny'},
-              ],
-            }
-          : {}),
+              ]
+            : []),
+          {permission: 'question', pattern: '*', action: 'deny'},
+        ],
       }),
     );
     let model;
