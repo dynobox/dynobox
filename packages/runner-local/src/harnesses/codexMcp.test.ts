@@ -45,6 +45,11 @@ if (args.includes('app-server')) {
     let result = {};
     if (request.method === 'config/read') result = {config};
     if (request.method === 'plugin/list') result = {marketplaces: mode === 'exit-between-rpcs' ? [{path: '/m', plugins: ['a', 'b'].map(name => ({id: name + '@m', name, installed: true, enabled: true}))}] : [], marketplaceLoadErrors: []};
+    if (request.method === 'plugin/list' && mode.endsWith('-marketplace')) result = {marketplaces: [{name: 'catalog', path: mode === 'local-marketplace' ? '/catalog' : null, plugins: [{id: 'example@catalog', name: 'example', installed: true, enabled: true}]}]};
+    if (request.method === 'plugin/read' && mode.endsWith('-marketplace')) {
+      appendFileSync(process.env.DXB_TEST_LOG + '.plugins', JSON.stringify(request.params) + '\\n');
+      result = {plugin: {mcpServers: []}};
+    }
     // Exit right after answering, so the next request goes to a dead server.
     if (request.method === 'plugin/read' && mode === 'exit-between-rpcs') return process.stdout.write(JSON.stringify({id: request.id, result: {plugin: {}}}) + '\\n', () => process.exit(0));
     console.log(JSON.stringify({id: request.id, result}));
@@ -141,6 +146,18 @@ describe('Codex MCP adapter', () => {
       message: expect.stringContaining('exited during plugin/read'),
     });
   }, 10_000);
+
+  it.each([
+    ['local-marketplace', {marketplacePath: '/catalog'}],
+    ['remote-marketplace', {remoteMarketplaceName: 'catalog'}],
+  ])('identifies plugins from %s', async (mode, identifier) => {
+    const f = await fixture(mode);
+    await runCodexWithMcp(f.options);
+    const params = JSON.parse(
+      await readFile(f.options.input.env.DXB_TEST_LOG + '.plugins', 'utf8'),
+    );
+    expect(params).toEqual({...identifier, pluginName: 'example'});
+  });
 
   it('recovers from a transient error event when the turn completes', async () => {
     const f = await fixture('reconnect');

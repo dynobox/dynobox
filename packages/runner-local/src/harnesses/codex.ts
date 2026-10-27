@@ -2,6 +2,7 @@ import {realpathSync} from 'node:fs';
 
 import type {PermissionMode} from '@dynobox/sdk';
 
+import {prepareMcpHarness} from '../mcpMocks/resolveExecutable.js';
 import {
   createToolEvent,
   isRecord,
@@ -10,7 +11,6 @@ import {
   parseJsonObjectLine,
   textFromContent,
 } from './parsing.js';
-import {prepareMcpHarness} from './resolveMcpExecutable.js';
 import {runStreamingHarness} from './runStreamingHarness.js';
 import type {
   Harness,

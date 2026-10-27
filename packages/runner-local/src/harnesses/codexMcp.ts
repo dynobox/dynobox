@@ -3,10 +3,14 @@ import {join, resolve} from 'node:path';
 
 import {execa} from 'execa';
 
+import {
+  mcpDeadline,
+  McpHarnessError,
+  requireMcpVersion,
+} from '../mcpMocks/errors.js';
+import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
 import {buildCodexArgs, parseCodexJsonLine} from './codex.js';
 import {cachedCodexPluginServers} from './codexMcpPlugins.js';
-import {mcpDeadline, McpHarnessError, requireMcpVersion} from './mcpError.js';
-import {mcpProxyEnv} from './mcpProxyEnv.js';
 import {asRecord, createToolEvent, isRecord} from './parsing.js';
 import {lineSplitter} from './runStreamingHarness.js';
 import type {
@@ -344,7 +348,9 @@ async function readSnapshot(
         const detail = asRecord(
           (
             await rpc('plugin/read', {
-              marketplacePath: marketplace.path,
+              ...(typeof marketplace.path === 'string'
+                ? {marketplacePath: marketplace.path}
+                : {remoteMarketplaceName: marketplace.name}),
               pluginName: plugin.name,
             })
           ).plugin,
