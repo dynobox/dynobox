@@ -9,6 +9,8 @@ import {
   evaluateAssertions,
   preEvaluateAnyOfObservationBranches,
 } from '@dynobox/evaluators';
+import {DynoboxConfigError} from '@dynobox/sdk/compiler';
+import type {McpObservation} from '@dynobox/sdk/ir';
 import {execa} from 'execa';
 
 import {type CliMockController, startCliMockController} from './cliMocks.js';
@@ -18,12 +20,24 @@ import {
   setupFailureDiagnostic,
 } from './diagnostics.js';
 import type {
+  Harness,
   HarnessResult,
   HarnessRunOutput,
   ToolEvent,
 } from './harnesses/index.js';
+import type {PreparedMcpHarness} from './harnesses/types.js';
 import type {HttpCapture} from './http/proxy.js';
 import {startHttpCapture} from './http/proxy.js';
+import {
+  type McpMockController,
+  startMcpMockController,
+} from './mcpMocks/controller.js';
+import {assertMcpExecutionSupported} from './mcpMocks/eligibility.js';
+import {
+  awaitMcpPreparation,
+  mcpDeadline,
+  mcpFailure,
+} from './mcpMocks/errors.js';
 import {
   permissionWarningsFromHarnessFailure,
   permissionWarningsFromToolEvents,
@@ -31,6 +45,7 @@ import {
 import {buildResult, buildTiming, setupDurationMs} from './result.js';
 import type {
   LocalArtifact,
+  LocalMcpSummary,
   LocalRunnerJob,
   LocalRunnerResult,
   RunJobOptions,
@@ -69,9 +84,14 @@ export {
 } from './harnesses/index.js';
 export {ensureDynoboxCA} from './http/ca.js';
 export {buildHttpRoutes, matchHttpEndpointId} from './http/events.js';
+export {
+  assertMcpExecutionSupported,
+  scenarioUsesMcp,
+} from './mcpMocks/eligibility.js';
 export type {
   CliMockCall,
   LocalArtifact,
+  LocalMcpSummary,
   LocalRunnerJob,
   LocalRunnerResult,
   LocalRunnerStatus,
@@ -99,18 +119,20 @@ export type {HttpEvent} from '@dynobox/evaluators';
  * Run one compiled scenario/harness job locally.
  *
  * Pipeline (early exits return a structured result and skip later steps):
- *   1. Create work directory
- *   2. Materialize fixtures
- *   3. Run setup commands (real PATH — CLI mocks not installed yet)
- *   4. Resolve harness + start version probe (real PATH)
- *   5. Install CLI mocks when configured (after collision checks)
- *   6. Capture artifact baselines + start HTTP capture
- *   7. Invoke harness (mocked PATH / HTTP proxy env)
- *   8. Finalize harness-phase mocks, extract result, check exit code
- *   9. Evaluate observation assertions from harness-phase data only
- *  10. Run verify commands in a new mock phase (mocked PATH)
- *  11. Evaluate verify assertions and decide pass/fail
- *  12. Always stop HTTP capture + CLI mocks in `finally`
+ *   1. Check MCP support before any workspace is created
+ *   2. Create work directory
+ *   3. Materialize fixtures
+ *   4. Run setup commands (real PATH — CLI mocks not installed yet)
+ *   5. Resolve harness + start version probe (real PATH)
+ *   6. Prepare the MCP adapter when mocks are declared (real PATH)
+ *   7. Install CLI mocks when configured (after collision checks)
+ *   8. Capture artifact baselines + start HTTP capture
+ *   9. Invoke harness (mocked PATH / HTTP proxy env)
+ *  10. Finalize harness-phase mocks, extract result, check exit code
+ *  11. Evaluate observation assertions from harness-phase data only
+ *  12. Run verify commands in a new mock phase (mocked PATH)
+ *  13. Evaluate verify assertions and decide pass/fail
+ *  14. Always stop MCP, HTTP capture + CLI mocks in `finally`
  *
  * Returns a structured result for CLI renderers and upload.
  */
@@ -118,11 +140,29 @@ export async function runJob(
   job: LocalRunnerJob,
   options: RunJobOptions = {},
 ): Promise<LocalRunnerResult> {
-  // --- 1. Work directory ---------------------------------------------------
+  // --- 1. MCP support (fail before creating a workspace) ------------------
+  assertMcpExecutionSupported(job.scenario, job.harness);
+  const usesMcp = job.scenario.mcpMocks !== undefined;
+  // Only tools declared by this job receive permission to run.
+  const mocks = job.scenario.mcpMocks;
+  const allowedMcpTools = Object.entries(mocks ?? {}).flatMap(
+    ([server, definition]) =>
+      Object.keys(definition.tools).map((tool) => ({server, tool})),
+  );
+  if (usesMcp) {
+    if (
+      !options.harnesses?.find((candidate) => candidate.id === job.harness)
+        ?.prepareMcp
+    )
+      throw new DynoboxConfigError(
+        'The registered harness does not implement isolated MCP execution.',
+      );
+  }
+  // --- 2. Work directory ---------------------------------------------------
   const workDir = await createWorkDir(options.scratchRoot);
   const artifacts: LocalArtifact[] = [{kind: 'work_dir', path: workDir}];
 
-  // --- 2. Fixtures ---------------------------------------------------------
+  // --- 3. Fixtures ---------------------------------------------------------
   emitProgress(options, {
     type: 'fixtures.started',
     job,
@@ -145,12 +185,13 @@ export async function runJob(
     });
   }
 
-  // --- 3. Setup commands (real PATH; mocks not installed) ------------------
+  // --- 4. Setup commands (real PATH; mocks not installed) ------------------
   const setupOptions: Parameters<typeof runScenarioSetup>[0] = {
     scenario: job.scenario,
     workDir,
   };
   if (options.env !== undefined) setupOptions.env = options.env;
+  if (options.signal !== undefined) setupOptions.signal = options.signal;
 
   emitProgress(options, {
     type: 'setup.started',
@@ -158,6 +199,10 @@ export async function runJob(
     commandCount: job.scenario.setup.length,
   });
   const commandSetupResult = await runScenarioSetup(setupOptions);
+
+  // A cancelled setup command exits non-zero; report cancellation, not failure.
+  options.signal?.throwIfAborted();
+
   const setupResult: SetupResult = {
     success: commandSetupResult.success,
     logs: [...fixturesResult.logs, ...commandSetupResult.logs],
@@ -175,7 +220,7 @@ export async function runJob(
     });
   }
 
-  // --- 4. Resolve harness + version probe (real PATH) ----------------------
+  // --- 5. Resolve harness + version probe (real PATH) ----------------------
   emitProgress(options, {
     type: 'harness.started',
     job,
@@ -204,12 +249,54 @@ export async function runJob(
     });
   }
 
-  // Non-blocking: version discovery must not delay harness execution.
-  const harnessVersion = Promise.resolve()
-    .then(() => harness.version?.() ?? null)
-    .catch(() => null);
+  // MCP probes must use the same exclusive configuration and environment as
+  // execution. The prepared adapter reports that version with its output.
+  let harnessVersion = usesMcp
+    ? Promise.resolve<string | null>(null)
+    : Promise.resolve()
+        .then(() => harness.version?.() ?? null)
+        .catch(() => null);
 
-  // --- 5. Install CLI mocks (if any) ---------------------------------------
+  // --- 6. Prepare MCP adapter (real PATH, before CLI mocks) ----------------
+  // One deadline covers MCP preparation, controller start and the harness run.
+  const remainingMcpTime = mcpDeadline(options.timeoutMs, options.signal);
+  let preparedMcp: PreparedMcpHarness | undefined;
+  if (usesMcp) {
+    try {
+      preparedMcp = await awaitMcpPreparation(
+        (signal) =>
+          harness.prepareMcp!({workDir, env: options.env ?? {}, signal}),
+        options.timeoutMs === undefined ? undefined : remainingMcpTime(),
+        options.signal,
+      );
+    } catch (error) {
+      options.signal?.throwIfAborted();
+      const failure = mcpFailure(error, 'configuration_failed');
+      emitProgress(options, {
+        type: 'harness.completed',
+        job,
+        harnessId: harness.id,
+        success: false,
+        toolCount: 0,
+      });
+      return buildResult(job, {
+        status: 'harness_failed',
+        workDir,
+        setupResult,
+        artifacts,
+        mcp: {
+          ready: false,
+          finalized: false,
+          failures: [failure.category],
+          calls: [],
+        },
+        diagnostics: [`MCP preparation failed: ${failure.message}`],
+        timing: buildTiming({setupMs}),
+      });
+    }
+  }
+
+  // --- 7. Install CLI mocks (if any) ---------------------------------------
   // Reject mocks that would shadow the harness binary itself (e.g. mock
   // "claude" while running the Claude Code harness).
   if (
@@ -267,10 +354,83 @@ export async function runJob(
     });
   }
 
-  // --- 6–11. Harness, assertions, verify (cleaned up in finally) -----------
+  // --- 8–14. Construct the final result only after cleanup outcomes are known.
   let httpCapture: HttpCapture | undefined;
+  let mcpController: McpMockController | undefined;
+  let mcpObservation: McpObservation | undefined;
+  let mcpReady = false;
+  let mcpToolEvents: ToolEvent[] | undefined;
+  const mcpFailures = new Set<LocalMcpSummary['failures'][number]>();
+  const recordMcpError = (error: unknown): string => {
+    const failure = mcpFailure(error, 'execution_failed');
+    mcpFailures.add(failure.category);
+    return failure.message;
+  };
+  const finalizeMcp = async (succeeded: boolean) => {
+    if (mcpController === undefined || mcpObservation !== undefined) return;
+    try {
+      mcpObservation = await mcpController.finalize({
+        harnessReady: mcpReady,
+        harnessSucceeded: succeeded,
+      });
+      for (const failure of mcpObservation.failures) mcpFailures.add(failure);
+    } catch {
+      mcpFailures.add('cleanup_failed');
+    }
+  };
+  let result: LocalRunnerResult;
   try {
-    // --- 6. Baselines + HTTP capture ---------------------------------------
+    result = await executeHarnessAndVerify(harness);
+  } catch (error) {
+    if (!usesMcp || options.signal?.aborted) throw error;
+    const message = recordMcpError(error);
+    result = buildResult(job, {
+      status: 'harness_failed',
+      workDir,
+      setupResult,
+      artifacts,
+      harnessVersion: await harnessVersion,
+      diagnostics: [`MCP job execution failed: ${message}`],
+      timing: buildTiming({setupMs}),
+    });
+  } finally {
+    // --- 14. Cleanup MCP, HTTP capture + CLI mocks on every exit path -----
+    await finalizeMcp(false);
+    const cleanup = await Promise.allSettled([
+      stopHttpCapture(httpCapture),
+      cliMockController?.stop(),
+    ]);
+    if (usesMcp && cleanup.some((outcome) => outcome.status === 'rejected'))
+      mcpFailures.add('cleanup_failed');
+  }
+  if (usesMcp) {
+    result.mcp = {
+      ready: mcpObservation?.ready ?? false,
+      finalized: mcpObservation?.finalized ?? false,
+      failures: [...mcpFailures],
+      calls: (mcpObservation?.calls ?? []).map(
+        ({sequence, server, tool, category}) => ({
+          sequence,
+          server,
+          tool,
+          category,
+        }),
+      ),
+    };
+    if (mcpFailures.size > 0) {
+      result.status = 'harness_failed';
+      result.passed = false;
+      result.diagnostics.push(
+        ...[...mcpFailures].map((failure) => `MCP ${failure}.`),
+      );
+    }
+  }
+  return result;
+
+  async function executeHarnessAndVerify(
+    harness: Harness,
+  ): Promise<LocalRunnerResult> {
+    // --- 8. Baselines + HTTP capture ---------------------------------------
     const cliMockEnv =
       cliMockController?.env(
         options.env?.PATH ?? process.env.PATH ?? '',
@@ -303,7 +463,7 @@ export async function runJob(
       });
     }
 
-    // --- 7. Run harness (mocked PATH + HTTP proxy env) ---------------------
+    // --- 9. Run harness (mocked PATH + HTTP proxy env) ---------------------
     let harnessOutput: HarnessRunOutput;
     const harnessStartedAt = Date.now();
     let liveToolCount = 0;
@@ -314,6 +474,8 @@ export async function runJob(
         ...cliMockEnv,
       };
       const harnessInput = {
+        ...(allowedMcpTools.length === 0 ? {} : {allowedMcpTools}),
+        ...(options.signal === undefined ? {} : {signal: options.signal}),
         prompt: job.scenario.prompt,
         workDir,
         env: harnessEnv,
@@ -333,12 +495,40 @@ export async function runJob(
           });
         },
       };
-      harnessOutput = await harness.run(
-        options.timeoutMs === undefined
-          ? harnessInput
-          : {...harnessInput, timeoutMs: options.timeoutMs},
-      );
+      if (preparedMcp !== undefined) {
+        remainingMcpTime();
+        mcpController = await startMcpMockController(job.scenario.mcpMocks!);
+        const servers = Object.fromEntries(
+          Object.entries(mcpController.urls).map(([name, url]) => [
+            name,
+            {
+              url,
+              tools: Object.keys(job.scenario.mcpMocks![name]!.tools),
+            },
+          ]),
+        );
+        const run = await preparedMcp.run(
+          // Without a job timeout the adapter keeps its own defaults.
+          options.timeoutMs === undefined
+            ? harnessInput
+            : {...harnessInput, timeoutMs: remainingMcpTime()},
+          servers,
+        );
+        harnessOutput = run.output;
+        mcpReady = run.harnessReady;
+        mcpToolEvents = run.toolEvents;
+        harnessVersion = Promise.resolve(run.version);
+      } else {
+        harnessOutput = await harness.run(
+          options.timeoutMs === undefined
+            ? harnessInput
+            : {...harnessInput, timeoutMs: options.timeoutMs},
+        );
+      }
     } catch (error) {
+      options.signal?.throwIfAborted();
+      const mcpMessage = usesMcp ? recordMcpError(error) : undefined;
+      await finalizeMcp(false);
       await cliMockController?.finalizePendingCalls();
       const cliMockFailures = cliMockController?.failures() ?? [];
       emitProgress(options, {
@@ -355,7 +545,9 @@ export async function runJob(
         artifacts,
         harnessVersion: await harnessVersion,
         diagnostics: [
-          `Harness "${harness.id}" failed to run: ${errorMessage(error)}`,
+          mcpMessage !== undefined
+            ? `MCP harness execution failed: ${mcpMessage}`
+            : `Harness "${harness.id}" failed to run: ${errorMessage(error)}`,
           ...cliMockFailures.map((failure) => failure.message),
         ],
         httpEvents: httpCapture?.events ?? [],
@@ -366,8 +558,13 @@ export async function runJob(
         }),
       });
     }
+    // execa resolves (reject: false) when cancelled; report cancellation, not
+    // a harness exit code.
+    options.signal?.throwIfAborted();
 
-    // --- 8. Finalize harness-phase mocks; extract + validate result --------
+    // --- 10. Seal MCP evidence before verification can mutate the workspace.
+    await finalizeMcp(harnessOutput.exitCode === 0);
+    // --- Finalize other harness-phase mocks; extract + validate result -----
     await cliMockController?.finalizePendingCalls();
     const httpEvents = httpCapture?.events ?? [];
     // Stop proxy before verify so verification traffic is not recorded as
@@ -378,7 +575,7 @@ export async function runJob(
     // Lifecycle failures (exhaustion, pending calls, handler errors) fail the
     // harness even when the process exited 0.
     const harnessCliMockFailures = cliMockController?.failures() ?? [];
-    if (harnessCliMockFailures.length > 0) {
+    if (harnessCliMockFailures.length > 0 || mcpFailures.size > 0) {
       emitProgress(options, {
         type: 'harness.completed',
         job,
@@ -408,6 +605,9 @@ export async function runJob(
     let harnessResult: HarnessResult;
     try {
       harnessResult = harness.extractResult(harnessOutput);
+      // MCP adapters report tool events under logical mock names.
+      if (mcpToolEvents !== undefined)
+        harnessResult = {...harnessResult, toolEvents: mcpToolEvents};
     } catch (error) {
       emitProgress(options, {
         type: 'harness.completed',
@@ -479,7 +679,7 @@ export async function runJob(
       durationMs: harnessResult.durationMs,
     });
 
-    // --- 9. Observation assertions (harness-phase data only) ---------------
+    // --- 11. Observation assertions (harness-phase data only) --------------
     emitProgress(options, {
       type: 'assertions.started',
       job,
@@ -491,6 +691,7 @@ export async function runJob(
     // full ordered log after verify (step 11).
     const harnessCliMockCalls = cliMockController?.calls() ?? [];
     const observationInput = {
+      ...(mcpObservation === undefined ? {} : {mcpObservation}),
       toolEvents: harnessResult.toolEvents,
       httpEvents,
       cliMockCalls: harnessCliMockCalls,
@@ -520,10 +721,11 @@ export async function runJob(
       anyOfObservationBranches,
     });
 
-    // --- 10. Verify commands (new mock phase, mocked PATH) -----------------
+    // --- 12. Verify commands (new mock phase, mocked PATH) -----------------
     const verifyOptions: Parameters<typeof runVerifyCommands>[0] = {
       scenario: job.scenario,
       workDir,
+      ...(options.signal === undefined ? {} : {signal: options.signal}),
     };
     // Open a new mock phase so verify traffic is recorded separately from the
     // harness-phase snapshot used above for observation assertions.
@@ -537,10 +739,12 @@ export async function runJob(
     if (options.env !== undefined || cliMockController !== undefined) {
       verifyOptions.env = {...(options.env ?? {}), ...verifyCliMockEnv};
     }
+    options.signal?.throwIfAborted();
     const verifyCommandResults = await runVerifyCommands(verifyOptions);
+    options.signal?.throwIfAborted();
     await cliMockController?.finalizePendingCalls();
 
-    // --- 11. Verify assertions + pass/fail ---------------------------------
+    // --- 13. Verify assertions + pass/fail ---------------------------------
     // Still uses observationInput (harness-phase mocks), plus verify results.
     const verifyAssertionResults = evaluateAssertions({
       assertions: postVerifyAssertions,
@@ -603,12 +807,6 @@ export async function runJob(
         assertionsMs,
       }),
     });
-  } finally {
-    // --- 12. Cleanup sockets / proxy on every exit path --------------------
-    await Promise.allSettled([
-      stopHttpCapture(httpCapture),
-      cliMockController?.stop(),
-    ]);
   }
 }
 

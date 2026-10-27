@@ -81,6 +81,11 @@ export function isRecord(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** The value when it is a plain object, otherwise an empty object. */
+export function asRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
 function shellCommand(input: unknown): string | undefined {
   if (!isRecord(input)) return undefined;
   if (typeof input.command === 'string') return input.command;

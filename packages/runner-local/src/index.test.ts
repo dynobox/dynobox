@@ -12,7 +12,7 @@ import {delimiter, join, relative} from 'node:path';
 
 import type {IrScenario} from '@dynobox/sdk/ir';
 import {execaCommand} from 'execa';
-import {afterEach, describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {FakeHarness} from './harnesses/fake.js';
 import type {
@@ -62,6 +62,113 @@ function createJob(scenario: Partial<IrScenario> = {}): LocalRunnerJob {
     },
   };
 }
+
+describe('MCP adapter availability', () => {
+  const mcpMocks = {
+    linear: {
+      tools: {
+        save: {inputSchema: {type: 'object' as const}, response: {content: []}},
+      },
+    },
+  };
+
+  it('times out while MCP preparation is stalled', async () => {
+    const harness = new RecordingHarness();
+    const prepareMcp = vi.fn(() => new Promise<never>(() => {}));
+    const pending = runJob(createJob({mcpMocks}), {
+      scratchRoot: createScratchRoot(),
+      harnesses: [
+        {
+          ...harness,
+          prepareMcp,
+          run: harness.run.bind(harness),
+          extractResult: harness.extractResult.bind(harness),
+        },
+      ],
+      timeoutMs: 30,
+    });
+    const result = await pending;
+    expect(prepareMcp).toHaveBeenCalledOnce();
+    expect(result.status).toBe('harness_failed');
+    expect(result.mcp?.failures).toEqual(['timed_out']);
+    expect(harness.inputs).toEqual([]);
+  });
+
+  it('cancels while MCP preparation is stalled', async () => {
+    const harness = new RecordingHarness();
+    const prepareMcp = vi.fn(() => new Promise<never>(() => {}));
+    const abort = new AbortController();
+    const pending = runJob(createJob({mcpMocks}), {
+      scratchRoot: createScratchRoot(),
+      harnesses: [
+        {
+          ...harness,
+          prepareMcp,
+          run: harness.run.bind(harness),
+          extractResult: harness.extractResult.bind(harness),
+        },
+      ],
+      signal: abort.signal,
+    });
+    const rejected = expect(pending).rejects.toThrow('cancel preparation');
+    await vi.waitFor(() => expect(prepareMcp).toHaveBeenCalledOnce());
+    abort.abort(new Error('cancel preparation'));
+    await rejected;
+    expect(harness.inputs).toEqual([]);
+  });
+
+  it.each([
+    {
+      mcpMocks: {
+        linear: {
+          tools: {
+            save: {inputSchema: {type: 'object'}, response: {content: []}},
+          },
+        },
+      },
+    },
+    {
+      assertions: [
+        {
+          id: 'a',
+          type: 'mcp.notCalled' as const,
+          server: 'linear',
+          tool: 'save',
+        },
+      ],
+    },
+    {
+      assertions: [
+        {
+          id: 'a',
+          type: 'anyOf' as const,
+          steps: [
+            {type: 'mcp.notCalled' as const, server: 'linear', tool: 'save'},
+          ],
+        },
+      ],
+    },
+  ])(
+    'rejects invalid or unsupported MCP execution before setup %#',
+    async (scenario) => {
+      const scratchRoot = createScratchRoot();
+      const marker = join(scratchRoot, 'setup-ran');
+      const harness = new RecordingHarness();
+      await expect(
+        runJob(createJob({...scenario, setup: [`touch ${marker}`]}), {
+          scratchRoot,
+          harnesses: [harness],
+        }),
+      ).rejects.toThrow(
+        'mcpMocks' in scenario
+          ? 'does not implement isolated MCP execution'
+          : 'MCP assertions require mcpMocks on the scenario',
+      );
+      expect(existsSync(marker)).toBe(false);
+      expect(harness.inputs).toEqual([]);
+    },
+  );
+});
 
 class RecordingHarness implements Harness {
   readonly id = 'claude-code' as const;
@@ -221,6 +328,42 @@ class CommandHarness implements Harness {
     };
   }
 }
+
+describe('runJob cancellation', () => {
+  it('rejects instead of reporting setup_failed when setup is cancelled', async () => {
+    const abort = new AbortController();
+    const harness = new RecordingHarness();
+    await expect(
+      runJob(createJob({setup: ['sleep 5']}), {
+        scratchRoot: createScratchRoot(),
+        harnesses: [harness],
+        signal: abort.signal,
+        onProgress: (event) => {
+          if (event.type === 'setup.started')
+            abort.abort(new Error('cancel setup'));
+        },
+      }),
+    ).rejects.toThrow('cancel setup');
+    expect(harness.inputs).toEqual([]);
+  });
+
+  it('rejects instead of reporting harness_failed when the harness is cancelled', async () => {
+    const abort = new AbortController();
+    const harness = new RecordingHarness(
+      {exitCode: 1, stdout: '', stderr: '', durationMs: 1},
+      [],
+      async () => null,
+      () => abort.abort(new Error('cancel harness')),
+    );
+    await expect(
+      runJob(createJob(), {
+        scratchRoot: createScratchRoot(),
+        harnesses: [harness],
+        signal: abort.signal,
+      }),
+    ).rejects.toThrow('cancel harness');
+  });
+});
 
 describe('runJob', () => {
   it('creates a work directory under scratchRoot and returns it as an artifact', async () => {
