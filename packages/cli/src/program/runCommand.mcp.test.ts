@@ -195,6 +195,50 @@ describe('MCP CLI execution', () => {
     );
   });
 
+  it.each([
+    ['failed', 'not_ready', '"subtype":"init"'],
+    ['exit', 'execution_failed', 'PRIVATE_STDOUT'],
+    ['malformed', 'execution_failed', 'PRIVATE_STDOUT'],
+    ['probe-failed', 'unsupported_version', 'PRIVATE_STDOUT'],
+    ['timeout', 'timed_out', 'PRIVATE_STDOUT'],
+  ])(
+    'preserves %s output only in local debug files',
+    async (mode, category, stdoutText) => {
+      for (const debug of [false, true]) {
+        const {path, options} = await fixture(mode);
+        if (mode === 'timeout') options.timeoutMs = 500;
+        const result = await executeCli(
+          ['run', path, '--reporter', 'json', ...(debug ? ['--debug'] : [])],
+          options,
+        );
+        expect(result.exitCode).toBe(1);
+        const job = JSON.parse(result.stdout.split('\n')[0]!);
+        expect(job.status).toBe('harness_failed');
+        expect(job.mcp.failures).toContain(category);
+        expect(result.stdout + result.stderr).not.toMatch(
+          /PRIVATE_STDOUT|PRIVATE_ERROR|127\.0\.0\.1/,
+        );
+        if (debug) {
+          expect(
+            await readFile(job.debugLogPaths.chatHistory, 'utf8'),
+          ).toContain(stdoutText);
+          expect(await readFile(job.debugLogPaths.stderr, 'utf8')).toContain(
+            'PRIVATE_ERROR',
+          );
+        } else {
+          expect(job.debugLogPaths).toBeUndefined();
+          for (const name of [
+            'dynobox-chat-history.jsonl',
+            'dynobox-stderr.log',
+          ])
+            await expect(
+              readFile(join(job.artifacts[0].path, name)),
+            ).rejects.toThrow();
+        }
+      }
+    },
+  );
+
   it('grants only the declared MCP tools in a run that mixes scenarios', async () => {
     const {path, options, log} = await fixture('call', true);
     const result = await executeCli(
@@ -256,8 +300,18 @@ import {appendFileSync, readFileSync} from 'node:fs';
 const args = process.argv.slice(2);
 const path = args[args.indexOf('--mcp-config') + 1];
 appendFileSync(process.env.MCP_TEST_LOG, JSON.stringify({args, path}) + '\\n');
+const mode = process.env.MCP_TEST_MODE;
+if (mode === 'probe-failed' && args.includes('--version')) {
+  console.log('PRIVATE_STDOUT'); console.error('PRIVATE_ERROR'); process.exit(1);
+}
 if (args.includes('--version')) {console.log('2.1.263 (Claude Code)'); process.exit(0);}
 if (!args.includes('--mcp-config')) {console.log(JSON.stringify({type: 'result', subtype: 'success', is_error: false, result: 'done'})); process.exit(0);}
+if (['exit', 'malformed', 'timeout'].includes(mode)) {
+  console.error('PRIVATE_ERROR');
+  console.log(mode === 'malformed' ? 'PRIVATE_STDOUT' : JSON.stringify({type: 'system', subtype: 'status', message: 'PRIVATE_STDOUT'}));
+  if (mode === 'exit') process.exit(1);
+  await new Promise(() => setInterval(() => {}, 1000));
+}
 const config = JSON.parse(readFileSync(path, 'utf8'));
 const url = config.mcpServers.linear.url;
 let id = 0;
@@ -267,7 +321,6 @@ async function rpc(method, params) {
 }
 await rpc('initialize', {protocolVersion: '2025-03-26', capabilities: {}, clientInfo: {name: 'cli-test', version: '1'}});
 await rpc('tools/list', {});
-const mode = process.env.MCP_TEST_MODE;
 console.log(JSON.stringify({type: 'system', subtype: 'init', tools: ['mcp__linear__get_issue', 'mcp__linear__save_issue'], mcp_servers: [{name: 'linear', status: mode === 'failed' ? 'failed' : 'connected'}]}));
 if (mode === 'failed') {console.error('PRIVATE_ERROR ' + url); process.exit(1);}
 if (mode === 'call') {

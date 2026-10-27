@@ -10,6 +10,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Preserve stdout and stderr from failed Claude Code MCP probes and runs in local
+  `--debug` logs while keeping raw output out of reports.
+- Stop child processes from Claude Code MCP version probes and runs when cancelled
+  on POSIX systems, including children that ignore SIGTERM or close output pipes.
 - Reject MCP uploads with the local-only error before checking authentication.
 - Apply timeout and cancellation limits during MCP preparation. Reject MCP mock
   requests larger than 10 MiB.

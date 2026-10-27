@@ -298,6 +298,12 @@ describe('isolated Claude Code MCP invocation', () => {
       expect(error).toMatchObject({
         category,
         message: expect.stringMatching(message),
+        output: {
+          exitCode: expect.any(Number),
+          stdout: expect.any(String),
+          stderr: expect.any(String),
+          durationMs: expect.any(Number),
+        },
       });
     },
   );
@@ -323,14 +329,68 @@ describe('isolated Claude Code MCP invocation', () => {
     });
     expect((await launches()).length).toBe(1);
   });
+
+  it.skipIf(process.platform === 'win32').each([
+    ['probe-child', 'inherit'],
+    ['probe-child', 'ignore'],
+    ['run-child', 'inherit'],
+    ['run-child', 'ignore'],
+  ])(
+    'stops SIGTERM-resistant children on cancellation (%s, stdio: %s)',
+    async (mode, stdio) => {
+      const {options, root} = await fixture(mode);
+      const abort = new AbortController();
+      const pidPath = join(root, 'child.pid');
+      options.input.signal = abort.signal;
+      options.input.env.CHILD_PID = pidPath;
+      options.input.env.CHILD_STDIO = stdio;
+      let childPid: number | undefined;
+      let outcome: unknown;
+      const pending = runClaudeCodeWithMcp(options).catch((error: unknown) => {
+        outcome = error;
+      });
+      try {
+        await vi.waitFor(async () => {
+          childPid = Number(await fs.readFile(pidPath, 'utf8'));
+          expect(childPid).toBeGreaterThan(0);
+        });
+        abort.abort();
+        await vi.waitFor(
+          () => expect(outcome).toBeInstanceOf(McpHarnessError),
+          {timeout: 2000},
+        );
+        expect(outcome).toMatchObject({category: 'execution_failed'});
+        await vi.waitFor(() =>
+          expect(() => process.kill(childPid!, 0)).toThrow(),
+        );
+      } finally {
+        abort.abort();
+        if (childPid !== undefined) {
+          try {
+            process.kill(childPid, 'SIGKILL');
+          } catch {
+            // The adapter already stopped the child on a successful test.
+          }
+        }
+        await pending;
+      }
+    },
+  );
 });
 
 // A child-process test double, not evidence that native Claude excludes sources.
 // It uses actual HTTP initialization/discovery/calls against our controller.
 const FAKE_CLAUDE = `#!${process.execPath}
+import {spawn} from 'node:child_process';
 import {appendFileSync, readFileSync} from 'node:fs';
 const args = process.argv.slice(2);
 const mode = process.env.PROBE_MODE;
+if ((mode === 'probe-child' && args.includes('--version')) ||
+    (mode === 'run-child' && !args.includes('--version'))) {
+  spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(process.env.CHILD_PID, String(process.pid)); setInterval(() => {}, 1000);'],
+    {stdio: process.env.CHILD_STDIO});
+  await new Promise(() => setInterval(() => {}, 1000));
+}
 if (args.includes('--version')) {
   console.log(mode === 'unsupported' ? '2.1.99 (Claude Code)' : mode === 'newer' ? '2.1.283 (Claude Code)' : '2.1.263 (Claude Code)');
   process.exit(0);

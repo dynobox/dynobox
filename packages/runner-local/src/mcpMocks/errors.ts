@@ -1,4 +1,5 @@
 import {errorMessage} from '../diagnostics.js';
+import type {HarnessRunOutput} from '../harnesses/types.js';
 import {isAtLeastVersion, parseVersion} from '../harnesses/version.js';
 import type {LocalMcpSummary} from '../runTypes.js';
 
@@ -15,6 +16,8 @@ export class McpHarnessError extends Error {
   constructor(
     readonly category: McpHarnessFailure,
     message: string,
+    /** Raw process output for local debug logs; excluded from diagnostics. */
+    readonly output?: HarnessRunOutput,
   ) {
     super(message);
     this.name = 'McpHarnessError';
