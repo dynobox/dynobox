@@ -4,12 +4,14 @@ import {
   readdir,
   readFile,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
+import {execa} from 'execa';
 import {afterEach, describe, expect, it} from 'vitest';
 
 import {startMcpMockController} from '../mcpMocks/controller.js';
@@ -396,17 +398,22 @@ describe.skipIf(!executable)(
   },
 );
 
-it('runs sharing a HOME take turns, even after one fails', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-fake-'));
-  cleanup.push(() => rm(root, {recursive: true, force: true}));
-  const home = join(root, 'home');
-  const toolDir = join(home, '.gemini', 'antigravity-cli', 'mcp', 'linear');
-  const fake = join(root, 'fake-agy');
-  // Each run reports whether another was active or had removed its tool
-  // definitions while it ran.
-  await writeFile(
-    fake,
-    `#!/bin/sh
+it.each([false, true])(
+  'runs sharing a HOME take turns, even after one fails (separate processes: %s)',
+  async (separateProcesses) => {
+    const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-fake-'));
+    cleanup.push(() => rm(root, {recursive: true, force: true}));
+    const home = join(root, 'home');
+    const alias = join(root, 'home-alias');
+    await mkdir(home);
+    await symlink(home, alias);
+    const toolDir = join(home, '.gemini', 'antigravity-cli', 'mcp', 'linear');
+    const fake = join(root, 'fake-agy');
+    // Each run reports whether another was active or had removed its tool
+    // definitions while it ran.
+    await writeFile(
+      fake,
+      `#!/bin/sh
 case "$1" in
   --version) echo 1.2.11; exit 0 ;;
   plugin) echo 'No imported plugins.'; exit 0 ;;
@@ -421,30 +428,94 @@ for other in '${root}'/active-*; do [ "$other" = '${root}'/active-$$ ] || reply=
 rm -f '${root}'/active-$$
 printf '{"event":"result","result":{"status":"SUCCESS","response":"%s"}}\\n' "$reply"
 `,
-    {mode: 0o755},
-  );
-  const run = async (prompt: string) => {
-    const work = join(root, prompt);
+      {mode: 0o755},
+    );
+    const run = async (prompt: string) => {
+      const work = join(root, prompt);
+      await mkdir(work);
+      const options = {
+        executable: fake,
+        input: {
+          workDir: work,
+          env: {HOME: prompt === 'last' ? alias : home},
+          prompt,
+        },
+        servers: {
+          linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']},
+        },
+      };
+      const {output} = separateProcesses
+        ? JSON.parse(
+            (
+              await execa(
+                process.execPath,
+                [
+                  '--import',
+                  import.meta.resolve('tsx'),
+                  '--input-type=module',
+                  '-e',
+                  `import {runAntigravityWithMcp} from ${JSON.stringify(new URL('./antigravityMcp.ts', import.meta.url).href)};
+           console.log(JSON.stringify(await runAntigravityWithMcp(JSON.parse(process.env.RUN_OPTIONS))));`,
+                ],
+                {env: {RUN_OPTIONS: JSON.stringify(options)}},
+              )
+            ).stdout,
+          )
+        : await runAntigravityWithMcp(options);
+      return new AntigravityHarness().extractResult(output).finalMessage;
+    };
+    const [first, failed, last] = await Promise.allSettled([
+      run('first'),
+      run('fail'),
+      run('last'),
+    ]);
+    expect(failed).toMatchObject({status: 'rejected'});
+    expect([first, last]).toEqual([
+      {status: 'fulfilled', value: 'kept'},
+      {status: 'fulfilled', value: 'kept'},
+    ]);
+    await expect(readdir(toolDir)).rejects.toMatchObject({code: 'ENOENT'});
+  },
+);
+
+it.each(['timeout', 'cancel'])(
+  'stops waiting for a HOME lock on %s',
+  async (mode) => {
+    const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-lock-'));
+    cleanup.push(() => rm(root, {recursive: true, force: true}));
+    const home = join(root, 'home');
+    const work = join(root, 'work');
+    const lock = join(home, '.gemini', 'dynobox-mcp.lock');
+    await mkdir(lock, {recursive: true});
     await mkdir(work);
-    const {output} = await runAntigravityWithMcp({
-      executable: fake,
-      input: {workDir: work, env: {HOME: home}, prompt},
-      servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
-    });
-    return new AntigravityHarness().extractResult(output).finalMessage;
-  };
-  const [first, failed, last] = await Promise.allSettled([
-    run('first'),
-    run('fail'),
-    run('last'),
-  ]);
-  expect(failed).toMatchObject({status: 'rejected'});
-  expect([first, last]).toEqual([
-    {status: 'fulfilled', value: 'kept'},
-    {status: 'fulfilled', value: 'kept'},
-  ]);
-  await expect(readdir(toolDir)).rejects.toMatchObject({code: 'ENOENT'});
-});
+    const abort = new AbortController();
+    const timer =
+      mode === 'cancel' ? setTimeout(() => abort.abort(), 30) : undefined;
+    try {
+      await expect(
+        runAntigravityWithMcp({
+          executable: join(root, 'must-not-start'),
+          input: {
+            workDir: work,
+            env: {HOME: home},
+            prompt: 'Reply.',
+            timeoutMs: mode === 'timeout' ? 30 : 1000,
+            signal: abort.signal,
+          },
+          servers: {
+            linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']},
+          },
+        }),
+      ).rejects.toMatchObject({
+        category: mode === 'timeout' ? 'timed_out' : 'execution_failed',
+      });
+      expect(await readdir(lock)).toEqual([]);
+      expect(await readdir(work)).toEqual([]);
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+);
 
 it.each([['--add-dir', '/elsewhere'], ['--project=other'], ['-c']])(
   'rejects workspace-changing extra arguments %j before any process starts',

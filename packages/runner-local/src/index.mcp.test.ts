@@ -8,7 +8,6 @@ import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/st
 import type {Transport} from '@modelcontextprotocol/sdk/shared/transport.js';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
-import {McpHarnessError} from './harnesses/mcpError.js';
 import type {
   Harness,
   HarnessInput,
@@ -17,6 +16,7 @@ import type {
 } from './harnesses/types.js';
 import {assertMcpExecutionSupported, runJob} from './index.js';
 import * as controllerModule from './mcpMocks/controller.js';
+import {McpHarnessError} from './mcpMocks/errors.js';
 
 const roots: string[] = [];
 afterEach(async () => {

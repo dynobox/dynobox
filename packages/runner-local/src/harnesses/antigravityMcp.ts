@@ -1,17 +1,30 @@
 import {randomUUID} from 'node:crypto';
-import {mkdir, readdir, readFile, rm, rmdir, writeFile} from 'node:fs/promises';
+import {
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  rmdir,
+  writeFile,
+} from 'node:fs/promises';
 import {dirname, join} from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
 import {pathToFileURL} from 'node:url';
 
 import {execa} from 'execa';
 
 import {
+  mcpDeadline,
+  McpHarnessError,
+  requireMcpVersion,
+} from '../mcpMocks/errors.js';
+import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
+import {
   buildAntigravityArgs,
   parseAntigravityJson,
   removeDynoboxProjectRecords,
 } from './antigravity.js';
-import {mcpDeadline, McpHarnessError, requireMcpVersion} from './mcpError.js';
-import {mcpProxyEnv} from './mcpProxyEnv.js';
 import {asRecord, isRecord} from './parsing.js';
 import type {
   HarnessInput,
@@ -36,20 +49,34 @@ const WORKSPACE_FLAGS = new Set([
 
 // Antigravity keeps each MCP tool definition in HOME, keyed only by server
 // name, and concurrent agy processes rewrite it under each other; a run could
-// then start without the mock tool. Runs that share a HOME take turns.
-const homeTurns = new Map<string, Promise<void>>();
-
-function inTurn<T>(home: string, run: () => Promise<T>): Promise<T> {
-  const result = (homeTurns.get(home) ?? Promise.resolve()).then(run);
-  const settled = result.then(
-    () => {},
-    () => {},
-  );
-  homeTurns.set(home, settled);
-  void settled.then(() => {
-    if (homeTurns.get(home) === settled) homeTurns.delete(home);
-  });
-  return result;
+// then start without the mock tool. The atomic directory also excludes runs
+// in other processes. Never remove a lock owned by another run.
+async function inTurn<T>(
+  home: string,
+  remaining: () => number,
+  signal: AbortSignal | undefined,
+  run: () => Promise<T>,
+): Promise<T> {
+  const lock = join(home, '.gemini', 'dynobox-mcp.lock');
+  await mkdir(dirname(lock), {recursive: true});
+  for (;;) {
+    remaining();
+    try {
+      await mkdir(lock);
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      await delay(Math.min(50, remaining()), undefined, {signal}).catch(() =>
+        remaining(),
+      );
+    }
+  }
+  try {
+    remaining();
+    return await run();
+  } finally {
+    await rmdir(lock);
+  }
 }
 
 /**
@@ -74,16 +101,18 @@ export async function runAntigravityWithMcp(options: {
   }
   const remaining = mcpDeadline(input.timeoutMs, input.signal);
   const cwd = input.workDir;
-  const home = input.env.HOME ?? process.env.HOME;
-  if (!home)
+  const requestedHome = input.env.HOME ?? process.env.HOME;
+  if (!requestedHome)
     throw new McpHarnessError(
       'configuration_failed',
       'Antigravity MCP mocking requires HOME to locate its config.',
     );
-  await assertNoInheritedMcpSources(cwd, home);
-  await removeDynoboxProjectRecords(home);
+  await mkdir(requestedHome, {recursive: true});
+  const home = await realpath(requestedHome);
 
-  return inTurn(home, async () => {
+  return inTurn(home, remaining, input.signal, async () => {
+    await assertNoInheritedMcpSources(cwd, home);
+    await removeDynoboxProjectRecords(home);
     const env = {
       ...process.env,
       ...input.env,
@@ -129,7 +158,7 @@ export async function runAntigravityWithMcp(options: {
       (await mkdir(dirname(projectConfig), {recursive: true})) !== undefined;
     // Antigravity copies each MCP tool definition here and the model reads it.
     // The inherited-source check means only mocks can own these names, and
-    // taking turns means no other run in this process is using them.
+    // taking turns means no other Dynobox MCP run is using them.
     const toolDirs = Object.keys(servers).map((name) =>
       join(home, '.gemini', 'antigravity-cli', 'mcp', name),
     );
