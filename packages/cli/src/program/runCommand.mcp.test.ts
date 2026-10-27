@@ -296,7 +296,7 @@ describe('MCP CLI execution', () => {
 });
 
 const CHILD = `#!${process.execPath}
-import {appendFileSync, readFileSync} from 'node:fs';
+import {appendFileSync, readFileSync, writeSync} from 'node:fs';
 const args = process.argv.slice(2);
 const path = args[args.indexOf('--mcp-config') + 1];
 appendFileSync(process.env.MCP_TEST_LOG, JSON.stringify({args, path}) + '\\n');
@@ -321,8 +321,10 @@ async function rpc(method, params) {
 }
 await rpc('initialize', {protocolVersion: '2025-03-26', capabilities: {}, clientInfo: {name: 'cli-test', version: '1'}});
 await rpc('tools/list', {});
+// Emit stderr before the init event can make the adapter stop this process.
+if (mode === 'failed') writeSync(2, 'PRIVATE_ERROR ' + url + '\\n');
 console.log(JSON.stringify({type: 'system', subtype: 'init', tools: ['mcp__linear__get_issue', 'mcp__linear__save_issue'], mcp_servers: [{name: 'linear', status: mode === 'failed' ? 'failed' : 'connected'}]}));
-if (mode === 'failed') {console.error('PRIVATE_ERROR ' + url); process.exit(1);}
+if (mode === 'failed') process.exit(1);
 if (mode === 'call') {
   await rpc('tools/call', {name: 'get_issue', arguments: {id: 'INPUT_SENTINEL'}});
   console.log(JSON.stringify({hook_event_name: 'PostToolUse', tool_name: 'mcp__linear__get_issue', tool_input: {id: 'INPUT_SENTINEL'}}));
