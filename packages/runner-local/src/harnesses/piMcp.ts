@@ -2,14 +2,13 @@ import {mkdtemp, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import {execa} from 'execa';
-
 import {
   mcpDeadline,
   McpHarnessError,
   requireMcpVersion,
 } from '../mcpMocks/errors.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
+import {startOwnedProcess} from '../processGroup.js';
 import {buildPiArgs, parsePiJson, parsePiJsonLine} from './pi.js';
 import {runStreamingHarness} from './runStreamingHarness.js';
 import type {
@@ -57,7 +56,7 @@ export async function runPiWithMcp(options: {
     forceKillAfterDelay: 1000,
     ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
   };
-  const probe = await execa(executable, ['--version'], {
+  const probe = await startOwnedProcess(executable, ['--version'], {
     ...processOptions,
     timeout: Math.min(5000, remaining()),
   });
