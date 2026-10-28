@@ -9,7 +9,14 @@ import {startMcpMockController} from '../mcpMocks/controller.js';
 import {piToolNames, runPiWithMcp} from './piMcp.js';
 
 const mocks = vi.hoisted(() => ({execa: vi.fn()}));
-vi.mock('execa', () => ({execa: mocks.execa}));
+vi.mock('execa', () => ({
+  execa: (...args: unknown[]) =>
+    Object.assign(mocks.execa(...args), {
+      kill: vi.fn(),
+      once: vi.fn(),
+      removeListener: vi.fn(),
+    }),
+}));
 
 const finalMessage = JSON.stringify({
   type: 'message_end',
