@@ -12,7 +12,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
 import {execa} from 'execa';
-import {afterEach, describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {startMcpMockController} from '../mcpMocks/controller.js';
 import {AntigravityHarness} from './antigravity.js';
@@ -513,6 +513,65 @@ it.each(['timeout', 'cancel'])(
       expect(await readdir(work)).toEqual([]);
     } finally {
       clearTimeout(timer);
+    }
+  },
+);
+
+it.each(['version', 'plugins', 'run'])(
+  'stops descendants holding stdout open when the %s phase times out',
+  async (stage) => {
+    const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-descendants-'));
+    cleanup.push(() => rm(root, {recursive: true, force: true}));
+    const home = join(root, 'home');
+    const work = join(root, 'work');
+    const executable = join(root, 'fake-agy');
+    const pidPath = join(root, 'child.pid');
+    await mkdir(work);
+    await writeFile(
+      executable,
+      `#!${process.execPath}
+const args = process.argv.slice(2);
+const stage = args[0] === '--version' ? 'version' : args[0] === 'plugin' ? 'plugins' : 'run';
+if (stage !== process.env.CHILD_STAGE) {
+  console.log(stage === 'version' ? '1.2.11' : 'No imported plugins.');
+} else {
+  require('node:child_process').spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(process.env.CHILD_PID, String(process.pid)); setInterval(() => {}, 1000);'], {stdio: 'inherit'});
+  setInterval(() => {}, 1000);
+}
+`,
+      {mode: 0o755},
+    );
+    const pending = runAntigravityWithMcp({
+      executable,
+      input: {
+        workDir: work,
+        env: {HOME: home, CHILD_STAGE: stage, CHILD_PID: pidPath},
+        prompt: 'Reply.',
+        timeoutMs: 1000,
+      },
+      servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
+    }).catch((error: unknown) => error);
+    let childPid: number | undefined;
+    try {
+      await vi.waitFor(async () => {
+        childPid = Number(await readFile(pidPath, 'utf8'));
+      });
+      expect(await pending).toMatchObject({category: 'timed_out'});
+      await vi.waitFor(() =>
+        expect(() => process.kill(childPid!, 0)).toThrow(),
+      );
+      await expect(
+        readdir(join(home, '.gemini', 'dynobox-mcp.lock')),
+      ).rejects.toMatchObject({code: 'ENOENT'});
+    } finally {
+      if (childPid !== undefined) {
+        try {
+          process.kill(childPid, 'SIGKILL');
+        } catch {
+          /* Already stopped. */
+        }
+      }
+      await pending;
     }
   },
 );
