@@ -12,14 +12,13 @@ import {dirname, join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {pathToFileURL} from 'node:url';
 
-import {execa} from 'execa';
-
 import {
   mcpDeadline,
   McpHarnessError,
   requireMcpVersion,
 } from '../mcpMocks/errors.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
+import {startOwnedProcess} from '../processGroup.js';
 import {
   buildAntigravityArgs,
   parseAntigravityJson,
@@ -128,16 +127,17 @@ export async function runAntigravityWithMcp(options: {
       forceKillAfterDelay: 1000,
       ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
     };
-    const probe = await execa(executable, ['--version'], {
+    const probe = await startOwnedProcess(executable, ['--version'], {
       ...processOptions,
       timeout: Math.min(5000, remaining()),
     });
     remaining();
     const version = requireMcpVersion('Antigravity', MIN_VERSION, probe);
-    const plugins = await execa(executable, ['plugin', 'list'], {
+    const plugins = await startOwnedProcess(executable, ['plugin', 'list'], {
       ...processOptions,
       timeout: Math.min(5000, remaining()),
     });
+    remaining();
     if (plugins.failed || plugins.stdout.trim() !== 'No imported plugins.')
       throw new McpHarnessError(
         'configuration_failed',
@@ -197,7 +197,7 @@ export async function runAntigravityWithMcp(options: {
           ),
         }),
       );
-      const result = await execa(
+      const result = await startOwnedProcess(
         executable,
         buildAntigravityArgs(
           cwd,
