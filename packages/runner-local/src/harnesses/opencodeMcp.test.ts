@@ -2,7 +2,7 @@ import {mkdtemp, readFile, realpath, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import {afterEach, describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {
   prepareOpenCodeMcpConfiguration,
@@ -24,11 +24,15 @@ async function fixture(mode = 'success') {
     executable,
     `#!${process.execPath}
 import {appendFileSync} from 'node:fs';
+import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 const args = process.argv.slice(2);
 const mode = process.env.DXB_TEST_MODE;
 appendFileSync(process.env.DXB_TEST_LOG, JSON.stringify({args, cwd: process.cwd(), noProxy: process.env.no_proxy, NO_PROXY: process.env.NO_PROXY, marker: process.env.DXB_TEST_MARKER}) + '\\n');
-if (mode === 'hang') {setInterval(() => {}, 1000);}
+if (mode === 'hang' || mode === 'serve-hang' && args.includes('serve')) {
+  if (process.env.DXB_TEST_CHILD_PID) spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(process.env.DXB_TEST_CHILD_PID, String(process.pid)); setInterval(() => {}, 1000);'], {stdio: 'inherit'});
+  setInterval(() => {}, 1000);
+}
 else if (args.includes('--version')) console.log(mode === 'version' ? '1.10.0' : mode === 'newer' ? '1.20.0' : '1.18.26');
 else if (args.includes('serve')) {
   const server = createServer(async (request, response) => {
@@ -338,6 +342,39 @@ describe('OpenCode MCP configuration preparation', () => {
       category: 'timed_out',
     });
   });
+
+  it.each(['hang', 'serve-hang'])(
+    'stops descendants holding stdout open when %s times out',
+    async (mode) => {
+      const {options, log} = await fixture(mode);
+      const pidPath = log + '.child';
+      Object.assign(options.input.env, {DXB_TEST_CHILD_PID: pidPath});
+      options.input.timeoutMs = 1000;
+      const pending = runOpenCodeWithMcp({
+        ...options,
+        input: {...options.input, prompt: 'OK'},
+      }).catch((error: unknown) => error);
+      let childPid: number | undefined;
+      try {
+        await vi.waitFor(async () => {
+          childPid = Number(await readFile(pidPath, 'utf8'));
+        });
+        expect(await pending).toMatchObject({category: 'timed_out'});
+        await vi.waitFor(() =>
+          expect(() => process.kill(childPid!, 0)).toThrow(),
+        );
+      } finally {
+        if (childPid !== undefined) {
+          try {
+            process.kill(childPid, 'SIGKILL');
+          } catch {
+            /* Already stopped. */
+          }
+        }
+        await pending;
+      }
+    },
+  );
 
   it('rejects cancellation before launching probes', async () => {
     const {options, log} = await fixture();

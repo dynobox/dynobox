@@ -1,14 +1,13 @@
 import {request as httpRequest} from 'node:http';
 import {setTimeout as delay} from 'node:timers/promises';
 
-import {execa} from 'execa';
-
 import {
   mcpDeadline,
   McpHarnessError,
   requireMcpVersion,
 } from '../mcpMocks/errors.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
+import {startOwnedProcess} from '../processGroup.js';
 import {parseOpenCodeJson} from './opencode.js';
 import {asRecord, createToolEvent, isRecord} from './parsing.js';
 import type {
@@ -53,7 +52,7 @@ export async function prepareOpenCodeMcpConfiguration(options: {
   const env = {...process.env, ...input.env};
   Object.assign(env, mcpProxyEnv(env));
   const probe = async (args: string[]) => {
-    const result = await execa(executable, ['--pure', ...args], {
+    const result = await startOwnedProcess(executable, ['--pure', ...args], {
       cwd,
       env,
       extendEnv: false,
@@ -255,7 +254,7 @@ export async function runOpenCodeWithMcp(options: {
     OPENCODE_SERVER_USERNAME: _username,
     ...serveEnv
   } = prepared.env;
-  const child = execa(
+  const child = startOwnedProcess(
     prepared.executable,
     ['--pure', 'serve', '--hostname', '127.0.0.1', '--port', '0'],
     {
@@ -513,7 +512,7 @@ export async function runOpenCodeWithMcp(options: {
       `OpenCode MCP run failed: ${error instanceof Error ? error.message : String(error)}`,
     );
   } finally {
-    child.kill();
+    child.stop();
     await child;
   }
 }
