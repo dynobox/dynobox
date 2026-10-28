@@ -1,14 +1,13 @@
 import {homedir} from 'node:os';
 import {join, resolve} from 'node:path';
 
-import {execa} from 'execa';
-
 import {
   mcpDeadline,
   McpHarnessError,
   requireMcpVersion,
 } from '../mcpMocks/errors.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
+import {startOwnedProcess} from '../processGroup.js';
 import {buildCodexArgs, parseCodexJsonLine} from './codex.js';
 import {cachedCodexPluginServers} from './codexMcpPlugins.js';
 import {asRecord, createToolEvent, isRecord} from './parsing.js';
@@ -84,7 +83,7 @@ export async function runCodexWithMcp(
     forceKillAfterDelay: 1000,
     ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
   };
-  const probe = await execa(executable, [...GUARDS, '--version'], {
+  const probe = await startOwnedProcess(executable, [...GUARDS, '--version'], {
     ...processOptions,
     stdin: 'ignore',
     timeout: Math.min(5000, remaining()),
@@ -129,7 +128,7 @@ export async function runCodexWithMcp(
     input.allowedMcpTools ?? [],
   );
 
-  const child = execa(
+  const child = startOwnedProcess(
     executable,
     [
       'exec',
@@ -202,7 +201,7 @@ export async function runCodexWithMcp(
               'execution_failed',
               'Codex emitted unparseable JSON output.',
             );
-      child.kill();
+      child.stop();
     }
   };
   const lines = lineSplitter(consume);
@@ -241,13 +240,17 @@ async function readSnapshot(
   args: string[],
   cwd: string,
   env: NodeJS.ProcessEnv,
-  processOptions: object,
+  processOptions: Parameters<typeof startOwnedProcess>[2],
   remaining: () => number,
 ): Promise<Snapshot> {
-  const child = execa(executable, [...args, 'app-server', '--stdio'], {
-    ...processOptions,
-    timeout: remaining(),
-  });
+  const child = startOwnedProcess(
+    executable,
+    [...args, 'app-server', '--stdio'],
+    {
+      ...processOptions,
+      timeout: remaining(),
+    },
+  );
   const pending = new Map<
     number,
     {method: string; resolve(value: unknown): void; reject(error: Error): void}
@@ -378,7 +381,7 @@ async function readSnapshot(
         });
     return {config, plugins};
   } finally {
-    child.kill();
+    child.stop();
     await child;
   }
 }

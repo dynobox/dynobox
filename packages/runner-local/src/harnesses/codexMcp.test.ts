@@ -24,9 +24,14 @@ async function fixture(
     executable,
     `#!${process.execPath}
 import {appendFileSync} from 'node:fs';
+import {spawn} from 'node:child_process';
 import {createInterface} from 'node:readline';
 const args = process.argv.slice(2);
 const mode = process.env.DXB_TEST_MODE;
+function hang() {
+  if (process.env.DXB_TEST_CHILD_PID) spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(process.env.DXB_TEST_CHILD_PID, String(process.pid)); setInterval(() => {}, 1000);'], {stdio: 'inherit'});
+  setInterval(() => {}, 1000);
+}
 appendFileSync(process.env.DXB_TEST_LOG, JSON.stringify({args, cwd: process.cwd(), noProxy: process.env.no_proxy, NO_PROXY: process.env.NO_PROXY, marker: process.env.DXB_ENV_MARKER}) + '\\n');
 if (args.includes('--version')) {console.log(mode === 'version' ? 'codex-cli 0.100.0' : mode === 'newer' ? 'codex-cli 0.999.0' : 'codex-cli 0.153.4'); process.exit(0);}
 const config = {features: {apps: false, remote_plugin: false, skill_mcp_dependency_install: false}, mcp_servers: JSON.parse(process.env.DXB_TEST_INHERITED), plugins: {}};
@@ -39,7 +44,7 @@ for (const arg of args) {
 const enabled = Object.entries(config.mcp_servers).filter(([, entry]) => entry.enabled !== false);
 if (mode === 'feature') config.features.apps = true;
 if (args.includes('app-server')) {
-  if (mode === 'probe-hang') setInterval(() => {}, 1000);
+  if (mode === 'probe-hang') hang();
   else createInterface({input: process.stdin}).on('line', line => {
     const request = JSON.parse(line);
     let result = {};
@@ -54,7 +59,7 @@ if (args.includes('app-server')) {
     if (request.method === 'plugin/read' && mode === 'exit-between-rpcs') return process.stdout.write(JSON.stringify({id: request.id, result: {plugin: {}}}) + '\\n', () => process.exit(0));
     console.log(JSON.stringify({id: request.id, result}));
   });
-} else if (mode === 'hang') {setInterval(() => {}, 1000);}
+} else if (mode === 'hang') {hang();}
 else {
   console.log(JSON.stringify({type: 'thread.started', thread_id: 'fixture'}));
   console.log(JSON.stringify({type: 'turn.started'}));
@@ -281,4 +286,36 @@ describe('Codex MCP adapter', () => {
       category: 'timed_out',
     });
   });
+
+  it.each(['probe-hang', 'hang'])(
+    'stops descendants holding stdout open when %s times out',
+    async (mode) => {
+      const f = await fixture(mode);
+      const pidPath = f.options.input.env.DXB_TEST_LOG + '.child';
+      f.options.input.env.DXB_TEST_CHILD_PID = pidPath;
+      f.options.input.timeoutMs = 1000;
+      const pending = runCodexWithMcp(f.options).catch(
+        (error: unknown) => error,
+      );
+      let childPid: number | undefined;
+      try {
+        await vi.waitFor(async () => {
+          childPid = Number(await readFile(pidPath, 'utf8'));
+        });
+        expect(await pending).toMatchObject({category: 'timed_out'});
+        await vi.waitFor(() =>
+          expect(() => process.kill(childPid!, 0)).toThrow(),
+        );
+      } finally {
+        if (childPid !== undefined) {
+          try {
+            process.kill(childPid, 'SIGKILL');
+          } catch {
+            /* Already stopped. */
+          }
+        }
+        await pending;
+      }
+    },
+  );
 });
