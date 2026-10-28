@@ -2,15 +2,13 @@ import {mkdtemp, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import {execa} from 'execa';
-
 import {
   mcpDeadline,
   McpHarnessError,
   requireMcpVersion,
 } from '../mcpMocks/errors.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
-import {cancelProcessGroupOnAbort} from '../processGroup.js';
+import {startOwnedProcess} from '../processGroup.js';
 import {
   buildClaudeCodeArgs,
   parseClaudeCodeStreamJsonLine,
@@ -64,17 +62,15 @@ export async function runClaudeCodeWithMcp(
     extendEnv: false,
     stdin: 'ignore' as const,
     reject: false as const,
-    detached: input.signal !== undefined && process.platform !== 'win32',
     forceKillAfterDelay: 1000,
     ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
   };
 
-  const probeProcess = execa(executable, ['--version'], {
+  const probeProcess = startOwnedProcess(executable, ['--version'], {
     ...processOptions,
     timeout: Math.min(5000, remaining()),
   });
-  const cleanupProbe = cancelProcessGroupOnAbort(probeProcess, input.signal);
-  const probe = await probeProcess.finally(cleanupProbe);
+  const probe = await probeProcess;
   let version: string;
   try {
     remaining();
@@ -91,7 +87,6 @@ export async function runClaudeCodeWithMcp(
   }
 
   const directory = await mkdtemp(join(tmpdir(), 'dynobox-claude-mcp-'));
-  let cleanupChild: (() => void) | undefined;
   let output: HarnessRunOutput | undefined;
   try {
     const configPath = join(directory, 'mcp.json');
@@ -103,7 +98,7 @@ export async function runClaudeCodeWithMcp(
         ),
       }),
     );
-    const child = execa(
+    const child = startOwnedProcess(
       executable,
       [
         ...buildClaudeCodeArgs('', [], input.model, input.permissionMode).slice(
@@ -119,7 +114,6 @@ export async function runClaudeCodeWithMcp(
       ],
       {...processOptions, timeout: remaining()},
     );
-    cleanupChild = cancelProcessGroupOnAbort(child, input.signal);
     let ready = false;
     let completed = false;
     let failure: McpHarnessError | undefined;
@@ -170,7 +164,7 @@ export async function runClaudeCodeWithMcp(
                 'execution_failed',
                 'Claude Code emitted unparseable stream-json output.',
               );
-        child.kill();
+        child.stop();
       }
     };
     const lines = lineSplitter(consume);
@@ -211,7 +205,6 @@ export async function runClaudeCodeWithMcp(
       throw new McpHarnessError(error.category, error.message, output);
     throw error;
   } finally {
-    cleanupChild?.();
     await rm(directory, {recursive: true, force: true});
   }
 }

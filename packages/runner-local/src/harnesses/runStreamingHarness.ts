@@ -1,6 +1,4 @@
-import {execa} from 'execa';
-
-import {cancelProcessGroupOnAbort} from '../processGroup.js';
+import {startOwnedProcess} from '../processGroup.js';
 import type {HarnessInput, HarnessRunOutput, ToolEvent} from './types.js';
 
 export type ParsedToolEventLine = {
@@ -26,7 +24,6 @@ export async function runStreamingHarness(
     cwd: options.cwd ?? input.workDir,
     env: {...process.env, ...input.env},
     reject: false,
-    detached: input.signal !== undefined && process.platform !== 'win32',
     ...(options.stdin === undefined ? {} : {stdin: options.stdin}),
     ...(options.processInput === undefined
       ? {}
@@ -37,8 +34,11 @@ export async function runStreamingHarness(
       : {cancelSignal: input.signal, forceKillAfterDelay: 1000}),
   };
 
-  const subprocess = execa(options.executable, options.args, execaOptions);
-  const cleanup = cancelProcessGroupOnAbort(subprocess, input.signal);
+  const subprocess = startOwnedProcess(
+    options.executable,
+    options.args,
+    execaOptions,
+  );
   const stdoutChunks: string[] = [];
   const stderrChunks: string[] = [];
   const streamParser = new ToolEventLineStream({
@@ -73,7 +73,7 @@ export async function runStreamingHarness(
       durationMs: result.durationMs,
     };
   } finally {
-    cleanup();
+    subprocess.stop();
   }
 }
 

@@ -23,6 +23,7 @@ import {
   runJob,
   type RunJobOptions,
 } from '@dynobox/runner-local';
+import {DynoboxConfigError} from '@dynobox/sdk/compiler';
 import {CommanderError} from 'commander';
 
 import {assertionByIdForJobs, buildLocalRunnerJobs} from '../jobs.js';
@@ -195,34 +196,35 @@ export async function runCommandAction(
   // Jobs stay grouped by source dyno so the run upload can report each
   // dyno (and its target) separately; execution flattens them in order.
   const runOptions = buildRunJobOptions(options);
-  const dynoGroups = compiled.map((entry) => {
+  const dynoGroups = compiled.flatMap((entry) => {
     try {
-      return {
-        entry,
-        jobs: buildLocalRunnerJobs(entry.ir, {
-          ...buildJobOptions(
-            overrideHarnesses,
-            overrideModels,
-            permissionMode,
-            scenarioPatterns,
-            iterations,
-          ),
-        }),
-      };
+      return [
+        {
+          entry,
+          jobs: buildLocalRunnerJobs(entry.ir, {
+            ...buildJobOptions(
+              overrideHarnesses,
+              overrideModels,
+              permissionMode,
+              scenarioPatterns,
+              iterations,
+            ),
+          }),
+        },
+      ];
     } catch (error) {
-      writeStderr(
-        renderRunConfigErrorMessage(
-          entry.filePath,
-          error instanceof Error ? error.message : 'Could not schedule dyno.',
-        ),
-      );
-      throw new CommanderError(
-        configErrorExitCode,
-        'dynobox.mcp',
-        'unsupported MCP execution',
-      );
+      if (!(error instanceof DynoboxConfigError)) throw error;
+      errors.push({filePath: entry.filePath, message: error.message});
+      writeStderr(renderRunConfigErrorMessage(entry.filePath, error.message));
+      return [];
     }
   });
+  if (dynoGroups.length === 0)
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.mcp',
+      'no dynos could be scheduled',
+    );
   const jobs = dynoGroups.flatMap((group) => group.jobs);
   if (jobs.length === 0 && scenarioPatterns !== undefined) {
     writeStderr(

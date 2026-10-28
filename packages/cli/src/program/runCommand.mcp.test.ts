@@ -105,6 +105,49 @@ async function fixture(mode = 'call', mixed = false) {
 }
 
 describe('MCP CLI execution', () => {
+  it.each([false, true])(
+    'reports each unsupported file and runs valid files (all unsupported: %s)',
+    async (allUnsupported) => {
+      const {root, path, options} = await fixture();
+      const source = JSON.parse(await readFile(path, 'utf8'));
+      source.harnesses = ['cursor'];
+      for (const name of ['a-unsupported', 'b-unsupported']) {
+        source.scenarios[0].setup = [`touch ${join(root, name + '-ran')}`];
+        await writeFile(
+          join(root, name + '.dyno.yaml'),
+          JSON.stringify(source),
+        );
+      }
+      if (allUnsupported) await rm(path);
+      const result = await executeCli(
+        ['run', root, '--reporter', 'json'],
+        options,
+      );
+      expect(result.exitCode).toBe(configErrorExitCode);
+      for (const name of ['a-unsupported', 'b-unsupported']) {
+        expect(result.stderr).toContain(name + '.dyno.yaml');
+        await expect(readFile(join(root, name + '-ran'))).rejects.toThrow();
+      }
+      if (allUnsupported) {
+        expect(result.stdout).toBe('');
+        await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();
+      } else {
+        const [job, summary] = result.stdout
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line));
+        expect(job.status).toBe('passed');
+        expect(summary.status).toBe('failed');
+        expect(summary.totals).toMatchObject({
+          jobs: 1,
+          passed: 1,
+          configErrors: 2,
+        });
+        await expect(readFile(join(root, 'setup-ran'))).resolves.toBeDefined();
+      }
+    },
+  );
+
   it('runs a YAML dyno through Claude preparation, controller, assertions and v3 JSON', async () => {
     const {path, options, log} = await fixture();
     const result = await executeCli(
