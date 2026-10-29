@@ -10,6 +10,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Install `signal-exit` as a runtime dependency so its license ships with the
+  package instead of bundling its code without the required notice.
 - Stop active setup and verification process groups when Dynobox exits or
   receives a terminating signal on POSIX systems.
 - Report timed-out MCP version checks as timeouts instead of unsupported versions.
