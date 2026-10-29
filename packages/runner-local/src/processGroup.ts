@@ -30,15 +30,7 @@ export function startOwnedProcess(
     detached: process.platform !== 'win32',
     forceKillAfterDelay: 1000,
   });
-  // Detached children do not receive terminal signals or execa's exit cleanup.
-  // Exit handlers must be synchronous: there is no time for a grace period.
-  const cleanupOwner = onExit(() => {
-    if (process.platform === 'win32') {
-      child.kill('SIGKILL');
-    } else {
-      stopProcessGroup(child, 'SIGKILL');
-    }
-  });
+  const cleanupOwner = stopProcessGroupOnExit(child);
   const abort = new AbortController();
   const cleanupGroup = cancelProcessGroupOnAbort(child, abort.signal);
   const stop = () => {
@@ -65,6 +57,21 @@ export function startOwnedProcess(
   return Object.assign(child, {stop}) as ResultPromise<OwnedLaunchOptions> & {
     stop(): void;
   };
+}
+
+/** Stop an owned group synchronously when Dynobox exits; returns an unregister function. */
+export function stopProcessGroupOnExit(
+  subprocess: Pick<ChildProcess, 'pid' | 'kill'>,
+): () => void {
+  // Detached children do not receive terminal signals or execa's exit cleanup.
+  // Exit handlers must be synchronous: there is no time for a grace period.
+  return onExit(() => {
+    if (process.platform === 'win32') {
+      subprocess.kill('SIGKILL');
+    } else {
+      stopProcessGroup(subprocess, 'SIGKILL');
+    }
+  });
 }
 
 /** Stop an owned POSIX process group when cancellation occurs. */

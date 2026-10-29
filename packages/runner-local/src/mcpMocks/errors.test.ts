@@ -1,6 +1,34 @@
 import {expect, it, vi} from 'vitest';
 
-import {awaitMcpPreparation} from './errors.js';
+import {awaitMcpPreparation, requireMcpVersion} from './errors.js';
+
+it('reports a version probe timeout even when it printed a supported version', () => {
+  expect(() =>
+    requireMcpVersion('Claude Code', '2.1.263', {
+      failed: true,
+      timedOut: true,
+      stdout: '2.1.263',
+    }),
+  ).toThrow(
+    expect.objectContaining({
+      category: 'timed_out',
+      message: 'Claude Code version check exceeded its timeout.',
+    }),
+  );
+});
+
+it.each(['2.1.262', 'unreadable'])(
+  'still rejects an unsupported version: %s',
+  (stdout) => {
+    expect(() =>
+      requireMcpVersion('Claude Code', '2.1.263', {
+        failed: false,
+        timedOut: false,
+        stdout,
+      }),
+    ).toThrow(expect.objectContaining({category: 'unsupported_version'}));
+  },
+);
 
 it('returns prepared output and removes the cancellation listener', async () => {
   const abort = new AbortController();

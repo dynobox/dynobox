@@ -70,7 +70,11 @@ import {
 } from './discoverDynos.js';
 import {shouldRenderLive} from './environment.js';
 import type {ExecuteCliOptions, OutputWriter} from './execute.js';
-import {cancelledExitCode, configErrorExitCode} from './exitCodes.js';
+import {
+  cancelledExitCode,
+  configErrorExitCode,
+  terminatedExitCode,
+} from './exitCodes.js';
 import {
   fetchAuthenticatedIdentity,
   type IdentityResult,
@@ -281,13 +285,17 @@ export async function runCommandAction(
   // installed until job execution ends: execa's signal-exit handler re-raises
   // the signal, killing the process before cleanup, once no other listener is left.
   const abort = new AbortController();
-  const cancel = () => {
-    if (abort.signal.aborted) process.exit(cancelledExitCode);
+  let cancellationExitCode = cancelledExitCode;
+  const cancel = (exitCode: number) => {
+    if (abort.signal.aborted) process.exit(exitCode);
+    cancellationExitCode = exitCode;
     abort.abort();
   };
+  const interrupt = () => cancel(cancelledExitCode);
+  const terminate = () => cancel(terminatedExitCode);
   runOptions.signal = abort.signal;
-  process.on('SIGINT', cancel);
-  process.on('SIGTERM', cancel);
+  process.on('SIGINT', interrupt);
+  process.on('SIGTERM', terminate);
   try {
     const execution =
       reporter === 'json'
@@ -316,8 +324,8 @@ export async function runCommandAction(
 
     // Upload does not use the run controller. Restore normal signal handling
     // so Ctrl-C can interrupt a stalled upload instead of aborting finished jobs.
-    process.off('SIGINT', cancel);
-    process.off('SIGTERM', cancel);
+    process.off('SIGINT', interrupt);
+    process.off('SIGTERM', terminate);
 
     if (commandFlags.saveRun === true) {
       await uploadRun({
@@ -342,13 +350,13 @@ export async function runCommandAction(
     if (!abort.signal.aborted) throw error;
     writeStderr('Run cancelled.\n');
     throw new CommanderError(
-      cancelledExitCode,
+      cancellationExitCode,
       'dynobox.cancelled',
       'run cancelled',
     );
   } finally {
-    process.off('SIGINT', cancel);
-    process.off('SIGTERM', cancel);
+    process.off('SIGINT', interrupt);
+    process.off('SIGTERM', terminate);
   }
 }
 

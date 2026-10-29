@@ -1,6 +1,9 @@
 import {execaCommand} from 'execa';
 
-import {cancelProcessGroupOnAbort} from './processGroup.js';
+import {
+  cancelProcessGroupOnAbort,
+  stopProcessGroupOnExit,
+} from './processGroup.js';
 
 /** Run a shell command and stop its process group when cancellation occurs. */
 export async function runShellCommand(options: {
@@ -25,10 +28,14 @@ export async function runShellCommand(options: {
       ? {}
       : {cancelSignal: signal, forceKillAfterDelay: 1000}),
   });
+  const cleanupOwner = ownsProcessGroup
+    ? stopProcessGroupOnExit(subprocess)
+    : undefined;
   const cleanup = cancelProcessGroupOnAbort(subprocess, signal);
   try {
     return await subprocess;
   } finally {
     cleanup();
+    cleanupOwner?.();
   }
 }

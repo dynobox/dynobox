@@ -91,9 +91,14 @@ export async function awaitMcpPreparation<T>(
 export function requireMcpVersion(
   label: string,
   minVersion: string,
-  probe: {failed: boolean; stdout: string},
+  probe: {failed: boolean; stdout: string; timedOut?: boolean},
   parse: (stdout: string) => string | null = parseVersion,
 ): string {
+  if (probe.timedOut)
+    throw new McpHarnessError(
+      'timed_out',
+      `${label} version check exceeded its timeout.`,
+    );
   const version = probe.failed ? null : parse(probe.stdout);
   if (version === null || !isAtLeastVersion(version, minVersion))
     throw new McpHarnessError(

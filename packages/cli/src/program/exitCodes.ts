@@ -13,3 +13,6 @@ export const runFailureExitCode = 1;
 
 /** Exit code used when a run is cancelled (matches the convention for SIGINT). */
 export const cancelledExitCode = 130;
+
+/** Exit code used when a run receives SIGTERM. */
+export const terminatedExitCode = 143;

@@ -10,12 +10,17 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Stop active setup and verification process groups when Dynobox exits or
+  receives a terminating signal on POSIX systems.
+- Report timed-out MCP version checks as timeouts instead of unsupported versions.
+- Exit with code 143 on SIGTERM; keep code 130 for SIGINT.
 - Continue running valid scenarios and harnesses when another pair cannot be scheduled, while
   reporting each configuration error and exiting nonzero.
 - Stop owned harness process groups when Dynobox exits or receives a terminating
   signal on POSIX systems.
-- Stop owned harness descendants on timeout, fatal stream errors, and parent exit
-  on POSIX systems, including children that keep output pipes open.
+- Stop the harness's process group when the harness exits, times out, or has a
+  fatal stream error on POSIX systems. This applies to ordinary and MCP runs,
+  including background servers and children that keep output pipes open.
 - Preserve stdout and stderr from failed Claude Code MCP probes and runs in local
   `--debug` logs while keeping raw output out of reports.
 - Stop child processes from Claude Code MCP version probes and runs when cancelled

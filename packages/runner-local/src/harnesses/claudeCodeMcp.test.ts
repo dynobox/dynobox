@@ -118,6 +118,16 @@ describe('isolated Claude Code MCP invocation', () => {
     expect(result.version).toBe('2.1.283');
   });
 
+  it('reports a slow supported version probe as a timeout', async () => {
+    const {options} = await fixture('probe-timeout');
+    options.input.timeoutMs = 15_000;
+    await expect(runClaudeCodeWithMcp(options)).rejects.toMatchObject({
+      category: 'timed_out',
+      message: 'Claude Code version check exceeded its timeout.',
+      output: {stdout: '2.1.263 (Claude Code)'},
+    });
+  }, 10_000);
+
   it('adds bypass permissions only when explicitly requested', async () => {
     const {options, launches} = await fixture();
     options.input.permissionMode = 'dangerous';
@@ -393,6 +403,7 @@ if ((mode === 'probe-child' && args.includes('--version')) ||
 }
 if (args.includes('--version')) {
   console.log(mode === 'unsupported' ? '2.1.99 (Claude Code)' : mode === 'newer' ? '2.1.283 (Claude Code)' : '2.1.263 (Claude Code)');
+  if (mode === 'probe-timeout') await new Promise(() => setInterval(() => {}, 1000));
   process.exit(0);
 }
 const path = args[args.indexOf('--mcp-config') + 1];
