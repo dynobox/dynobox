@@ -1,6 +1,7 @@
 import type {ChildProcess} from 'node:child_process';
 
 import {execa, type ResultPromise} from 'execa';
+import {onExit} from 'signal-exit';
 
 type OwnedProcessOptions = {
   cwd: string;
@@ -29,6 +30,15 @@ export function startOwnedProcess(
     detached: process.platform !== 'win32',
     forceKillAfterDelay: 1000,
   });
+  // Detached children do not receive terminal signals or execa's exit cleanup.
+  // Exit handlers must be synchronous: there is no time for a grace period.
+  const cleanupOwner = onExit(() => {
+    if (process.platform === 'win32') {
+      child.kill('SIGKILL');
+    } else {
+      stopProcessGroup(child, 'SIGKILL');
+    }
+  });
   const abort = new AbortController();
   const cleanupGroup = cancelProcessGroupOnAbort(child, abort.signal);
   const stop = () => {
@@ -48,6 +58,7 @@ export function startOwnedProcess(
     child.removeListener('exit', stop);
     stop();
     cleanupGroup();
+    cleanupOwner();
   };
   void child.then(cleanup, cleanup);
   // Execa's optional error fields conflict with exactOptionalPropertyTypes.
@@ -62,17 +73,9 @@ export function cancelProcessGroupOnAbort(
   signal?: AbortSignal,
 ): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const stopGroup = (killSignal: NodeJS.Signals) => {
-    if (process.platform === 'win32' || subprocess.pid === undefined) return;
-    try {
-      process.kill(-subprocess.pid, killSignal);
-    } catch {
-      // The process group can exit before the cancellation handler runs.
-    }
-  };
   const cancel = () => {
-    stopGroup('SIGTERM');
-    timer ??= setTimeout(() => stopGroup('SIGKILL'), 1000);
+    stopProcessGroup(subprocess, 'SIGTERM');
+    timer ??= setTimeout(() => stopProcessGroup(subprocess, 'SIGKILL'), 1000);
   };
   signal?.addEventListener('abort', cancel, {once: true});
   if (signal?.aborted) cancel();
@@ -80,6 +83,18 @@ export function cancelProcessGroupOnAbort(
     signal?.removeEventListener('abort', cancel);
     clearTimeout(timer);
     // Also stop children that closed their output pipes before the parent exited.
-    if (signal?.aborted) stopGroup('SIGKILL');
+    if (signal?.aborted) stopProcessGroup(subprocess, 'SIGKILL');
   };
+}
+
+function stopProcessGroup(
+  subprocess: Pick<ChildProcess, 'pid'>,
+  signal: NodeJS.Signals,
+): void {
+  if (process.platform === 'win32' || subprocess.pid === undefined) return;
+  try {
+    process.kill(-subprocess.pid, signal);
+  } catch {
+    // The process group can exit before the cleanup handler runs.
+  }
 }

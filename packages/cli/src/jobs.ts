@@ -6,6 +6,7 @@
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 import {assertMcpExecutionSupported} from '@dynobox/runner-local';
 import type {HarnessId, PermissionMode} from '@dynobox/sdk';
+import {DynoboxConfigError} from '@dynobox/sdk/compiler';
 import type {
   Ir,
   IrAssertion,
@@ -54,6 +55,8 @@ export type RunMatrix = {
  *
  * Pass `harnesses` to override the per-scenario harness list (the `--harness`
  * CLI flag's contract).
+ * With `onSchedulingError`, report unsupported pairs and retain valid siblings.
+ * Without it, configuration errors throw as usual.
  */
 export function buildLocalRunnerJobs(
   ir: Ir,
@@ -62,6 +65,11 @@ export function buildLocalRunnerJobs(
     permissionMode?: PermissionMode;
     scenarioPatterns?: readonly string[];
     iterations?: number;
+    onSchedulingError?: (
+      error: DynoboxConfigError,
+      scenario: IrScenario,
+      harness: IrHarnessConfig,
+    ) => void;
   } = {},
 ): LocalRunnerJob[] {
   const iterations = options.iterations ?? 1;
@@ -69,7 +77,17 @@ export function buildLocalRunnerJobs(
   return scenarios.flatMap((scenario) =>
     selectHarnessConfigs(scenario.harnesses, options.harnesses).flatMap(
       (harness) => {
-        assertMcpExecutionSupported(scenario, harness.id);
+        try {
+          assertMcpExecutionSupported(scenario, harness.id);
+        } catch (error) {
+          if (
+            !(error instanceof DynoboxConfigError) ||
+            options.onSchedulingError === undefined
+          )
+            throw error;
+          options.onSchedulingError(error, scenario, harness);
+          return [];
+        }
         return Array.from({length: iterations}, (_, iteration) => {
           const permissionMode = permissionModeForHarness(
             harness,

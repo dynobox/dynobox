@@ -106,6 +106,63 @@ async function fixture(mode = 'call', mixed = false) {
 
 describe('MCP CLI execution', () => {
   it.each([false, true])(
+    'runs valid siblings in one file (supported MCP sibling: %s)',
+    async (supportedSibling) => {
+      const {root, path, options} = await fixture('call', true);
+      const source = JSON.parse(await readFile(path, 'utf8'));
+      source.scenarios[0].harnesses = supportedSibling
+        ? ['cursor', 'claude-code']
+        : ['cursor'];
+      await writeFile(path, JSON.stringify(source));
+      const result = await executeCli(
+        ['run', path, '--reporter', 'json'],
+        options,
+      );
+      expect(result.exitCode).toBe(configErrorExitCode);
+      expect(result.stderr).toContain(
+        'Lookup (cursor): MCP mocking is unavailable for Cursor',
+      );
+      const output = result.stdout
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      const summary = output.pop();
+      expect(output).toHaveLength(supportedSibling ? 2 : 1);
+      expect(output.every((job) => job.status === 'passed')).toBe(true);
+      expect(summary.status).toBe('failed');
+      expect(summary.totals).toMatchObject({
+        jobs: supportedSibling ? 2 : 1,
+        passed: supportedSibling ? 2 : 1,
+        configErrors: 1,
+      });
+      if (!supportedSibling) {
+        await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();
+      }
+    },
+  );
+
+  it('reports scheduling failure without a false scenario-filter error', async () => {
+    const {root, path, options} = await fixture('call', true);
+    const source = JSON.parse(await readFile(path, 'utf8'));
+    const plain = {...source, scenarios: [source.scenarios[1]]};
+    source.scenarios = [source.scenarios[0]];
+    source.harnesses = ['cursor'];
+    await writeFile(path, JSON.stringify(source));
+    await writeFile(join(root, 'plain.dyno.yaml'), JSON.stringify(plain));
+    const result = await executeCli(
+      ['run', root, '--scenario', 'Lookup', '--reporter', 'json'],
+      options,
+    );
+    expect(result.exitCode).toBe(configErrorExitCode);
+    expect(result.stderr).toContain(
+      'Lookup (cursor): MCP mocking is unavailable for Cursor',
+    );
+    expect(result.stderr).not.toContain('No scenarios matched');
+    expect(result.stdout).toBe('');
+    await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();
+  });
+
+  it.each([false, true])(
     'reports each unsupported file and runs valid files (all unsupported: %s)',
     async (allUnsupported) => {
       const {root, path, options} = await fixture();

@@ -10,8 +10,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
-- Continue running valid dyno files when another file cannot be scheduled, while
+- Continue running valid scenarios and harnesses when another pair cannot be scheduled, while
   reporting each configuration error and exiting nonzero.
+- Stop owned harness process groups when Dynobox exits or receives a terminating
+  signal on POSIX systems.
 - Stop owned harness descendants on timeout, fatal stream errors, and parent exit
   on POSIX systems, including children that keep output pipes open.
 - Preserve stdout and stderr from failed Claude Code MCP probes and runs in local

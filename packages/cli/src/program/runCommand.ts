@@ -23,7 +23,6 @@ import {
   runJob,
   type RunJobOptions,
 } from '@dynobox/runner-local';
-import {DynoboxConfigError} from '@dynobox/sdk/compiler';
 import {CommanderError} from 'commander';
 
 import {assertionByIdForJobs, buildLocalRunnerJobs} from '../jobs.js';
@@ -196,36 +195,32 @@ export async function runCommandAction(
   // Jobs stay grouped by source dyno so the run upload can report each
   // dyno (and its target) separately; execution flattens them in order.
   const runOptions = buildRunJobOptions(options);
-  const dynoGroups = compiled.flatMap((entry) => {
-    try {
-      return [
-        {
-          entry,
-          jobs: buildLocalRunnerJobs(entry.ir, {
-            ...buildJobOptions(
-              overrideHarnesses,
-              overrideModels,
-              permissionMode,
-              scenarioPatterns,
-              iterations,
-            ),
-          }),
-        },
-      ];
-    } catch (error) {
-      if (!(error instanceof DynoboxConfigError)) throw error;
-      errors.push({filePath: entry.filePath, message: error.message});
-      writeStderr(renderRunConfigErrorMessage(entry.filePath, error.message));
-      return [];
-    }
-  });
-  if (dynoGroups.length === 0)
+  let schedulingErrorCount = 0;
+  const dynoGroups = compiled.map((entry) => ({
+    entry,
+    jobs: buildLocalRunnerJobs(entry.ir, {
+      ...buildJobOptions(
+        overrideHarnesses,
+        overrideModels,
+        permissionMode,
+        scenarioPatterns,
+        iterations,
+      ),
+      onSchedulingError(error, scenario, harness) {
+        schedulingErrorCount++;
+        const message = `${scenario.name} (${harness.id}): ${error.message}`;
+        errors.push({filePath: entry.filePath, message});
+        writeStderr(renderRunConfigErrorMessage(entry.filePath, message));
+      },
+    }),
+  }));
+  const jobs = dynoGroups.flatMap((group) => group.jobs);
+  if (jobs.length === 0 && schedulingErrorCount > 0)
     throw new CommanderError(
       configErrorExitCode,
       'dynobox.mcp',
       'no dynos could be scheduled',
     );
-  const jobs = dynoGroups.flatMap((group) => group.jobs);
   if (jobs.length === 0 && scenarioPatterns !== undefined) {
     writeStderr(
       renderRunConfigErrorMessage(
