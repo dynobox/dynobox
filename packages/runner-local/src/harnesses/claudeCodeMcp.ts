@@ -179,6 +179,8 @@ export async function runClaudeCodeWithMcp(
     };
     lines.flush();
     remaining();
+    if (result.timedOut)
+      throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');
     if (failure) throw failure;
     if (result.failed)
       throw new McpHarnessError(

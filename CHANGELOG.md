@@ -14,7 +14,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   package instead of bundling its code without the required notice.
 - Stop active setup and verification process groups when Dynobox exits or
   receives a terminating signal on POSIX systems.
-- Report timed-out MCP version checks as timeouts instead of unsupported versions.
+- Report timed-out MCP version checks and Claude Code runs as timeouts instead of
+  unsupported versions or execution failures.
 - Exit with code 143 on SIGTERM; keep code 130 for SIGINT.
 - Continue running valid scenarios and harnesses when another pair cannot be scheduled, while
   reporting each configuration error and exiting nonzero.

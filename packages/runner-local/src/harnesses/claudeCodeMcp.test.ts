@@ -6,6 +6,7 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {startMcpMockController} from '../mcpMocks/controller.js';
 import {McpHarnessError} from '../mcpMocks/errors.js';
+import * as processGroup from '../processGroup.js';
 import {
   type ClaudeCodeMcpOptions,
   runClaudeCodeWithMcp,
@@ -127,6 +128,42 @@ describe('isolated Claude Code MCP invocation', () => {
       output: {stdout: '2.1.263 (Claude Code)'},
     });
   }, 10_000);
+
+  it('reports a process timeout even before the clock deadline passes', async () => {
+    const root = await fs.mkdtemp(join(tmpdir(), 'dynobox-claude-timeout-'));
+    roots.push(root);
+    vi.spyOn(Date, 'now').mockReturnValue(1000);
+    const start = vi
+      .spyOn(processGroup, 'startOwnedProcess')
+      .mockImplementation((_executable, args) => {
+        const probe = args.includes('--version');
+        return Object.assign(
+          Promise.resolve({
+            failed: !probe,
+            timedOut: !probe,
+            exitCode: probe ? 0 : undefined,
+            stdout: probe ? '2.1.263 (Claude Code)' : 'partial run output',
+            stderr: '',
+            durationMs: 10,
+          }),
+          {stop: vi.fn()},
+        ) as unknown as ReturnType<typeof processGroup.startOwnedProcess>;
+      });
+
+    await expect(
+      runClaudeCodeWithMcp({
+        executable: 'claude',
+        input: {prompt: 'test', workDir: root, env: {}, timeoutMs: 5000},
+        servers: {},
+      }),
+    ).rejects.toMatchObject({
+      category: 'timed_out',
+      message: 'MCP run exceeded its timeout.',
+      output: {stdout: 'partial run output', stderr: '', exitCode: 1},
+    });
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(start.mock.calls[1]![2].timeout).toBe(5000);
+  });
 
   it('adds bypass permissions only when explicitly requested', async () => {
     const {options, launches} = await fixture();
