@@ -22,6 +22,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Include required third-party license notices in the CLI package.
 - Report timed-out Pi MCP probes and runs as timeouts, and preserve failure
   output in local debug logs.
+- Stop Pi MCP runs when a tool-event callback fails, and retain the original
+  callback error and raw process output even if cleanup passes the deadline.
 
 ---
 

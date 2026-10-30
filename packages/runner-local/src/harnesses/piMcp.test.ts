@@ -54,6 +54,73 @@ afterEach(() => {
 });
 
 describe('Pi MCP launch contract', () => {
+  it.each([false, true])(
+    'stops and retains a callback failure (later timeout: %s)',
+    async (laterTimeout) => {
+      const stdout = new PassThrough();
+      let finish!: (result: object) => void;
+      const child = Object.assign(
+        new Promise<object>((resolve) => {
+          finish = resolve;
+        }),
+        {stdout},
+      );
+      mocks.execa.mockImplementation((_executable, args) =>
+        args[0] === '--version'
+          ? Promise.resolve({stdout: '0.84.2', failed: false})
+          : child,
+      );
+      let now = Date.now();
+      vi.spyOn(Date, 'now').mockImplementation(() => now);
+      const onToolEvent = vi.fn(() => {
+        if (laterTimeout) now += 10_000;
+        throw new Error('Caller callback failed');
+      });
+      const f = options();
+      const pending = runPiWithMcp({
+        ...f,
+        input: {...f.input, onToolEvent},
+      }).catch((error: unknown) => error);
+      const lines =
+        [
+          JSON.stringify({
+            type: 'tool_execution_start',
+            toolCallId: 'call-1',
+            args: {id: 'DYNO-1'},
+          }),
+          JSON.stringify({
+            type: 'tool_execution_end',
+            toolCallId: 'call-1',
+            toolName: 'mcp__linear__get_issue',
+            isError: false,
+          }),
+          finalMessage,
+        ].join('\n') + '\n';
+      try {
+        await vi.waitFor(() =>
+          expect(stdout.listenerCount('data')).toBeGreaterThan(0),
+        );
+        stdout.write(lines);
+        expect(onToolEvent).toHaveBeenCalledTimes(1);
+        expect(Reflect.get(child, 'kill')).toHaveBeenCalled();
+      } finally {
+        finish({
+          failed: laterTimeout,
+          timedOut: laterTimeout,
+          exitCode: laterTimeout ? undefined : 0,
+          stdout: lines,
+          stderr: 'debug output',
+          durationMs: 1,
+        });
+      }
+      expect(await pending).toMatchObject({
+        category: 'execution_failed',
+        message: expect.stringContaining('Caller callback failed'),
+        output: {stdout: lines, stderr: 'debug output'},
+      });
+    },
+  );
+
   it.each(['0.84.2', '0.86.0', '1.0.0'])(
     'accepts Pi %s and newer',
     async (version) => {
