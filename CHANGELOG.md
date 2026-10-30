@@ -10,6 +10,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Stop Pi MCP runs when a tool-event callback fails, and retain the original
+  callback error and raw process output even if cleanup passes the deadline.
 - Retain OpenCode MCP tool error messages and preserve explicit response, model,
   and callback failures when cleanup passes the run deadline.
 - Preserve Codex plugin settings during MCP mock runs and distinguish app-server

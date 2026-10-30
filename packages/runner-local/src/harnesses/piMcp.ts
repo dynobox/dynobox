@@ -92,10 +92,22 @@ export async function runPiWithMcp(options: {
       ),
       {...processOptions, timeout: remaining()},
     );
+    let callbackFailure: McpHarnessError | undefined;
     const stream = new ToolEventLineStream({
       parseLine: (line, lineNumber) =>
         parsePiJsonLine(line, lineNumber, toolInputs),
-      onToolEvent: (event) => input.onToolEvent?.(event),
+      onToolEvent: (event) => {
+        if (callbackFailure !== undefined) return;
+        try {
+          input.onToolEvent?.(event);
+        } catch (error) {
+          callbackFailure = new McpHarnessError(
+            'execution_failed',
+            `Pi tool-event callback failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          child.stop();
+        }
+      },
     });
     child.stdout?.on('data', (chunk: Buffer | string) =>
       stream.write(chunk.toString()),
@@ -108,6 +120,7 @@ export async function runPiWithMcp(options: {
       durationMs: Date.now() - started,
     };
     stream.flush();
+    if (callbackFailure !== undefined) throw callbackFailure;
     remaining();
     if (result.timedOut)
       throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');
