@@ -48,7 +48,10 @@ beforeEach(() => {
     return {stdout: finalMessage, stderr: '', failed: false, exitCode: 0};
   });
 });
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.clearAllMocks();
+});
 
 describe('Pi MCP launch contract', () => {
   it.each(['0.84.2', '0.86.0', '1.0.0'])(
@@ -67,6 +70,74 @@ describe('Pi MCP launch contract', () => {
       message: expect.stringContaining('0.84.2 or newer'),
     });
     expect(mocks.execa).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['version', 'run'])(
+    'reports a %s process timeout with raw output before the clock deadline passes',
+    async (stage) => {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.now());
+      const timeout = {
+        failed: true,
+        timedOut: true,
+        stdout: stage === 'version' ? '0.84.2' : 'partial run output',
+        stderr: 'PRIVATE_STDERR_SENTINEL',
+        durationMs: 10,
+      };
+      if (stage === 'run')
+        mocks.execa.mockResolvedValueOnce({stdout: '0.84.2', failed: false});
+      mocks.execa.mockResolvedValueOnce(timeout);
+      await expect(runPiWithMcp(options())).rejects.toMatchObject({
+        category: 'timed_out',
+        output: {
+          exitCode: 1,
+          stdout: timeout.stdout,
+          stderr: timeout.stderr,
+        },
+      });
+    },
+  );
+
+  it.each([
+    [2, finalMessage],
+    [0, 'not JSON'],
+    [0, ''],
+  ])(
+    'retains failed run output (exit %s, stdout %j)',
+    async (exitCode, stdout) => {
+      mocks.execa
+        .mockResolvedValueOnce({stdout: '0.84.2', failed: false})
+        .mockResolvedValueOnce({
+          exitCode,
+          stdout,
+          stderr: 'PRIVATE_STDERR_SENTINEL',
+          failed: exitCode !== 0,
+        });
+      await expect(runPiWithMcp(options())).rejects.toMatchObject({
+        category: 'execution_failed',
+        output: {exitCode, stdout, stderr: 'PRIVATE_STDERR_SENTINEL'},
+      });
+      const args = mocks.execa.mock.calls[1]![1] as string[];
+      await expect(
+        access(dirname(args[args.indexOf('-e') + 1]!)),
+      ).rejects.toMatchObject({code: 'ENOENT'});
+    },
+  );
+
+  it('retains output from an unsupported version probe', async () => {
+    mocks.execa.mockResolvedValueOnce({
+      stdout: '0.80.0',
+      stderr: 'PRIVATE_STDERR_SENTINEL',
+      failed: false,
+      exitCode: 0,
+    });
+    await expect(runPiWithMcp(options())).rejects.toMatchObject({
+      category: 'unsupported_version',
+      output: {
+        stdout: '0.80.0',
+        stderr: 'PRIVATE_STDERR_SENTINEL',
+        exitCode: 0,
+      },
+    });
   });
 
   it('uses an explicit bridge, preserves the profile and unions proxy bypasses', async () => {
