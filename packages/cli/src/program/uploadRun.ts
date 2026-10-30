@@ -196,6 +196,7 @@ function assertNoMcpUpload(
       dyno.jobs.some((job) => scenarioUsesMcp(job.scenario)),
     )
   ) {
+    // TODO: Enable MCP uploads
     throw new Error(
       'MCP uploads are not enabled. Run locally without --save-run.',
     );
