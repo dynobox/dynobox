@@ -1,4 +1,5 @@
 import {errorMessage} from '../diagnostics.js';
+import type {HarnessRunOutput} from '../harnesses/types.js';
 import {isAtLeastVersion, parseVersion} from '../harnesses/version.js';
 import type {LocalMcpSummary} from '../runTypes.js';
 
@@ -15,6 +16,8 @@ export class McpHarnessError extends Error {
   constructor(
     readonly category: McpHarnessFailure,
     message: string,
+    /** Raw process output for local debug logs; excluded from diagnostics. */
+    readonly output?: HarnessRunOutput,
   ) {
     super(message);
     this.name = 'McpHarnessError';
@@ -88,9 +91,14 @@ export async function awaitMcpPreparation<T>(
 export function requireMcpVersion(
   label: string,
   minVersion: string,
-  probe: {failed: boolean; stdout: string},
+  probe: {failed: boolean; stdout: string; timedOut?: boolean},
   parse: (stdout: string) => string | null = parseVersion,
 ): string {
+  if (probe.timedOut)
+    throw new McpHarnessError(
+      'timed_out',
+      `${label} version check exceeded its timeout.`,
+    );
   const version = probe.failed ? null : parse(probe.stdout);
   if (version === null || !isAtLeastVersion(version, minVersion))
     throw new McpHarnessError(

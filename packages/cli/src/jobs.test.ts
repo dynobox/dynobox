@@ -1,10 +1,63 @@
 import {defineDyno} from '@dynobox/sdk';
 import {compile} from '@dynobox/sdk/compiler';
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 
 import {buildLocalRunnerJobs} from './jobs.js';
 
 describe('buildLocalRunnerJobs', () => {
+  it('retains valid scenarios and harnesses when reporting unsupported pairs', () => {
+    const ir = compile(
+      defineDyno({
+        harnesses: ['cursor', 'claude-code'],
+        scenarios: [
+          {
+            name: 'MCP',
+            prompt: 'Save',
+            mcpMocks: {
+              linear: {
+                tools: {
+                  save: {
+                    inputSchema: {type: 'object'},
+                    response: {content: []},
+                  },
+                },
+              },
+            },
+          },
+          {name: 'Plain', prompt: 'Reply'},
+        ],
+      }),
+    );
+    const onSchedulingError = vi.fn();
+    const jobs = buildLocalRunnerJobs(ir, {iterations: 2, onSchedulingError});
+    expect(
+      jobs.map((job) => [job.scenario.name, job.harness, job.iteration]),
+    ).toEqual([
+      ['MCP', 'claude-code', 0],
+      ['MCP', 'claude-code', 1],
+      ['Plain', 'cursor', 0],
+      ['Plain', 'cursor', 1],
+      ['Plain', 'claude-code', 0],
+      ['Plain', 'claude-code', 1],
+    ]);
+    expect(onSchedulingError).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        message: expect.stringContaining('unavailable for Cursor'),
+      }),
+      ir.scenarios[0],
+      expect.objectContaining({id: 'cursor'}),
+    );
+    expect(() => buildLocalRunnerJobs(ir)).toThrow('unavailable for Cursor');
+    onSchedulingError.mockClear();
+    expect(
+      buildLocalRunnerJobs(ir, {
+        scenarioPatterns: ['Plain'],
+        onSchedulingError,
+      }),
+    ).toHaveLength(2);
+    expect(onSchedulingError).not.toHaveBeenCalled();
+  });
+
   it('schedules MCP scenarios for supported harnesses', () => {
     const ir = compile(
       defineDyno({

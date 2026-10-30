@@ -37,6 +37,7 @@ import {
   awaitMcpPreparation,
   mcpDeadline,
   mcpFailure,
+  McpHarnessError,
 } from './mcpMocks/errors.js';
 import {
   permissionWarningsFromHarnessFailure,
@@ -550,6 +551,9 @@ export async function runJob(
             : `Harness "${harness.id}" failed to run: ${errorMessage(error)}`,
           ...cliMockFailures.map((failure) => failure.message),
         ],
+        ...(error instanceof McpHarnessError && error.output !== undefined
+          ? {harnessOutput: error.output}
+          : {}),
         httpEvents: httpCapture?.events ?? [],
         cliMockCalls: cliMockController?.calls() ?? [],
         timing: buildTiming({

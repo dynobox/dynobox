@@ -70,7 +70,11 @@ import {
 } from './discoverDynos.js';
 import {shouldRenderLive} from './environment.js';
 import type {ExecuteCliOptions, OutputWriter} from './execute.js';
-import {configErrorExitCode} from './exitCodes.js';
+import {
+  cancelledExitCode,
+  configErrorExitCode,
+  terminatedExitCode,
+} from './exitCodes.js';
 import {
   fetchAuthenticatedIdentity,
   type IdentityResult,
@@ -155,15 +159,6 @@ export async function runCommandAction(
   );
   const scenarioPatterns = validateScenarioFilters(commandFlags.scenario);
 
-  // Fail fast when --save-run cannot authenticate before doing any expensive
-  // local scenario work that would only fail during upload.
-  if (
-    commandFlags.saveRun === true &&
-    resolveCustomUploadUrl(options.env) === null
-  ) {
-    await validateSaveRunAuth({inputLabel, env: options.env, writeStderr});
-  }
-
   const {files, configPath: appliedConfigPath} = await discoverOrFail(
     configPath,
     resolvedInputPath,
@@ -203,20 +198,33 @@ export async function runCommandAction(
 
   // Jobs stay grouped by source dyno so the run upload can report each
   // dyno (and its target) separately; execution flattens them in order.
+  const runOptions = buildRunJobOptions(options);
+  let schedulingErrorCount = 0;
   const dynoGroups = compiled.map((entry) => ({
     entry,
-    jobs: buildLocalRunnerJobs(
-      entry.ir,
-      buildJobOptions(
+    jobs: buildLocalRunnerJobs(entry.ir, {
+      ...buildJobOptions(
         overrideHarnesses,
         overrideModels,
         permissionMode,
         scenarioPatterns,
         iterations,
       ),
-    ),
+      onSchedulingError(error, scenario, harness) {
+        schedulingErrorCount++;
+        const message = `${scenario.name} (${harness.id}): ${error.message}`;
+        errors.push({filePath: entry.filePath, message});
+        writeStderr(renderRunConfigErrorMessage(entry.filePath, message));
+      },
+    }),
   }));
   const jobs = dynoGroups.flatMap((group) => group.jobs);
+  if (jobs.length === 0 && schedulingErrorCount > 0)
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.mcp',
+      'no dynos could be scheduled',
+    );
   if (jobs.length === 0 && scenarioPatterns !== undefined) {
     writeStderr(
       renderRunConfigErrorMessage(
@@ -230,7 +238,30 @@ export async function runCommandAction(
       'no scenarios matched',
     );
   }
-  const runOptions = buildRunJobOptions(options);
+  const usesMcp = jobs.some((job) => job.scenario.mcpMocks !== undefined);
+  if (usesMcp && commandFlags.saveRun === true) {
+    writeStderr(
+      renderRunConfigErrorMessage(
+        inputLabel,
+        'MCP runs are local-only while upload support is under development. Remove --save-run.',
+      ),
+    );
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.mcpUpload',
+      'MCP uploads are not enabled',
+    );
+  }
+
+  // Reject unsupported uploads before authenticating, while still checking
+  // authentication before setup or harness execution for supported uploads.
+  if (
+    commandFlags.saveRun === true &&
+    resolveCustomUploadUrl(options.env) === null
+  ) {
+    await validateSaveRunAuth({inputLabel, env: options.env, writeStderr});
+  }
+
   const ctx = createRenderContext(options, commandFlags);
   if (
     reporter !== 'json' &&
@@ -249,50 +280,84 @@ export async function runCommandAction(
       jobs: dynoJobs,
     }));
 
-  const execution =
-    reporter === 'json'
-      ? await runStatic({
-          dynos: renderDynos,
-          runOptions,
-          ctx,
-          writeStdout,
-          reporter,
-          configErrorCount: errors.length,
-        })
-      : shouldRenderLive(options, ctx)
-        ? await runLive({dynos: renderDynos, runOptions, ctx, writeStdout})
-        : await runStatic({
+  // Stop scheduling and cancel running jobs on the first signal so mocks and
+  // controllers clean up; a second signal exits at once. The listener stays
+  // installed until job execution ends: execa's signal-exit handler re-raises
+  // the signal, killing the process before cleanup, once no other listener is left.
+  const abort = new AbortController();
+  let cancellationExitCode = cancelledExitCode;
+  const cancel = (exitCode: number) => {
+    if (abort.signal.aborted) process.exit(exitCode);
+    cancellationExitCode = exitCode;
+    abort.abort();
+  };
+  const interrupt = () => cancel(cancelledExitCode);
+  const terminate = () => cancel(terminatedExitCode);
+  runOptions.signal = abort.signal;
+  process.on('SIGINT', interrupt);
+  process.on('SIGTERM', terminate);
+  try {
+    const execution =
+      reporter === 'json'
+        ? await runStatic({
             dynos: renderDynos,
             runOptions,
             ctx,
             writeStdout,
             reporter,
             configErrorCount: errors.length,
-          });
+          })
+        : shouldRenderLive(options, ctx)
+          ? await runLive({dynos: renderDynos, runOptions, ctx, writeStdout})
+          : await runStatic({
+              dynos: renderDynos,
+              runOptions,
+              ctx,
+              writeStdout,
+              reporter,
+              configErrorCount: errors.length,
+            });
 
-  const {results} = execution;
-  const anyJobFailed = results.some((result) => !result.passed);
-  const runFailed = anyJobFailed || errors.length > 0;
+    const {results} = execution;
+    const anyJobFailed = results.some((result) => !result.passed);
+    const runFailed = anyJobFailed || errors.length > 0;
 
-  if (commandFlags.saveRun === true) {
-    await uploadRun({
-      dynos: dynoGroups
-        .filter(({jobs: dynoJobs}) => dynoJobs.length > 0)
-        .map(({entry, jobs: dynoJobs}) => ({
-          dynoPath: dynoDisplayPath(entry.filePath),
-          name: entry.ir.name ?? null,
-          target: dynoTarget(entry),
-          jobs: dynoJobs,
-        })),
-      results,
-      runFailed,
-      inputPath: inputLabel,
-      ...(options.env === undefined ? {} : {env: options.env}),
-      writeStderr,
-    });
+    // Upload does not use the run controller. Restore normal signal handling
+    // so Ctrl-C can interrupt a stalled upload instead of aborting finished jobs.
+    process.off('SIGINT', interrupt);
+    process.off('SIGTERM', terminate);
+
+    if (commandFlags.saveRun === true) {
+      await uploadRun({
+        dynos: dynoGroups
+          .filter(({jobs: dynoJobs}) => dynoJobs.length > 0)
+          .map(({entry, jobs: dynoJobs}) => ({
+            dynoPath: dynoDisplayPath(entry.filePath),
+            name: entry.ir.name ?? null,
+            target: dynoTarget(entry),
+            jobs: dynoJobs,
+          })),
+        results,
+        runFailed,
+        inputPath: inputLabel,
+        ...(options.env === undefined ? {} : {env: options.env}),
+        writeStderr,
+      });
+    }
+
+    return runFailed;
+  } catch (error) {
+    if (!abort.signal.aborted) throw error;
+    writeStderr('Run cancelled.\n');
+    throw new CommanderError(
+      cancellationExitCode,
+      'dynobox.cancelled',
+      'run cancelled',
+    );
+  } finally {
+    process.off('SIGINT', interrupt);
+    process.off('SIGTERM', terminate);
   }
-
-  return runFailed;
 }
 
 async function validateSaveRunAuth(input: {
@@ -443,8 +508,11 @@ type RunPathResult = {
  */
 async function runStatic(input: RunPathInput): Promise<RunPathResult> {
   const jobs = input.dynos.flatMap((dyno) => dyno.jobs);
-  const execution = await runScenarioExecutions(input.dynos, (job) =>
-    runJob(job, input.runOptions),
+  const execution = await runScenarioExecutions(
+    input.dynos,
+    (job) => runJob(job, input.runOptions),
+    {},
+    input.runOptions.signal,
   );
   const {results, elapsedMs} = execution;
   const debugLogPaths = writeDebugLogsIfDebug(input.ctx, input.dynos, results);
@@ -526,72 +594,77 @@ async function runLive(input: RunPathInput): Promise<RunPathResult> {
 
   try {
     spinner?.start();
-    const execution = await runScenarioExecutions(dynos, executeJob, {
-      scenarioStarted: (scenario) => {
-        if (scenario.dyno !== currentDyno) {
-          if (currentDyno !== undefined) writeStdout('\n');
-          currentDyno = scenario.dyno;
-          writeStdout(
-            `${renderDynoLine(scenario.dyno.name ?? scenario.dyno.path, ctx)}\n`,
-          );
-        }
-        writeStdout(`${renderScenarioLine(scenario.name, ctx)}\n`);
-        stateByJob.clear();
-        laneIndexByJob.clear();
-        completedByLane.clear();
-        scenario.harnessLanes.forEach((lane, laneIndex) => {
-          completedByLane.set(laneIndex, []);
-          for (const entry of lane.jobs) {
-            laneIndexByJob.set(entry.job, laneIndex);
+    const execution = await runScenarioExecutions(
+      dynos,
+      executeJob,
+      {
+        scenarioStarted: (scenario) => {
+          if (scenario.dyno !== currentDyno) {
+            if (currentDyno !== undefined) writeStdout('\n');
+            currentDyno = scenario.dyno;
+            writeStdout(
+              `${renderDynoLine(scenario.dyno.name ?? scenario.dyno.path, ctx)}\n`,
+            );
           }
-        });
-        live.start(
-          scenario.harnessLanes.map((lane) => ({
-            headline: renderRunningGroupRow(
-              ctx,
-              rowOptionsFor(lane.jobs[0]!.job),
-            ),
-          })),
-        );
+          writeStdout(`${renderScenarioLine(scenario.name, ctx)}\n`);
+          stateByJob.clear();
+          laneIndexByJob.clear();
+          completedByLane.clear();
+          scenario.harnessLanes.forEach((lane, laneIndex) => {
+            completedByLane.set(laneIndex, []);
+            for (const entry of lane.jobs) {
+              laneIndexByJob.set(entry.job, laneIndex);
+            }
+          });
+          live.start(
+            scenario.harnessLanes.map((lane) => ({
+              headline: renderRunningGroupRow(
+                ctx,
+                rowOptionsFor(lane.jobs[0]!.job),
+              ),
+            })),
+          );
+        },
+        jobStarted: (entry, scenario) => {
+          stateByJob.set(entry.job, createLiveJobState());
+          const laneIndex = laneIndexByJob.get(entry.job);
+          if (laneIndex === undefined) return;
+          const iterationCount = scenario.harnessLanes[laneIndex]!.jobs.length;
+          live.setHeadline(
+            laneIndex,
+            renderRunningGroupRow(ctx, {
+              ...rowOptionsFor(entry.job),
+              ...(iterationCount === 1
+                ? {}
+                : {iteration: entry.job.iteration, iterationCount}),
+            }),
+            true,
+          );
+        },
+        jobCompleted: (entry, result) => {
+          const laneIndex = laneIndexByJob.get(entry.job);
+          if (laneIndex === undefined) return;
+          const entries = completedByLane.get(laneIndex)!;
+          entries.push({job: entry.job, result});
+          live.setHeadline(
+            laneIndex,
+            renderHarnessGroupRow(entries, ctx, rowOptionsFor(entry.job)),
+          );
+        },
+        scenarioCompleted: (scenario, scenarioResults) => {
+          live.clear();
+          writeLiveScenarioCompletion(
+            scenario,
+            scenarioResults,
+            ctx,
+            writeStdout,
+            showHarnessMetadata,
+            expanded,
+          );
+        },
       },
-      jobStarted: (entry, scenario) => {
-        stateByJob.set(entry.job, createLiveJobState());
-        const laneIndex = laneIndexByJob.get(entry.job);
-        if (laneIndex === undefined) return;
-        const iterationCount = scenario.harnessLanes[laneIndex]!.jobs.length;
-        live.setHeadline(
-          laneIndex,
-          renderRunningGroupRow(ctx, {
-            ...rowOptionsFor(entry.job),
-            ...(iterationCount === 1
-              ? {}
-              : {iteration: entry.job.iteration, iterationCount}),
-          }),
-          true,
-        );
-      },
-      jobCompleted: (entry, result) => {
-        const laneIndex = laneIndexByJob.get(entry.job);
-        if (laneIndex === undefined) return;
-        const entries = completedByLane.get(laneIndex)!;
-        entries.push({job: entry.job, result});
-        live.setHeadline(
-          laneIndex,
-          renderHarnessGroupRow(entries, ctx, rowOptionsFor(entry.job)),
-        );
-      },
-      scenarioCompleted: (scenario, scenarioResults) => {
-        live.clear();
-        writeLiveScenarioCompletion(
-          scenario,
-          scenarioResults,
-          ctx,
-          writeStdout,
-          showHarnessMetadata,
-          expanded,
-        );
-      },
-    });
+      runOptions.signal,
+    );
     writeStdout(renderRunSummary(execution.results, ctx, execution.elapsedMs));
     return execution;
   } finally {

@@ -126,9 +126,10 @@ const irMcpCalledNodeSchema = z
 const irMcpNotCalledNodeSchema = z
   .object({type: z.literal('mcp.notCalled'), ...mcpAssertionShape})
   .strict();
-const irMcpCalledSchema = irMcpCalledNodeSchema.merge(irAssertionBaseSchema);
-const irMcpNotCalledSchema = irMcpNotCalledNodeSchema.merge(
-  irAssertionBaseSchema,
+// The base goes first: merge keeps the second schema's unknown-key policy.
+const irMcpCalledSchema = irAssertionBaseSchema.merge(irMcpCalledNodeSchema);
+const irMcpNotCalledSchema = irAssertionBaseSchema.merge(
+  irMcpNotCalledNodeSchema,
 );
 
 const irHttpCalledAssertionNodeSchema = z.object({
