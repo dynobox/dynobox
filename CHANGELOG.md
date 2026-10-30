@@ -10,6 +10,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Stop Pi MCP runs when a tool-event callback fails, and retain the original
+  callback error and raw process output even if cleanup passes the deadline.
 - Retain OpenCode MCP tool error messages and preserve explicit response, model,
   and callback failures when cleanup passes the run deadline.
 - Preserve Codex plugin settings during MCP mock runs and distinguish app-server
@@ -22,7 +24,7 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   package instead of bundling its code without the required notice.
 - Stop active setup and verification process groups when Dynobox exits or
   receives a terminating signal on POSIX systems.
-- Report timed-out MCP probes and Claude Code, Codex, and OpenCode runs as
+- Report timed-out MCP probes and Claude Code, Codex, OpenCode, and Pi runs as
   timeouts instead of unsupported versions or execution failures.
 - Exit with code 143 on SIGTERM; keep code 130 for SIGINT.
 - Continue running valid scenarios and harnesses when another pair cannot be scheduled, while
@@ -32,7 +34,7 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Stop the harness's process group when the harness exits, times out, or has a
   fatal stream error on POSIX systems. This applies to ordinary and MCP runs,
   including background servers and children that keep output pipes open.
-- Preserve stdout and stderr from failed Claude Code, Codex, and OpenCode MCP
+- Preserve stdout and stderr from failed Claude Code, Codex, OpenCode, and Pi MCP
   probes and runs in local `--debug` logs while keeping raw output out of reports.
 - Stop child processes from Claude Code MCP version probes and runs when cancelled
   on POSIX systems, including children that ignore SIGTERM or close output pipes.
