@@ -36,11 +36,16 @@ const execArgs = [
   '--',
   'Reply OK.',
 ];
-afterEach(async () => {
-  for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
-});
+afterEach(
+  /** Remove test resources in the reverse order of creation. */
+  async () => {
+    for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+  },
+);
 
+/** Define native Codex tests with local model and MCP servers. */
 describe.skipIf(!executable)('native Codex MCP gates', () => {
+  /** Check server exclusion and the retention of skills and permissions. */
   it('excludes active user/project/plugin servers and preserves skills and permissions', async () => {
     const fixture = await nativeFixture('call');
     const {output: result} = await fixture.mockRun();
@@ -82,6 +87,7 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
     );
   }, 40_000);
 
+  /** Check that a mock call without approval causes a run failure. */
   it('fails a run whose mock call is refused for approval', async () => {
     const fixture = await nativeFixture('call');
     await expect(
@@ -109,6 +115,7 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
     expect(observation.calls).toEqual([]);
   }, 40_000);
 
+  /** Check mock discovery when no tool call is required. */
   it('discovers mocks during a negative-only run', async () => {
     const fixture = await nativeFixture('negative');
     const {output: result} = await fixture.mockRun();
@@ -122,6 +129,7 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
     await fixture.assertNoSentinels();
   }, 30_000);
 
+  /** Check that failed mock startup prevents a model request. */
   it('fails a negative-only turn before model execution when required startup fails', async () => {
     const fixture = await nativeFixture('negative');
     await fixture.controller.finalize({
@@ -134,6 +142,7 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
     expect(fixture.requests).toEqual([]);
     await fixture.assertNoSentinels();
   }, 30_000);
+  /** Check that simultaneous runs use separate controllers and closed routes. */
   it('keeps concurrent controllers independent and revokes their routes', async () => {
     const first = await nativeFixture('call');
     const second = await nativeFixture('negative');
@@ -151,6 +160,7 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
     }
   }, 30_000);
 
+  /** Check cancellation after Codex discovers the mock tools. */
   it('cancels a native invocation after mock discovery', async () => {
     const fixture = await nativeFixture('negative');
     fixture.mode = 'hang';
@@ -159,9 +169,13 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
     const rejected = expect(pending).rejects.toMatchObject({
       category: 'execution_failed',
     });
-    await vi.waitFor(() => expect(fixture.requests.length).toBeGreaterThan(0), {
-      timeout: 10_000,
-    });
+    await vi.waitFor(
+      /** Check that the local model server has received a request. */
+      () => expect(fixture.requests.length).toBeGreaterThan(0),
+      {
+        timeout: 10_000,
+      },
+    );
     abort.abort();
     await rejected;
     expect(
@@ -175,6 +189,7 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
     await fixture.assertNoSentinels();
   }, 30_000);
 
+  /** Check server exclusion after marketplace metadata changes. */
   it('isolates installed flat-map cached servers after marketplace metadata changes', async () => {
     const fixture = await nativeFixture('negative', true);
     await writeFile(fixture.pluginMcp, JSON.stringify({mcpServers: {}}));
@@ -198,6 +213,7 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
     expect(JSON.stringify(fixture.requests)).toContain('PLUGIN_SKILL_SENTINEL');
   }, 30_000);
 
+  /** Check server exclusion and skill retention without marketplace metadata. */
   it('isolates orphaned cached plugin servers while preserving their skills', async () => {
     const fixture = await nativeFixture('negative');
     const control = await fixture.run(execArgs);
@@ -235,23 +251,35 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
   }, 30_000);
 });
 
+/** Start a local HTTP server and register its cleanup. */
 async function listen(server: Server) {
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
-  });
+  await new Promise<void>(
+    /** Wait for the server to listen or report an error. */
+    (resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', resolve);
+    },
+  );
   cleanups.push(
+    /** Stop the HTTP server and close its connections. */
     () =>
-      new Promise<void>((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
-        server.closeAllConnections();
-      }),
+      new Promise<void>(
+        /** Wait for the HTTP server to close. */
+        (resolve, reject) => {
+          server.close(
+            /** Report a server close error or complete the cleanup. */
+            (error) => (error ? reject(error) : resolve()),
+          );
+          server.closeAllConnections();
+        },
+      ),
   );
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('No listener');
   return `http://127.0.0.1:${address.port}`;
 }
 
+/** Make a native Codex fixture with temporary configuration and local servers. */
 async function nativeFixture(
   initialMode: 'call' | 'negative',
   flatMcp = false,
@@ -259,7 +287,10 @@ async function nativeFixture(
   const root = await realpath(
     await mkdtemp(join(tmpdir(), 'dynobox-codex-native-')),
   );
-  cleanups.push(() => rm(root, {recursive: true, force: true, maxRetries: 5}));
+  cleanups.push(
+    /** Remove the temporary fixture directory. */
+    () => rm(root, {recursive: true, force: true, maxRetries: 5}),
+  );
   const home = join(root, 'home');
   const configDir = join(home, '.codex');
   const project = join(root, 'project');
@@ -288,6 +319,7 @@ async function nativeFixture(
     sentinel,
     `import {appendFileSync} from 'node:fs'; appendFileSync(process.argv[2], process.argv[3] + '\\n');`,
   );
+  /** Make a command that records an inherited server startup. */
   const stdio = (source: string) => ({
     command: process.execPath,
     args: [sentinel, marker, source],
@@ -295,11 +327,14 @@ async function nativeFixture(
   let contacts = 0;
   const httpSources = new Set<string>();
   const sentinelUrl = await listen(
-    createServer((_request, response) => {
-      contacts++;
-      httpSources.add(_request.url ?? '');
-      response.writeHead(503).end();
-    }),
+    createServer(
+      /** Record an inherited HTTP server request and return an error. */
+      (_request, response) => {
+        contacts++;
+        httpSources.add(_request.url ?? '');
+        response.writeHead(503).end();
+      },
+    ),
   );
   const controller = await startMcpMockController({
     service: {
@@ -312,88 +347,100 @@ async function nativeFixture(
       },
     },
   });
-  cleanups.push(() =>
-    controller.finalize({harnessReady: false, harnessSucceeded: false}),
+  cleanups.push(
+    /** Close the mock controller after the test. */
+    () => controller.finalize({harnessReady: false, harnessSucceeded: false}),
   );
   const requests: unknown[] = [];
   const state = {mode: initialMode as 'call' | 'negative' | 'hang'};
   const modelUrl = await listen(
-    createServer(async (request, response) => {
-      const chunks: Buffer[] = [];
-      for await (const chunk of request) chunks.push(Buffer.from(chunk));
-      try {
-        if (request.headers.authorization !== 'Bearer synthetic-api-key') {
-          response.writeHead(401).end();
-          return;
-        }
-        const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-        requests.push(body);
-        if (state.mode === 'hang') return;
-        const hasResult = JSON.stringify(body.input).includes(
-          'MCP_FIXTURE_RECEIPT',
-        );
-        const call = state.mode === 'call' && !hasResult && requests.length < 4;
-        response.writeHead(200, {'content-type': 'text/event-stream'});
-        const output = call
-          ? !JSON.stringify(body.input).includes('tool_search_output')
-            ? [
-                {
-                  id: 'ts_fixture',
-                  type: 'tool_search_call',
-                  call_id: 'search_fixture',
-                  execution: 'client',
-                  arguments: {query: 'lookup receipt', limit: 1},
-                  status: 'completed',
-                },
-              ]
+    createServer(
+      /** Return a local model response for the selected test mode. */
+      async (request, response) => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) chunks.push(Buffer.from(chunk));
+        try {
+          if (request.headers.authorization !== 'Bearer synthetic-api-key') {
+            response.writeHead(401).end();
+            return;
+          }
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+          requests.push(body);
+          if (state.mode === 'hang') return;
+          const hasResult = JSON.stringify(body.input).includes(
+            'MCP_FIXTURE_RECEIPT',
+          );
+          const call =
+            state.mode === 'call' && !hasResult && requests.length < 4;
+          response.writeHead(200, {'content-type': 'text/event-stream'});
+          const output = call
+            ? !JSON.stringify(body.input).includes('tool_search_output')
+              ? [
+                  {
+                    id: 'ts_fixture',
+                    type: 'tool_search_call',
+                    call_id: 'search_fixture',
+                    execution: 'client',
+                    arguments: {query: 'lookup receipt', limit: 1},
+                    status: 'completed',
+                  },
+                ]
+              : [
+                  {
+                    id: 'fc_fixture',
+                    type: 'function_call',
+                    call_id: 'call_fixture',
+                    name: 'lookup',
+                    namespace: 'mcp__service',
+                    arguments: '{"key":"receipt"}',
+                    status: 'completed',
+                  },
+                ]
             : [
                 {
-                  id: 'fc_fixture',
-                  type: 'function_call',
-                  call_id: 'call_fixture',
-                  name: 'lookup',
-                  namespace: 'mcp__service',
-                  arguments: '{"key":"receipt"}',
+                  id: 'msg_fixture',
+                  type: 'message',
+                  role: 'assistant',
                   status: 'completed',
+                  content: [{type: 'output_text', text: 'OK', annotations: []}],
                 },
-              ]
-          : [
-              {
-                id: 'msg_fixture',
-                type: 'message',
-                role: 'assistant',
-                status: 'completed',
-                content: [{type: 'output_text', text: 'OK', annotations: []}],
-              },
-            ];
-        const event = (type: string, data: object) =>
-          response.write(
-            `event: ${type}\ndata: ${JSON.stringify({type, ...data})}\n\n`,
-          );
-        event('response.created', {
-          response: {
-            id: 'resp_fixture',
-            object: 'response',
-            status: 'in_progress',
-            output: [],
-          },
-        });
-        event('response.output_item.added', {output_index: 0, item: output[0]});
-        event('response.output_item.done', {output_index: 0, item: output[0]});
-        event('response.completed', {
-          response: {
-            id: 'resp_fixture',
-            object: 'response',
-            status: 'completed',
-            output,
-            usage: {input_tokens: 100, output_tokens: 10, total_tokens: 110},
-          },
-        });
-        response.end();
-      } catch {
-        response.writeHead(500).end();
-      }
-    }),
+              ];
+          /** Write one model response event to the HTTP stream. */
+          const event = (type: string, data: object) =>
+            response.write(
+              `event: ${type}\ndata: ${JSON.stringify({type, ...data})}\n\n`,
+            );
+          event('response.created', {
+            response: {
+              id: 'resp_fixture',
+              object: 'response',
+              status: 'in_progress',
+              output: [],
+            },
+          });
+          event('response.output_item.added', {
+            output_index: 0,
+            item: output[0],
+          });
+          event('response.output_item.done', {
+            output_index: 0,
+            item: output[0],
+          });
+          event('response.completed', {
+            response: {
+              id: 'resp_fixture',
+              object: 'response',
+              status: 'completed',
+              output,
+              usage: {input_tokens: 100, output_tokens: 10, total_tokens: 110},
+            },
+          });
+          response.end();
+        } catch {
+          response.writeHead(500).end();
+        }
+      },
+    ),
   );
   const configFile = join(configDir, 'config.toml');
   await writeFile(
@@ -438,6 +485,7 @@ async function nativeFixture(
     no_proxy: '127.0.0.1,localhost',
   };
   // Keep remote marketplace synchronization out of synthetic controls too.
+  /** Run the native Codex executable with the fixture environment. */
   const run = (args: string[], signal?: AbortSignal) =>
     execa(executable!, [...guards, ...args], {
       cwd: project,
@@ -468,7 +516,10 @@ async function nativeFixture(
       configFile,
       join(project, '.codex', 'config.toml'),
       join(plugin, '.mcp.json'),
-    ].map(async (path) => [path, await readFile(path, 'utf8')] as const),
+    ].map(
+      /** Read a configuration file and keep its original text. */
+      async (path) => [path, await readFile(path, 'utf8')] as const,
+    ),
   );
   return {
     controller,
@@ -480,27 +531,35 @@ async function nativeFixture(
     env,
     configFile,
     pluginMcp: join(plugin, '.mcp.json'),
+    /** Get the local model response mode. */
     get mode() {
       return state.mode;
     },
+    /** Set the local model response mode. */
     set mode(value: typeof state.mode) {
       state.mode = value;
     },
+    /** Get the number of inherited HTTP server requests. */
     contacts: () => contacts,
+    /** Get the paths used for inherited HTTP server requests. */
     httpSources: () => [...httpSources],
+    /** Clear the records of inherited server activity. */
     resetSentinels: async () => {
       contacts = 0;
       httpSources.clear();
       await rm(marker, {force: true});
     },
+    /** Check that no inherited server starts or receives a request. */
     assertNoSentinels: async () => {
       expect(contacts).toBe(0);
       await expect(readFile(marker)).rejects.toThrow();
     },
+    /** Check that the original configuration files have not changed. */
     assertOriginals: async () => {
       for (const [path, text] of originals)
         expect(await readFile(path, 'utf8')).toBe(text);
     },
+    /** Run Codex with the fixture mock server and its tool grant. */
     mockRun: (signal?: AbortSignal) =>
       runCodexWithMcp({
         executable: executable!,
@@ -518,11 +577,15 @@ async function nativeFixture(
   };
 }
 
+/** Convert a test configuration value to TOML text. */
 function toml(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(toml).join(',')}]`;
   if (value !== null && typeof value === 'object')
     return `{${Object.entries(value)
-      .map(([key, item]) => `${JSON.stringify(key)}=${toml(item)}`)
+      .map(
+        /** Convert a key and its value to a TOML entry. */
+        ([key, item]) => `${JSON.stringify(key)}=${toml(item)}`,
+      )
       .join(',')}}`;
   return JSON.stringify(value);
 }

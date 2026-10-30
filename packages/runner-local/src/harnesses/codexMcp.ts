@@ -27,7 +27,10 @@ const GUARDED_FEATURES = [
   'remote_plugin',
   'skill_mcp_dependency_install',
 ] as const;
-const GUARDS = GUARDED_FEATURES.flatMap((name) => ['--disable', name]);
+const GUARDS = GUARDED_FEATURES.flatMap(
+  /** Make a disable flag for each feature. */
+  (name) => ['--disable', name],
+);
 // Extra arguments that would change the configuration the overlay is built on.
 // -C/--cd moves the project whose config Codex loads away from the snapshot's.
 const CONFIG_FLAGS = new Set([
@@ -53,9 +56,10 @@ export type CodexMcpOptions = {
 };
 
 /**
- * Codex has no strict MCP mode. Read the effective configuration, then launch
- * with an overlay that disables every inherited MCP server (including plugin
- * servers) and adds the mocks. Skills and other settings stay intact.
+ * Run Codex with MCP mock servers only.
+ *
+ * Read the active configuration. Disable inherited MCP servers, including plugin
+ * servers. Keep skills and other settings unchanged.
  */
 export async function runCodexWithMcp(
   options: CodexMcpOptions,
@@ -95,6 +99,7 @@ export async function runCodexWithMcp(
       'Codex',
       MIN_VERSION,
       probe,
+      /** Get the Codex version from the process output. */
       (stdout) => /^codex-cli (\d+\.\d+\.\d+)/.exec(stdout.trim())?.[1] ?? null,
     );
   } catch (error) {
@@ -157,10 +162,12 @@ export async function runCodexWithMcp(
   let lastError: string | undefined;
   let failure: McpHarnessError | undefined;
   const toolEvents: ToolEvent[] = [];
+  /** Record a tool event and send it to the caller. */
   const emit = (event: ToolEvent) => {
     toolEvents.push(event);
     input.onToolEvent?.(event);
   };
+  /** Read one JSON event and check the run status. */
   const consume = (line: string) => {
     if (!line.trim() || failure) return;
     try {
@@ -218,7 +225,11 @@ export async function runCodexWithMcp(
   };
   const lines = lineSplitter(consume);
   child.stdout?.setEncoding('utf8');
-  child.stdout?.on('data', (chunk: string) => lines.write(chunk));
+  child.stdout?.on(
+    'data',
+    /** Send process output to the line reader. */
+    (chunk: string) => lines.write(chunk),
+  );
   const result = await child;
   const output = {
     exitCode: result.exitCode ?? 1,
@@ -250,7 +261,7 @@ export async function runCodexWithMcp(
   }
 }
 
-/** Read effective config and every enabled plugin's MCP servers via app-server. */
+/** Read the active configuration and the MCP server names for each enabled plugin. */
 async function readSnapshot(
   executable: string,
   args: string[],
@@ -273,6 +284,7 @@ async function readSnapshot(
   >();
   let nextId = 0;
   let exited = false;
+  /** Make an error for a request that stops when the process exits. */
   const exitError = (method: string) => {
     try {
       remaining();
@@ -285,44 +297,56 @@ async function readSnapshot(
       `Codex app-server exited during ${method}.`,
     );
   };
+  /** Reject all requests that have no response. */
   const rejectAll = () => {
     exited = true;
     for (const waiter of pending.values())
       waiter.reject(exitError(waiter.method));
     pending.clear();
   };
-  const lines = lineSplitter((line) => {
-    let message: unknown;
-    try {
-      message = JSON.parse(line);
-    } catch {
-      return;
-    }
-    if (!isRecord(message) || typeof message.id !== 'number') return;
-    const waiter = pending.get(message.id);
-    if (!waiter) return;
-    pending.delete(message.id);
-    if (message.error !== undefined || !Object.hasOwn(message, 'result'))
-      waiter.reject(
-        new McpHarnessError(
-          'configuration_failed',
-          `Codex app-server ${waiter.method} failed.`,
-        ),
-      );
-    else waiter.resolve(message.result);
-  });
+  const lines = lineSplitter(
+    /** Read a JSON response and complete its request. */
+    (line) => {
+      let message: unknown;
+      try {
+        message = JSON.parse(line);
+      } catch {
+        return;
+      }
+      if (!isRecord(message) || typeof message.id !== 'number') return;
+      const waiter = pending.get(message.id);
+      if (!waiter) return;
+      pending.delete(message.id);
+      if (message.error !== undefined || !Object.hasOwn(message, 'result'))
+        waiter.reject(
+          new McpHarnessError(
+            'configuration_failed',
+            `Codex app-server ${waiter.method} failed.`,
+          ),
+        );
+      else waiter.resolve(message.result);
+    },
+  );
   child.stdout?.setEncoding('utf8');
-  child.stdout?.on('data', (chunk: string) => lines.write(chunk));
+  child.stdout?.on(
+    'data',
+    /** Send process output to the line reader. */
+    (chunk: string) => lines.write(chunk),
+  );
   child.then(rejectAll, rejectAll);
+  /** Send a request to the app-server and wait for its response. */
   const rpc = async (method: string, params: object): Promise<RecordValue> => {
     remaining();
     const id = ++nextId;
-    const value = await new Promise<unknown>((resolve, reject) => {
-      // A request written after exit would never get a reply.
-      if (exited) return reject(exitError(method));
-      pending.set(id, {method, resolve, reject});
-      child.stdin!.write(`${JSON.stringify({id, method, params})}\n`);
-    });
+    const value = await new Promise<unknown>(
+      /** Register the request and write it to the process input. */
+      (resolve, reject) => {
+        // A request written after exit would never get a reply.
+        if (exited) return reject(exitError(method));
+        pending.set(id, {method, resolve, reject});
+        child.stdin!.write(`${JSON.stringify({id, method, params})}\n`);
+      },
+    );
     return isRecord(value) ? value : {};
   };
   try {
@@ -421,6 +445,7 @@ async function readSnapshot(
   }
 }
 
+/** Make configuration changes that disable other servers and add mock servers. */
 function buildOverlay(
   snapshot: Snapshot,
   servers: McpServerConnections,
@@ -429,15 +454,18 @@ function buildOverlay(
   const inherited = asRecord(snapshot.config.mcp_servers);
   // Disabling needs a valid transport, but never the inherited one.
   const mcp: RecordValue = Object.fromEntries(
-    Object.entries(inherited).map(([name, value]) => [
-      name,
-      {
-        enabled: false,
-        ...(typeof asRecord(value).command === 'string'
-          ? {command: process.execPath}
-          : {url: 'http://127.0.0.1:1'}),
-      },
-    ]),
+    Object.entries(inherited).map(
+      /** Make a disabled entry for an existing MCP server. */
+      ([name, value]) => [
+        name,
+        {
+          enabled: false,
+          ...(typeof asRecord(value).command === 'string'
+            ? {command: process.execPath}
+            : {url: 'http://127.0.0.1:1'}),
+        },
+      ],
+    ),
   );
   // Start from the effective plugins table so each plugin keeps its own
   // settings (such as `enabled`) whether Codex merges or replaces the table.
@@ -451,7 +479,10 @@ function buildOverlay(
       mcp_servers: {
         ...asRecord(current.mcp_servers),
         ...Object.fromEntries(
-          plugin.servers.map((name) => [name, {enabled: false}]),
+          plugin.servers.map(
+            /** Make a disabled entry for a plugin MCP server. */
+            (name) => [name, {enabled: false}],
+          ),
         ),
       },
     };
@@ -471,7 +502,10 @@ function buildOverlay(
       required: true,
       startup_timeout_sec: 10,
     };
-    for (const grant of grants.filter((grant) => grant.server === name))
+    for (const grant of grants.filter(
+      /** Select tool grants for this mock server. */
+      (grant) => grant.server === name,
+    ))
       entry.tools = {
         ...asRecord(entry.tools),
         [grant.tool]: {approval_mode: 'approve'},
@@ -488,18 +522,26 @@ function buildOverlay(
   };
 }
 
+/** Get the error message from a JSON event. */
 function errorText(event: RecordValue): string {
   const error = asRecord(event.error);
   return String(error.message ?? event.message ?? 'no details');
 }
 
+/** Convert a value to TOML text. */
 function toml(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(toml).join(',')}]`;
   if (isRecord(value))
     // TOML has no null; an absent key means the same.
     return `{${Object.entries(value)
-      .filter(([, item]) => item !== null && item !== undefined)
-      .map(([key, item]) => `${JSON.stringify(key)}=${toml(item)}`)
+      .filter(
+        /** Exclude values that TOML cannot represent. */
+        ([, item]) => item !== null && item !== undefined,
+      )
+      .map(
+        /** Convert a key and its value to a TOML entry. */
+        ([key, item]) => `${JSON.stringify(key)}=${toml(item)}`,
+      )
       .join(',')}}`;
   return JSON.stringify(value);
 }

@@ -54,6 +54,7 @@ export class CodexHarness implements Harness {
     return this.probeVersion();
   }
 
+  /** Resolve the Codex executable before CLI mocks change PATH. */
   async prepareMcp(
     input: Pick<HarnessInput, 'workDir' | 'env'>,
   ): Promise<PreparedMcpHarness> {

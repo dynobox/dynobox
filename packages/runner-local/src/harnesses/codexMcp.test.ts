@@ -7,12 +7,16 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import {type CodexMcpOptions, runCodexWithMcp} from './codexMcp.js';
 
 const roots: string[] = [];
-afterEach(async () => {
-  vi.restoreAllMocks();
-  for (const root of roots.splice(0))
-    await rm(root, {recursive: true, force: true});
-});
+afterEach(
+  /** Restore function mocks and remove temporary test directories. */
+  async () => {
+    vi.restoreAllMocks();
+    for (const root of roots.splice(0))
+      await rm(root, {recursive: true, force: true});
+  },
+);
 
+/** Make a fake Codex executable and its test inputs. */
 async function fixture(
   mode = 'success',
   inherited: Record<string, unknown> = {},
@@ -30,9 +34,10 @@ import {createInterface} from 'node:readline';
 const args = process.argv.slice(2);
 const mode = process.env.DXB_TEST_MODE;
 console.error('PRIVATE_STDERR_SENTINEL');
+/** Keep the process active until the test stops it. */
 function hang() {
-  if (process.env.DXB_TEST_CHILD_PID) spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(process.env.DXB_TEST_CHILD_PID, String(process.pid)); setInterval(() => {}, 1000);'], {stdio: 'inherit'});
-  setInterval(() => {}, 1000);
+  if (process.env.DXB_TEST_CHILD_PID) spawn(process.execPath, ['-e', 'process.on("SIGTERM", /** Ignore SIGTERM to test forced termination. */ () => {}); require("node:fs").writeFileSync(process.env.DXB_TEST_CHILD_PID, String(process.pid)); setInterval(/** Keep the process active. */ () => {}, 1000);'], {stdio: 'inherit'});
+  setInterval(/** Keep the process active. */ () => {}, 1000);
 }
 appendFileSync(process.env.DXB_TEST_LOG, JSON.stringify({args, cwd: process.cwd(), noProxy: process.env.no_proxy, NO_PROXY: process.env.NO_PROXY, marker: process.env.DXB_ENV_MARKER}) + '\\n');
 if (args.includes('--version')) {console.log(mode === 'version' ? 'codex-cli 0.100.0' : mode === 'newer' ? 'codex-cli 0.999.0' : 'codex-cli 0.153.4'); if (mode === 'version-timeout') hang(); else process.exit(0);}
@@ -43,22 +48,22 @@ for (const arg of args) {
     for (const [name, entry] of Object.entries(overlay)) config.mcp_servers[name] = {...config.mcp_servers[name], ...entry};
   }
 }
-const enabled = Object.entries(config.mcp_servers).filter(([, entry]) => entry.enabled !== false);
+const enabled = Object.entries(config.mcp_servers) .filter(/** Select enabled servers. */ ([, entry]) => entry.enabled !== false);
 if (mode === 'feature') config.features.apps = true;
 if (args.includes('app-server')) {
   if (mode === 'probe-hang') hang();
-  else createInterface({input: process.stdin}).on('line', line => {
+  else createInterface({input: process.stdin}).on('line', /** Send a fake response for each request. */ line => {
     const request = JSON.parse(line);
     let result = {};
     if (request.method === 'config/read') result = {config};
-    if (request.method === 'plugin/list') result = {marketplaces: mode === 'exit-between-rpcs' ? [{path: '/m', plugins: ['a', 'b'].map(name => ({id: name + '@m', name, installed: true, enabled: true}))}] : [], marketplaceLoadErrors: []};
+    if (request.method === 'plugin/list') result = {marketplaces: mode === 'exit-between-rpcs' ? [{path: '/m', plugins: ['a', 'b'].map(/** Make an enabled plugin entry. */ name => ({id: name + '@m', name, installed: true, enabled: true}))}] : [], marketplaceLoadErrors: []};
     if (request.method === 'plugin/list' && mode.endsWith('-marketplace')) result = {marketplaces: [{name: 'catalog', path: mode === 'local-marketplace' ? '/catalog' : null, plugins: [{id: 'example@catalog', name: 'example', installed: true, enabled: true}]}]};
     if (request.method === 'plugin/read' && mode.endsWith('-marketplace')) {
       appendFileSync(process.env.DXB_TEST_LOG + '.plugins', JSON.stringify(request.params) + '\\n');
       result = {plugin: {mcpServers: []}};
     }
     // Exit right after answering, so the next request goes to a dead server.
-    if (request.method === 'plugin/read' && mode === 'exit-between-rpcs') return process.stdout.write(JSON.stringify({id: request.id, result: {plugin: {}}}) + '\\n', () => process.exit(0));
+    if (request.method === 'plugin/read' && mode === 'exit-between-rpcs') return process.stdout.write(JSON.stringify({id: request.id, result: {plugin: {}}}) + '\\n', /** Exit after the response is written. */ () => process.exit(0));
     console.log(JSON.stringify({id: request.id, result}));
   });
 } else if (mode === 'hang') {console.log(JSON.stringify({type: 'turn.started'})); hang();}
@@ -95,11 +100,13 @@ else {
       },
     },
   };
+  /** Read the recorded process calls. */
   const invocations = async () =>
     (await readFile(log, 'utf8'))
       .trim()
       .split('\n')
       .map(
+        /** Convert a recorded JSON line to a process call. */
         (line) =>
           JSON.parse(line) as {
             args: string[];
@@ -112,7 +119,9 @@ else {
   return {options, invocations};
 }
 
+/** Define tests for the Codex MCP adapter. */
 describe('Codex MCP adapter', () => {
+  /** Check server names, environment variables, and default permissions. */
   it('preserves logical names without collisions and normal environment and permissions', async () => {
     const f = await fixture();
     f.options.input.env.NO_PROXY = 'one.example';
@@ -145,6 +154,7 @@ describe('Codex MCP adapter', () => {
     expect(calls[2]!.args.slice(-2)).toEqual(['--', 'Reply OK.']);
   });
 
+  /** Check that a process exit rejects the next plugin request. */
   it('fails when app-server exits during plugin reads', async () => {
     const f = await fixture('exit-between-rpcs');
     delete f.options.input.timeoutMs;
@@ -154,30 +164,38 @@ describe('Codex MCP adapter', () => {
     });
   }, 10_000);
 
+  /** Check the marketplace identifier in each plugin request. */
   it.each([
     ['local-marketplace', {marketplacePath: '/catalog'}],
     ['remote-marketplace', {remoteMarketplaceName: 'catalog'}],
-  ])('identifies plugins from %s', async (mode, identifier) => {
-    const f = await fixture(mode);
-    await runCodexWithMcp(f.options);
-    const params = JSON.parse(
-      await readFile(f.options.input.env.DXB_TEST_LOG + '.plugins', 'utf8'),
-    );
-    expect(params).toEqual({...identifier, pluginName: 'example'});
-  });
+  ])(
+    'identifies plugins from %s',
 
+    async (mode, identifier) => {
+      const f = await fixture(mode);
+      await runCodexWithMcp(f.options);
+      const params = JSON.parse(
+        await readFile(f.options.input.env.DXB_TEST_LOG + '.plugins', 'utf8'),
+      );
+      expect(params).toEqual({...identifier, pluginName: 'example'});
+    },
+  );
+
+  /** Check that the run can continue after a connection error. */
   it('recovers from a transient error event when the turn completes', async () => {
     const f = await fixture('reconnect');
     const run = await runCodexWithMcp(f.options);
     expect(run.harnessReady).toBe(true);
   });
 
+  /** Check that a newer Codex version is accepted. */
   it('accepts newer Codex releases', async () => {
     const f = await fixture('newer');
     const run = await runCodexWithMcp(f.options);
     expect(run.version).toBe('0.999.0');
   });
 
+  /** Check that a server name conflict prevents the model run. */
   it('fails before execution when the user config has a same-named server', async () => {
     const f = await fixture('success', {
       service: {command: '/original', args: ['PRIVATE_SENTINEL']},
@@ -189,10 +207,16 @@ describe('Codex MCP adapter', () => {
       ),
     });
     const calls = await f.invocations();
-    expect(calls.some((call) => call.args[0] === 'exec')).toBe(false);
+    expect(
+      calls.some(
+        /** Identify a model run in the recorded process calls. */
+        (call) => call.args[0] === 'exec',
+      ),
+    ).toBe(false);
     expect(JSON.stringify(calls)).not.toContain('PRIVATE_SENTINEL');
   });
 
+  /** Check that configuration arguments are rejected before a process starts. */
   it.each([
     ['--profile', 'other'],
     ['-pother'],
@@ -206,6 +230,7 @@ describe('Codex MCP adapter', () => {
     ['--disable', 'plugins'],
   ])(
     'rejects config-changing extra arguments %j before any process starts',
+
     async (...args) => {
       const f = await fixture();
       f.options.extraArgs = args;
@@ -216,6 +241,7 @@ describe('Codex MCP adapter', () => {
     },
   );
 
+  /** Check the error category and message for each failure. */
   it.each([
     ['version', 'unsupported_version', /0\.153\.4 or newer/],
     ['feature', 'configuration_failed', /feature "apps" is forced on/],
@@ -225,6 +251,7 @@ describe('Codex MCP adapter', () => {
     ['exit', 'execution_failed', /exited with code 1/],
   ])(
     'reports %s as %s with a readable reason',
+
     async (mode, category, message) => {
       const f = await fixture(mode);
       await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
@@ -233,11 +260,15 @@ describe('Codex MCP adapter', () => {
       });
       if (mode === 'version' || mode === 'feature')
         expect(
-          (await f.invocations()).some((call) => call.args[0] === 'exec'),
+          (await f.invocations()).some(
+            /** Identify a model run in the recorded process calls. */
+            (call) => call.args[0] === 'exec',
+          ),
         ).toBe(false);
     },
   );
 
+  /** Check that local debug output is kept for each failure. */
   it.each([
     'version',
     'feature',
@@ -247,6 +278,7 @@ describe('Codex MCP adapter', () => {
     'no-completion',
   ])(
     'retains raw output from a %s failure for local debug logs',
+
     async (mode) => {
       const f = await fixture(mode);
       await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
@@ -260,8 +292,10 @@ describe('Codex MCP adapter', () => {
     },
   );
 
+  /** Check timeout categories and output when the system clock does not change. */
   it.each(['version-timeout', 'probe-hang', 'hang'])(
     'reports %s as a timeout with raw output before the clock deadline passes',
+
     async (mode) => {
       const f = await fixture(mode);
       f.options.input.timeoutMs = 500;
@@ -276,6 +310,7 @@ describe('Codex MCP adapter', () => {
     },
   );
 
+  /** Check model, permission, and CLI mock settings in each process call. */
   it('uses explicit dangerous mode and CLI mock settings consistently during preflight and execution', async () => {
     const f = await fixture();
     f.options.input.permissionMode = 'dangerous';
@@ -293,6 +328,7 @@ describe('Codex MCP adapter', () => {
     }
   });
 
+  /** Check that only the specified mock tool gets a permission grant. */
   it('grants only an explicitly requested declared MCP tool', async () => {
     const f = await fixture();
     f.options.input.allowedMcpTools = [{server: 'service', tool: 'lookup'}];
@@ -302,23 +338,31 @@ describe('Codex MCP adapter', () => {
     );
   });
 
+  /** Check that cancellation stops each process phase. */
   it.each(['probe-hang', 'hang'])(
     'bounds and cancels %s processes',
+
     async (mode) => {
       const f = await fixture(mode);
       const abort = new AbortController();
       f.options.input.signal = abort.signal;
-      const pending = runCodexWithMcp(f.options).catch((error) => error);
-      await vi.waitFor(async () =>
-        expect((await f.invocations()).length).toBeGreaterThanOrEqual(
-          mode === 'probe-hang' ? 2 : 3,
-        ),
+      const pending = runCodexWithMcp(f.options).catch(
+        /** Return the error as a value for the cancellation check. */
+        (error) => error,
+      );
+      await vi.waitFor(
+        /** Check that the expected process phase has started. */
+        async () =>
+          expect((await f.invocations()).length).toBeGreaterThanOrEqual(
+            mode === 'probe-hang' ? 2 : 3,
+          ),
       );
       abort.abort();
       expect(await pending).toMatchObject({category: 'execution_failed'});
     },
   );
 
+  /** Check that configuration reads stop at the run deadline. */
   it('bounds preflight by the invocation deadline', async () => {
     const f = await fixture('probe-hang');
     f.options.input.timeoutMs = 250;
@@ -327,24 +371,35 @@ describe('Codex MCP adapter', () => {
     });
   });
 
+  /** Check that a timeout stops child processes that keep output pipes open. */
   it.each(['probe-hang', 'hang'])(
     'stops descendants holding stdout open when %s times out',
+
     async (mode) => {
       const f = await fixture(mode);
       const pidPath = f.options.input.env.DXB_TEST_LOG + '.child';
       f.options.input.env.DXB_TEST_CHILD_PID = pidPath;
       f.options.input.timeoutMs = 1000;
       const pending = runCodexWithMcp(f.options).catch(
+        /** Return the error as a value for the timeout check. */
         (error: unknown) => error,
       );
       let childPid: number | undefined;
       try {
-        await vi.waitFor(async () => {
-          childPid = Number(await readFile(pidPath, 'utf8'));
-        });
+        await vi.waitFor(
+          /** Read the child process identifier when its file is available. */
+          async () => {
+            childPid = Number(await readFile(pidPath, 'utf8'));
+          },
+        );
         expect(await pending).toMatchObject({category: 'timed_out'});
-        await vi.waitFor(() =>
-          expect(() => process.kill(childPid!, 0)).toThrow(),
+        await vi.waitFor(
+          /** Check that the child process has stopped. */
+          () =>
+            expect(
+              /** Check whether the child process still exists. */
+              () => process.kill(childPid!, 0),
+            ).toThrow(),
         );
       } finally {
         if (childPid !== undefined) {
