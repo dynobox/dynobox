@@ -27,6 +27,7 @@ import {
 import {asRecord, isRecord} from './parsing.js';
 import type {
   HarnessInput,
+  HarnessRunOutput,
   McpHarnessRun,
   McpServerConnections,
 } from './types.js';
@@ -127,22 +128,47 @@ export async function runAntigravityWithMcp(options: {
       forceKillAfterDelay: 1000,
       ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
     };
-    const probe = await startOwnedProcess(executable, ['--version'], {
-      ...processOptions,
-      timeout: Math.min(5000, remaining()),
+    const preflight = async <T>(
+      args: string[],
+      check: (result: Awaited<ReturnType<typeof startOwnedProcess>>) => T,
+    ) => {
+      const result = await startOwnedProcess(executable, args, {
+        ...processOptions,
+        timeout: Math.min(5000, remaining()),
+      });
+      try {
+        remaining();
+        if (result.timedOut)
+          throw new McpHarnessError(
+            'timed_out',
+            'MCP run exceeded its timeout.',
+          );
+        return check(result);
+      } catch (error) {
+        throw new McpHarnessError(
+          error instanceof McpHarnessError
+            ? error.category
+            : 'configuration_failed',
+          error instanceof Error ? error.message : String(error),
+          {
+            exitCode: result.exitCode ?? 1,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            durationMs: result.durationMs,
+          },
+        );
+      }
+    };
+    const version = await preflight(['--version'], (result) =>
+      requireMcpVersion('Antigravity', MIN_VERSION, result),
+    );
+    await preflight(['plugin', 'list'], (plugins) => {
+      if (plugins.failed || plugins.stdout.trim() !== 'No imported plugins.')
+        throw new McpHarnessError(
+          'configuration_failed',
+          'Antigravity has imported plugins that could load other MCP servers; remove them to use MCP mocks.',
+        );
     });
-    remaining();
-    const version = requireMcpVersion('Antigravity', MIN_VERSION, probe);
-    const plugins = await startOwnedProcess(executable, ['plugin', 'list'], {
-      ...processOptions,
-      timeout: Math.min(5000, remaining()),
-    });
-    remaining();
-    if (plugins.failed || plugins.stdout.trim() !== 'No imported plugins.')
-      throw new McpHarnessError(
-        'configuration_failed',
-        'Antigravity has imported plugins that could load other MCP servers; remove them to use MCP mocks.',
-      );
 
     const projectId = randomUUID();
     const projectRecord = join(
@@ -162,6 +188,7 @@ export async function runAntigravityWithMcp(options: {
     const toolDirs = Object.keys(servers).map((name) =>
       join(home, '.gemini', 'antigravity-cli', 'mcp', name),
     );
+    let output: HarnessRunOutput | undefined;
     try {
       await mkdir(dirname(projectRecord), {recursive: true});
       await writeFile(
@@ -210,7 +237,15 @@ export async function runAntigravityWithMcp(options: {
         ),
         {...processOptions, timeout: remaining()},
       );
+      output = {
+        exitCode: result.exitCode ?? 1,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        durationMs: Date.now() - started,
+      };
       remaining();
+      if (result.timedOut)
+        throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');
       if (result.failed)
         throw new McpHarnessError(
           'execution_failed',
@@ -227,13 +262,18 @@ export async function runAntigravityWithMcp(options: {
       return {
         harnessReady: true,
         version,
-        output: {
-          exitCode: 0,
-          stdout: result.stdout,
-          stderr: result.stderr,
-          durationMs: Date.now() - started,
-        },
+        output,
       };
+    } catch (error) {
+      if (output !== undefined)
+        throw new McpHarnessError(
+          error instanceof McpHarnessError
+            ? error.category
+            : 'execution_failed',
+          error instanceof Error ? error.message : String(error),
+          output,
+        );
+      throw error;
     } finally {
       await Promise.all([
         rm(projectConfig, {force: true}).then(() =>

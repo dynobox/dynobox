@@ -15,12 +15,14 @@ import {execa} from 'execa';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {startMcpMockController} from '../mcpMocks/controller.js';
+import * as processGroup from '../processGroup.js';
 import {AntigravityHarness} from './antigravity.js';
 import {runAntigravityWithMcp} from './antigravityMcp.js';
 
 const executable = process.env.DYNOBOX_ANTIGRAVITY_MCP_EXECUTABLE;
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const close of cleanup.splice(0).reverse()) await close();
 });
 
@@ -516,6 +518,106 @@ it.each(['timeout', 'cancel'])(
     }
   },
 );
+
+it.each([
+  ['version', 'failure', 'unsupported_version'],
+  ['plugins', 'failure', 'configuration_failed'],
+  ['run', 'failure', 'execution_failed'],
+  ['run', 'bad-json', 'execution_failed'],
+  ['run', 'no-final', 'execution_failed'],
+  ['version', 'timeout', 'timed_out'],
+  ['plugins', 'timeout', 'timed_out'],
+  ['run', 'timeout', 'timed_out'],
+])('retains %s output and reports %s as %s', async (stage, mode, category) => {
+  const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-failure-'));
+  cleanup.push(() => rm(root, {recursive: true, force: true}));
+  const work = join(root, 'work');
+  const home = join(root, 'home');
+  const fake = join(root, 'fake-agy');
+  await mkdir(work);
+  await writeFile(
+    fake,
+    `#!${process.execPath}
+const args = process.argv.slice(2);
+const stage = args[0] === '--version' ? 'version' : args[0] === 'plugin' ? 'plugins' : 'run';
+const mode = stage === process.env.FAILURE_STAGE ? process.env.FAILURE_MODE : 'success';
+console.error('PRIVATE_STDERR_SENTINEL');
+console.log(stage === 'version' ? mode === 'failure' ? '1.0.0' : '1.2.11'
+  : stage === 'plugins' ? mode === 'failure' ? 'Imported plugin' : 'No imported plugins.'
+  : mode === 'bad-json' ? 'PRIVATE_STDOUT_SENTINEL'
+  : mode === 'no-final' ? '{}' : JSON.stringify({event:'result', result:{status:'SUCCESS',response:'PRIVATE_STDOUT_SENTINEL'}}));
+if (mode === 'timeout') setInterval(() => {}, 1000);
+else if (mode === 'failure' && stage === 'run') process.exitCode = 2;
+`,
+    {mode: 0o755},
+  );
+  if (mode === 'timeout') {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now());
+    vi.spyOn(processGroup, 'startOwnedProcess').mockImplementation(
+      (_executable, args) => {
+        const current =
+          args[0] === '--version'
+            ? 'version'
+            : args[0] === 'plugin'
+              ? 'plugins'
+              : 'run';
+        return Object.assign(
+          Promise.resolve({
+            failed: current === stage,
+            timedOut: current === stage,
+            exitCode: current === stage ? undefined : 0,
+            stdout:
+              current === 'version'
+                ? '1.2.11'
+                : current === 'plugins'
+                  ? 'No imported plugins.'
+                  : 'PRIVATE_STDOUT_SENTINEL',
+            stderr: 'PRIVATE_STDERR_SENTINEL',
+            durationMs: 10,
+          }),
+          {stop: vi.fn()},
+        ) as unknown as ReturnType<typeof processGroup.startOwnedProcess>;
+      },
+    );
+  }
+  await expect(
+    runAntigravityWithMcp({
+      executable: fake,
+      input: {
+        workDir: work,
+        env: {HOME: home, FAILURE_STAGE: stage, FAILURE_MODE: mode},
+        prompt: 'Reply.',
+        timeoutMs: mode === 'timeout' ? 500 : 5000,
+      },
+      servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
+    }),
+  ).rejects.toMatchObject({
+    category,
+    output: {
+      stdout:
+        stage === 'version'
+          ? expect.stringContaining(mode === 'failure' ? '1.0.0' : '1.2.11')
+          : stage === 'plugins'
+            ? expect.stringContaining(
+                mode === 'failure' ? 'Imported plugin' : 'No imported plugins.',
+              )
+            : expect.stringContaining(
+                mode === 'no-final' ? '{}' : 'PRIVATE_STDOUT_SENTINEL',
+              ),
+      stderr: expect.stringContaining('PRIVATE_STDERR_SENTINEL'),
+      exitCode: expect.any(Number),
+    },
+  });
+  await expect(
+    readFile(join(work, '.agents', 'mcp_config.json')),
+  ).rejects.toMatchObject({code: 'ENOENT'});
+  await expect(
+    readdir(join(home, '.gemini', 'dynobox-mcp.lock')),
+  ).rejects.toMatchObject({code: 'ENOENT'});
+  expect(
+    await readdir(join(home, '.gemini', 'config', 'projects')).catch(() => []),
+  ).toEqual([]);
+});
 
 it.each(['version', 'plugins', 'run'])(
   'stops descendants holding stdout open when the %s phase times out',
