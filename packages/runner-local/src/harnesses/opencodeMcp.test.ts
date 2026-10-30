@@ -11,6 +11,7 @@ import {
 
 const roots: string[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0))
     await rm(root, {recursive: true, force: true});
 });
@@ -28,12 +29,14 @@ import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 const args = process.argv.slice(2);
 const mode = process.env.DXB_TEST_MODE;
+console.error('PRIVATE_STDERR_SENTINEL');
 appendFileSync(process.env.DXB_TEST_LOG, JSON.stringify({args, cwd: process.cwd(), noProxy: process.env.no_proxy, NO_PROXY: process.env.NO_PROXY, marker: process.env.DXB_TEST_MARKER}) + '\\n');
-if (mode === 'hang' || mode === 'serve-hang' && args.includes('serve')) {
+if (mode === 'hang' || mode === 'serve-hang' && args.includes('serve') || mode === 'config-hang' && args.includes('debug')) {
   if (process.env.DXB_TEST_CHILD_PID) spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(process.env.DXB_TEST_CHILD_PID, String(process.pid)); setInterval(() => {}, 1000);'], {stdio: 'inherit'});
   setInterval(() => {}, 1000);
 }
 else if (args.includes('--version')) console.log(mode === 'version' ? '1.10.0' : mode === 'newer' ? '1.20.0' : '1.18.26');
+else if (args.includes('serve') && mode === 'serve-exit') {console.log('PRIVATE_STDOUT_SENTINEL'); process.exit(2);}
 else if (args.includes('serve')) {
   const server = createServer(async (request, response) => {
     let body = '';
@@ -45,7 +48,10 @@ else if (args.includes('serve')) {
       result = {id: 'test'};
     }
     if (request.url === '/permission' || request.method === 'GET' && request.url.endsWith('/message')) result = [];
-    if (request.method === 'POST' && request.url.endsWith('/message')) result = {info: {finish: 'stop'}};
+    if (request.method === 'POST' && request.url.endsWith('/message')) {
+      if (mode === 'request-hang') return;
+      result = mode === 'model-error' ? {info: {error: {message: 'model failed'}}} : {info: {finish: 'stop'}};
+    }
     response.setHeader('Content-Type', 'application/json');
     response.end(JSON.stringify(result));
   });
@@ -332,6 +338,65 @@ describe('OpenCode MCP configuration preparation', () => {
         message: expect.stringContaining('1.18.26 or newer'),
       });
   });
+
+  it.each(['version', 'exit'])(
+    'retains raw output from a %s preflight failure',
+    async (mode) => {
+      const {options} = await fixture(mode);
+      await expect(
+        prepareOpenCodeMcpConfiguration(options),
+      ).rejects.toMatchObject({
+        output: {
+          stderr: expect.stringContaining('PRIVATE_STDERR_SENTINEL'),
+          stdout: expect.any(String),
+        },
+      });
+    },
+  );
+
+  it.each(['serve-exit', 'model-error'])(
+    'retains server output from a %s run failure',
+    async (mode) => {
+      const {options} = await fixture(mode);
+      await expect(
+        runOpenCodeWithMcp({
+          ...options,
+          input: {...options.input, prompt: 'OK'},
+        }),
+      ).rejects.toMatchObject({
+        category: 'execution_failed',
+        output: {
+          stderr: expect.stringContaining('PRIVATE_STDERR_SENTINEL'),
+          stdout: expect.stringContaining(
+            mode === 'serve-exit'
+              ? 'PRIVATE_STDOUT_SENTINEL'
+              : 'http://127.0.0.1:',
+          ),
+        },
+      });
+    },
+  );
+
+  it.each(['hang', 'config-hang', 'serve-hang', 'request-hang'])(
+    'reports %s as a timeout with raw output before the clock deadline passes',
+    async (mode) => {
+      const {options} = await fixture(mode);
+      options.input.timeoutMs = 500;
+      vi.spyOn(Date, 'now').mockReturnValue(Date.now());
+      await expect(
+        runOpenCodeWithMcp({
+          ...options,
+          input: {...options.input, prompt: 'OK'},
+        }),
+      ).rejects.toMatchObject({
+        category: 'timed_out',
+        output: {
+          stderr: expect.stringContaining('PRIVATE_STDERR_SENTINEL'),
+          stdout: expect.any(String),
+        },
+      });
+    },
+  );
 
   it('bounds hanging probes by the invocation deadline', async () => {
     const {options} = await fixture('hang');

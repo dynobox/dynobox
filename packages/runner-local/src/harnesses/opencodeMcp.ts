@@ -51,7 +51,7 @@ export async function prepareOpenCodeMcpConfiguration(options: {
   const cwd = input.workDir;
   const env = {...process.env, ...input.env};
   Object.assign(env, mcpProxyEnv(env));
-  const probe = async (args: string[]) => {
+  const probe = async <T>(args: string[], parse: (stdout: string) => T) => {
     const result = await startOwnedProcess(executable, ['--pure', ...args], {
       cwd,
       env,
@@ -62,21 +62,39 @@ export async function prepareOpenCodeMcpConfiguration(options: {
       forceKillAfterDelay: 1000,
       ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
     });
-    remaining();
-    if (result.failed)
+    try {
+      remaining();
+      if (result.timedOut)
+        throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');
+      if (result.failed)
+        throw new McpHarnessError(
+          'configuration_failed',
+          `opencode ${args.join(' ')} exited with code ${result.exitCode ?? 'unknown'}.`,
+        );
+      return parse(result.stdout);
+    } catch (error) {
       throw new McpHarnessError(
-        'configuration_failed',
-        `opencode ${args.join(' ')} exited with code ${result.exitCode ?? 'unknown'}.`,
+        error instanceof McpHarnessError
+          ? error.category
+          : 'configuration_failed',
+        error instanceof Error ? error.message : String(error),
+        {
+          exitCode: result.exitCode ?? 1,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          durationMs: result.durationMs,
+        },
       );
-    return result.stdout;
+    }
   };
-  const version = requireMcpVersion('OpenCode', MIN_VERSION, {
-    failed: false,
-    stdout: await probe(['--version']),
-  });
+  const version = await probe(['--version'], (stdout) =>
+    requireMcpVersion('OpenCode', MIN_VERSION, {failed: false, stdout}),
+  );
 
   // Do not use `mcp list` here: it can connect to inherited real servers.
-  const initial = asRecord(JSON.parse(await probe(['debug', 'config'])));
+  const initial = await probe(['debug', 'config'], (stdout) =>
+    asRecord(JSON.parse(stdout)),
+  );
   const inline = asRecord(JSON.parse(env.OPENCODE_CONFIG_CONTENT ?? '{}'));
   const occupied = new Set([
     ...Object.keys(asRecord(initial.mcp)),
@@ -293,6 +311,7 @@ export async function runOpenCodeWithMcp(options: {
     // node:http rather than fetch: fetch caps a response at 300s, and the
     // message request stays open for the whole model turn.
     const request = async (path: string, body?: unknown): Promise<unknown> => {
+      const deadline = AbortSignal.timeout(remaining());
       const {status, text} = await new Promise<{status: number; text: string}>(
         (resolve, reject) => {
           const outgoing = httpRequest(
@@ -304,7 +323,7 @@ export async function runOpenCodeWithMcp(options: {
                 'x-opencode-directory': encodeURIComponent(prepared.cwd),
               },
               signal: AbortSignal.any([
-                AbortSignal.timeout(remaining()),
+                deadline,
                 ...(input.signal ? [input.signal] : []),
               ]),
             },
@@ -323,6 +342,11 @@ export async function runOpenCodeWithMcp(options: {
         },
       ).catch((error: unknown) => {
         remaining();
+        if (deadline.aborted)
+          throw new McpHarnessError(
+            'timed_out',
+            'MCP run exceeded its timeout.',
+          );
         throw error;
       });
       if (status < 200 || status >= 300)
@@ -505,11 +529,29 @@ export async function runOpenCodeWithMcp(options: {
       },
     };
   } catch (error) {
-    if (error instanceof McpHarnessError) throw error;
-    remaining();
+    child.stop();
+    const result = await child;
+    let failure = error;
+    try {
+      remaining();
+      if (result.timedOut)
+        throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');
+    } catch (deadline) {
+      failure = deadline;
+    }
     throw new McpHarnessError(
-      'execution_failed',
-      `OpenCode MCP run failed: ${error instanceof Error ? error.message : String(error)}`,
+      failure instanceof McpHarnessError
+        ? failure.category
+        : 'execution_failed',
+      failure instanceof McpHarnessError
+        ? failure.message
+        : `OpenCode MCP run failed: ${failure instanceof Error ? failure.message : String(failure)}`,
+      {
+        exitCode: result.exitCode ?? 1,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        durationMs: Date.now() - started,
+      },
     );
   } finally {
     child.stop();
