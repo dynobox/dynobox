@@ -8,9 +8,13 @@ import {
 } from '../mcpMocks/errors.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
 import {startOwnedProcess} from '../processGroup.js';
-import {buildCodexArgs, parseCodexJsonLine} from './codex.js';
+import {
+  buildCodexArgs,
+  createCodexToolEventDeduper,
+  parseCodexJsonLine,
+} from './codex.js';
 import {cachedCodexPluginServers} from './codexMcpPlugins.js';
-import {asRecord, createToolEvent, isRecord} from './parsing.js';
+import {asRecord, isRecord} from './parsing.js';
 import {lineSplitter} from './runStreamingHarness.js';
 import type {
   HarnessInput,
@@ -143,30 +147,40 @@ export async function runCodexWithMcp(
 
   const child = startOwnedProcess(
     executable,
-    [
-      'exec',
-      ...ordinary,
-      ...extras,
-      ...configArgs,
-      ...overlay,
-      '--',
-      input.prompt,
-    ],
+    ['exec', ...ordinary, ...extras, ...GUARDS, ...overlay, '--', input.prompt],
     {...processOptions, stdin: 'ignore', timeout: remaining()},
   );
   let completed = false;
   let lastError: string | undefined;
   let failure: McpHarnessError | undefined;
   const toolEvents: ToolEvent[] = [];
+  const shouldEmit = createCodexToolEventDeduper();
   const emit = (event: ToolEvent) => {
     toolEvents.push(event);
-    input.onToolEvent?.(event);
+    try {
+      input.onToolEvent?.(event);
+    } catch (error) {
+      throw new McpHarnessError(
+        'execution_failed',
+        `Codex tool-event callback failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   };
   /** Read one JSON event and check the run status. */
   const consume = (line: string) => {
     if (!line.trim() || failure) return;
+    let event: unknown;
     try {
-      const event: unknown = JSON.parse(line);
+      event = JSON.parse(line);
+    } catch {
+      failure = new McpHarnessError(
+        'execution_failed',
+        'Codex emitted unparseable JSON output.',
+      );
+      child.stop();
+      return;
+    }
+    try {
       if (!isRecord(event)) return;
       // Codex also reports recoverable problems (stream reconnects) as
       // `error` events; only a failed or unfinished turn is fatal.
@@ -189,31 +203,23 @@ export async function runCodexWithMcp(
             'not_ready',
             `Codex called MCP server "${server}", which is not a mock.`,
           );
-        // A call refused for approval never reaches the mock, so it would
-        // otherwise let a negative assertion pass.
-        if (
-          item.status !== 'completed' &&
-          /approval/i.test(String(asRecord(item.error).message))
-        )
+        // An incomplete call can be a refusal or a transport failure. Neither
+        // proves that the mock received the attempted call.
+        if (item.status !== 'completed')
           throw new McpHarnessError(
             'execution_failed',
-            `Codex refused mock tool mcp__${server}__${String(item.tool)} without approval. Check the Codex permission settings.`,
+            `Codex did not complete mock tool mcp__${server}__${String(item.tool)}: ${errorText(item)}. Check permissions and the MCP connection.`,
           );
-        emit(
-          createToolEvent(
-            `mcp__${server}__${String(item.tool)}`,
-            item.arguments,
-            item.status === 'completed' ? 'success' : 'failure',
-          ),
-        );
-      } else for (const tool of parseCodexJsonLine(line).toolEvents) emit(tool);
+      }
+      for (const tool of parseCodexJsonLine(line).toolEvents)
+        if (shouldEmit(tool, line)) emit(tool);
     } catch (error) {
       failure =
         error instanceof McpHarnessError
           ? error
           : new McpHarnessError(
               'execution_failed',
-              'Codex emitted unparseable JSON output.',
+              `Codex event processing failed: ${error instanceof Error ? error.message : String(error)}`,
             );
       child.stop();
     }
@@ -230,10 +236,10 @@ export async function runCodexWithMcp(
   };
   try {
     lines.flush();
+    if (failure) throw failure;
     remaining();
     if (result.timedOut)
       throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');
-    if (failure) throw failure;
     if (result.failed)
       throw new McpHarnessError(
         'execution_failed',
@@ -275,6 +281,7 @@ async function readSnapshot(
   >();
   let nextId = 0;
   let exited = false;
+  let exitFailure: McpHarnessError | undefined;
   /** Make an error for a request that stops when the process exits. */
   const exitError = (method: string) => {
     try {
@@ -283,10 +290,11 @@ async function readSnapshot(
       // Report cancellation or timeout rather than the resulting exit.
       return deadline as McpHarnessError;
     }
-    return new McpHarnessError(
+    exitFailure = new McpHarnessError(
       'configuration_failed',
       `Codex app-server exited during ${method}.`,
     );
+    return exitFailure;
   };
   const rejectAll = () => {
     exited = true;
@@ -303,7 +311,12 @@ async function readSnapshot(
       } catch {
         return;
       }
-      if (!isRecord(message) || typeof message.id !== 'number') return;
+      if (
+        !isRecord(message) ||
+        typeof message.id !== 'number' ||
+        Object.hasOwn(message, 'method')
+      )
+        return;
       const waiter = pending.get(message.id);
       if (!waiter) return;
       pending.delete(message.id);
@@ -407,12 +420,19 @@ async function readSnapshot(
     child.stop();
     const result = await child;
     let failure = error;
-    try {
-      remaining();
-      if (result.timedOut)
-        throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');
-    } catch (deadline) {
-      failure = deadline;
+    // Only replace a process-exit error with its timeout cause. Keep explicit
+    // configuration or protocol errors that occurred before cleanup.
+    if (exitFailure !== undefined && error === exitFailure) {
+      try {
+        remaining();
+        if (result.timedOut)
+          throw new McpHarnessError(
+            'timed_out',
+            'MCP run exceeded its timeout.',
+          );
+      } catch (deadline) {
+        failure = deadline;
+      }
     }
     if (failure instanceof McpHarnessError)
       throw new McpHarnessError(failure.category, failure.message, {
@@ -455,7 +475,6 @@ function buildOverlay(
     const current = asRecord(plugins[plugin.id]);
     plugins[plugin.id] = {
       ...current,
-      enabled: true,
       mcp_servers: {
         ...asRecord(current.mcp_servers),
         ...Object.fromEntries(

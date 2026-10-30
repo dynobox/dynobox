@@ -189,7 +189,7 @@ export function parseCodexJsonLine(
   };
 }
 
-function createCodexToolEventDeduper(): (
+export function createCodexToolEventDeduper(): (
   event: ToolEvent,
   line: string,
 ) => boolean {
@@ -227,6 +227,18 @@ function parseToolEvent(
   candidate: JsonObject,
   event: JsonObject,
 ): ToolEvent | undefined {
+  if (candidate.type === 'mcp_tool_call') {
+    const result = isRecord(candidate.result) ? candidate.result : undefined;
+    const toolFailed = result?.isError === true;
+    return createToolEvent(
+      `mcp__${String(candidate.server)}__${String(candidate.tool)}`,
+      parseToolInput(candidate),
+      toolFailed ? 'failure' : parseStatus(candidate, event),
+      parseFailureMessage(candidate, event) ??
+        (toolFailed ? textFromContent(result.content) : undefined),
+    );
+  }
+
   const command = parseCommand(candidate);
   if (command !== undefined) {
     return createToolEvent(

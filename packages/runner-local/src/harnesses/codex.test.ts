@@ -32,6 +32,53 @@ function jsonl(...events: unknown[]): string {
 }
 
 describe('CodexHarness', () => {
+  it('parses MCP argument strings and keeps error details', () => {
+    const parsed = parseCodexJsonLine(
+      JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'mcp_tool_call',
+          server: 'service',
+          tool: 'lookup',
+          arguments: '{"key":"receipt"}',
+          status: 'failed',
+          error: {message: 'Permission denied'},
+        },
+      }),
+    );
+    expect(parsed.toolEvents).toEqual([
+      expect.objectContaining({
+        rawName: 'mcp__service__lookup',
+        input: {key: 'receipt'},
+        status: 'failure',
+        message: 'Permission denied',
+      }),
+    ]);
+  });
+
+  it('records a completed MCP error response as a failed tool event', () => {
+    const parsed = parseCodexJsonLine(
+      JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'mcp_tool_call',
+          server: 'service',
+          tool: 'lookup',
+          arguments: {},
+          status: 'completed',
+          result: {
+            isError: true,
+            content: [{type: 'text', text: 'No receipt'}],
+          },
+        },
+      }),
+    );
+    expect(parsed.toolEvents[0]).toMatchObject({
+      status: 'failure',
+      message: 'No receipt',
+    });
+  });
+
   it('has the codex harness id', () => {
     expect(new CodexHarness().id).toBe('codex');
   });

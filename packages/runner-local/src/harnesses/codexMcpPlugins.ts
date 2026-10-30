@@ -13,8 +13,10 @@ export async function cachedCodexPluginServers(
   codexHome: string,
   id: string,
 ): Promise<string[]> {
-  const [name, marketplace] = id.split('@');
-  if (!name || !marketplace) return [];
+  const separator = id.lastIndexOf('@');
+  if (separator <= 0 || separator === id.length - 1) return [];
+  const name = id.slice(0, separator);
+  const marketplace = id.slice(separator + 1);
   const cache = join(codexHome, 'plugins', 'cache', marketplace, name);
   const versions = await readdir(cache).catch(() => [] as string[]);
   const names = new Set<string>();

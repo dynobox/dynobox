@@ -10,6 +10,12 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Preserve Codex plugin settings during MCP mock runs and distinguish app-server
+  requests from configuration responses.
+- Normalize Codex MCP tool inputs, retain tool error details, and remove duplicate
+  tool events. Fail runs with incomplete mock calls, including denied calls.
+- Preserve explicit Codex MCP failures when cleanup passes the run deadline, and
+  report tool-event callback errors separately from invalid JSON output.
 - Install `signal-exit` as a runtime dependency so its license ships with the
   package instead of bundling its code without the required notice.
 - Stop active setup and verification process groups when Dynobox exits or

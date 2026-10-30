@@ -16,8 +16,12 @@ async function fixture() {
   const home = await mkdtemp(join(tmpdir(), 'dynobox-codex-cache-'));
   roots.push(home);
   /** Write a plugin manifest for one cached version. */
-  const version = async (name: string, manifest: object = {}) => {
-    const root = join(home, 'plugins', 'cache', 'market', 'fixture', name);
+  const version = async (
+    name: string,
+    manifest: object = {},
+    plugin = 'fixture',
+  ) => {
+    const root = join(home, 'plugins', 'cache', 'market', plugin, name);
     await mkdir(join(root, '.codex-plugin'), {recursive: true});
     await writeFile(
       join(root, '.codex-plugin', 'plugin.json'),
@@ -29,6 +33,26 @@ async function fixture() {
 }
 
 describe('cached Codex plugin metadata', () => {
+  it('uses the last @ to separate the plugin name from the marketplace', async () => {
+    const f = await fixture();
+    const root = await f.version('1', {}, '@org/tool');
+    await writeFile(
+      join(root, '.mcp.json'),
+      JSON.stringify({mcpServers: {scoped: {command: 'unused'}}}),
+    );
+    expect(await cachedCodexPluginServers(f.home, '@org/tool@market')).toEqual([
+      'scoped',
+    ]);
+  });
+
+  it.each(['fixture', 'fixture@', '@market', ''])(
+    'ignores an incomplete plugin ID: %s',
+    async (id) => {
+      const f = await fixture();
+      expect(await cachedCodexPluginServers(f.home, id)).toEqual([]);
+    },
+  );
+
   it('collects names from every version without exposing transport or credentials', async () => {
     const f = await fixture();
     for (const name of ['1', '2']) {
