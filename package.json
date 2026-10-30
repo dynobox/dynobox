@@ -11,13 +11,13 @@
   "scripts": {
     "build": "pnpm -r build",
     "validate": "pnpm run format && pnpm run lint",
-    "dynolocal": "sh -c 'cd \"$INIT_CWD\" && DYNOBOX_API_URL=http://localhost:8787 tsx \"$OLDPWD/packages/cli/src/bin.ts\" \"$@\"' --",
+    "dynolocal": "pnpm --filter dynobox... build && sh -c 'cd \"$INIT_CWD\" && DYNOBOX_API_URL=http://localhost:8787 tsx \"$OLDPWD/packages/cli/src/bin.ts\" \"$@\"' --",
     "format": "prettier --check \"**/*.{js,cjs,mjs,ts,cts,mts,tsx,jsx,json}\"",
     "format:write": "prettier --write \"**/*.{js,cjs,mjs,ts,cts,mts,tsx,jsx,json}\"",
     "lint": "eslint .",
     "lint:write": "eslint . --fix",
     "test": "pnpm -r test",
-    "typecheck": "pnpm run build && pnpm -r typecheck",
+    "typecheck": "pnpm run build && pnpm -r typecheck && tsc -p dynos/tsconfig.json",
     "write": "pnpm run format:write && pnpm run lint:write"
   },
   "devDependencies": {

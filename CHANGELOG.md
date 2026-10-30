@@ -24,8 +24,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   package instead of bundling its code without the required notice.
 - Stop active setup and verification process groups when Dynobox exits or
   receives a terminating signal on POSIX systems.
-- Report timed-out MCP probes and Claude Code, Codex, OpenCode, and Pi runs as
-  timeouts instead of unsupported versions or execution failures.
+- Report timed-out MCP probes and runs as timeouts instead of unsupported
+  versions or execution failures across all supported MCP harnesses.
 - Exit with code 143 on SIGTERM; keep code 130 for SIGINT.
 - Continue running valid scenarios and harnesses when another pair cannot be scheduled, while
   reporting each configuration error and exiting nonzero.
@@ -34,8 +34,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Stop the harness's process group when the harness exits, times out, or has a
   fatal stream error on POSIX systems. This applies to ordinary and MCP runs,
   including background servers and children that keep output pipes open.
-- Preserve stdout and stderr from failed Claude Code, Codex, OpenCode, and Pi MCP
-  probes and runs in local `--debug` logs while keeping raw output out of reports.
+- Preserve stdout and stderr from failed MCP probes and runs in local `--debug`
+  logs across all supported MCP harnesses while keeping raw output out of reports.
 - Stop child processes from Claude Code MCP version probes and runs when cancelled
   on POSIX systems, including children that ignore SIGTERM or close output pipes.
 - Reject MCP uploads with the local-only error before checking authentication.
@@ -45,6 +45,19 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   cancelled, including children that ignore SIGTERM.
 - Skip directories during MCP harness executable lookup. Preserve symlink paths
   that point to executable files.
+- Enable local MCP mock runs without an experimental environment flag. Each
+  scenario grants its declared mock tools automatically, and MCP runs remain
+  ineligible for upload.
+- Stop a run on the first SIGINT or SIGTERM: running harness processes are
+  cancelled, no further jobs start, mocks clean up, and the CLI exits with code
+  130 for SIGINT or 143 for SIGTERM. A second signal exits immediately. Once jobs
+  finish, restore normal signal handling so Ctrl-C can interrupt a `--save-run`
+  upload.
+
+### `@dynobox/runner-local`
+
+- Isolate MCP mock runs from inherited harness servers and report refused mock
+  calls as failures, so negative call assertions cannot pass on a refusal.
 
 ---
 
