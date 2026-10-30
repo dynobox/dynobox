@@ -20,6 +20,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Preserve MCP failure details in local debug logs. Keep MCP mock runs local-only
   and limit mock request sizes.
 - Include required third-party license notices in the CLI package.
+- Report timed-out Pi MCP probes and runs as timeouts, and preserve failure
+  output in local debug logs.
 
 ---
 

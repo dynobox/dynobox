@@ -10,9 +10,10 @@ import {
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
 import {startOwnedProcess} from '../processGroup.js';
 import {buildPiArgs, parsePiJson, parsePiJsonLine} from './pi.js';
-import {runStreamingHarness} from './runStreamingHarness.js';
+import {ToolEventLineStream} from './runStreamingHarness.js';
 import type {
   HarnessInput,
+  HarnessRunOutput,
   McpHarnessRun,
   McpServerConnections,
 } from './types.js';
@@ -60,32 +61,56 @@ export async function runPiWithMcp(options: {
     ...processOptions,
     timeout: Math.min(5000, remaining()),
   });
-  remaining();
-  const version = requireMcpVersion('Pi', MIN_VERSION, probe);
+  let version: string;
+  try {
+    remaining();
+    version = requireMcpVersion('Pi', MIN_VERSION, probe);
+  } catch (error) {
+    if (error instanceof McpHarnessError)
+      throw new McpHarnessError(error.category, error.message, {
+        exitCode: probe.exitCode ?? 1,
+        stdout: probe.stdout,
+        stderr: probe.stderr,
+        durationMs: probe.durationMs,
+      });
+    throw error;
+  }
 
   const directory = await mkdtemp(join(tmpdir(), 'dynobox-pi-mcp-'));
+  let output: HarnessRunOutput | undefined;
   try {
     const bridge = join(directory, 'bridge.mjs');
     await writeFile(bridge, piBridgeSource(servers, tools));
     const toolInputs = new Map<string, unknown>();
-    const result = await runStreamingHarness({
+    const child = startOwnedProcess(
       executable,
-      args: buildPiArgs(
+      buildPiArgs(
         input.prompt,
         [...(options.extraArgs ?? []), '--no-extensions', '-e', bridge],
         input.model,
         input.permissionMode,
       ),
-      input: {
-        ...input,
-        env: {...input.env, PI_OFFLINE: '1', ...mcpProxyEnv(env)},
-        timeoutMs: remaining(),
-      },
-      stdin: 'ignore',
+      {...processOptions, timeout: remaining()},
+    );
+    const stream = new ToolEventLineStream({
       parseLine: (line, lineNumber) =>
         parsePiJsonLine(line, lineNumber, toolInputs),
+      onToolEvent: (event) => input.onToolEvent?.(event),
     });
+    child.stdout?.on('data', (chunk: Buffer | string) =>
+      stream.write(chunk.toString()),
+    );
+    const result = await child;
+    output = {
+      exitCode: result.exitCode ?? 1,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      durationMs: Date.now() - started,
+    };
+    stream.flush();
     remaining();
+    if (result.timedOut)
+      throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');
     const notReady = result.stderr
       .split('\n')
       .find((line) => line.startsWith(NOT_READY_MARKER));
@@ -94,7 +119,7 @@ export async function runPiWithMcp(options: {
         'not_ready',
         notReady.slice(NOT_READY_MARKER.length).trim(),
       );
-    if (result.exitCode !== 0)
+    if (result.failed || output.exitCode !== 0)
       throw new McpHarnessError(
         'execution_failed',
         `Pi exited with code ${result.exitCode ?? 'unknown'}.`,
@@ -108,13 +133,16 @@ export async function runPiWithMcp(options: {
     return {
       harnessReady: true,
       version,
-      output: {
-        exitCode: 0,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        durationMs: Date.now() - started,
-      },
+      output,
     };
+  } catch (error) {
+    if (output !== undefined)
+      throw new McpHarnessError(
+        error instanceof McpHarnessError ? error.category : 'execution_failed',
+        error instanceof Error ? error.message : String(error),
+        output,
+      );
+    throw error;
   } finally {
     await rm(directory, {recursive: true, force: true});
   }
