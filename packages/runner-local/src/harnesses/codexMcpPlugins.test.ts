@@ -7,13 +7,10 @@ import {afterEach, describe, expect, it} from 'vitest';
 import {cachedCodexPluginServers} from './codexMcpPlugins.js';
 
 const roots: string[] = [];
-afterEach(
-  /** Remove temporary plugin caches after each test. */
-  async () => {
-    for (const root of roots.splice(0))
-      await rm(root, {recursive: true, force: true});
-  },
-);
+afterEach(async () => {
+  for (const root of roots.splice(0))
+    await rm(root, {recursive: true, force: true});
+});
 /** Make a temporary plugin cache for a test. */
 async function fixture() {
   const home = await mkdtemp(join(tmpdir(), 'dynobox-codex-cache-'));
@@ -31,9 +28,7 @@ async function fixture() {
   return {home, version};
 }
 
-/** Define tests for cached plugin server names. */
 describe('cached Codex plugin metadata', () => {
-  /** Check that all versions supply names without transport or credential data. */
   it('collects names from every version without exposing transport or credentials', async () => {
     const f = await fixture();
     for (const name of ['1', '2']) {
@@ -56,7 +51,6 @@ describe('cached Codex plugin metadata', () => {
     ]);
   });
 
-  /** Check server names in default files, manifests, and referenced files. */
   it('includes default files, inline manifests and referenced files', async () => {
     const f = await fixture();
     const root = await f.version('1', {
@@ -77,7 +71,6 @@ describe('cached Codex plugin metadata', () => {
     ]);
   });
 
-  /** Check server names in flat JSON objects. */
   it('reads flat server maps in default and referenced MCP files', async () => {
     const f = await fixture();
     const root = await f.version('1', {mcpServers: './extra.json'});
@@ -95,7 +88,6 @@ describe('cached Codex plugin metadata', () => {
     ]);
   });
 
-  /** Check that an absent cache or a cache with skills only returns no names. */
   it('accepts a skill-only cache and an absent installation', async () => {
     const f = await fixture();
     await f.version('1');
@@ -107,7 +99,6 @@ describe('cached Codex plugin metadata', () => {
     );
   });
 
-  /** Check that a server can have the name mcpServers. */
   it('recognizes a flat-map server named mcpServers', async () => {
     const f = await fixture();
     const root = await f.version('1');
@@ -120,7 +111,6 @@ describe('cached Codex plugin metadata', () => {
     ]);
   });
 
-  /** Check that invalid JSON supplies no server names. */
   it('ignores malformed metadata that Codex could not load either', async () => {
     const f = await fixture();
     const root = await f.version('1');

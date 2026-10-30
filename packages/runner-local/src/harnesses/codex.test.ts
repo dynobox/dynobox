@@ -59,7 +59,6 @@ fi
     expect(readFileSync(probeLog, 'utf8')).toBe('probe\n');
   });
 
-  /** Check that MCP preparation keeps the original executable path. */
   it('pins the MCP executable before CLI mock PATH changes', async () => {
     const root = createScratchRoot();
     const executable = join(root, 'codex');
@@ -87,7 +86,6 @@ fi
     expect(readFileSync(marker, 'utf8')).toBe('resolved');
   });
 
-  /** Check that preparation reports a missing executable. */
   it('rejects missing MCP executables during preparation', async () => {
     const root = createScratchRoot();
     await expect(
