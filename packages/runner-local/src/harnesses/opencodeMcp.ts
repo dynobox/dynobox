@@ -294,9 +294,14 @@ export async function runOpenCodeWithMcp(options: {
         const match = output.match(/http:\/\/127\.0\.0\.1:(\d+)/);
         if (match) resolve(match[0]);
       });
-      child.then(() => {
+      child.then((result) => {
         try {
           remaining();
+          if (result.timedOut)
+            throw new McpHarnessError(
+              'timed_out',
+              'MCP run exceeded its timeout.',
+            );
           reject(
             new McpHarnessError(
               'execution_failed',
@@ -354,7 +359,14 @@ export async function runOpenCodeWithMcp(options: {
           'execution_failed',
           `OpenCode ${path} returned HTTP ${status}.`,
         );
-      return JSON.parse(text);
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw new McpHarnessError(
+          'execution_failed',
+          `OpenCode ${path} returned invalid JSON.`,
+        );
+      }
     };
     let status = asRecord(await request('/mcp'));
     // OpenCode can report "Failed to get tools" immediately after
@@ -512,11 +524,19 @@ export async function runOpenCodeWithMcp(options: {
             `mcp__${server}__${tool}`,
             event.input,
             event.status,
+            event.message,
           );
       }
       return event;
     });
-    for (const event of toolEvents) input.onToolEvent?.(event);
+    try {
+      for (const event of toolEvents) input.onToolEvent?.(event);
+    } catch (error) {
+      throw new McpHarnessError(
+        'execution_failed',
+        `OpenCode tool-event callback failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
     return {
       harnessReady: true,
       version: prepared.version,
@@ -532,12 +552,19 @@ export async function runOpenCodeWithMcp(options: {
     child.stop();
     const result = await child;
     let failure = error;
-    try {
-      remaining();
-      if (result.timedOut)
-        throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');
-    } catch (deadline) {
-      failure = deadline;
+    // Explicit failures occurred before cleanup. Only infer a timeout for
+    // transport errors that do not already have a harness failure category.
+    if (!(error instanceof McpHarnessError)) {
+      try {
+        remaining();
+        if (result.timedOut)
+          throw new McpHarnessError(
+            'timed_out',
+            'MCP run exceeded its timeout.',
+          );
+      } catch (deadline) {
+        failure = deadline;
+      }
     }
     throw new McpHarnessError(
       failure instanceof McpHarnessError

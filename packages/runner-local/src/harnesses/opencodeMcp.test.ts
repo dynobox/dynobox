@@ -4,6 +4,7 @@ import {join} from 'node:path';
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
+import * as processGroup from '../processGroup.js';
 import {
   prepareOpenCodeMcpConfiguration,
   runOpenCodeWithMcp,
@@ -48,12 +49,13 @@ else if (args.includes('serve')) {
       result = {id: 'test'};
     }
     if (request.url === '/permission' || request.method === 'GET' && request.url.endsWith('/message')) result = [];
+    if (request.method === 'GET' && request.url.endsWith('/message') && mode === 'tool-error') result = [{info: {role: 'assistant'}, parts: [{id: 'tool-1', type: 'tool', tool: 'linear_get_issue', state: {status: 'error', input: {id: 'DYNO-1'}, error: 'Issue missing'}}]}];
     if (request.method === 'POST' && request.url.endsWith('/message')) {
       if (mode === 'request-hang') return;
       result = mode === 'model-error' ? {info: {error: {message: 'model failed'}}} : {info: {finish: 'stop'}};
     }
     response.setHeader('Content-Type', 'application/json');
-    response.end(JSON.stringify(result));
+    response.end(mode === 'bad-response' && request.url === '/mcp' ? 'not JSON' : JSON.stringify(result));
   });
   server.listen(0, '127.0.0.1', () => console.log('http://127.0.0.1:' + server.address().port));
 }
@@ -101,6 +103,78 @@ else {
 }
 
 describe('OpenCode MCP configuration preparation', () => {
+  it('retains tool error messages when mapping MCP names', async () => {
+    const {options} = await fixture('tool-error');
+    const run = await runOpenCodeWithMcp({
+      ...options,
+      input: {...options.input, prompt: 'OK'},
+    });
+    expect(run.toolEvents).toEqual([
+      expect.objectContaining({
+        rawName: 'mcp__linear__get_issue',
+        status: 'failure',
+        message: 'Issue missing',
+      }),
+    ]);
+  });
+
+  it('keeps a callback failure when its deadline passes', async () => {
+    const {options} = await fixture('tool-error');
+    let now = Date.now();
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    await expect(
+      runOpenCodeWithMcp({
+        ...options,
+        input: {
+          ...options.input,
+          prompt: 'OK',
+          onToolEvent: () => {
+            now += 10_000;
+            throw new Error('Caller callback failed');
+          },
+        },
+      }),
+    ).rejects.toMatchObject({
+      category: 'execution_failed',
+      message: expect.stringContaining('Caller callback failed'),
+      output: {stderr: expect.stringContaining('PRIVATE_STDERR_SENTINEL')},
+    });
+  });
+
+  it.each(['model-error', 'bad-response'])(
+    'keeps a %s failure when cleanup passes the deadline',
+    async (mode) => {
+      const {options} = await fixture(mode);
+      let now = Date.now();
+      vi.spyOn(Date, 'now').mockImplementation(() => now);
+      const start = processGroup.startOwnedProcess;
+      vi.spyOn(processGroup, 'startOwnedProcess').mockImplementation(
+        (executable, args, options) => {
+          const child = start(executable, args, options);
+          if (args.includes('serve')) {
+            const stop = child.stop;
+            child.stop = () => {
+              now += 10_000;
+              stop();
+            };
+          }
+          return child;
+        },
+      );
+      await expect(
+        runOpenCodeWithMcp({
+          ...options,
+          input: {...options.input, prompt: 'OK'},
+        }),
+      ).rejects.toMatchObject({
+        category: 'execution_failed',
+        message: expect.stringContaining(
+          mode === 'model-error' ? 'model failed' : 'JSON',
+        ),
+      });
+    },
+  );
+
   it.each(['--attach', '--dir', '--agent', '--continue', '--session'])(
     'rejects extra arguments before any probe: %s',
     async (arg) => {

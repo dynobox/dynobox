@@ -10,6 +10,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Retain OpenCode MCP tool error messages and preserve explicit response, model,
+  and callback failures when cleanup passes the run deadline.
 - Preserve Codex plugin settings during MCP mock runs and distinguish app-server
   requests from configuration responses.
 - Normalize Codex MCP tool inputs, retain tool error details, and remove duplicate
