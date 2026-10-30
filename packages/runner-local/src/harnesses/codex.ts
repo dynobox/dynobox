@@ -1,6 +1,8 @@
-import type {PermissionMode} from '@dynobox/sdk';
-import {realpathSync} from 'fs';
+import {realpathSync} from 'node:fs';
 
+import type {PermissionMode} from '@dynobox/sdk';
+
+import {prepareMcpHarness} from '../mcpMocks/resolveExecutable.js';
 import {
   createToolEvent,
   isRecord,
@@ -15,6 +17,7 @@ import type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
+  PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
 import {createVersionProbe} from './version.js';
@@ -49,6 +52,19 @@ export class CodexHarness implements Harness {
 
   version(): Promise<string | null> {
     return this.probeVersion();
+  }
+
+  /** Resolve the Codex executable before CLI mocks change PATH. */
+  async prepareMcp(
+    input: Pick<HarnessInput, 'workDir' | 'env'>,
+  ): Promise<PreparedMcpHarness> {
+    const {runCodexWithMcp} = await import('./codexMcp.js');
+    return prepareMcpHarness(
+      this.executable,
+      this.extraArgs,
+      input,
+      runCodexWithMcp,
+    );
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
@@ -173,7 +189,7 @@ export function parseCodexJsonLine(
   };
 }
 
-function createCodexToolEventDeduper(): (
+export function createCodexToolEventDeduper(): (
   event: ToolEvent,
   line: string,
 ) => boolean {
@@ -211,6 +227,18 @@ function parseToolEvent(
   candidate: JsonObject,
   event: JsonObject,
 ): ToolEvent | undefined {
+  if (candidate.type === 'mcp_tool_call') {
+    const result = isRecord(candidate.result) ? candidate.result : undefined;
+    const toolFailed = result?.isError === true;
+    return createToolEvent(
+      `mcp__${String(candidate.server)}__${String(candidate.tool)}`,
+      parseToolInput(candidate),
+      toolFailed ? 'failure' : parseStatus(candidate, event),
+      parseFailureMessage(candidate, event) ??
+        (toolFailed ? textFromContent(result.content) : undefined),
+    );
+  }
+
   const command = parseCommand(candidate);
   if (command !== undefined) {
     return createToolEvent(

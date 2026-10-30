@@ -32,6 +32,53 @@ function jsonl(...events: unknown[]): string {
 }
 
 describe('CodexHarness', () => {
+  it('parses MCP argument strings and keeps error details', () => {
+    const parsed = parseCodexJsonLine(
+      JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'mcp_tool_call',
+          server: 'service',
+          tool: 'lookup',
+          arguments: '{"key":"receipt"}',
+          status: 'failed',
+          error: {message: 'Permission denied'},
+        },
+      }),
+    );
+    expect(parsed.toolEvents).toEqual([
+      expect.objectContaining({
+        rawName: 'mcp__service__lookup',
+        input: {key: 'receipt'},
+        status: 'failure',
+        message: 'Permission denied',
+      }),
+    ]);
+  });
+
+  it('records a completed MCP error response as a failed tool event', () => {
+    const parsed = parseCodexJsonLine(
+      JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'mcp_tool_call',
+          server: 'service',
+          tool: 'lookup',
+          arguments: {},
+          status: 'completed',
+          result: {
+            isError: true,
+            content: [{type: 'text', text: 'No receipt'}],
+          },
+        },
+      }),
+    );
+    expect(parsed.toolEvents[0]).toMatchObject({
+      status: 'failure',
+      message: 'No receipt',
+    });
+  });
+
   it('has the codex harness id', () => {
     expect(new CodexHarness().id).toBe('codex');
   });
@@ -57,6 +104,43 @@ fi
       Promise.all([harness.version(), harness.version()]),
     ).resolves.toEqual(['0.87.0', '0.87.0']);
     expect(readFileSync(probeLog, 'utf8')).toBe('probe\n');
+  });
+
+  it('pins the MCP executable before CLI mock PATH changes', async () => {
+    const root = createScratchRoot();
+    const executable = join(root, 'codex');
+    const marker = join(root, 'pinned');
+    writeFileSync(
+      executable,
+      `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(marker)}, 'resolved'); console.log('codex-cli 0.0.0');\n`,
+      {mode: 0o755},
+    );
+    const prepared = await new CodexHarness().prepareMcp({
+      workDir: root,
+      env: {PATH: root},
+    });
+    await expect(
+      prepared.run(
+        {prompt: 'OK', workDir: root, env: {PATH: '/nonexistent'}},
+        {
+          service: {
+            url: `http://127.0.0.1:1234/${'a'.repeat(48)}`,
+            tools: ['lookup'],
+          },
+        },
+      ),
+    ).rejects.toMatchObject({category: 'unsupported_version'});
+    expect(readFileSync(marker, 'utf8')).toBe('resolved');
+  });
+
+  it('rejects missing MCP executables during preparation', async () => {
+    const root = createScratchRoot();
+    await expect(
+      new CodexHarness({executable: 'missing-codex'}).prepareMcp({
+        workDir: root,
+        env: {PATH: root},
+      }),
+    ).rejects.toMatchObject({category: 'configuration_failed'});
   });
 
   it('builds non-interactive JSONL arguments', () => {
