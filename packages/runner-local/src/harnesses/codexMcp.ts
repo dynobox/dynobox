@@ -88,13 +88,25 @@ export async function runCodexWithMcp(
     stdin: 'ignore',
     timeout: Math.min(5000, remaining()),
   });
-  remaining();
-  const version = requireMcpVersion(
-    'Codex',
-    MIN_VERSION,
-    probe,
-    (stdout) => /^codex-cli (\d+\.\d+\.\d+)/.exec(stdout.trim())?.[1] ?? null,
-  );
+  let version: string;
+  try {
+    remaining();
+    version = requireMcpVersion(
+      'Codex',
+      MIN_VERSION,
+      probe,
+      (stdout) => /^codex-cli (\d+\.\d+\.\d+)/.exec(stdout.trim())?.[1] ?? null,
+    );
+  } catch (error) {
+    if (error instanceof McpHarnessError)
+      throw new McpHarnessError(error.category, error.message, {
+        exitCode: probe.exitCode ?? 1,
+        stdout: probe.stdout,
+        stderr: probe.stderr,
+        durationMs: probe.durationMs,
+      });
+    throw error;
+  }
 
   // Model, permission and CLI-mock settings must also apply to the config read.
   const ordinary = buildCodexArgs(
@@ -208,30 +220,34 @@ export async function runCodexWithMcp(
   child.stdout?.setEncoding('utf8');
   child.stdout?.on('data', (chunk: string) => lines.write(chunk));
   const result = await child;
-  lines.flush();
-  remaining();
-  if (failure) throw failure;
-  if (result.failed)
-    throw new McpHarnessError(
-      'execution_failed',
-      `Codex exited with code ${result.exitCode ?? 'unknown'}.`,
-    );
-  if (!completed)
-    throw new McpHarnessError(
-      'execution_failed',
-      `Codex exited without completing its turn${lastError === undefined ? '' : ` (last error: ${lastError})`}.`,
-    );
-  return {
-    harnessReady: true,
-    version,
-    toolEvents,
-    output: {
-      exitCode: result.exitCode ?? 1,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      durationMs: Date.now() - started,
-    },
+  const output = {
+    exitCode: result.exitCode ?? 1,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    durationMs: Date.now() - started,
   };
+  try {
+    lines.flush();
+    remaining();
+    if (result.timedOut)
+      throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');
+    if (failure) throw failure;
+    if (result.failed)
+      throw new McpHarnessError(
+        'execution_failed',
+        `Codex exited with code ${result.exitCode ?? 'unknown'}.`,
+      );
+    if (!completed)
+      throw new McpHarnessError(
+        'execution_failed',
+        `Codex exited without completing its turn${lastError === undefined ? '' : ` (last error: ${lastError})`}.`,
+      );
+    return {harnessReady: true, version, toolEvents, output};
+  } catch (error) {
+    if (error instanceof McpHarnessError)
+      throw new McpHarnessError(error.category, error.message, output);
+    throw error;
+  }
 }
 
 /** Read effective config and every enabled plugin's MCP servers via app-server. */
@@ -380,6 +396,25 @@ async function readSnapshot(
           servers: await cachedCodexPluginServers(codexHome, id),
         });
     return {config, plugins};
+  } catch (error) {
+    child.stop();
+    const result = await child;
+    let failure = error;
+    try {
+      remaining();
+      if (result.timedOut)
+        throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');
+    } catch (deadline) {
+      failure = deadline;
+    }
+    if (failure instanceof McpHarnessError)
+      throw new McpHarnessError(failure.category, failure.message, {
+        exitCode: result.exitCode ?? 1,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        durationMs: result.durationMs,
+      });
+    throw failure;
   } finally {
     child.stop();
     await child;

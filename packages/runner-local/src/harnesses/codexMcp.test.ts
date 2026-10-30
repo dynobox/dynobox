@@ -8,6 +8,7 @@ import {type CodexMcpOptions, runCodexWithMcp} from './codexMcp.js';
 
 const roots: string[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0))
     await rm(root, {recursive: true, force: true});
 });
@@ -28,12 +29,13 @@ import {spawn} from 'node:child_process';
 import {createInterface} from 'node:readline';
 const args = process.argv.slice(2);
 const mode = process.env.DXB_TEST_MODE;
+console.error('PRIVATE_STDERR_SENTINEL');
 function hang() {
   if (process.env.DXB_TEST_CHILD_PID) spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(process.env.DXB_TEST_CHILD_PID, String(process.pid)); setInterval(() => {}, 1000);'], {stdio: 'inherit'});
   setInterval(() => {}, 1000);
 }
 appendFileSync(process.env.DXB_TEST_LOG, JSON.stringify({args, cwd: process.cwd(), noProxy: process.env.no_proxy, NO_PROXY: process.env.NO_PROXY, marker: process.env.DXB_ENV_MARKER}) + '\\n');
-if (args.includes('--version')) {console.log(mode === 'version' ? 'codex-cli 0.100.0' : mode === 'newer' ? 'codex-cli 0.999.0' : 'codex-cli 0.153.4'); process.exit(0);}
+if (args.includes('--version')) {console.log(mode === 'version' ? 'codex-cli 0.100.0' : mode === 'newer' ? 'codex-cli 0.999.0' : 'codex-cli 0.153.4'); if (mode === 'version-timeout') hang(); else process.exit(0);}
 const config = {features: {apps: false, remote_plugin: false, skill_mcp_dependency_install: false}, mcp_servers: JSON.parse(process.env.DXB_TEST_INHERITED), plugins: {}};
 for (const arg of args) {
   if (arg.startsWith('mcp_servers=')) {
@@ -59,7 +61,7 @@ if (args.includes('app-server')) {
     if (request.method === 'plugin/read' && mode === 'exit-between-rpcs') return process.stdout.write(JSON.stringify({id: request.id, result: {plugin: {}}}) + '\\n', () => process.exit(0));
     console.log(JSON.stringify({id: request.id, result}));
   });
-} else if (mode === 'hang') {hang();}
+} else if (mode === 'hang') {console.log(JSON.stringify({type: 'turn.started'})); hang();}
 else {
   console.log(JSON.stringify({type: 'thread.started', thread_id: 'fixture'}));
   console.log(JSON.stringify({type: 'turn.started'}));
@@ -233,6 +235,44 @@ describe('Codex MCP adapter', () => {
         expect(
           (await f.invocations()).some((call) => call.args[0] === 'exec'),
         ).toBe(false);
+    },
+  );
+
+  it.each([
+    'version',
+    'feature',
+    'bad-json',
+    'failed-turn',
+    'exit',
+    'no-completion',
+  ])(
+    'retains raw output from a %s failure for local debug logs',
+    async (mode) => {
+      const f = await fixture(mode);
+      await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
+        output: {
+          stdout: expect.any(String),
+          stderr: expect.stringContaining('PRIVATE_STDERR_SENTINEL'),
+          exitCode: expect.any(Number),
+          durationMs: expect.any(Number),
+        },
+      });
+    },
+  );
+
+  it.each(['version-timeout', 'probe-hang', 'hang'])(
+    'reports %s as a timeout with raw output before the clock deadline passes',
+    async (mode) => {
+      const f = await fixture(mode);
+      f.options.input.timeoutMs = 500;
+      vi.spyOn(Date, 'now').mockReturnValue(Date.now());
+      await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
+        category: 'timed_out',
+        output: {
+          stderr: expect.stringContaining('PRIVATE_STDERR_SENTINEL'),
+          stdout: expect.any(String),
+        },
+      });
     },
   );
 
