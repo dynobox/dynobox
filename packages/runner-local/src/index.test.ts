@@ -223,6 +223,24 @@ describe('MCP tool evidence', () => {
       attempts: [],
       passes: true,
     },
+    {
+      name: 'null arguments for a received empty call',
+      received: [null],
+      attempts: [{id: null, status: 'success'}],
+      passes: true,
+    },
+    ...[
+      'list_mcp_resources',
+      'read_mcp_resource',
+      'mcp_other',
+      'linear_internal',
+      'mcp__other__save',
+    ].map((rawName) => ({
+      name: `unrelated event ${rawName}`,
+      received: [],
+      attempts: [{id: '1', status: 'success' as const, rawName}],
+      passes: true,
+    })),
   ] as const)('$name', async ({received, attempts, passes}) => {
     const harness: Harness = {
       id: 'opencode',
@@ -249,7 +267,10 @@ describe('MCP tool evidence', () => {
             );
             await client.listTools();
             for (const id of received)
-              await client.callTool({name: 'save', arguments: {id}});
+              await client.callTool({
+                name: 'save',
+                arguments: id === null ? {} : {id},
+              });
           } finally {
             await client.close();
           }
@@ -257,11 +278,12 @@ describe('MCP tool evidence', () => {
             harnessReady: true,
             version: 'fixture',
             output: {exitCode: 0, stdout: 'OK', stderr: '', durationMs: 1},
-            toolEvents: attempts.map(({id, status}) => ({
+            toolEvents: attempts.map((attempt) => ({
               kind: 'mcp' as const,
-              rawName: 'mcp__linear__save',
-              input: {id},
-              status,
+              rawName:
+                'rawName' in attempt ? attempt.rawName : 'mcp__linear__save',
+              input: attempt.id === null ? null : {id: attempt.id},
+              status: attempt.status,
             })),
           };
         },
@@ -306,7 +328,10 @@ describe('MCP tool evidence', () => {
       expect(result.assertionResults[0]).toMatchObject({passed: true});
     } else {
       expect(result.status).toBe('harness_failed');
-      expect(result.mcp?.failures).toContain('not_ready');
+      expect(result.mcp?.failures).toContain('execution_failed');
+      expect(result.diagnostics.join('\n')).toContain(
+        'Harness reported mcp__linear__save, but the MCP mock did not receive a matching call.',
+      );
       expect(result.assertionResults).toEqual([]);
     }
   });

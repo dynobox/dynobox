@@ -362,6 +362,7 @@ export async function runJob(
   let mcpObservation: McpObservation | undefined;
   let mcpReady = false;
   let mcpToolEvents: ToolEvent[] | undefined;
+  const mcpDiagnostics: string[] = [];
   const mcpFailures = new Set<LocalMcpSummary['failures'][number]>();
   const recordMcpError = (error: unknown): string => {
     const failure = mcpFailure(error, 'execution_failed');
@@ -377,26 +378,32 @@ export async function runJob(
       });
       // Each reported MCP call must have its own received call. A previous
       // call with the same input must not hide a later refused attempt.
+      const mockNames = new Set(
+        Object.entries(job.scenario.mcpMocks ?? {}).flatMap(([server, mock]) =>
+          Object.keys(mock.tools).map((tool) => `mcp__${server}__${tool}`),
+        ),
+      );
       const unmatched = [...mcpObservation.calls];
-      const unreceived = (mcpToolEvents ?? []).some((event) => {
-        if (event.kind !== 'mcp') return false;
+      for (const event of mcpToolEvents ?? []) {
+        if (!mockNames.has(event.rawName)) continue;
         const index = unmatched.findIndex(
           (call) =>
             event.rawName === `mcp__${call.server}__${call.tool}` &&
-            isDeepStrictEqual(event.input, call.input),
+            isDeepStrictEqual(event.input ?? {}, call.input),
         );
-        if (index === -1) return true;
-        unmatched.splice(index, 1);
-        return false;
-      });
-      if (unreceived)
+        if (index === -1)
+          mcpDiagnostics.push(
+            `Harness reported ${event.rawName}, but the MCP mock did not receive a matching call. Check permissions, tool arguments, and the MCP connection.`,
+          );
+        else unmatched.splice(index, 1);
+      }
+      if (mcpDiagnostics.length > 0) {
         mcpObservation = {
           ...mcpObservation,
           ready: false,
-          failures: [
-            ...new Set([...mcpObservation.failures, 'not_ready' as const]),
-          ],
         };
+        mcpFailures.add('execution_failed');
+      }
       for (const failure of mcpObservation.failures) mcpFailures.add(failure);
     } catch {
       mcpFailures.add('cleanup_failed');
@@ -445,6 +452,7 @@ export async function runJob(
       result.status = 'harness_failed';
       result.passed = false;
       result.diagnostics.push(
+        ...new Set(mcpDiagnostics),
         ...[...mcpFailures].map((failure) => `MCP ${failure}.`),
       );
     }

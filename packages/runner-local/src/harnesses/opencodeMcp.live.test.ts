@@ -1,20 +1,14 @@
 import {existsSync} from 'node:fs';
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  realpath,
-  rm,
-  writeFile,
-} from 'node:fs/promises';
+import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
 
-import {execa} from 'execa';
 import {afterEach, describe, expect, it} from 'vitest';
 
 import {startMcpMockController} from '../mcpMocks/controller.js';
+import {startOwnedProcess} from '../processGroup.js';
 import {OpenCodeHarness} from './opencode.js';
 import {runOpenCodeWithMcp} from './opencodeMcp.js';
 
@@ -26,6 +20,9 @@ afterEach(async () => {
 
 async function fixture(
   mode:
+    | 'invalid-arguments'
+    | 'mock-error'
+    | 'hang'
     | 'call'
     | 'negative'
     | 'failed'
@@ -42,8 +39,16 @@ async function fixture(
     linear: {
       tools: {
         get_issue: {
-          inputSchema: {type: 'object'},
-          response: {content: [{type: 'text', text: 'fixture-receipt-42'}]},
+          inputSchema: {
+            type: 'object',
+            properties: {id: {type: 'string'}},
+            required: ['id'],
+            additionalProperties: false,
+          },
+          response: {
+            content: [{type: 'text', text: 'fixture-receipt-42'}],
+            ...(mode === 'mock-error' ? {isError: true} : {}),
+          },
         },
       },
     },
@@ -52,6 +57,11 @@ async function fixture(
     controller.finalize({harnessReady: false, harnessSucceeded: false}),
   );
   const requests: Record<string, unknown>[] = [];
+  let modelStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    modelStarted = resolve;
+  });
+  let invalidSent = false;
   let realContacts = 0;
   let globalContacts = 0;
   let bashCalled = false;
@@ -71,9 +81,11 @@ async function fixture(
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const body = JSON.parse(Buffer.concat(chunks).toString());
     requests.push(body);
+    modelStarted();
+    if (mode === 'hang') return;
     const tool = body.tools?.find((entry: {function?: {name?: string}}) =>
       mode === 'question' || mode === 'ask-bash'
-        ? entry.function?.name === (mode === 'question' ? 'question' : 'bash')
+        ? entry.function?.name === (mode === 'question' ? 'question' : 'shell')
         : entry.function?.name?.endsWith('_get_issue'),
     );
     const hasReceipt = JSON.stringify(body.messages).includes(
@@ -92,23 +104,23 @@ async function fixture(
           message.role === 'user' &&
           JSON.stringify(message.content).includes('SUBAGENT_RUN_TOUCH'),
       );
-      if (inSubagent && !bashCalled && names.includes('bash')) {
+      if (inSubagent && !bashCalled && names.includes('shell')) {
         bashCalled = true;
         delegated = {
-          name: 'bash',
+          name: 'shell',
           arguments: JSON.stringify({
             command: 'touch bash-ran',
             description: 'Mark the run',
           }),
         };
-      } else if (!inSubagent && !taskCalled && names.includes('task')) {
+      } else if (!inSubagent && !taskCalled && names.includes('subagent')) {
         taskCalled = true;
         delegated = {
-          name: 'task',
+          name: 'subagent',
           arguments: JSON.stringify({
             description: 'Mark the run',
             prompt: 'SUBAGENT_RUN_TOUCH',
-            subagent_type: 'general',
+            agent: 'general',
           }),
         };
       }
@@ -116,6 +128,8 @@ async function fixture(
     const call =
       delegated !== undefined ||
       ((mode === 'call' ||
+        mode === 'mock-error' ||
+        (mode === 'invalid-arguments' && !invalidSent) ||
         mode === 'ask' ||
         mode === 'ask-continue' ||
         mode === 'question' ||
@@ -123,6 +137,7 @@ async function fixture(
         !hasReceipt &&
         !!tool &&
         requests.length < 10);
+    if (call && mode === 'invalid-arguments') invalidSent = true;
     if (call && mode === 'ask-bash') bashCalled = true;
     const delta = call
       ? {
@@ -141,7 +156,9 @@ async function fixture(
                           command: 'touch bash-ran',
                           description: 'Mark the run',
                         })
-                      : '{"id":"DYNO-1"}',
+                      : mode === 'invalid-arguments'
+                        ? '{"id":{"bad":true}}'
+                        : '{"id":"DYNO-1"}',
               },
             },
           ],
@@ -173,33 +190,49 @@ async function fixture(
   const marker = join(root, 'real-started');
   const config = {
     $schema: 'https://opencode.ai/config.json',
-    provider: {
+    providers: {
       fixture: {
-        npm: '@ai-sdk/openai-compatible',
+        package: '@opencode/ai/providers/openai-compatible',
         name: 'Fixture',
-        options: {baseURL: `${base}/v1`, apiKey: 'synthetic'},
+        settings: {baseURL: `${base}/v1`, apiKey: 'synthetic'},
         models: {
-          fixture: {name: 'Fixture', limit: {context: 32000, output: 1000}},
+          fixture: {
+            name: 'Fixture',
+            capabilities: {tools: true},
+            limit: {context: 32000, output: 1000},
+          },
         },
       },
     },
     mcp: {
-      real_linear: {
-        type: 'local',
-        command: [
-          process.execPath,
-          '-e',
-          `require('fs').writeFileSync(${JSON.stringify(marker)}, 'started')`,
-        ],
+      servers: {
+        real_linear: {
+          type: 'local',
+          command: [
+            process.execPath,
+            '-e',
+            `require('fs').writeFileSync(${JSON.stringify(marker)}, 'started')`,
+          ],
+        },
+        remote: {type: 'remote', url: `${base}/real-mcp`, oauth: false},
       },
-      remote: {type: 'remote', url: `${base}/real-mcp`, oauth: false},
     },
-    ...(mode === 'denied' ? {permission: {linear_get_issue: 'deny'}} : {}),
+    ...(mode === 'denied'
+      ? {
+          permissions: [
+            {action: 'linear_get_issue', resource: '*', effect: 'deny'},
+          ],
+        }
+      : {}),
     ...(mode === 'ask' || mode === 'ask-continue'
-      ? {permission: {linear_get_issue: 'ask'}}
+      ? {
+          permissions: [
+            {action: 'linear_get_issue', resource: '*', effect: 'ask'},
+          ],
+        }
       : {}),
     ...(mode === 'ask-bash' || mode === 'ask-subagent'
-      ? {permission: {bash: 'ask'}}
+      ? {permissions: [{action: 'shell', resource: '*', effect: 'ask'}]}
       : {}),
     // The model keeps going after a denial and can still finish with "stop".
     ...(mode === 'ask-continue'
@@ -213,7 +246,9 @@ async function fixture(
   const globalSource = JSON.stringify({
     $schema: 'https://opencode.ai/config.json',
     mcp: {
-      global: {type: 'remote', url: `${base}/global-mcp`, oauth: false},
+      servers: {
+        global: {type: 'remote', url: `${base}/global-mcp`, oauth: false},
+      },
     },
   });
   await mkdir(join(root, 'config', 'opencode'), {recursive: true});
@@ -225,7 +260,7 @@ async function fixture(
     XDG_CACHE_HOME: join(root, 'cache'),
     XDG_STATE_HOME: join(root, 'state'),
     OPENCODE_CONFIG: configPath,
-    OPENCODE_CONFIG_DIR: root,
+    OPENCODE_CONFIG_DIR: join(root, 'config', 'opencode'),
     OPENCODE_CONFIG_CONTENT: '{}',
     OPENCODE_DISABLE_MODELS_FETCH: 'true',
   };
@@ -242,10 +277,14 @@ async function fixture(
     [join(root, '.opencode', 'plugins'), pluginMarkers[0]!],
     [join(root, 'config', 'opencode', 'plugins'), pluginMarkers[1]!],
   ] as const) {
-    await mkdir(directory, {recursive: true});
+    await mkdir(join(directory, 'probe'), {recursive: true});
     await writeFile(
-      join(directory, 'probe.js'),
-      `import {writeFileSync} from 'node:fs'; export const Probe = async () => { writeFileSync(${JSON.stringify(marker)}, 'loaded'); return {} };`,
+      join(directory, 'probe', 'package.json'),
+      JSON.stringify({type: 'module'}),
+    );
+    await writeFile(
+      join(directory, 'probe', 'server.js'),
+      `import {writeFileSync} from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'loaded'); export default {id: 'probe_${pluginMarkers.indexOf(marker)}', setup() {}};`,
     );
   }
   const options = {
@@ -270,6 +309,7 @@ async function fixture(
   };
   return {
     options,
+    started,
     controller,
     requests,
     marker,
@@ -286,51 +326,57 @@ async function fixture(
 describe.skipIf(!executable)(
   'native OpenCode MCP runtime (local model, no credits)',
   () => {
-    it('loads the planted plugin shape without --pure', async () => {
-      const root = await realpath(
-        await mkdtemp(join(tmpdir(), 'dynobox-opencode-plugin-control-')),
-      );
-      cleanup.push(() => rm(root, {recursive: true, force: true}));
-      const markers = [
-        join(root, 'project-plugin-loaded'),
-        join(root, 'global-plugin-loaded'),
-      ];
-      for (const [directory, marker] of [
-        [join(root, '.opencode', 'plugins'), markers[0]!],
-        [join(root, 'config', 'opencode', 'plugins'), markers[1]!],
-      ] as const) {
-        await mkdir(directory, {recursive: true});
-        await writeFile(
-          join(directory, 'probe.js'),
-          `import {writeFileSync} from 'node:fs'; export const Probe = async () => { writeFileSync(${JSON.stringify(marker)}, 'loaded'); return {} };`,
-        );
-      }
-      const configPath = join(root, 'opencode.json');
-      await writeFile(
-        configPath,
-        JSON.stringify({$schema: 'https://opencode.ai/config.json'}),
-      );
-      const result = await execa(executable!, ['debug', 'config'], {
-        cwd: root,
-        env: {
-          ...process.env,
-          HOME: root,
-          XDG_CONFIG_HOME: join(root, 'config'),
-          XDG_DATA_HOME: join(root, 'data'),
-          XDG_CACHE_HOME: join(root, 'cache'),
-          XDG_STATE_HOME: join(root, 'state'),
-          OPENCODE_CONFIG: configPath,
-          OPENCODE_CONFIG_DIR: root,
-          OPENCODE_DISABLE_MODELS_FETCH: 'true',
-          OPENCODE_DISABLE_AUTOUPDATE: 'true',
+    it('loads the planted v2 plugins without the adapter block', async () => {
+      const f = await fixture('negative');
+      const child = startOwnedProcess(
+        executable!,
+        ['serve', '--hostname', '127.0.0.1', '--port', '0'],
+        {
+          cwd: f.options.input.workDir,
+          env: {
+            ...f.options.input.env,
+            OPENCODE_PASSWORD: 'fixture-control',
+            OPENCODE_CONFIG_CONTENT: JSON.stringify({
+              policies: [
+                {action: 'integration.use', resource: 'mcp:*', effect: 'deny'},
+              ],
+            }),
+          },
+          stdin: 'ignore',
+          reject: false,
+          timeout: 10000,
         },
-        timeout: 30000,
-        reject: false,
-      });
-      expect(result.exitCode, result.stderr).toBe(0);
-      for (const marker of markers)
-        expect(await readFile(marker, 'utf8')).toBe('loaded');
-    }, 35000);
+      );
+      try {
+        const base = await new Promise<string>((resolve, reject) => {
+          let output = '';
+          child.stdout?.on('data', (chunk) => {
+            output += String(chunk);
+            const match = output.match(/http:\/\/127\.0\.0\.1:\d+(?=\s)/);
+            if (match) resolve(match[0]);
+          });
+          child.then(() => reject(new Error('control server exited')), reject);
+        });
+        const response = await fetch(`${base}/api/plugin`, {
+          headers: {
+            Authorization: `Basic ${Buffer.from('opencode:fixture-control').toString('base64')}`,
+          },
+          signal: AbortSignal.timeout(5000),
+        });
+        expect(response.status).toBe(200);
+        for (
+          let attempt = 0;
+          attempt < 30 && !f.pluginMarkers.every(existsSync);
+          attempt++
+        )
+          await delay(100);
+        for (const marker of f.pluginMarkers)
+          expect(await readFile(marker, 'utf8')).toBe('loaded');
+      } finally {
+        child.stop();
+        await child;
+      }
+    }, 15000);
 
     it.each(['call', 'negative'] as const)(
       'runs %s with inherited servers excluded',
@@ -372,16 +418,48 @@ describe.skipIf(!executable)(
               kind: 'mcp',
             }),
           ]);
-          await execa(executable!, ['--pure', 'mcp', 'list'], {
-            cwd: f.options.input.workDir,
-            env: f.options.input.env,
-            timeout: 10000,
-            reject: false,
-          });
-          expect(f.contacts()).toBeGreaterThan(0);
-          expect(f.globalContacts()).toBeGreaterThan(0);
-          expect(await readFile(f.marker, 'utf8')).toBe('started');
         }
+      },
+      30000,
+    );
+
+    it('rejects a global allow policy before inherited integrations load', async () => {
+      const f = await fixture('call');
+      await writeFile(
+        f.globalConfigPath,
+        JSON.stringify({
+          policies: [
+            {action: 'integration.use', resource: '*', effect: 'allow'},
+          ],
+        }),
+      );
+      await expect(runOpenCodeWithMcp(f.options)).rejects.toMatchObject({
+        category: 'configuration_failed',
+        message: expect.stringContaining('can override MCP mock isolation'),
+      });
+      expect(f.requests).toHaveLength(0);
+      expect(f.contacts()).toBe(0);
+      expect(f.globalContacts()).toBe(0);
+      for (const marker of f.pluginMarkers)
+        expect(existsSync(marker)).toBe(false);
+    }, 30000);
+
+    it.each(Array.from({length: 10}, (_, index) => index))(
+      'keeps direct mock tools available after discovery (iteration %i)',
+      async () => {
+        const f = await fixture('call');
+        const result = await runOpenCodeWithMcp(f.options);
+        const observation = await f.controller.finalize({
+          harnessReady: result.harnessReady,
+          harnessSucceeded: true,
+        });
+        expect(observation.calls).toHaveLength(1);
+        expect(result.toolEvents).toContainEqual(
+          expect.objectContaining({
+            rawName: 'mcp__linear__get_issue',
+            status: 'success',
+          }),
+        );
       },
       30000,
     );
@@ -422,7 +500,7 @@ describe.skipIf(!executable)(
         ).rejects.toMatchObject({
           category: 'execution_failed',
           message: expect.stringContaining(
-            '"ask" permission for linear_get_issue',
+            'rejected permission for a mock tool',
           ),
         });
         const observation = await f.controller.finalize({
@@ -528,25 +606,84 @@ describe.skipIf(!executable)(
     }, 30000);
 
     it('cancels an active invocation and closes its controller routes', async () => {
-      const f = await fixture('negative');
+      const f = await fixture('hang');
       const abort = new AbortController();
-      const timer = setTimeout(() => abort.abort(), 1000);
-      try {
-        await expect(
-          runOpenCodeWithMcp({
-            ...f.options,
-            input: {...f.options.input, signal: abort.signal},
-          }),
-        ).rejects.toMatchObject({category: 'execution_failed'});
-      } finally {
-        clearTimeout(timer);
-      }
+      const pending = runOpenCodeWithMcp({
+        ...f.options,
+        input: {...f.options.input, signal: abort.signal},
+      });
+      const rejected = expect(pending).rejects.toMatchObject({
+        category: 'execution_failed',
+      });
+      await f.started;
+      abort.abort();
+      await rejected;
       const observation = await f.controller.finalize({
         harnessReady: false,
         harnessSucceeded: false,
       });
       expect(observation.ready).toBe(false);
       await expect(fetch(f.controller.urls.linear!)).rejects.toThrow();
+    }, 30000);
+
+    it('keeps an invalid mock attempt in the evidence when no call reaches the mock', async () => {
+      const f = await fixture('invalid-arguments');
+      const result = await runOpenCodeWithMcp(f.options);
+      const observation = await f.controller.finalize({
+        harnessReady: true,
+        harnessSucceeded: true,
+      });
+      expect(observation.calls).toHaveLength(0);
+      expect(result.toolEvents).toContainEqual(
+        expect.objectContaining({
+          rawName: 'mcp__linear__get_issue',
+          status: 'failure',
+        }),
+      );
+    }, 30000);
+
+    it('retains a received mock error as call evidence', async () => {
+      const f = await fixture('mock-error');
+      const result = await runOpenCodeWithMcp(f.options);
+      const observation = await f.controller.finalize({
+        harnessReady: true,
+        harnessSucceeded: true,
+      });
+      expect(observation.calls).toHaveLength(1);
+      expect(observation.calls[0]?.category).toBe('tool_error');
+      expect(result.toolEvents).toContainEqual(
+        expect.objectContaining({
+          rawName: 'mcp__linear__get_issue',
+          status: 'failure',
+          message: expect.stringContaining('fixture-receipt-42'),
+        }),
+      );
+    }, 30000);
+
+    it('applies an explicit grant after inherited wildcard ask rules', async () => {
+      const f = await fixture('call');
+      await writeFile(
+        f.globalConfigPath,
+        JSON.stringify({
+          permissions: [
+            {action: 'linear_get_issue', resource: '*', effect: 'ask'},
+            {action: 'linear_*', resource: '*', effect: 'ask'},
+          ],
+        }),
+      );
+      const result = await runOpenCodeWithMcp({
+        ...f.options,
+        input: {
+          ...f.options.input,
+          permissionMode: 'default',
+          allowedMcpTools: [{server: 'linear', tool: 'get_issue'}],
+        },
+      });
+      const observation = await f.controller.finalize({
+        harnessReady: result.harnessReady,
+        harnessSucceeded: true,
+      });
+      expect(observation.calls).toHaveLength(1);
     }, 30000);
   },
 );

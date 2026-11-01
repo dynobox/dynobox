@@ -107,6 +107,16 @@ The current example expects these repository secrets:
 - `ANTHROPIC_API_KEY` for Claude Code runs.
 - `OPENAI_API_KEY` for Codex runs.
 
+OpenCode MCP mock jobs require OpenCode **2.2.5 or a later 2.x release**.
+Dynobox uses a private v2 server for each job and exposes mock tools directly,
+with Code Mode disabled for those tools. It blocks inherited MCP servers and
+external server plugins for the run. The normal profile and configuration files
+stay in place.
+
+MCP mock jobs stop before launch if a file defines a server with a mock's name
+or has an integration allow policy that can override isolation. These jobs also
+reject macOS managed preferences, which the inline configuration cannot override.
+
 OpenCode runs require the `opencode` executable plus credentials for the
 provider named by the configured `provider/model`. OpenCode has no single
 provider-independent CI secret.

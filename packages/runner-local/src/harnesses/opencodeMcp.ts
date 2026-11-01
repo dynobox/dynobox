@@ -1,5 +1,11 @@
+import {randomBytes} from 'node:crypto';
+import {readFile, realpath} from 'node:fs/promises';
 import {request as httpRequest} from 'node:http';
+import {homedir, userInfo} from 'node:os';
+import {dirname, join, resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
+
+import {parse, type ParseError} from 'jsonc-parser';
 
 import {
   mcpDeadline,
@@ -16,26 +22,155 @@ import type {
   McpServerConnections,
 } from './types.js';
 
-// Oldest release whose `--pure` + inline-config isolation was verified natively.
-const MIN_VERSION = '1.18.26';
+// The native regression suite uses this v2 release and its HTTP contracts.
+const MIN_VERSION = '2.2.5';
 type Config = Record<string, unknown>;
-
+type Rule = {action: string; resource: string; effect: string};
 export type OpenCodeMcpConfiguration = {
   executable: string;
   cwd: string;
   env: Record<string, string | undefined>;
-  version: string | null;
-  denials: {permission: string; pattern: string; action: string}[];
+  version: string;
 };
 
-/** OpenCode tool ids are `<server>_<tool>` with other characters replaced. */
-const toolId = (server: string, tool: string) =>
-  `${server}_${tool}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+// Mock names use the portable MCP name schema. They need no replacement.
+const toolId = (server: string, tool: string) => `${server}_${tool}`;
 
-/**
- * Build the launch environment: every inherited MCP server is disabled in an
- * inline config overlay and the mocks are added under their own names.
- */
+function hasMcpServer(config: Config, name: string): boolean {
+  const mcp = asRecord(config.mcp);
+  const legacy = asRecord(mcp[name]);
+  return (
+    Object.hasOwn(asRecord(mcp.servers), name) ||
+    legacy.type === 'local' ||
+    legacy.type === 'remote' ||
+    typeof legacy.enabled === 'boolean'
+  );
+}
+
+/** Read inline configuration and report invalid JSONC as a configuration failure. */
+function inlineConfig(
+  text: string | undefined,
+  source = 'OPENCODE_CONFIG_CONTENT',
+): Config {
+  if (!text?.trim()) return {};
+  const errors: ParseError[] = [];
+  const value: unknown = parse(text, errors, {allowTrailingComma: true});
+  if (errors.length || !isRecord(value))
+    throw new McpHarnessError(
+      'configuration_failed',
+      `${source} must contain a JSON or JSONC object.`,
+    );
+  return value;
+}
+
+/** Stop before launch when a file can override the blocks on inherited integrations. */
+async function checkFileIsolation(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  servers: McpServerConnections,
+) {
+  const directories = new Set([
+    env.OPENCODE_CONFIG_DIR ??
+      join(
+        env.XDG_CONFIG_HOME ?? join(env.HOME ?? homedir(), '.config'),
+        'opencode',
+      ),
+    ...(process.platform === 'darwin'
+      ? ['/Library/Application Support/opencode']
+      : process.platform === 'win32'
+        ? [join(env.ProgramData ?? 'C:\\ProgramData', 'opencode')]
+        : ['/etc/opencode']),
+  ]);
+  if (
+    !['1', 'true'].includes(
+      env.OPENCODE_CONFIG_PROJECT_DISABLE ??
+        env.OPENCODE_DISABLE_PROJECT_CONFIG ??
+        '',
+    )
+  ) {
+    for (let directory = cwd; ; directory = dirname(directory)) {
+      directories.add(directory);
+      directories.add(join(directory, '.opencode'));
+      if (directory === dirname(directory)) break;
+    }
+  }
+  const files = new Set(
+    [...directories].flatMap((directory) =>
+      ['opencode.json', 'opencode.jsonc'].map((name) => join(directory, name)),
+    ),
+  );
+  if (env.OPENCODE_CONFIG) files.add(resolve(cwd, env.OPENCODE_CONFIG));
+  if (process.platform === 'darwin') {
+    // Managed preferences are authoritative and cannot be replaced by this overlay.
+    for (const file of [
+      join(
+        '/Library/Managed Preferences',
+        userInfo().username,
+        'ai.opencode.managed.plist',
+      ),
+      '/Library/Managed Preferences/ai.opencode.managed.plist',
+    ]) {
+      const present = await readFile(file).then(
+        () => true,
+        (error: NodeJS.ErrnoException) => {
+          if (error.code === 'ENOENT') return false;
+          throw error;
+        },
+      );
+      if (present)
+        throw new McpHarnessError(
+          'configuration_failed',
+          'OpenCode MCP mocking cannot isolate managed preferences on this machine.',
+        );
+    }
+  }
+  await Promise.all(
+    [...files].map(async (file) => {
+      const text = await readFile(file, 'utf8').catch(
+        (error: NodeJS.ErrnoException) => {
+          if (error.code === 'ENOENT') return undefined;
+          throw new McpHarnessError(
+            'configuration_failed',
+            `Cannot read OpenCode configuration "${file}".`,
+          );
+        },
+      );
+      if (text === undefined) return;
+      const config = inlineConfig(text, file);
+      for (const name of Object.keys(servers))
+        if (hasMcpServer(config, name))
+          throw new McpHarnessError(
+            'configuration_failed',
+            `OpenCode config already has an MCP server named "${name}"; rename or remove it to use this mock.`,
+          );
+      const policies = [
+        config.policies,
+        asRecord(config.experimental).policies,
+      ].flatMap((value) => (Array.isArray(value) ? value : []));
+      for (const policy of policies) {
+        if (
+          !isRecord(policy) ||
+          policy.action !== 'integration.use' ||
+          policy.effect !== 'allow'
+        )
+          continue;
+        const resource = policy.resource;
+        if (
+          typeof resource === 'string' &&
+          (resource.startsWith('skill:') ||
+            Object.keys(servers).some((name) => resource === `mcp:${name}`))
+        )
+          continue;
+        throw new McpHarnessError(
+          'configuration_failed',
+          `OpenCode integration allow policy in "${file}" can override MCP mock isolation. Remove that policy for this run.`,
+        );
+      }
+    }),
+  );
+}
+
+/** Prepare a v2 launch with mock connections and blocks for inherited integrations. */
 export async function prepareOpenCodeMcpConfiguration(options: {
   executable: string;
   input: Pick<
@@ -48,210 +183,130 @@ export async function prepareOpenCodeMcpConfiguration(options: {
   const {input, servers, executable} = options;
   const remaining =
     options.remaining ?? mcpDeadline(input.timeoutMs, input.signal);
-  const cwd = input.workDir;
+  const cwd = await realpath(input.workDir);
   const env = {...process.env, ...input.env};
   Object.assign(env, mcpProxyEnv(env));
-  const probe = async <T>(args: string[], parse: (stdout: string) => T) => {
-    const result = await startOwnedProcess(executable, ['--pure', ...args], {
-      cwd,
-      env,
-      extendEnv: false,
-      stdin: 'ignore',
-      reject: false,
-      timeout: remaining(),
-      forceKillAfterDelay: 1000,
-      ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
-    });
-    try {
-      remaining();
-      if (result.timedOut)
-        throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');
-      if (result.failed)
-        throw new McpHarnessError(
-          'configuration_failed',
-          `opencode ${args.join(' ')} exited with code ${result.exitCode ?? 'unknown'}.`,
-        );
-      return parse(result.stdout);
-    } catch (error) {
-      throw new McpHarnessError(
-        error instanceof McpHarnessError
-          ? error.category
-          : 'configuration_failed',
-        error instanceof Error ? error.message : String(error),
-        {
-          exitCode: result.exitCode ?? 1,
-          stdout: result.stdout,
-          stderr: result.stderr,
-          durationMs: result.durationMs,
-        },
-      );
-    }
-  };
-  const version = await probe(['--version'], (stdout) =>
-    requireMcpVersion('OpenCode', MIN_VERSION, {failed: false, stdout}),
-  );
-
-  // Do not use `mcp list` here: it can connect to inherited real servers.
-  const initial = await probe(['debug', 'config'], (stdout) =>
-    asRecord(JSON.parse(stdout)),
-  );
-  const inline = asRecord(JSON.parse(env.OPENCODE_CONFIG_CONTENT ?? '{}'));
-  const occupied = new Set([
-    ...Object.keys(asRecord(initial.mcp)),
-    ...Object.keys(asRecord(inline.mcp)),
-  ]);
-  const mcp: Config = Object.fromEntries(
-    [...occupied].map((name) => [
-      name,
-      {...asRecord(asRecord(inline.mcp)[name]), enabled: false},
-    ]),
-  );
-  const usedPrefixes = new Set([...occupied].map((name) => toolId(name, '')));
-  const mockTools = new Map<string, string>();
-  for (const [name, {tools}] of Object.entries(servers))
-    for (const tool of tools) {
-      const id = toolId(name, tool);
-      const other = mockTools.get(id);
-      if (other !== undefined)
-        throw new McpHarnessError(
-          'configuration_failed',
-          `OpenCode names both mcp__${other} and mcp__${name}__${tool} "${id}"; rename one to use these mocks.`,
-        );
-      mockTools.set(id, `${name}__${tool}`);
-    }
-  for (const [name, server] of Object.entries(servers)) {
-    // Renaming the mock would show the model a different tool name than
-    // other harnesses, so a name clash fails instead.
-    if (usedPrefixes.has(toolId(name, '')))
+  const inline = inlineConfig(env.OPENCODE_CONFIG_CONTENT);
+  await checkFileIsolation(cwd, env, servers);
+  for (const name of Object.keys(servers))
+    if (hasMcpServer(inline, name))
       throw new McpHarnessError(
         'configuration_failed',
-        `OpenCode config already has an MCP server named "${name}"; rename or remove it to use this mock.`,
+        `OpenCode inline config already has an MCP server named "${name}".`,
       );
-    mcp[name] = {
-      type: 'remote',
-      url: server.url,
-      enabled: true,
-      oauth: false,
-      timeout: 10_000,
-    };
+  const result = await startOwnedProcess(executable, ['--version'], {
+    cwd,
+    env,
+    extendEnv: false,
+    stdin: 'ignore',
+    reject: false,
+    timeout: remaining(),
+    forceKillAfterDelay: 1000,
+    ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
+  });
+  let version: string;
+  try {
+    remaining();
+    version = requireMcpVersion('OpenCode', MIN_VERSION, result);
+    if (!version.startsWith('2.'))
+      throw new McpHarnessError(
+        'unsupported_version',
+        'OpenCode MCP mocking requires a supported v2 release.',
+      );
+  } catch (error) {
+    throw new McpHarnessError(
+      error instanceof McpHarnessError
+        ? error.category
+        : 'configuration_failed',
+      error instanceof Error ? error.message : String(error),
+      {
+        exitCode: result.exitCode ?? 1,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        durationMs: result.durationMs,
+      },
+    );
   }
-  const permission = mockPermissions(
-    initial,
-    servers,
-    input.allowedMcpTools ?? [],
-  );
-  const launchEnv = {
-    ...env,
-    OPENCODE_CONFIG_CONTENT: JSON.stringify({
-      ...inline,
-      mcp,
-      // `opencode serve` offers a question tool that `opencode run` does not;
-      // an unanswered question would stall the run.
-      permission: {...permission, question: 'deny'},
-    }),
-  };
+  const names = new Set<string>();
+  for (const [server, {tools}] of Object.entries(servers))
+    for (const tool of tools) {
+      const id = toolId(server, tool);
+      if (names.has(id))
+        throw new McpHarnessError(
+          'configuration_failed',
+          `OpenCode mock tool name "${id}" is not unique.`,
+        );
+      names.add(id);
+    }
+  const grants = (input.allowedMcpTools ?? []).map(({server, tool}) => ({
+    action: toolId(server, tool),
+    resource: '*',
+    effect: 'allow',
+  }));
   return {
     executable,
     cwd,
-    env: launchEnv,
     version,
-    denials: collectDenials(initial),
+    env: {
+      ...env,
+      OPENCODE_CONFIG_CONTENT: JSON.stringify({
+        ...inline,
+        mcp: {
+          ...asRecord(inline.mcp),
+          servers: {
+            ...asRecord(asRecord(inline.mcp).servers),
+            ...Object.fromEntries(
+              Object.entries(servers).map(([name, server]) => [
+                name,
+                {
+                  type: 'remote',
+                  url: server.url,
+                  oauth: false,
+                  codemode: false,
+                  timeout: {
+                    startup: 10_000,
+                    catalog: 10_000,
+                    execution: 10_000,
+                  },
+                },
+              ]),
+            ),
+          },
+        },
+        permissions: [
+          ...(Array.isArray(inline.permissions) ? inline.permissions : []),
+          ...grants,
+        ],
+        policies: [
+          ...(Array.isArray(inline.policies) ? inline.policies : []),
+          {action: 'integration.use', resource: 'mcp:*', effect: 'deny'},
+          ...Object.keys(servers).map((name) => ({
+            action: 'integration.use',
+            resource: `mcp:${name}`,
+            effect: 'allow',
+          })),
+          {action: 'integration.use', resource: 'plugin:*', effect: 'deny'},
+        ],
+      }),
+    },
   };
 }
 
-/**
- * Config rules for a dangerous-mode session, in order after its `*` allow.
- * Like `opencode run --auto`, an `ask` rule is approved rather than asked.
- */
-function collectDenials(config: Config) {
-  const denials: OpenCodeMcpConfiguration['denials'] = [];
-  const auto = (action: string) => (action === 'ask' ? 'allow' : action);
-  for (const source of [
-    config,
-    asRecord(asRecord(config.agent)[String(config.default_agent ?? 'build')]),
-  ]) {
-    for (const [permission, value] of Object.entries(asRecord(source.tools)))
-      if (value === false)
-        denials.push({permission, pattern: '*', action: 'deny'});
-    for (const [permission, value] of Object.entries(
-      asRecord(source.permission),
-    )) {
-      if (typeof value === 'string')
-        denials.push({permission, pattern: '*', action: auto(value)});
-      else if (isRecord(value))
-        for (const [pattern, action] of Object.entries(value))
-          if (typeof action === 'string')
-            denials.push({permission, pattern, action: auto(action)});
-    }
-  }
-  return denials;
-}
+/** Match a tool name against an OpenCode permission pattern. */
+const matches = (pattern: string, value: string) =>
+  new RegExp(
+    `^${pattern
+      .split('*')
+      .map((part) =>
+        part
+          .split('?')
+          .map((literal) => literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+          .join('.'),
+      )
+      .join('.*')}$`,
+  ).test(value);
 
-/**
- * Fail when a mock tool is denied (a denied tool would pass negative
- * assertions) and apply grants for declared mock tools.
- */
-function mockPermissions(
-  initial: Config,
-  servers: McpServerConnections,
-  grants: readonly {server: string; tool: string}[],
-) {
-  const permission = {...asRecord(initial.permission)};
-  const match = (pattern: string, name: string) =>
-    new RegExp(
-      `^${pattern
-        .split('*')
-        .map((part) =>
-          part
-            .split('?')
-            .map((literal) => literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-            .join('.'),
-        )
-        .join('.*')}$`,
-    ).test(name);
-  const selectedAgent = asRecord(
-    asRecord(initial.agent)[String(initial.default_agent ?? 'build')],
-  );
-  for (const [server, {tools}] of Object.entries(servers)) {
-    for (const tool of tools) {
-      const id = toolId(server, tool);
-      const denied = new McpHarnessError(
-        'not_ready',
-        `OpenCode config denies MCP tool "${id}".`,
-      );
-      const granted = grants.some(
-        (grant) => grant.server === server && grant.tool === tool,
-      );
-      let action: string | undefined;
-      for (const [index, source] of [initial, selectedAgent].entries()) {
-        if (index === 1 && granted) action = 'allow';
-        for (const [pattern, value] of Object.entries(asRecord(source.tools)))
-          if (match(pattern, id) && value === false) action = 'deny';
-        for (const [pattern, value] of Object.entries(
-          asRecord(source.permission),
-        )) {
-          if (!match(pattern, id)) continue;
-          if (typeof value === 'string') action = value;
-          else if (isRecord(value))
-            for (const [nestedPattern, nestedAction] of Object.entries(value))
-              if (match(nestedPattern, id) && typeof nestedAction === 'string')
-                action = nestedAction;
-        }
-      }
-      if (action === 'deny') throw denied;
-      if (granted) {
-        delete permission[id];
-        permission[id] = 'allow';
-      }
-    }
-  }
-  return permission;
-}
-
-/**
- * Drive `opencode serve` so mock discovery can be confirmed (and retried)
- * before the model runs. The controller still owns discovery evidence.
- */
+/** Run one v2 session and retain the received tool inputs and failure reasons. */
 export async function runOpenCodeWithMcp(options: {
   executable: string;
   input: HarnessInput;
@@ -270,19 +325,17 @@ export async function runOpenCodeWithMcp(options: {
     ...options,
     remaining,
   });
-  // The adapter's own requests carry no credentials, and `opencode run` never
-  // needed them, so this private server runs without basic auth.
-  const {
-    OPENCODE_SERVER_PASSWORD: _password,
-    OPENCODE_SERVER_USERNAME: _username,
-    ...serveEnv
-  } = prepared.env;
+  const password = randomBytes(32).toString('hex');
   const child = startOwnedProcess(
     prepared.executable,
-    ['--pure', 'serve', '--hostname', '127.0.0.1', '--port', '0'],
+    ['serve', '--hostname', '127.0.0.1', '--port', '0'],
     {
       cwd: prepared.cwd,
-      env: serveEnv,
+      env: {
+        ...prepared.env,
+        OPENCODE_PASSWORD: password,
+        OPENCODE_SERVER_PASSWORD: password,
+      },
       extendEnv: false,
       stdin: 'ignore',
       reject: false,
@@ -295,12 +348,18 @@ export async function runOpenCodeWithMcp(options: {
   try {
     const base = await new Promise<string>((resolve, reject) => {
       let output = '';
-      child.stdout?.on('data', (chunk: Buffer) => {
+      const listening = (chunk: Buffer) => {
         output += chunk.toString();
-        const match = output.match(/http:\/\/127\.0\.0\.1:(\d+)/);
-        if (match) resolve(match[0]);
-      });
+        // Wait for whitespace after the port. End-of-chunk is not end-of-port.
+        const match = output.match(/http:\/\/127\.0\.0\.1:(\d+)(?=\s)/);
+        if (match) {
+          child.stdout?.off('data', listening);
+          resolve(match[0]);
+        } else output = output.slice(-4096);
+      };
+      child.stdout?.on('data', listening);
       child.then((result) => {
+        child.stdout?.off('data', listening);
         try {
           remaining();
           if (result.timedOut)
@@ -319,8 +378,10 @@ export async function runOpenCodeWithMcp(options: {
         }
       }, reject);
     });
-    // node:http rather than fetch: fetch caps a response at 300s, and the
-    // message request stays open for the whole model turn.
+    /**
+     * Send a v2 control request within the remaining job time.
+     * Use node:http to avoid the fetch header timeout during a model turn.
+     */
     const request = async (
       path: string,
       body?: unknown,
@@ -335,7 +396,7 @@ export async function runOpenCodeWithMcp(options: {
               method: body === undefined ? 'GET' : 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'x-opencode-directory': encodeURIComponent(prepared.cwd),
+                Authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}`,
               },
               signal: AbortSignal.any([
                 deadline,
@@ -370,6 +431,7 @@ export async function runOpenCodeWithMcp(options: {
           'execution_failed',
           `OpenCode ${path} returned HTTP ${status}.`,
         );
+      if (status === 204) return undefined;
       try {
         return JSON.parse(text);
       } catch {
@@ -379,146 +441,270 @@ export async function runOpenCodeWithMcp(options: {
         );
       }
     };
-    let status = asRecord(await request('/mcp'));
-    // OpenCode can report "Failed to get tools" immediately after
-    // initialization without sending tools/list. Retry only discovery, before
-    // any model invocation.
-    for (const name of Object.keys(servers)) {
-      for (
-        let attempt = 0;
-        attempt < 2 &&
-        asRecord(status[name]).status === 'failed' &&
-        asRecord(status[name]).error === 'Failed to get tools';
-        attempt++
-      ) {
-        await request(`/mcp/${name}/connect`, {});
-        status = asRecord(await request('/mcp'));
-      }
+    const entries = await request('/api/config');
+    if (
+      !Array.isArray(entries) ||
+      entries.some(
+        (entry) =>
+          !isRecord(entry) ||
+          !['document', 'directory'].includes(String(entry.type)) ||
+          (entry.type === 'document' && !isRecord(entry.info)),
+      )
+    )
+      throw new McpHarnessError(
+        'configuration_failed',
+        'OpenCode returned invalid configuration sources.',
+      );
+    const documents = entries
+      .filter((entry) => entry.type === 'document')
+      .map((entry) => asRecord(entry.info));
+    const agentId = String(
+      [...documents]
+        .reverse()
+        .find((doc) => typeof doc.default_agent === 'string')?.default_agent ??
+        'build',
+    );
+    let agents: unknown = [];
+    for (let attempt = 0; attempt < 20; attempt++) {
+      agents = asRecord(await request('/api/agent')).data;
+      if (!Array.isArray(agents) || agents.length > 0) break;
+      await delay(
+        Math.min(100, remaining()),
+        undefined,
+        input.signal ? {signal: input.signal} : {},
+      );
     }
-    for (const [name, state] of Object.entries(status)) {
-      const current = asRecord(state).status;
-      if (Object.hasOwn(servers, name)) {
-        if (current !== 'connected')
+    if (!Array.isArray(agents))
+      throw new McpHarnessError(
+        'configuration_failed',
+        'OpenCode returned invalid agents.',
+      );
+    const agent = agents.find(
+      (value) => isRecord(value) && value.id === agentId,
+    );
+    if (!isRecord(agent) || !Array.isArray(agent.permissions))
+      throw new McpHarnessError(
+        'configuration_failed',
+        `OpenCode agent "${agentId}" is not available.`,
+      );
+    const rules = agent.permissions as Rule[];
+    if (
+      rules.some(
+        (rule) =>
+          !isRecord(rule) ||
+          typeof rule.action !== 'string' ||
+          typeof rule.resource !== 'string' ||
+          !['allow', 'ask', 'deny'].includes(rule.effect),
+      )
+    )
+      throw new McpHarnessError(
+        'configuration_failed',
+        'OpenCode returned invalid permission rules.',
+      );
+    for (const [server, {tools}] of Object.entries(servers))
+      for (const tool of tools) {
+        const id = toolId(server, tool);
+        if (
+          [...rules]
+            .reverse()
+            .find(
+              (rule) => matches(rule.action, id) && matches(rule.resource, '*'),
+            )?.effect === 'deny'
+        )
           throw new McpHarnessError(
             'not_ready',
-            `OpenCode reports MCP mock server "${name}" as ${String(current)}.`,
+            `OpenCode config denies MCP tool "${id}".`,
           );
-      } else if (current !== 'disabled')
-        throw new McpHarnessError(
-          'configuration_failed',
-          `OpenCode left inherited MCP server "${name}" ${String(current)}.`,
+      }
+    let status: unknown;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      status = asRecord(await request('/api/mcp')).data;
+      if (!Array.isArray(status)) break;
+      const states = status;
+      const pending = Object.keys(servers).some((name) => {
+        const value = states.find(
+          (value: unknown) => isRecord(value) && value.name === name,
         );
+        return (
+          value === undefined ||
+          asRecord(asRecord(value).status).status === 'pending'
+        );
+      });
+      if (!pending) break;
+      await delay(
+        Math.min(100, remaining()),
+        undefined,
+        input.signal ? {signal: input.signal} : {},
+      );
     }
-    const missing = Object.keys(servers).find(
-      (name) => !Object.hasOwn(status, name),
-    );
-    if (missing !== undefined)
+    if (!Array.isArray(status))
       throw new McpHarnessError(
         'not_ready',
-        `OpenCode did not load MCP mock server "${missing}".`,
+        'OpenCode returned invalid MCP status.',
       );
-    const session = asRecord(
-      await request('/session', {
-        permission: [
-          ...(input.permissionMode === 'dangerous'
-            ? [
-                {permission: '*', pattern: '*', action: 'allow'},
-                ...prepared.denials,
-                ...(input.allowedMcpTools ?? []).map(({server, tool}) => ({
-                  permission: toolId(server, tool),
-                  pattern: '*',
-                  action: 'allow',
-                })),
-              ]
-            : []),
-          {permission: 'question', pattern: '*', action: 'deny'},
-        ],
-      }),
+    for (const value of status) {
+      const state = asRecord(value);
+      if (!Object.hasOwn(servers, String(state.name))) {
+        if (asRecord(state.status).status !== 'disabled')
+          throw new McpHarnessError(
+            'configuration_failed',
+            `OpenCode did not block inherited MCP server "${String(state.name)}".`,
+          );
+      }
+    }
+    for (const name of Object.keys(servers)) {
+      const state = status.find(
+        (value) => isRecord(value) && value.name === name,
+      );
+      if (asRecord(asRecord(state).status).status !== 'connected')
+        throw new McpHarnessError(
+          'not_ready',
+          `OpenCode MCP mock server "${name}" is not connected.`,
+        );
+    }
+    // v2 debounces tool registration for 100 ms after discovery. A connected
+    // transport can still have an empty model tool catalog during that window.
+    await delay(
+      Math.min(200, remaining()),
+      undefined,
+      input.signal ? {signal: input.signal} : {},
     );
-    let model;
+    let model: {providerID: string; id: string} | undefined;
     if (input.model !== undefined) {
       const slash = input.model.indexOf('/');
-      if (slash <= 0)
+      if (slash <= 0 || slash === input.model.length - 1)
         throw new McpHarnessError(
           'configuration_failed',
           `OpenCode models must be "provider/model" (got "${input.model}").`,
         );
       model = {
         providerID: input.model.slice(0, slash),
-        modelID: input.model.slice(slash + 1),
+        id: input.model.slice(slash + 1),
       };
     }
-    // serve waits for a reply to each permission request. Answer the way
-    // `opencode run` does so an `ask` rule cannot stall the run: reject, or
-    // approve once under --auto. Subagent sessions do not inherit the
-    // session's `*` allow rule, so their requests arrive here too.
-    const approve = input.permissionMode === 'dangerous';
+    const grants = (input.allowedMcpTools ?? []).map(({server, tool}) => ({
+      action: toolId(server, tool),
+      resource: '*',
+      effect: 'allow',
+    }));
+    const session = asRecord(
+      asRecord(
+        await request('/api/session', {
+          location: {directory: prepared.cwd},
+          agent: agentId,
+          ...(model ? {model} : {}),
+          permissions: [
+            ...(input.permissionMode === 'dangerous'
+              ? [
+                  {action: '*', resource: '*', effect: 'allow'},
+                  ...rules.map((rule) => ({
+                    ...rule,
+                    effect: rule.effect === 'ask' ? 'allow' : rule.effect,
+                  })),
+                ]
+              : []),
+            ...grants,
+            {action: 'question', resource: '*', effect: 'deny'},
+          ],
+        }),
+      ).data,
+    );
+    if (typeof session.id !== 'string')
+      throw new McpHarnessError(
+        'execution_failed',
+        'OpenCode returned an invalid session.',
+      );
     const permissions = new AbortController();
     const rejected = new Set<string>();
-    const rejectPermissions = (async () => {
+    /** Answer permission requests until the model turn ends. */
+    const answerPermissions = (async () => {
       while (!permissions.signal.aborted) {
-        const pending = await request(
-          '/permission',
-          undefined,
-          permissions.signal,
-        ).catch(() => []);
-        for (const value of Array.isArray(pending) ? pending : []) {
+        const pending = asRecord(
+          await request(
+            '/api/permission/request',
+            undefined,
+            permissions.signal,
+          ),
+        ).data;
+        if (!Array.isArray(pending))
+          throw new McpHarnessError(
+            'execution_failed',
+            'OpenCode returned invalid permission requests.',
+          );
+        for (const value of pending) {
           if (permissions.signal.aborted) return;
           const permission = asRecord(value);
-          if (!approve) rejected.add(String(permission.permission));
+          if (
+            typeof permission.id !== 'string' ||
+            typeof permission.sessionID !== 'string' ||
+            typeof permission.action !== 'string'
+          )
+            throw new McpHarnessError(
+              'execution_failed',
+              'OpenCode returned an invalid permission request.',
+            );
+          const approve = input.permissionMode === 'dangerous';
+          if (!approve) rejected.add(String(permission.action));
           await request(
-            `/permission/${String(permission.id)}/reply`,
+            `/api/session/${encodeURIComponent(String(permission.sessionID))}/permission/${encodeURIComponent(String(permission.id))}/reply`,
             {
-              reply: approve ? 'once' : 'reject',
+              decision: approve ? 'once' : 'reject',
+              ...(!approve
+                ? {
+                    message:
+                      'This non-interactive run cannot approve this action. Continue without it.',
+                  }
+                : {}),
             },
             permissions.signal,
-          ).catch(() => {});
+          );
         }
-        await delay(200, undefined, {signal: permissions.signal}).catch(
-          () => {},
-        );
+        await delay(200, undefined, {signal: permissions.signal});
       }
     })();
-    let completed: Config;
+    // Race failures from either task. Abort the other task when this turn ends.
     try {
-      completed = asRecord(
-        await request(`/session/${String(session.id)}/message`, {
-          parts: [{type: 'text', text: input.prompt}],
-          ...(model ? {model} : {}),
-        }),
-      );
+      await Promise.race([
+        (async () => {
+          await request(
+            `/api/session/${session.id}/prompt`,
+            {text: input.prompt},
+            permissions.signal,
+          );
+          await request(
+            `/api/experimental/session/${session.id}/wait`,
+            {},
+            permissions.signal,
+          );
+        })(),
+        answerPermissions,
+      ]);
     } finally {
       permissions.abort();
-      await rejectPermissions;
+      await answerPermissions.catch(() => {});
     }
-    const info = asRecord(completed.info);
-    // A rejected mock call never reaches the mock, so it would otherwise let
-    // a negative assertion pass.
-    const mockIds = new Set(
-      Object.entries(servers).flatMap(([server, {tools}]) =>
-        tools.map((tool) => toolId(server, tool)),
-      ),
+    const exported = asRecord(
+      asRecord(await request(`/api/experimental/session/${session.id}/export`))
+        .data,
     );
-    const rejectedMocks = [...rejected].filter((id) => mockIds.has(id));
-    if (rejectedMocks.length > 0)
+    transcript = messageHistoryTranscript(exported.messages, servers);
+    if (
+      [...rejected].some((id) =>
+        Object.entries(servers).some(([server, {tools}]) =>
+          tools.some((tool) => toolId(server, tool) === id),
+        ),
+      )
+    )
       throw new McpHarnessError(
         'execution_failed',
-        `OpenCode rejected an "ask" permission for ${rejectedMocks.join(', ')}. Allow the tool in the OpenCode config, including any agent-level permission rules.`,
+        'OpenCode rejected permission for a mock tool. Allow the tool in the OpenCode configuration.',
       );
-    // Like `opencode run`, another rejected permission ends the turn without
-    // failing it; the assertions judge the result.
-    if (info.error || (info.finish !== 'stop' && rejected.size === 0))
+    if (asRecord(exported.info).outcome !== 'succeeded')
       throw new McpHarnessError(
         'execution_failed',
-        `OpenCode finished with ${info.error ? JSON.stringify(info.error) : String(info.finish)}.`,
+        `OpenCode session ${String(asRecord(exported.info).outcome)}.`,
       );
-    const messages = await request(`/session/${String(session.id)}/message`);
-    transcript = messageHistoryTranscript(messages);
-    const stdout = transcript;
-    const parsed = parseOpenCodeJson(
-      stdout,
-      Object.keys(servers).map((name) => `${name}_`),
-    );
+    const parsed = parseOpenCodeJson(transcript);
     if (parsed.errorMessage)
       throw new McpHarnessError('execution_failed', parsed.errorMessage);
     const toolEvents = parsed.toolEvents.map((event) => {
@@ -550,7 +736,7 @@ export async function runOpenCodeWithMcp(options: {
       toolEvents,
       output: {
         exitCode: 0,
-        stdout,
+        stdout: transcript,
         stderr: '',
         durationMs: Date.now() - started,
       },
@@ -559,8 +745,6 @@ export async function runOpenCodeWithMcp(options: {
     child.stop();
     const result = await child;
     let failure = error;
-    // Explicit failures occurred before cleanup. Only infer a timeout for
-    // transport errors that do not already have a harness failure category.
     if (!(error instanceof McpHarnessError)) {
       try {
         remaining();
@@ -577,9 +761,7 @@ export async function runOpenCodeWithMcp(options: {
       failure instanceof McpHarnessError
         ? failure.category
         : 'execution_failed',
-      failure instanceof McpHarnessError
-        ? failure.message
-        : `OpenCode MCP run failed: ${failure instanceof Error ? failure.message : String(failure)}`,
+      failure instanceof Error ? failure.message : String(failure),
       {
         exitCode: result.exitCode ?? 1,
         stdout: transcript ?? result.stdout,
@@ -593,8 +775,11 @@ export async function runOpenCodeWithMcp(options: {
   }
 }
 
-/** Validate message history and convert assistant parts to transcript lines. */
-function messageHistoryTranscript(messages: unknown): string {
+/** Validate the complete v2 history and convert assistant content to parser events. */
+function messageHistoryTranscript(
+  messages: unknown,
+  servers: McpServerConnections,
+): string {
   const invalid = () =>
     new McpHarnessError(
       'execution_failed',
@@ -602,39 +787,83 @@ function messageHistoryTranscript(messages: unknown): string {
     );
   if (!Array.isArray(messages)) throw invalid();
   const lines: string[] = [];
+  let lastFinish: unknown;
   for (const message of messages) {
     if (
       !isRecord(message) ||
-      !isRecord(message.info) ||
-      typeof message.info.role !== 'string' ||
-      !Array.isArray(message.parts)
+      typeof message.type !== 'string' ||
+      typeof message.id !== 'string'
     )
       throw invalid();
-    for (const part of message.parts) {
-      if (!isRecord(part) || typeof part.type !== 'string') throw invalid();
-      if (message.info.role !== 'assistant') continue;
-      if (part.type === 'text' && typeof part.text !== 'string')
+    if (message.type !== 'assistant') continue;
+    if (!Array.isArray(message.content)) throw invalid();
+    if (message.error)
+      throw new McpHarnessError(
+        'execution_failed',
+        `OpenCode assistant failed: ${JSON.stringify(message.error)}`,
+      );
+    lastFinish = message.finish;
+    for (const [index, content] of message.content.entries()) {
+      if (!isRecord(content) || typeof content.type !== 'string')
         throw invalid();
-      if (
-        part.type === 'tool' &&
-        (typeof part.tool !== 'string' ||
-          !isRecord(part.state) ||
-          typeof part.state.status !== 'string' ||
-          !['pending', 'running', 'completed', 'error'].includes(
-            part.state.status,
-          ) ||
-          !isRecord(part.state.input))
-      )
-        throw invalid();
-      const type =
-        part.type === 'tool'
-          ? 'tool_use'
-          : part.type === 'step-finish'
-            ? 'step_finish'
-            : part.type;
-      if (['tool_use', 'text', 'step_finish'].includes(type))
-        lines.push(JSON.stringify({type, part}));
+      if (content.type === 'text') {
+        if (typeof content.text !== 'string') throw invalid();
+        lines.push(
+          JSON.stringify({
+            type: 'text',
+            part: {
+              type: 'text',
+              id: `${message.id}:${index}`,
+              messageID: message.id,
+              text: content.text,
+            },
+          }),
+        );
+      } else if (content.type === 'tool') {
+        if (
+          typeof content.name !== 'string' ||
+          typeof content.id !== 'string' ||
+          !isRecord(content.state) ||
+          !['completed', 'error'].includes(String(content.state.status)) ||
+          !isRecord(content.state.input)
+        )
+          throw invalid();
+        const target =
+          content.name === 'invalid' ? content.state.input.tool : undefined;
+        if (
+          typeof target === 'string' &&
+          Object.entries(servers).some(([server, {tools}]) =>
+            tools.some((tool) => toolId(server, tool) === target),
+          )
+        )
+          throw new McpHarnessError(
+            'execution_failed',
+            `OpenCode rejected arguments for mock tool "${target}" before it reached the mock.`,
+          );
+        const state = {
+          ...content.state,
+          error: isRecord(content.state.error)
+            ? JSON.stringify(content.state.error)
+            : content.state.error,
+        };
+        lines.push(
+          JSON.stringify({
+            type: 'tool_use',
+            part: {
+              type: 'tool',
+              id: `${message.id}:${content.id}`,
+              tool: content.name,
+              state,
+            },
+          }),
+        );
+      }
     }
   }
+  if (lastFinish !== 'stop')
+    throw new McpHarnessError(
+      'execution_failed',
+      `OpenCode finished with ${String(lastFinish)}.`,
+    );
   return lines.join('\n');
 }

@@ -10,8 +10,16 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
-- Reject reported MCP calls that have no matching controller record before
-  assertions run. Preserve received mock error responses as valid call evidence.
+- Require OpenCode 2.2.5 or a later 2.x release for MCP mock jobs. Use its
+  authenticated private server, ordered permissions, session outcomes, and full
+  message exports. Keep mock tools outside Code Mode and preserve profile files.
+- Limit MCP call evidence checks to declared mock tools. Normalize empty
+  arguments and name reported calls that have no matching controller record.
+  Preserve received mock error responses as valid call evidence.
+- Read OpenCode inline JSONC, wait for the complete server URL, and fail on
+  incomplete model turns even after an unrelated permission rejection.
+- Stop OpenCode runs when permission polling fails. Keep invalid mock attempts
+  visible to evidence checks and cancel stalled polling when a turn ends.
 - Match OpenCode `?` permission patterns and cancel pending permission polls when
   the model request finishes, including runs without a job timeout.
 - Reject malformed OpenCode message history and retain fetched transcripts when
