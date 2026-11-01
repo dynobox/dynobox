@@ -10,6 +10,12 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Reject reported MCP calls that have no matching controller record before
+  assertions run. Preserve received mock error responses as valid call evidence.
+- Match OpenCode `?` permission patterns and cancel pending permission polls when
+  the model request finishes, including runs without a job timeout.
+- Reject malformed OpenCode message history and retain fetched transcripts when
+  parsing or caller callbacks fail.
 - Retain OpenCode MCP tool error messages and preserve explicit response, model,
   and callback failures when cleanup passes the run deadline.
 - Preserve Codex plugin settings during MCP mock runs and distinguish app-server

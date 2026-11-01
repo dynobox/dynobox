@@ -43,6 +43,7 @@ else if (args.includes('serve')) {
     let body = '';
     for await (const chunk of request) body += chunk;
     let result = {};
+    if (request.url === '/permission' && mode === 'permission-hang') {appendFileSync(process.env.DXB_TEST_LOG + '.permission-start', 'started'); return;}
     if (request.url === '/mcp') result = {linear: {status: 'connected'}};
     if (request.url === '/session') {
       appendFileSync(process.env.DXB_TEST_LOG + '.session', body);
@@ -50,6 +51,7 @@ else if (args.includes('serve')) {
     }
     if (request.url === '/permission' || request.method === 'GET' && request.url.endsWith('/message')) result = [];
     if (request.method === 'GET' && request.url.endsWith('/message') && mode === 'tool-error') result = [{info: {role: 'assistant'}, parts: [{id: 'tool-1', type: 'tool', tool: 'linear_get_issue', state: {status: 'error', input: {id: 'DYNO-1'}, error: 'Issue missing'}}]}];
+    if (request.method === 'GET' && request.url.endsWith('/message') && process.env.DXB_TEST_HISTORY !== undefined) result = JSON.parse(process.env.DXB_TEST_HISTORY);
     if (request.method === 'POST' && request.url.endsWith('/message')) {
       if (mode === 'request-hang') return;
       result = mode === 'model-error' ? {info: {error: {message: 'model failed'}}} : {info: {finish: 'stop'}};
@@ -103,6 +105,134 @@ else {
 }
 
 describe('OpenCode MCP configuration preparation', () => {
+  it('rejects a selected-agent deny rule with a question-mark wildcard', async () => {
+    const {options} = await fixture();
+    options.input.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+      agent: {build: {permission: {'linear_?et_issue': 'deny'}}},
+    });
+    await expect(
+      prepareOpenCodeMcpConfiguration({
+        ...options,
+        input: {
+          ...options.input,
+          allowedMcpTools: [{server: 'linear', tool: 'get_issue'}],
+        },
+      }),
+    ).rejects.toMatchObject({category: 'not_ready'});
+  });
+
+  it('uses the last matching question-mark allow rule and matches exactly one character', async () => {
+    const {options} = await fixture();
+    options.input.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+      permission: {
+        '*': 'deny',
+        'linear_?et_issue': 'allow',
+        'linear_??et_issue': 'deny',
+      },
+    });
+    await expect(
+      prepareOpenCodeMcpConfiguration(options),
+    ).resolves.toHaveProperty('version', '1.18.26');
+  });
+
+  it.each([false, true])(
+    'cancels a stalled permission poll after the model completes (job timeout: %s)',
+    async (withTimeout) => {
+      const {options, log} = await fixture('permission-hang');
+      const abort = new AbortController();
+      const timer = setTimeout(() => abort.abort(), 3000);
+      try {
+        const result = await runOpenCodeWithMcp({
+          ...options,
+          input: {
+            workDir: options.input.workDir,
+            env: options.input.env,
+            prompt: 'OK',
+            signal: abort.signal,
+            ...(withTimeout ? {timeoutMs: 2000} : {}),
+          },
+        });
+        expect(result.output.exitCode).toBe(0);
+        expect(await readFile(log + '.permission-start', 'utf8')).toBe(
+          'started',
+        );
+        expect(abort.signal.aborted).toBe(false);
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+  );
+
+  it.each([
+    {unexpected: true},
+    [{info: {role: 'assistant'}, parts: {}}],
+    [{info: {}, parts: []}],
+    [{info: {role: 'assistant'}, parts: [null]}],
+    [{info: {role: 'assistant'}, parts: [{type: 'text'}]}],
+    [
+      {
+        info: {role: 'assistant'},
+        parts: [
+          {
+            type: 'tool',
+            tool: 'linear_get_issue',
+            state: {status: 'unknown', input: {}},
+          },
+        ],
+      },
+    ],
+    [
+      {
+        info: {role: 'assistant'},
+        parts: [
+          {type: 'tool', tool: 'linear_get_issue', state: {status: 'error'}},
+        ],
+      },
+    ],
+    [
+      {
+        info: {role: 'assistant'},
+        parts: [{type: 'tool', tool: 'linear_get_issue'}],
+      },
+    ],
+  ])('rejects malformed history %#', async (history) => {
+    const {options} = await fixture();
+    Object.assign(options.input.env, {
+      DXB_TEST_HISTORY: JSON.stringify(history),
+    });
+    await expect(
+      runOpenCodeWithMcp({...options, input: {...options.input, prompt: 'OK'}}),
+    ).rejects.toMatchObject({
+      category: 'execution_failed',
+      message: expect.stringContaining('message history'),
+    });
+  });
+
+  it('retains the fetched transcript when a caller callback fails', async () => {
+    const {options} = await fixture('tool-error');
+    const error = await runOpenCodeWithMcp({
+      ...options,
+      input: {
+        ...options.input,
+        prompt: 'OK',
+        onToolEvent: () => {
+          throw new Error('callback failed');
+        },
+      },
+    }).catch((error: unknown) => error);
+    expect(error).toMatchObject({
+      category: 'execution_failed',
+      output: {
+        stdout: expect.stringContaining('"type":"tool_use"'),
+        stderr: expect.stringContaining('PRIVATE_STDERR_SENTINEL'),
+      },
+    });
+    expect(error).toHaveProperty(
+      'output.stdout',
+      expect.stringContaining('Issue missing'),
+    );
+  });
+
   it('retains tool error messages when mapping MCP names', async () => {
     const {options} = await fixture('tool-error');
     const run = await runOpenCodeWithMcp({

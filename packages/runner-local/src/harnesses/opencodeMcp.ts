@@ -201,7 +201,12 @@ function mockPermissions(
     new RegExp(
       `^${pattern
         .split('*')
-        .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .map((part) =>
+          part
+            .split('?')
+            .map((literal) => literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+            .join('.'),
+        )
         .join('.*')}$`,
     ).test(name);
   const selectedAgent = asRecord(
@@ -286,6 +291,7 @@ export async function runOpenCodeWithMcp(options: {
       ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
     },
   );
+  let transcript: string | undefined;
   try {
     const base = await new Promise<string>((resolve, reject) => {
       let output = '';
@@ -315,7 +321,11 @@ export async function runOpenCodeWithMcp(options: {
     });
     // node:http rather than fetch: fetch caps a response at 300s, and the
     // message request stays open for the whole model turn.
-    const request = async (path: string, body?: unknown): Promise<unknown> => {
+    const request = async (
+      path: string,
+      body?: unknown,
+      signal?: AbortSignal,
+    ): Promise<unknown> => {
       const deadline = AbortSignal.timeout(remaining());
       const {status, text} = await new Promise<{status: number; text: string}>(
         (resolve, reject) => {
@@ -330,6 +340,7 @@ export async function runOpenCodeWithMcp(options: {
               signal: AbortSignal.any([
                 deadline,
                 ...(input.signal ? [input.signal] : []),
+                ...(signal ? [signal] : []),
               ]),
             },
             (response) => {
@@ -442,19 +453,30 @@ export async function runOpenCodeWithMcp(options: {
     // approve once under --auto. Subagent sessions do not inherit the
     // session's `*` allow rule, so their requests arrive here too.
     const approve = input.permissionMode === 'dangerous';
-    let prompting = true;
+    const permissions = new AbortController();
     const rejected = new Set<string>();
     const rejectPermissions = (async () => {
-      while (prompting) {
-        const pending = await request('/permission').catch(() => []);
+      while (!permissions.signal.aborted) {
+        const pending = await request(
+          '/permission',
+          undefined,
+          permissions.signal,
+        ).catch(() => []);
         for (const value of Array.isArray(pending) ? pending : []) {
+          if (permissions.signal.aborted) return;
           const permission = asRecord(value);
           if (!approve) rejected.add(String(permission.permission));
-          await request(`/permission/${String(permission.id)}/reply`, {
-            reply: approve ? 'once' : 'reject',
-          }).catch(() => {});
+          await request(
+            `/permission/${String(permission.id)}/reply`,
+            {
+              reply: approve ? 'once' : 'reject',
+            },
+            permissions.signal,
+          ).catch(() => {});
         }
-        await delay(200);
+        await delay(200, undefined, {signal: permissions.signal}).catch(
+          () => {},
+        );
       }
     })();
     let completed: Config;
@@ -466,7 +488,7 @@ export async function runOpenCodeWithMcp(options: {
         }),
       );
     } finally {
-      prompting = false;
+      permissions.abort();
       await rejectPermissions;
     }
     const info = asRecord(completed.info);
@@ -491,23 +513,8 @@ export async function runOpenCodeWithMcp(options: {
         `OpenCode finished with ${info.error ? JSON.stringify(info.error) : String(info.finish)}.`,
       );
     const messages = await request(`/session/${String(session.id)}/message`);
-    const lines: string[] = [];
-    for (const message of Array.isArray(messages) ? messages : []) {
-      const entry = asRecord(message);
-      if (asRecord(entry.info).role !== 'assistant') continue;
-      for (const value of Array.isArray(entry.parts) ? entry.parts : []) {
-        const part = asRecord(value);
-        const type =
-          part.type === 'tool'
-            ? 'tool_use'
-            : part.type === 'step-finish'
-              ? 'step_finish'
-              : part.type;
-        if (['tool_use', 'text', 'step_finish'].includes(String(type)))
-          lines.push(JSON.stringify({type, part}));
-      }
-    }
-    const stdout = lines.join('\n');
+    transcript = messageHistoryTranscript(messages);
+    const stdout = transcript;
     const parsed = parseOpenCodeJson(
       stdout,
       Object.keys(servers).map((name) => `${name}_`),
@@ -575,7 +582,7 @@ export async function runOpenCodeWithMcp(options: {
         : `OpenCode MCP run failed: ${failure instanceof Error ? failure.message : String(failure)}`,
       {
         exitCode: result.exitCode ?? 1,
-        stdout: result.stdout,
+        stdout: transcript ?? result.stdout,
         stderr: result.stderr,
         durationMs: Date.now() - started,
       },
@@ -584,4 +591,50 @@ export async function runOpenCodeWithMcp(options: {
     child.stop();
     await child;
   }
+}
+
+/** Validate message history and convert assistant parts to transcript lines. */
+function messageHistoryTranscript(messages: unknown): string {
+  const invalid = () =>
+    new McpHarnessError(
+      'execution_failed',
+      'OpenCode returned invalid message history.',
+    );
+  if (!Array.isArray(messages)) throw invalid();
+  const lines: string[] = [];
+  for (const message of messages) {
+    if (
+      !isRecord(message) ||
+      !isRecord(message.info) ||
+      typeof message.info.role !== 'string' ||
+      !Array.isArray(message.parts)
+    )
+      throw invalid();
+    for (const part of message.parts) {
+      if (!isRecord(part) || typeof part.type !== 'string') throw invalid();
+      if (message.info.role !== 'assistant') continue;
+      if (part.type === 'text' && typeof part.text !== 'string')
+        throw invalid();
+      if (
+        part.type === 'tool' &&
+        (typeof part.tool !== 'string' ||
+          !isRecord(part.state) ||
+          typeof part.state.status !== 'string' ||
+          !['pending', 'running', 'completed', 'error'].includes(
+            part.state.status,
+          ) ||
+          !isRecord(part.state.input))
+      )
+        throw invalid();
+      const type =
+        part.type === 'tool'
+          ? 'tool_use'
+          : part.type === 'step-finish'
+            ? 'step_finish'
+            : part.type;
+      if (['tool_use', 'text', 'step_finish'].includes(type))
+        lines.push(JSON.stringify({type, part}));
+    }
+  }
+  return lines.join('\n');
 }

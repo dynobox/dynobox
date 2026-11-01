@@ -1,6 +1,7 @@
 import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {basename, join} from 'node:path';
+import {isDeepStrictEqual} from 'node:util';
 
 import {
   assertionRequiresVerify,
@@ -374,6 +375,28 @@ export async function runJob(
         harnessReady: mcpReady,
         harnessSucceeded: succeeded,
       });
+      // Each reported MCP call must have its own received call. A previous
+      // call with the same input must not hide a later refused attempt.
+      const unmatched = [...mcpObservation.calls];
+      const unreceived = (mcpToolEvents ?? []).some((event) => {
+        if (event.kind !== 'mcp') return false;
+        const index = unmatched.findIndex(
+          (call) =>
+            event.rawName === `mcp__${call.server}__${call.tool}` &&
+            isDeepStrictEqual(event.input, call.input),
+        );
+        if (index === -1) return true;
+        unmatched.splice(index, 1);
+        return false;
+      });
+      if (unreceived)
+        mcpObservation = {
+          ...mcpObservation,
+          ready: false,
+          failures: [
+            ...new Set([...mcpObservation.failures, 'not_ready' as const]),
+          ],
+        };
       for (const failure of mcpObservation.failures) mcpFailures.add(failure);
     } catch {
       mcpFailures.add('cleanup_failed');
