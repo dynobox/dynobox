@@ -193,7 +193,7 @@ describe('MCP runner lifecycle', () => {
       expect(result.status).toBe(
         mode === 'no-discovery' ? 'harness_failed' : 'passed',
       );
-      expect(result.harnessVersion).toBe('1.18.26');
+      expect(result.harnessVersion).toBe('2.2.5');
     },
   );
   it.each(['call', 'negative', 'no-discovery'] as const)(
@@ -566,7 +566,7 @@ class McpHarness implements Harness {
           this.id === 'codex'
             ? '0.153.4'
             : this.id === 'opencode'
-              ? '1.18.26'
+              ? '2.2.5'
               : '2.1.263',
         output: {exitCode: 0, stdout: 'done', stderr: '', durationMs: 5},
       };
