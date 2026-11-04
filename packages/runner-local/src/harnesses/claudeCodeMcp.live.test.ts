@@ -62,6 +62,13 @@ describe.skipIf(!executable)('native Claude Code MCP gates', () => {
       ],
     });
     expect(
+      run.toolEvents?.filter(
+        (event) => event.rawName === 'mcp__service__lookup',
+      ),
+    ).toEqual([
+      expect.objectContaining({kind: 'mcp', input: {key: 'receipt'}}),
+    ]);
+    expect(
       fixture.requests.some((request) =>
         JSON.stringify(request).includes('MCP_FIXTURE_RECEIPT'),
       ),

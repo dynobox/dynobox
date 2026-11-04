@@ -361,6 +361,7 @@ export async function runJob(
   let mcpObservation: McpObservation | undefined;
   let mcpReady = false;
   let mcpToolEvents: ToolEvent[] | undefined;
+  const mcpDiagnostics: string[] = [];
   const mcpFailures = new Set<LocalMcpSummary['failures'][number]>();
   const recordMcpError = (error: unknown): string => {
     const failure = mcpFailure(error, 'execution_failed');
@@ -374,6 +375,30 @@ export async function runJob(
         harnessReady: mcpReady,
         harnessSucceeded: succeeded,
       });
+      // Match reported mock attempts one-for-one by tool name. The mock's
+      // received arguments can differ from the harness's reported input.
+      const mockNames = new Set(
+        allowedMcpTools.map(({server, tool}) => `mcp__${server}__${tool}`),
+      );
+      const unmatched = [...mcpObservation.calls];
+      for (const event of mcpToolEvents ?? []) {
+        if (!mockNames.has(event.rawName)) continue;
+        const index = unmatched.findIndex(
+          (call) => event.rawName === `mcp__${call.server}__${call.tool}`,
+        );
+        if (index === -1)
+          mcpDiagnostics.push(
+            `Harness reported ${event.rawName}, but the MCP mock did not receive a matching call. Check permissions, tool arguments, and the MCP connection.`,
+          );
+        else unmatched.splice(index, 1);
+      }
+      if (mcpDiagnostics.length > 0) {
+        mcpObservation = {
+          ...mcpObservation,
+          ready: false,
+        };
+        mcpFailures.add('execution_failed');
+      }
       for (const failure of mcpObservation.failures) mcpFailures.add(failure);
     } catch {
       mcpFailures.add('cleanup_failed');
@@ -422,6 +447,7 @@ export async function runJob(
       result.status = 'harness_failed';
       result.passed = false;
       result.diagnostics.push(
+        ...new Set(mcpDiagnostics),
         ...[...mcpFailures].map((failure) => `MCP ${failure}.`),
       );
     }

@@ -3,6 +3,7 @@ import {realpathSync} from 'node:fs';
 import type {PermissionMode} from '@dynobox/sdk';
 import {execa} from 'execa';
 
+import {prepareMcpHarness} from '../mcpMocks/resolveExecutable.js';
 import {
   createToolEvent,
   isRecord,
@@ -16,6 +17,7 @@ import type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
+  PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
 import {createVersionProbe} from './version.js';
@@ -59,6 +61,18 @@ export class OpenCodeHarness implements Harness {
 
   version(): Promise<string | null> {
     return this.probeVersion();
+  }
+
+  async prepareMcp(
+    input: Pick<HarnessInput, 'workDir' | 'env'>,
+  ): Promise<PreparedMcpHarness> {
+    const {runOpenCodeWithMcp} = await import('./opencodeMcp.js');
+    return prepareMcpHarness(
+      this.executable,
+      this.extraArgs,
+      input,
+      runOpenCodeWithMcp,
+    );
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {

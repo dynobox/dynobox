@@ -11,6 +11,9 @@ import {tmpdir} from 'node:os';
 import {delimiter, join, relative} from 'node:path';
 
 import type {IrScenario} from '@dynobox/sdk/ir';
+import {Client} from '@modelcontextprotocol/sdk/client/index.js';
+import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type {Transport} from '@modelcontextprotocol/sdk/shared/transport.js';
 import {execaCommand} from 'execa';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
@@ -168,6 +171,170 @@ describe('MCP adapter availability', () => {
       expect(harness.inputs).toEqual([]);
     },
   );
+});
+
+describe('MCP tool evidence', () => {
+  it.each([
+    {
+      name: 'unreceived failed call',
+      received: [],
+      attempts: [{id: '1', status: 'failure'}],
+      passes: false,
+    },
+    {
+      name: 'unreceived completed call',
+      received: [],
+      attempts: [{id: '1', status: 'success'}],
+      passes: false,
+    },
+    {
+      name: 'received tool error',
+      received: ['1'],
+      attempts: [{id: '1', status: 'failure'}],
+      passes: true,
+    },
+    {
+      name: 'different received input',
+      received: ['2'],
+      attempts: [{id: '1', status: 'failure'}],
+      passes: true,
+    },
+    {
+      name: 'earlier call cannot cover a later failure',
+      received: ['1'],
+      attempts: [
+        {id: '1', status: 'success'},
+        {id: '1', status: 'failure'},
+      ],
+      passes: false,
+    },
+    {
+      name: 'two received error responses',
+      received: ['1', '1'],
+      attempts: [
+        {id: '1', status: 'failure'},
+        {id: '1', status: 'failure'},
+      ],
+      passes: true,
+    },
+    {
+      name: 'negative run without attempts',
+      received: [],
+      attempts: [],
+      passes: true,
+    },
+    {
+      name: 'null arguments for a received empty call',
+      received: [null],
+      attempts: [{id: null, status: 'success'}],
+      passes: true,
+    },
+    ...[
+      'list_mcp_resources',
+      'read_mcp_resource',
+      'mcp_other',
+      'linear_internal',
+      'mcp__other__save',
+    ].map((rawName) => ({
+      name: `unrelated event ${rawName}`,
+      received: [],
+      attempts: [{id: '1', status: 'success' as const, rawName}],
+      passes: true,
+    })),
+  ] as const)('$name', async ({received, attempts, passes}) => {
+    const harness: Harness = {
+      id: 'opencode',
+      run: async () => {
+        throw new Error('ordinary run must not start');
+      },
+      extractResult: (raw) => ({
+        ...raw,
+        transcript: raw.stdout,
+        finalMessage: 'OK',
+        toolEvents: [],
+      }),
+      prepareMcp: async () => ({
+        run: async (_input, servers) => {
+          const client = new Client({
+            name: 'runner-evidence-test',
+            version: '1',
+          });
+          try {
+            await client.connect(
+              new StreamableHTTPClientTransport(
+                new URL(servers.linear!.url),
+              ) as Transport,
+            );
+            await client.listTools();
+            for (const id of received)
+              await client.callTool({
+                name: 'save',
+                arguments: id === null ? {} : {id},
+              });
+          } finally {
+            await client.close();
+          }
+          return {
+            harnessReady: true,
+            version: 'fixture',
+            output: {exitCode: 0, stdout: 'OK', stderr: '', durationMs: 1},
+            toolEvents: attempts.map((attempt) => ({
+              kind: 'mcp' as const,
+              rawName:
+                'rawName' in attempt ? attempt.rawName : 'mcp__linear__save',
+              input: attempt.id === null ? null : {id: attempt.id},
+              status: attempt.status,
+            })),
+          };
+        },
+      }),
+    };
+    const job: LocalRunnerJob = {
+      ...createJob({
+        harnesses: [{id: 'opencode'}],
+        mcpMocks: {
+          linear: {
+            tools: {
+              save: {
+                inputSchema: {type: 'object'},
+                response: {
+                  isError: true,
+                  content: [{type: 'text', text: 'expected mock error'}],
+                },
+              },
+            },
+          },
+        },
+        assertions: [
+          {
+            id: 'evidence',
+            type:
+              received.length > 0 && passes ? 'mcp.called' : 'mcp.notCalled',
+            server: 'linear',
+            tool: 'save',
+          },
+        ],
+      }),
+      harness: 'opencode',
+    };
+    const result = await runJob(job, {
+      scratchRoot: createScratchRoot(),
+      harnesses: [harness],
+    });
+    expect(result.passed).toBe(passes);
+    expect(result.mcp?.ready).toBe(passes);
+    if (passes) {
+      expect(result.status).toBe('passed');
+      expect(result.assertionResults[0]).toMatchObject({passed: true});
+    } else {
+      expect(result.status).toBe('harness_failed');
+      expect(result.mcp?.failures).toContain('execution_failed');
+      expect(result.diagnostics.join('\n')).toContain(
+        'Harness reported mcp__linear__save, but the MCP mock did not receive a matching call.',
+      );
+      expect(result.assertionResults).toEqual([]);
+    }
+  });
 });
 
 class RecordingHarness implements Harness {
