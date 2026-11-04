@@ -636,8 +636,17 @@ export async function runOpenCodeWithMcp(options: {
           `OpenCode MCP mock server "${name}" is not connected.`,
         );
     }
-    // v2.2.5's SessionContext.select awaits McpTool.flush before taking the
-    // model tool snapshot; transport readiness needs no extra registration sleep.
+    // In v2.2.5, flush only awaits initial registration. Late connections become
+    // connected before a separate 100 ms debounced tool-registry refresh runs.
+    // No HTTP route exposes that registry, so allow 300 ms as a timing workaround,
+    // not a readiness guarantee. Remove once our minimum release has McpTool.ready:
+    // https://github.com/anomalyco/opencode/issues/51812
+    // https://github.com/anomalyco/opencode/pull/58374
+    await delay(
+      Math.min(300, remaining()),
+      undefined,
+      input.signal ? {signal: input.signal} : {},
+    );
     const {grants, model, mockTools} = prepared;
     const session = asRecord(
       asRecord(
