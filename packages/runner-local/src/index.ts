@@ -375,12 +375,10 @@ export async function runJob(
         harnessReady: mcpReady,
         harnessSucceeded: succeeded,
       });
-      // Each reported MCP call must have its own received call. A previous
-      // call with the same input must not hide a later refused attempt.
+      // Match reported mock attempts one-for-one by tool name. The mock's
+      // received arguments can differ from the harness's reported input.
       const mockNames = new Set(
-        Object.entries(job.scenario.mcpMocks ?? {}).flatMap(([server, mock]) =>
-          Object.keys(mock.tools).map((tool) => `mcp__${server}__${tool}`),
-        ),
+        allowedMcpTools.map(({server, tool}) => `mcp__${server}__${tool}`),
       );
       const unmatched = [...mcpObservation.calls];
       for (const event of mcpToolEvents ?? []) {

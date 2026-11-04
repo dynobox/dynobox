@@ -2,6 +2,8 @@ import {mkdtemp, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
+import type {ToolEvent} from '@dynobox/sdk';
+
 import {
   mcpDeadline,
   McpHarnessError,
@@ -114,6 +116,7 @@ export async function runClaudeCodeWithMcp(
       ],
       {...processOptions, timeout: remaining()},
     );
+    const toolEvents: ToolEvent[] = [];
     let ready = false;
     let completed = false;
     let failure: McpHarnessError | undefined;
@@ -154,8 +157,10 @@ export async function runClaudeCodeWithMcp(
             );
           completed = true;
         }
-        for (const tool of parseClaudeCodeStreamJsonLine(line).toolEvents)
+        for (const tool of parseClaudeCodeStreamJsonLine(line).toolEvents) {
+          toolEvents.push(tool);
           input.onToolEvent?.(tool);
+        }
       } catch (error) {
         failure =
           error instanceof McpHarnessError
@@ -200,6 +205,7 @@ export async function runClaudeCodeWithMcp(
     return {
       harnessReady: true,
       version,
+      toolEvents,
       output,
     };
   } catch (error) {

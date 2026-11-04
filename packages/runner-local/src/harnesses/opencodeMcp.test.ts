@@ -4,6 +4,7 @@ import {join} from 'node:path';
 
 import {afterEach, describe, expect, it} from 'vitest';
 
+import {parseOpenCodeJson} from './opencode.js';
 import {
   prepareOpenCodeMcpConfiguration,
   runOpenCodeWithMcp,
@@ -44,6 +45,7 @@ else {
  let replied = false;
  let agentReads = 0;
  let mcpReads = 0;
+ let prompted = false;
  const server = createServer(async (request,response) => {
   let body='';for await (const chunk of request) body+=chunk;
   record({path:request.url, body:body ? JSON.parse(body) : undefined, authenticated:request.headers.authorization === 'Basic '+Buffer.from('opencode:'+process.env.OPENCODE_PASSWORD).toString('base64')});
@@ -53,23 +55,25 @@ else {
    if(mode==='permission-hang') return;
   }
   let result = {};
-  if(path==='/api/config') result = mode==='bad-config' ? {} : [{type:'document',info:inline}];
+  if(path==='/api/config') result = mode==='bad-config' ? {} : [{type:'document',info:inline}, ...(mode==='org-policy' ? [{type:'document',info:{policies:[{action:'plugin.use',resource:'*',effect:'allow'}]}}] : [])];
+  if(path==='/api/plugin') result={data: mode==='plugin' || mode==='late-plugin' && prompted ? [{source:{type:'package',target:'external'},state:{status:'active'}}] : [{source:{type:'builtin'},state:{status:'active'}}]};
+  if(path.endsWith('/prompt')) prompted=true;
   if(path==='/api/agent') result = {data: mode==='agent-pending' && agentReads++===0 ? [] : [{id:'build', permissions: JSON.parse(process.env.DXB_RULES || '[]')}]};
   if(path==='/api/mcp') result = {data: [{name:'linear', status:{status:mode==='disconnected' ? 'failed' : mode==='mcp-pending' && mcpReads++===0 ? 'pending' : 'connected'}}, ...(mode==='inherited' ? [{name:'real',status:{status:'connected'}}] : [])]};
   if(path.startsWith('/api/session?')) result={data: mode==='child-bad-list' ? {} : path==='/api/session?parentID=test' && mode.startsWith('child-') ? [{id:'child'}] : path==='/api/session?parentID=child' && mode==='child-nested' ? [{id:'nested'},{id:'test'}] : [], cursor:{next:null,previous:null}};
   if(mode==='child-paged' && path.startsWith('/api/session?')) result={data:path.includes('cursor=page2') ? [{id:'child'}] : [],cursor:{next:path==='/api/session?parentID=test' ? 'page2' : null,previous:null}};
   if(path==='/api/session') result={data:{id:process.env.DXB_SESSION_ID || 'test'}};
-  if(path==='/api/permission/request') result={data:mode==='reject-length' && !replied ? [{id:'per_test',sessionID:'test',action:'shell'}] : []};
+  if(path==='/api/permission/request') result={data:(mode==='reject-length' || mode==='reject-mock') && !replied ? [{id:'per_test',sessionID:'test',action:mode==='reject-mock' ? 'linear_get_issue' : 'shell'}] : []};
   if(path.endsWith('/reply')) {replied=true;response.writeHead(204).end();return;}
   if(path.endsWith('/wait')) {
    if(mode==='request-hang') return;
-   while (!permissionsStarted || mode==='reject-length' && !replied) await new Promise(r=>setTimeout(r,5));
+   while (!permissionsStarted || (mode==='reject-length' || mode==='reject-mock') && !replied) await new Promise(r=>setTimeout(r,5));
    response.writeHead(204).end();return;
   }
   if(path.endsWith('/export')) {
    const tool = {type:'tool',id:'call_1',name:'linear_get_issue',state:{status:'error',input:{id:'1'},error:{message:'Issue missing'}}};
    const childHistory = (path.includes('/child/') || path.includes('/nested/')) && mode==='child-nested' ? [{type:'assistant',id:path,finish:'stop',content:[tool]}] : path.includes('/child/') && mode==='child-invalid' ? [{type:'assistant',id:'child-msg',finish:'stop',content:[{type:'tool',id:'bad',name:'invalid',state:{status:'error',input:{tool:'linear_get_issue'},error:'invalid'}}]}] : undefined;
-   const messages = childHistory || (process.env.DXB_HISTORY ? JSON.parse(process.env.DXB_HISTORY) : [{type:'assistant', id:'msg_1', finish: mode==='reject-length' ? 'length' : 'stop', content:mode==='tool-error' ? [tool] : [{type:'text',text:'OK'}]}]);
+   const messages = path.includes('/child/') && process.env.DXB_CHILD_HISTORY ? JSON.parse(process.env.DXB_CHILD_HISTORY) : childHistory || (process.env.DXB_HISTORY ? JSON.parse(process.env.DXB_HISTORY) : [{type:'assistant', id:'msg_1', finish: (mode==='reject-length' || mode==='reject-mock') ? 'length' : 'stop', content:mode==='tool-error' ? [tool] : [{type:'text',text:'OK'}]}]);
    result={data:{info:{outcome:mode==='model-error' ? 'failed' : 'succeeded'},messages}};
   }
   if(mode==='permission-error' && path==='/api/permission/request' || mode==='http-error' && path==='/api/mcp') {response.writeHead(503).end();return;}
@@ -90,7 +94,18 @@ else {
     prompt: 'Use the mock.',
     timeoutMs: 5000,
     env: {
+      ...Object.fromEntries(
+        Object.keys(process.env)
+          .filter(
+            (key) => key.startsWith('OPENCODE_') || key.startsWith('XDG_'),
+          )
+          .map((key) => [key, undefined]),
+      ),
       HOME: root,
+      XDG_CONFIG_HOME: join(root, '.config'),
+      XDG_DATA_HOME: join(root, '.data'),
+      XDG_CACHE_HOME: join(root, '.cache'),
+      XDG_STATE_HOME: join(root, '.state'),
       DXB_MODE: mode,
       DXB_LOG: log,
       OPENCODE_CONFIG_CONTENT: '{}',
@@ -149,12 +164,34 @@ describe('OpenCode v2 MCP preparation', () => {
     ).rejects.toMatchObject({category: 'configuration_failed'});
     await expect(readFile(log)).rejects.toMatchObject({code: 'ENOENT'});
   });
+  it.each(['', 'relative-config'])(
+    'resolves global config against the child cwd (XDG_CONFIG_HOME=%j)',
+    async (xdg) => {
+      const {options, root} = await fixture();
+      options.input.env.XDG_CONFIG_HOME = xdg;
+      const directory = join(root, xdg || '.config', 'opencode');
+      await mkdir(directory, {recursive: true});
+      await writeFile(
+        join(directory, 'config.json'),
+        JSON.stringify({
+          policies: [{action: 'plugin.use', resource: '*', effect: 'allow'}],
+        }),
+      );
+      await expect(
+        prepareOpenCodeMcpConfiguration(options),
+      ).rejects.toMatchObject({category: 'configuration_failed'});
+    },
+  );
   it('caps the version probe without a job timeout', async () => {
     const {options} = await fixture('hang');
     delete options.input.timeoutMs;
     await expect(
       prepareOpenCodeMcpConfiguration(options),
-    ).rejects.toBeDefined();
+    ).rejects.toMatchObject({
+      category: 'timed_out',
+      message: 'OpenCode version check exceeded its timeout.',
+      output: {stderr: expect.stringContaining('PRIVATE_STDERR_SENTINEL')},
+    });
   }, 10000);
   it.each([
     'fixture/fixture#',
@@ -269,6 +306,85 @@ describe('OpenCode v2 MCP preparation', () => {
 });
 
 describe('OpenCode v2 MCP execution', () => {
+  it.each(['org-policy', 'plugin', 'late-plugin'])(
+    'rejects runtime isolation bypasses (%s)',
+    async (mode) => {
+      const {options} = await fixture(mode);
+      await expect(runOpenCodeWithMcp(options)).rejects.toMatchObject({
+        category: 'configuration_failed',
+      });
+    },
+  );
+  it('shows mock permission guidance before reporting the finish reason', async () => {
+    const {options} = await fixture('reject-mock');
+    await expect(runOpenCodeWithMcp(options)).rejects.toThrow('Allow the tool');
+  });
+  it('orders parent and child tool calls by execution time', async () => {
+    const {options} = await fixture('child-custom');
+    const tool = (id: string, time: number) => ({
+      type: 'tool',
+      id,
+      name: 'linear_get_issue',
+      time: {created: time - 1, ran: time},
+      state: {status: 'completed', input: {id}},
+    });
+    options.input.env.DXB_HISTORY = JSON.stringify(
+      history([tool('before', 10), tool('after', 30)]),
+    );
+    options.input.env.DXB_CHILD_HISTORY = JSON.stringify([
+      {
+        type: 'assistant',
+        id: 'child-msg',
+        finish: 'stop',
+        content: [tool('between', 20)],
+      },
+    ]);
+    const result = await runOpenCodeWithMcp(options);
+    expect(result.toolEvents?.map((event) => event.input)).toEqual([
+      {id: 'before'},
+      {id: 'between'},
+      {id: 'after'},
+    ]);
+  });
+  it('allows the parent to recover from a failed child', async () => {
+    const {options} = await fixture('child-custom');
+    options.input.env.DXB_CHILD_HISTORY = JSON.stringify([
+      {
+        type: 'assistant',
+        id: 'child-msg',
+        finish: 'error',
+        error: {message: 'child failed'},
+        content: [],
+      },
+    ]);
+    await expect(runOpenCodeWithMcp(options)).resolves.toMatchObject({
+      harnessReady: true,
+    });
+  });
+  it('does not substitute child or earlier parent text for a textless final turn', async () => {
+    const {options} = await fixture('child-custom');
+    options.input.env.DXB_HISTORY = JSON.stringify([
+      {
+        type: 'assistant',
+        id: 'earlier',
+        finish: 'stop',
+        content: [{type: 'text', text: 'Earlier parent'}],
+      },
+      ...history([]),
+    ]);
+    options.input.env.DXB_CHILD_HISTORY = JSON.stringify([
+      {
+        type: 'assistant',
+        id: 'child-msg',
+        finish: 'stop',
+        content: [{type: 'text', text: 'Child answer'}],
+      },
+    ]);
+    const result = await runOpenCodeWithMcp(options);
+    expect(
+      parseOpenCodeJson(result.output.stdout).finalMessage,
+    ).toBeUndefined();
+  });
   it('encodes session IDs in control request paths', async () => {
     const {options, log} = await fixture();
     const id = 'session/with ?#%';

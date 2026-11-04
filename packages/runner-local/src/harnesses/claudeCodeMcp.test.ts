@@ -283,6 +283,23 @@ describe('isolated Claude Code MCP invocation', () => {
     );
   });
 
+  it('returns reported attempts even when the mock never receives them', async () => {
+    const {options, controller} = await fixture('reported-only');
+    const result = await runClaudeCodeWithMcp(options);
+    expect(result.toolEvents).toEqual([
+      expect.objectContaining({
+        kind: 'mcp',
+        rawName: 'mcp__service__lookup',
+        input: {literal: 'value'},
+      }),
+    ]);
+    const observation = await controller.finalize({
+      harnessReady: true,
+      harnessSucceeded: true,
+    });
+    expect(observation.calls).toEqual([]);
+  });
+
   it('keeps concurrent configs, discovery, calls and responses invocation-local', async () => {
     const first = await fixture('call', 'first');
     const second = await fixture('call', 'second');
@@ -468,6 +485,7 @@ if (mode === 'extra-server') init.mcp_servers.push({name: 'claude.ai Linear', st
 if (mode === 'missing-tool') init.tools = ['Read'];
 if (mode !== 'no-init') console.log(JSON.stringify(init));
 let result = 'No tools called.';
+if (mode === 'reported-only') console.log(JSON.stringify({type:'assistant',message:{content:[{type:'tool_use',id:'t1',name:'mcp__service__lookup',input:{literal:'value'}}]}}));
 if (mode === 'call') result = JSON.stringify(await rpc('tools/call', {name: 'lookup', arguments: {literal: 'value'}}));
 console.log(JSON.stringify({type: 'result', subtype: 'success', is_error: mode === 'result-error', result, permission_denials: mode === 'permission-denied' ? [{tool_name: 'mcp__service__lookup', tool_use_id: 't1', tool_input: {}}] : []}));
 `;
