@@ -10,6 +10,14 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Reject OpenCode native and wildcard integration allow policies before launch,
+  including inline policies and policies in both global configuration locations.
+- Include child-session mock tool attempts in OpenCode evidence checks, with
+  pagination and nested sessions. Match attempts to received calls by tool and
+  count so argument changes do not reject valid calls.
+- Support OpenCode model variants, preserve recovered assistant errors for
+  diagnosis, cap version probes at five seconds, and encode session request IDs.
+- Include the Microsoft MIT license notice for the bundled `jsonc-parser`.
 - Require OpenCode 2.2.5 or a later 2.x release for MCP mock jobs. Use its
   authenticated private server, ordered permissions, session outcomes, and full
   message exports. Keep mock tools outside Code Mode and preserve profile files.

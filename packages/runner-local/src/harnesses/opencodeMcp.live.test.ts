@@ -20,6 +20,7 @@ afterEach(async () => {
 
 async function fixture(
   mode:
+    | 'child-invalid'
     | 'invalid-arguments'
     | 'mock-error'
     | 'hang'
@@ -93,7 +94,7 @@ async function fixture(
     );
     // The parent delegates to a subagent, which runs an `ask`-gated command.
     let delegated: {name: string; arguments: string} | undefined;
-    if (mode === 'ask-subagent') {
+    if (mode === 'ask-subagent' || mode === 'child-invalid') {
       const names: unknown[] = (body.tools ?? []).map(
         (entry: {function?: {name?: string}}) => entry.function?.name,
       );
@@ -104,7 +105,18 @@ async function fixture(
           message.role === 'user' &&
           JSON.stringify(message.content).includes('SUBAGENT_RUN_TOUCH'),
       );
-      if (inSubagent && !bashCalled && names.includes('shell')) {
+      if (mode === 'child-invalid' && inSubagent && !invalidSent && tool) {
+        invalidSent = true;
+        delegated = {
+          name: tool.function.name,
+          arguments: '{"id":{"bad":true}}',
+        };
+      } else if (
+        mode === 'ask-subagent' &&
+        inSubagent &&
+        !bashCalled &&
+        names.includes('shell')
+      ) {
         bashCalled = true;
         delegated = {
           name: 'shell',
@@ -198,6 +210,7 @@ async function fixture(
         models: {
           fixture: {
             name: 'Fixture',
+            variants: [{id: 'fast'}],
             capabilities: {tools: true},
             limit: {context: 32000, output: 1000},
           },
@@ -423,26 +436,28 @@ describe.skipIf(!executable)(
       30000,
     );
 
-    it('rejects a global allow policy before inherited integrations load', async () => {
-      const f = await fixture('call');
-      await writeFile(
-        f.globalConfigPath,
-        JSON.stringify({
-          policies: [
-            {action: 'integration.use', resource: '*', effect: 'allow'},
-          ],
-        }),
-      );
-      await expect(runOpenCodeWithMcp(f.options)).rejects.toMatchObject({
-        category: 'configuration_failed',
-        message: expect.stringContaining('can override MCP mock isolation'),
-      });
-      expect(f.requests).toHaveLength(0);
-      expect(f.contacts()).toBe(0);
-      expect(f.globalContacts()).toBe(0);
-      for (const marker of f.pluginMarkers)
-        expect(existsSync(marker)).toBe(false);
-    }, 30000);
+    it.each(['integration.use', 'plugin.use', 'mcp.use', '*', 'integration.*'])(
+      'rejects global %s allow policy before inherited integrations load',
+      async (action) => {
+        const f = await fixture('call');
+        await writeFile(
+          f.globalConfigPath,
+          JSON.stringify({
+            policies: [{action, resource: '*', effect: 'allow'}],
+          }),
+        );
+        await expect(runOpenCodeWithMcp(f.options)).rejects.toMatchObject({
+          category: 'configuration_failed',
+          message: expect.stringContaining('can override MCP mock isolation'),
+        });
+        expect(f.requests).toHaveLength(0);
+        expect(f.contacts()).toBe(0);
+        expect(f.globalContacts()).toBe(0);
+        for (const marker of f.pluginMarkers)
+          expect(existsSync(marker)).toBe(false);
+      },
+      30000,
+    );
 
     it.each(Array.from({length: 10}, (_, index) => index))(
       'keeps direct mock tools available after discovery (iteration %i)',
@@ -628,6 +643,29 @@ describe.skipIf(!executable)(
 
     it('keeps an invalid mock attempt in the evidence when no call reaches the mock', async () => {
       const f = await fixture('invalid-arguments');
+      const result = await runOpenCodeWithMcp(f.options);
+      const observation = await f.controller.finalize({
+        harnessReady: true,
+        harnessSucceeded: true,
+      });
+      expect(observation.calls).toHaveLength(0);
+      expect(result.toolEvents).toContainEqual(
+        expect.objectContaining({
+          rawName: 'mcp__linear__get_issue',
+          status: 'failure',
+        }),
+      );
+    }, 30000);
+
+    it('runs with a model variant', async () => {
+      const f = await fixture('call');
+      f.options.input.model = 'fixture/fixture#fast';
+      const result = await runOpenCodeWithMcp(f.options);
+      expect(result.harnessReady).toBe(true);
+    }, 30000);
+
+    it('includes an invalid mock attempt from a subagent', async () => {
+      const f = await fixture('child-invalid');
       const result = await runOpenCodeWithMcp(f.options);
       const observation = await f.controller.finalize({
         harnessReady: true,

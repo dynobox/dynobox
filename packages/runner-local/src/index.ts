@@ -1,7 +1,6 @@
 import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {basename, join} from 'node:path';
-import {isDeepStrictEqual} from 'node:util';
 
 import {
   assertionRequiresVerify,
@@ -387,9 +386,7 @@ export async function runJob(
       for (const event of mcpToolEvents ?? []) {
         if (!mockNames.has(event.rawName)) continue;
         const index = unmatched.findIndex(
-          (call) =>
-            event.rawName === `mcp__${call.server}__${call.tool}` &&
-            isDeepStrictEqual(event.input ?? {}, call.input),
+          (call) => event.rawName === `mcp__${call.server}__${call.tool}`,
         );
         if (index === -1)
           mcpDiagnostics.push(

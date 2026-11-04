@@ -197,7 +197,7 @@ describe('MCP tool evidence', () => {
       name: 'different received input',
       received: ['2'],
       attempts: [{id: '1', status: 'failure'}],
-      passes: false,
+      passes: true,
     },
     {
       name: 'earlier call cannot cover a later failure',

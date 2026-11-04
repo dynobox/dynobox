@@ -1,4 +1,4 @@
-import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -56,7 +56,9 @@ else {
   if(path==='/api/config') result = mode==='bad-config' ? {} : [{type:'document',info:inline}];
   if(path==='/api/agent') result = {data: mode==='agent-pending' && agentReads++===0 ? [] : [{id:'build', permissions: JSON.parse(process.env.DXB_RULES || '[]')}]};
   if(path==='/api/mcp') result = {data: [{name:'linear', status:{status:mode==='disconnected' ? 'failed' : mode==='mcp-pending' && mcpReads++===0 ? 'pending' : 'connected'}}, ...(mode==='inherited' ? [{name:'real',status:{status:'connected'}}] : [])]};
-  if(path==='/api/session') result={data:{id:'test'}};
+  if(path.startsWith('/api/session?')) result={data: mode==='child-bad-list' ? {} : path==='/api/session?parentID=test' && mode.startsWith('child-') ? [{id:'child'}] : path==='/api/session?parentID=child' && mode==='child-nested' ? [{id:'nested'},{id:'test'}] : [], cursor:{next:null,previous:null}};
+  if(mode==='child-paged' && path.startsWith('/api/session?')) result={data:path.includes('cursor=page2') ? [{id:'child'}] : [],cursor:{next:path==='/api/session?parentID=test' ? 'page2' : null,previous:null}};
+  if(path==='/api/session') result={data:{id:process.env.DXB_SESSION_ID || 'test'}};
   if(path==='/api/permission/request') result={data:mode==='reject-length' && !replied ? [{id:'per_test',sessionID:'test',action:'shell'}] : []};
   if(path.endsWith('/reply')) {replied=true;response.writeHead(204).end();return;}
   if(path.endsWith('/wait')) {
@@ -66,7 +68,8 @@ else {
   }
   if(path.endsWith('/export')) {
    const tool = {type:'tool',id:'call_1',name:'linear_get_issue',state:{status:'error',input:{id:'1'},error:{message:'Issue missing'}}};
-   const messages = process.env.DXB_HISTORY ? JSON.parse(process.env.DXB_HISTORY) : [{type:'assistant', id:'msg_1', finish: mode==='reject-length' ? 'length' : 'stop', content:mode==='tool-error' ? [tool] : [{type:'text',text:'OK'}]}];
+   const childHistory = (path.includes('/child/') || path.includes('/nested/')) && mode==='child-nested' ? [{type:'assistant',id:path,finish:'stop',content:[tool]}] : path.includes('/child/') && mode==='child-invalid' ? [{type:'assistant',id:'child-msg',finish:'stop',content:[{type:'tool',id:'bad',name:'invalid',state:{status:'error',input:{tool:'linear_get_issue'},error:'invalid'}}]}] : undefined;
+   const messages = childHistory || (process.env.DXB_HISTORY ? JSON.parse(process.env.DXB_HISTORY) : [{type:'assistant', id:'msg_1', finish: mode==='reject-length' ? 'length' : 'stop', content:mode==='tool-error' ? [tool] : [{type:'text',text:'OK'}]}]);
    result={data:{info:{outcome:mode==='model-error' ? 'failed' : 'succeeded'},messages}};
   }
   if(mode==='permission-error' && path==='/api/permission/request' || mode==='http-error' && path==='/api/mcp') {response.writeHead(503).end();return;}
@@ -110,6 +113,62 @@ const history = (content: unknown, finish = 'stop') => [
 ];
 
 describe('OpenCode v2 MCP preparation', () => {
+  it.each(['plugin.use', 'mcp.use', '*', 'integration.*'])(
+    'rejects unsafe action %s from every policy source',
+    async (action) => {
+      for (const inline of [true, false]) {
+        const {options, root, log} = await fixture();
+        const config = {
+          experimental: {policies: [{action, resource: '*', effect: 'allow'}]},
+        };
+        if (inline)
+          options.input.env.OPENCODE_CONFIG_CONTENT = JSON.stringify(config);
+        else
+          await writeFile(join(root, 'opencode.jsonc'), JSON.stringify(config));
+        await expect(
+          prepareOpenCodeMcpConfiguration(options),
+        ).rejects.toMatchObject({category: 'configuration_failed'});
+        await expect(readFile(log)).rejects.toMatchObject({code: 'ENOENT'});
+      }
+    },
+  );
+  it('checks the normal global directory when a custom directory is set', async () => {
+    const {options, root, log} = await fixture();
+    options.input.env.OPENCODE_CONFIG_DIR = join(root, 'custom');
+    options.input.env.XDG_CONFIG_HOME = join(root, '.config');
+    const directory = join(root, '.config', 'opencode');
+    await mkdir(directory, {recursive: true});
+    await writeFile(
+      join(directory, 'config.json'),
+      JSON.stringify({
+        policies: [{action: 'mcp.use', resource: '*', effect: 'allow'}],
+      }),
+    );
+    await expect(
+      prepareOpenCodeMcpConfiguration(options),
+    ).rejects.toMatchObject({category: 'configuration_failed'});
+    await expect(readFile(log)).rejects.toMatchObject({code: 'ENOENT'});
+  });
+  it('caps the version probe without a job timeout', async () => {
+    const {options} = await fixture('hang');
+    delete options.input.timeoutMs;
+    await expect(
+      prepareOpenCodeMcpConfiguration(options),
+    ).rejects.toBeDefined();
+  }, 10000);
+  it.each([
+    'fixture/fixture#',
+    'fixture/#fast',
+    '/fixture',
+    'fixture/model#fast#extra',
+  ])('rejects invalid model %s before launch', async (model) => {
+    const {options, log} = await fixture();
+    options.input.model = model;
+    await expect(runOpenCodeWithMcp(options)).rejects.toMatchObject({
+      category: 'configuration_failed',
+    });
+    await expect(readFile(log)).rejects.toMatchObject({code: 'ENOENT'});
+  });
   it.each(['1.18.26', '1.99.0', '2.0.32', '2.2.4', '3.0.0'])(
     'rejects unsupported release %s',
     async (version) => {
@@ -210,6 +269,74 @@ describe('OpenCode v2 MCP preparation', () => {
 });
 
 describe('OpenCode v2 MCP execution', () => {
+  it('encodes session IDs in control request paths', async () => {
+    const {options, log} = await fixture();
+    const id = 'session/with ?#%';
+    options.input.env.DXB_SESSION_ID = id;
+    await runOpenCodeWithMcp(options);
+    const paths = (await readFile(log, 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line).path);
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        `/api/session/${encodeURIComponent(id)}/prompt`,
+        `/api/experimental/session/${encodeURIComponent(id)}/wait`,
+        `/api/experimental/session/${encodeURIComponent(id)}/export`,
+      ]),
+    );
+  });
+  it('sends the model variant separately', async () => {
+    const {options, log} = await fixture();
+    options.input.model = 'fixture/fixture#fast';
+    await runOpenCodeWithMcp(options);
+    const requests = (await readFile(log, 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(
+      requests.find((entry) => entry.path === '/api/session').body.model,
+    ).toEqual({providerID: 'fixture', id: 'fixture', variant: 'fast'});
+  });
+  it('rejects invalid mock arguments in a child session', async () => {
+    const {options} = await fixture('child-invalid');
+    await expect(runOpenCodeWithMcp(options)).rejects.toThrow(
+      'rejected arguments',
+    );
+  });
+  it('collects nested child attempts once', async () => {
+    const {options} = await fixture('child-nested');
+    const result = await runOpenCodeWithMcp(options);
+    expect(result.toolEvents).toHaveLength(2);
+    expect(
+      result.toolEvents?.every(
+        (event) => event.rawName === 'mcp__linear__get_issue',
+      ),
+    ).toBe(true);
+  });
+  it('reads all child session pages', async () => {
+    const {options, log} = await fixture('child-paged');
+    await runOpenCodeWithMcp(options);
+    expect(await readFile(log, 'utf8')).toContain(
+      '/api/experimental/session/child/export',
+    );
+  });
+  it('fails when the child list is invalid', async () => {
+    const {options} = await fixture('child-bad-list');
+    await expect(runOpenCodeWithMcp(options)).rejects.toThrow(
+      'invalid child sessions',
+    );
+  });
+  it('accepts recovery after an earlier assistant error', async () => {
+    const {options} = await fixture();
+    options.input.env.DXB_HISTORY = JSON.stringify([
+      {type: 'assistant', id: 'failed', error: {message: 'retry'}, content: []},
+      ...history([{type: 'text', text: 'Recovered'}]),
+    ]);
+    await expect(runOpenCodeWithMcp(options)).resolves.toMatchObject({
+      harnessReady: true,
+    });
+  });
   it.each(['success', 'split-port', 'agent-pending', 'mcp-pending'])(
     'uses authenticated v2 control requests (%s)',
     async (mode) => {
