@@ -46,6 +46,8 @@ else {
  let agentReads = 0;
  let mcpReads = 0;
  let prompted = false;
+ let catalogReadyAt;
+ let promptSawMock = false;
  const server = createServer(async (request,response) => {
   let body='';for await (const chunk of request) body+=chunk;
   record({path:request.url, body:body ? JSON.parse(body) : undefined, authenticated:request.headers.authorization === 'Basic '+Buffer.from('opencode:'+process.env.OPENCODE_PASSWORD).toString('base64')});
@@ -57,9 +59,11 @@ else {
   let result = {};
   if(path==='/api/config') result = mode==='bad-config' ? {} : [{type:'document',info:inline}, ...(mode==='org-policy' ? [{type:'document',info:{policies:[{action:'plugin.use',resource:'*',effect:'allow'}]}}] : [])];
   if(path==='/api/plugin') result={data: mode==='plugin' || mode==='late-plugin' && prompted ? [{source:{type:'package',target:'external'},state:{status:'active'}}] : [{source:{type:'builtin'},state:{status:'active'}}]};
-  if(path.endsWith('/prompt')) prompted=true;
+  if(path.endsWith('/prompt')) {prompted=true;promptSawMock=Date.now()>=catalogReadyAt;}
   if(path==='/api/agent') result = {data: mode==='agent-pending' && agentReads++===0 ? [] : [{id:'build', permissions: JSON.parse(process.env.DXB_RULES || '[]')}]};
   if(path==='/api/mcp') result = {data: [{name:'linear', status:{status:mode==='disconnected' ? 'failed' : mode==='mcp-pending' && mcpReads++===0 ? 'pending' : 'connected'}}, ...(mode==='inherited' ? [{name:'real',status:{status:'connected'}}] : [])]};
+  // Transport is connected before the separate tool catalog update finishes.
+  if(path==='/api/mcp' && mode==='late-tools') catalogReadyAt ??= Date.now()+150;
   if(path.startsWith('/api/session?')) result={data: mode==='child-bad-list' ? {} : path==='/api/session?parentID=test' && mode.startsWith('child-') ? [{id:'child'}] : path==='/api/session?parentID=child' && mode==='child-nested' ? [{id:'nested'},{id:'test'}] : [], cursor:{next:null,previous:null}};
   if(mode==='child-paged' && path.startsWith('/api/session?')) result={data:path.includes('cursor=page2') ? [{id:'child'}] : [],cursor:{next:path==='/api/session?parentID=test' ? 'page2' : null,previous:null}};
   if(path==='/api/session') result={data:{id:process.env.DXB_SESSION_ID || 'test'}};
@@ -73,7 +77,7 @@ else {
   if(path.endsWith('/export')) {
    const tool = {type:'tool',id:'call_1',name:'linear_get_issue',state:{status:'error',input:{id:'1'},error:{message:'Issue missing'}}};
    const childHistory = (path.includes('/child/') || path.includes('/nested/')) && mode==='child-nested' ? [{type:'assistant',id:path,finish:'stop',content:[tool]}] : path.includes('/child/') && mode==='child-invalid' ? [{type:'assistant',id:'child-msg',finish:'stop',content:[{type:'tool',id:'bad',name:'invalid',state:{status:'error',input:{tool:'linear_get_issue'},error:'invalid'}}]}] : undefined;
-   const messages = path.includes('/child/') && process.env.DXB_CHILD_HISTORY ? JSON.parse(process.env.DXB_CHILD_HISTORY) : childHistory || (process.env.DXB_HISTORY ? JSON.parse(process.env.DXB_HISTORY) : [{type:'assistant', id:'msg_1', finish: (mode==='reject-length' || mode==='reject-mock') ? 'length' : 'stop', content:mode==='tool-error' ? [tool] : [{type:'text',text:'OK'}]}]);
+   const messages = path.includes('/child/') && process.env.DXB_CHILD_HISTORY ? JSON.parse(process.env.DXB_CHILD_HISTORY) : childHistory || (process.env.DXB_HISTORY ? JSON.parse(process.env.DXB_HISTORY) : [{type:'assistant', id:'msg_1', finish: (mode==='reject-length' || mode==='reject-mock') ? 'length' : 'stop', content:mode==='tool-error' || mode==='late-tools' && promptSawMock ? [tool] : [{type:'text',text:'OK'}]}]);
    result={data:{info:{outcome:mode==='model-error' ? 'failed' : 'succeeded'},messages}};
   }
   if(mode==='permission-error' && path==='/api/permission/request' || mode==='http-error' && path==='/api/mcp') {response.writeHead(503).end();return;}
@@ -306,6 +310,13 @@ describe('OpenCode v2 MCP preparation', () => {
 });
 
 describe('OpenCode v2 MCP execution', () => {
+  it('offers late-registered mock tools to the first prompt', async () => {
+    const {options} = await fixture('late-tools');
+    const result = await runOpenCodeWithMcp(options);
+    expect(result.toolEvents).toEqual([
+      expect.objectContaining({rawName: 'mcp__linear__get_issue'}),
+    ]);
+  });
   it.each(['org-policy', 'plugin', 'late-plugin'])(
     'rejects runtime isolation bypasses (%s)',
     async (mode) => {
