@@ -10,61 +10,16 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
-- Reject OpenCode native and wildcard integration allow policies before launch,
-  including inline policies and policies in both global configuration locations.
-- Include child-session mock tool attempts in OpenCode evidence checks, with
-  pagination and nested sessions. Match attempts to received calls by tool and
-  count so argument changes do not reject valid calls.
-- Support OpenCode model variants, preserve recovered assistant errors for
-  diagnosis, cap version probes at five seconds, and encode session request IDs.
-- Include the Microsoft MIT license notice for the bundled `jsonc-parser`.
-- Require OpenCode 2.2.5 or a later 2.x release for MCP mock jobs. Use its
-  authenticated private server, ordered permissions, session outcomes, and full
-  message exports. Keep mock tools outside Code Mode and preserve profile files.
-- Limit MCP call evidence checks to declared mock tools. Normalize empty
-  arguments and name reported calls that have no matching controller record.
-  Preserve received mock error responses as valid call evidence.
-- Read OpenCode inline JSONC, wait for the complete server URL, and fail on
-  incomplete model turns even after an unrelated permission rejection.
-- Stop OpenCode runs when permission polling fails. Keep invalid mock attempts
-  visible to evidence checks and cancel stalled polling when a turn ends.
-- Match OpenCode `?` permission patterns and cancel pending permission polls when
-  the model request finishes, including runs without a job timeout.
-- Reject malformed OpenCode message history and retain fetched transcripts when
-  parsing or caller callbacks fail.
-- Retain OpenCode MCP tool error messages and preserve explicit response, model,
-  and callback failures when cleanup passes the run deadline.
-- Preserve Codex plugin settings during MCP mock runs and distinguish app-server
-  requests from configuration responses.
-- Normalize Codex MCP tool inputs, retain tool error details, and remove duplicate
-  tool events. Fail runs with incomplete mock calls, including denied calls.
-- Preserve explicit Codex MCP failures when cleanup passes the run deadline, and
-  report tool-event callback errors separately from invalid JSON output.
-- Install `signal-exit` as a runtime dependency so its license ships with the
-  package instead of bundling its code without the required notice.
-- Stop active setup and verification process groups when Dynobox exits or
-  receives a terminating signal on POSIX systems.
-- Report timed-out MCP probes and Claude Code, Codex, and OpenCode runs as
-  timeouts instead of unsupported versions or execution failures.
-- Exit with code 143 on SIGTERM; keep code 130 for SIGINT.
-- Continue running valid scenarios and harnesses when another pair cannot be scheduled, while
-  reporting each configuration error and exiting nonzero.
-- Stop owned harness process groups when Dynobox exits or receives a terminating
-  signal on POSIX systems.
-- Stop the harness's process group when the harness exits, times out, or has a
-  fatal stream error on POSIX systems. This applies to ordinary and MCP runs,
-  including background servers and children that keep output pipes open.
-- Preserve stdout and stderr from failed Claude Code, Codex, and OpenCode MCP
-  probes and runs in local `--debug` logs while keeping raw output out of reports.
-- Stop child processes from Claude Code MCP version probes and runs when cancelled
-  on POSIX systems, including children that ignore SIGTERM or close output pipes.
-- Reject MCP uploads with the local-only error before checking authentication.
-- Apply timeout and cancellation limits during MCP preparation. Reject MCP mock
-  requests larger than 10 MiB.
-- Stop harness, setup, and verification child processes on POSIX systems when a job is
-  cancelled, including children that ignore SIGTERM.
-- Skip directories during MCP harness executable lookup. Preserve symlink paths
-  that point to executable files.
+- Support MCP mock runs with OpenCode 2.2.5 and later 2.x releases, including
+  model variants, inherited integration isolation, and subagent tool evidence.
+- Improve MCP call evidence and failure reporting across Claude Code, Codex, and
+  OpenCode. Preserve received mock errors and reject incomplete tool attempts.
+- Stop harness, setup, and verification child processes on timeout, cancellation,
+  or exit. Preserve standard exit codes for interrupt and termination signals.
+- Continue valid scenario and harness pairs when another pair cannot be scheduled.
+- Preserve MCP failure details in local debug logs. Keep MCP mock runs local-only
+  and limit mock request sizes.
+- Include required third-party license notices in the CLI package.
 
 ---
 
