@@ -1,5 +1,6 @@
 import type {PermissionMode} from '@dynobox/sdk';
 
+import {prepareMcpHarness} from '../mcpMocks/resolveExecutable.js';
 import {
   createToolEvent,
   isRecord,
@@ -14,14 +15,21 @@ import type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
+  PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
-import {createVersionProbe} from './version.js';
+import {createVersionProbe, isAtLeastVersion} from './version.js';
 
 export type PiHarnessOptions = {
   executable?: string;
   extraArgs?: readonly string[];
 };
+
+// Oldest release verified for stdin prompts, `--no-extensions` isolation and
+// `systemPromptOptions` edits from extensions.
+export const PI_MIN_VERSION = '0.86.0';
+// Pi trims stdin and exits 0 without calling the model when nothing is left.
+export const PI_BLANK_PROMPT = 'Pi cannot run a blank prompt.';
 
 export type PiParsedOutput = {
   finalMessage: string | undefined;
@@ -54,21 +62,36 @@ export class PiHarness implements Harness {
     return this.probeVersion();
   }
 
+  async prepareMcp(
+    input: Pick<HarnessInput, 'workDir' | 'env'>,
+  ): Promise<PreparedMcpHarness> {
+    const {runPiWithMcp} = await import('./piMcp.js');
+    return prepareMcpHarness(
+      this.executable,
+      this.extraArgs,
+      input,
+      runPiWithMcp,
+    );
+  }
+
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
     const toolInputs = new Map<string, unknown>();
+    if (input.prompt.trim() === '') throw new Error(PI_BLANK_PROMPT);
+    // An unknown version is allowed: the probe can fail transiently, and its
+    // cached result would otherwise block every later run.
+    const version = await this.version();
+    if (version !== null && !isAtLeastVersion(version, PI_MIN_VERSION))
+      throw new Error(
+        `Pi ${PI_MIN_VERSION} or newer is required (found ${version}).`,
+      );
     return runStreamingHarness({
       executable: this.executable,
-      args: buildPiArgs(
-        input.prompt,
-        this.extraArgs,
-        input.model,
-        input.permissionMode,
-      ),
+      args: buildPiArgs(this.extraArgs, input.model, input.permissionMode),
       input: {
         ...input,
         env: {...input.env, PI_OFFLINE: '1'},
       },
-      stdin: 'ignore',
+      processInput: input.prompt,
       parseLine: (line, lineNumber) =>
         parsePiJsonLine(line, lineNumber, toolInputs),
     });
@@ -90,7 +113,6 @@ export class PiHarness implements Harness {
 }
 
 export function buildPiArgs(
-  prompt: string,
   extraArgs: readonly string[] = [],
   model?: string,
   permissionMode?: PermissionMode,
@@ -102,7 +124,6 @@ export function buildPiArgs(
     ...piPermissionArgs(permissionMode),
     ...(model === undefined ? [] : ['--model', model]),
     ...extraArgs,
-    prompt,
   ];
 }
 
@@ -123,8 +144,12 @@ export function parsePiJson(stdout: string): PiParsedOutput {
     const parsed = parsePiJsonLine(line, lineNumber, toolInputs);
     toolEvents.push(...parsed.toolEvents);
     if (parsed.finalMessage !== undefined) finalMessage = parsed.finalMessage;
-    if (parsed.errorMessage !== undefined) errorMessage = parsed.errorMessage;
-    if (parsed.terminalFailure === true) terminalFailure = true;
+    // The last assistant message decides failure, so a retried provider error
+    // does not fail a run that recovered.
+    if (parsed.terminalFailure !== undefined) {
+      terminalFailure = parsed.terminalFailure;
+      errorMessage = parsed.errorMessage;
+    }
   }
 
   return {finalMessage, toolEvents, errorMessage, terminalFailure};
@@ -208,6 +233,6 @@ function parseAssistantMessage(message: JsonObject): PiParsedLine {
     toolEvents: [],
     ...(finalMessage === undefined ? {} : {finalMessage}),
     ...(errorMessage === undefined ? {} : {errorMessage}),
-    ...(terminalFailure ? {terminalFailure} : {}),
+    terminalFailure,
   };
 }

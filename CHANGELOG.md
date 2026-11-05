@@ -14,12 +14,24 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   model variants, inherited integration isolation, and subagent tool evidence.
 - Improve MCP call evidence and failure reporting across Claude Code, Codex, and
   OpenCode. Preserve received mock errors and reject incomplete tool attempts.
+  Every MCP tool attempt not reported as failed must reach the mock; failed
+  attempts may be rejected by the harness if another attempt reaches the mock.
 - Stop harness, setup, and verification child processes on timeout, cancellation,
   or exit. Preserve standard exit codes for interrupt and termination signals.
 - Continue valid scenario and harness pairs when another pair cannot be scheduled.
 - Preserve MCP failure details in local debug logs. Keep MCP mock runs local-only
   and limit mock request sizes.
 - Include required third-party license notices in the CLI package.
+- Require Pi 0.86.0 or newer. Support MCP mock runs with inherited extensions
+  excluded and server instructions preserved. Retain attempted tool calls for
+  evidence checks, expose structured results and mock errors to the model, and
+  allow recovery from failed tool requests and transient provider errors. Require
+  positive bridge readiness and validate extra arguments before execution.
+  Accept successful tool-only runs without requiring a final text response.
+- Preserve Pi MCP startup, runtime, timeout, and callback failure details in
+  local debug logs and handle streamed Unicode input. Pass prompts through
+  stdin (subject to Pi's whitespace trimming) and reject blank prompts before
+  starting Pi.
 
 ---
 

@@ -1,4 +1,10 @@
-import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -30,6 +36,31 @@ describe('PiHarness', () => {
     expect(new PiHarness().id).toBe('pi');
   });
 
+  it('pins the MCP executable before the CLI mock PATH changes', async () => {
+    const root = createScratchRoot();
+    const executable = join(root, 'pi');
+    const marker = join(root, 'pinned');
+    writeFileSync(
+      executable,
+      `#!/bin/sh\nprintf pinned > '${marker}'\nprintf 'unsupported-version'\n`,
+      {mode: 0o755},
+    );
+    const harness = new PiHarness();
+    const prepared = await harness.prepareMcp({
+      workDir: root,
+      env: {PATH: root},
+    });
+    await expect(
+      prepared.run(
+        {workDir: root, env: {PATH: '/nonexistent'}, prompt: 'Hello'},
+        {
+          linear: {url: 'http://127.0.0.1:1234/mock', tools: ['get_issue']},
+        },
+      ),
+    ).rejects.toMatchObject({category: 'unsupported_version'});
+    expect(readFileSync(marker, 'utf8')).toBe('pinned');
+  });
+
   it('captures a custom executable version once', async () => {
     const scratchRoot = createScratchRoot();
     const executable = join(scratchRoot, 'fake-pi');
@@ -54,9 +85,7 @@ fi
   });
 
   it('builds isolated non-interactive JSON arguments', () => {
-    expect(
-      buildPiArgs('Say hello.', ['--tools', 'bash'], 'openai/gpt-5.1'),
-    ).toEqual([
+    expect(buildPiArgs(['--tools', 'bash'], 'openai/gpt-5.1')).toEqual([
       '--mode',
       'json',
       '--no-session',
@@ -65,62 +94,114 @@ fi
       'openai/gpt-5.1',
       '--tools',
       'bash',
-      'Say hello.',
     ]);
   });
 
   it('approves project resources only in dangerous permission mode', () => {
-    expect(buildPiArgs('Say hello.', [], undefined, 'dangerous')).toEqual([
+    expect(buildPiArgs([], undefined, 'dangerous')).toEqual([
       '--mode',
       'json',
       '--no-session',
       '--approve',
-      'Say hello.',
     ]);
   });
 
-  it('disables Pi startup network operations and emits streamed tool events', async () => {
-    const scratchRoot = createScratchRoot();
-    const executable = join(scratchRoot, 'fake-pi');
-    const configLog = join(scratchRoot, 'config.log');
-    const stdinLog = join(scratchRoot, 'stdin.log');
-    writeFileSync(
-      executable,
-      `#!/bin/sh
+  it.each(['- list the open issues', '@literal prompt'])(
+    'sends %s through stdin and emits streamed tool events',
+    async (prompt) => {
+      const scratchRoot = createScratchRoot();
+      const executable = join(scratchRoot, 'fake-pi');
+      const configLog = join(scratchRoot, 'config.log');
+      const stdinLog = join(scratchRoot, 'stdin.log');
+      writeFileSync(
+        executable,
+        `#!/bin/sh
+if [ "$1" = "--version" ]; then printf '0.86.0'; exit 0; fi
 printf '%s' "$PI_OFFLINE" > '${configLog}'
-if IFS= read -r _; then
-  printf 'input' > '${stdinLog}'
-else
-  printf 'eof' > '${stdinLog}'
-fi
+cat > '${stdinLog}'
 cat <<'JSONL'
 {"type":"tool_execution_start","toolCallId":"call-1","toolName":"bash","args":{"command":"pnpm test"}}
 {"type":"tool_execution_end","toolCallId":"call-1","toolName":"bash","result":{"content":[{"type":"text","text":"tests passed"}],"details":{}},"isError":false}
 JSONL
 `,
+        {mode: 0o755},
+      );
+      const toolEvents: ToolEvent[] = [];
+      const output = await new PiHarness({executable}).run({
+        prompt,
+        workDir: scratchRoot,
+        env: {},
+        onToolEvent: (event) => toolEvents.push(event),
+      });
+
+      expect(output.exitCode).toBe(0);
+      expect(readFileSync(configLog, 'utf8')).toBe('1');
+      expect(readFileSync(stdinLog, 'utf8')).toBe(prompt);
+      expect(toolEvents).toEqual([
+        {
+          kind: 'shell',
+          rawName: 'bash',
+          input: {command: 'pnpm test'},
+          command: 'pnpm test',
+          status: 'success',
+          message: 'tests passed',
+        },
+      ]);
+    },
+  );
+
+  it.each([
+    ['refuses', "printf '0.85.1'", false],
+    ['allows an unknown version and', 'exit 1', true],
+  ])('%s runs Pi below the minimum', async (_label, versionProbe, runs) => {
+    const root = createScratchRoot();
+    const executable = join(root, 'fake-pi');
+    const ran = join(root, 'ran');
+    writeFileSync(
+      executable,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then ${versionProbe}; exit 0; fi
+touch '${ran}'
+`,
       {mode: 0o755},
     );
-    const toolEvents: ToolEvent[] = [];
-    const output = await new PiHarness({executable}).run({
-      prompt: 'Run tests.',
-      workDir: scratchRoot,
+    const run = new PiHarness({executable}).run({
+      workDir: root,
       env: {},
-      onToolEvent: (event) => toolEvents.push(event),
+      prompt: 'Run the tests.',
     });
+    if (runs) await run;
+    else
+      await expect(run).rejects.toThrow(
+        'Pi 0.86.0 or newer is required (found 0.85.1).',
+      );
+    expect(existsSync(ran)).toBe(runs);
+  });
 
-    expect(output.exitCode).toBe(0);
-    expect(readFileSync(configLog, 'utf8')).toBe('1');
-    expect(readFileSync(stdinLog, 'utf8')).toBe('eof');
-    expect(toolEvents).toEqual([
-      {
-        kind: 'shell',
-        rawName: 'bash',
-        input: {command: 'pnpm test'},
-        command: 'pnpm test',
-        status: 'success',
-        message: 'tests passed',
-      },
-    ]);
+  it('rejects a blank prompt before starting Pi', async () => {
+    const root = createScratchRoot();
+    const ran = join(root, 'ran');
+    const executable = join(root, 'fake-pi');
+    writeFileSync(executable, `#!/bin/sh\ntouch '${ran}'\n`, {mode: 0o755});
+    await expect(
+      new PiHarness({executable}).run({workDir: root, env: {}, prompt: '  \n'}),
+    ).rejects.toThrow('Pi cannot run a blank prompt.');
+    expect(existsSync(ran)).toBe(false);
+  });
+
+  it('keeps earlier answer text when the last turn has none', () => {
+    const turn = (stopReason: string, content: unknown[]) => ({
+      type: 'message_end',
+      message: {role: 'assistant', stopReason, content},
+    });
+    const parsed = parsePiJson(
+      jsonl(
+        turn('toolUse', [{type: 'text', text: 'DYNO-1 is titled Foo.'}]),
+        turn('stop', []),
+      ),
+    );
+    expect(parsed.finalMessage).toBe('DYNO-1 is titled Foo.');
+    expect(parsed.terminalFailure).toBe(false);
   });
 
   it('extracts transcript, final message, tool events, and assistant errors', () => {
@@ -244,6 +325,42 @@ describe('parsePiJson', () => {
         message: 'permission denied',
       },
     ]);
+  });
+
+  it('uses the last assistant outcome after a provider retry', () => {
+    const error = {
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        stopReason: 'error',
+        errorMessage: 'Temporary 503',
+      },
+    };
+    const success = {
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        stopReason: 'stop',
+        content: [{type: 'text', text: 'Recovered'}],
+      },
+    };
+    expect(parsePiJson(jsonl(error, success))).toMatchObject({
+      terminalFailure: false,
+      errorMessage: undefined,
+      finalMessage: 'Recovered',
+    });
+    expect(
+      parsePiJson(
+        jsonl(success, {
+          type: 'message_end',
+          message: {role: 'assistant', stopReason: 'stop', content: []},
+        }),
+      ),
+    ).toMatchObject({finalMessage: 'Recovered', terminalFailure: false});
+    expect(parsePiJson(jsonl(success, error))).toMatchObject({
+      terminalFailure: true,
+      errorMessage: 'Temporary 503',
+    });
   });
 
   it('rejects malformed JSON with its line number', () => {
