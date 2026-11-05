@@ -53,12 +53,12 @@ export async function runPiWithMcp(options: {
     env,
     extendEnv: false,
     reject: false as const,
-    stdin: 'ignore' as const,
     forceKillAfterDelay: 1000,
     ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
   };
   const probe = await startOwnedProcess(executable, ['--version'], {
     ...processOptions,
+    stdin: 'ignore',
     timeout: Math.min(5000, remaining()),
   });
   let version: string;
@@ -85,12 +85,11 @@ export async function runPiWithMcp(options: {
     const child = startOwnedProcess(
       executable,
       buildPiArgs(
-        input.prompt,
         [...(options.extraArgs ?? []), '--no-extensions', '-e', bridge],
         input.model,
         input.permissionMode,
       ),
-      {...processOptions, timeout: remaining()},
+      {...processOptions, input: input.prompt, timeout: remaining()},
     );
     let callbackFailure: McpHarnessError | undefined;
     const stream = new ToolEventLineStream({
@@ -109,9 +108,8 @@ export async function runPiWithMcp(options: {
         }
       },
     });
-    child.stdout?.on('data', (chunk: Buffer | string) =>
-      stream.write(chunk.toString()),
-    );
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => stream.write(chunk));
     const result = await child;
     output = {
       exitCode: result.exitCode ?? 1,
@@ -147,6 +145,7 @@ export async function runPiWithMcp(options: {
       harnessReady: true,
       version,
       output,
+      toolEvents: parsed.toolEvents,
     };
   } catch (error) {
     if (output !== undefined)
@@ -175,12 +174,13 @@ function piBridgeSource(
   tools: readonly string[],
 ): string {
   return `
+import {writeSync} from 'node:fs';
 import {Client} from ${JSON.stringify(import.meta.resolve('@modelcontextprotocol/sdk/client/index.js'))};
 import {StreamableHTTPClientTransport} from ${JSON.stringify(import.meta.resolve('@modelcontextprotocol/sdk/client/streamableHttp.js'))};
 const servers = ${JSON.stringify(servers)};
 const tools = ${JSON.stringify(tools)};
 const notReady = (reason) => {
-  console.error(${JSON.stringify(NOT_READY_MARKER)} + ' ' + reason);
+  writeSync(2, ${JSON.stringify(NOT_READY_MARKER)} + ' ' + reason + '\\n');
   process.exit(1);
 };
 export default async function(pi) {
@@ -188,28 +188,37 @@ export default async function(pi) {
   const instructions = [];
   for (const [server, connection] of Object.entries(servers)) {
     const client = new Client({name: 'dynobox-pi', version: '1.0.0'});
-    client.onerror = () => notReady('Lost connection to MCP mock server "' + server + '".');
     clients.push(client);
     try {
       await client.connect(new StreamableHTTPClientTransport(new URL(connection.url)));
     } catch {
       notReady('Could not connect to MCP mock server "' + server + '".');
     }
-    const guidance = client.getInstructions();
-    if (guidance) instructions.push('MCP server ' + server + ':\\n' + guidance);
-    const listing = await client.listTools();
-    for (const tool of listing.tools) {
-      const name = 'mcp__' + server + '__' + tool.name;
-      if (!tools.includes(name)) continue;
-      pi.registerTool({name, label: server + '/' + tool.name,
-        description: tool.description || server + '/' + tool.name,
-        parameters: tool.inputSchema,
-        async execute(id, args, signal) {
-          const result = await client.callTool({name: tool.name, arguments: args}, undefined, {signal});
-          if (result.isError) throw new Error(JSON.stringify(result.content));
-          return {content: result.content, details: result.structuredContent || {}};
-        }
-      });
+    try {
+      const guidance = client.getInstructions();
+      if (guidance) instructions.push('MCP server ' + server + ':\\n' + guidance);
+      const listing = await client.listTools();
+      for (const tool of listing.tools) {
+        const name = 'mcp__' + server + '__' + tool.name;
+        if (!tools.includes(name)) continue;
+        pi.registerTool({name, label: server + '/' + tool.name,
+          description: tool.description || server + '/' + tool.name,
+          parameters: tool.inputSchema,
+          async execute(id, args, signal) {
+            const result = await client.callTool({name: tool.name, arguments: args}, undefined, {signal});
+            const content = [...result.content];
+            // Pi sends content to the model; details are metadata only.
+            if (result.structuredContent !== undefined)
+              content.push({type: 'text', text: JSON.stringify(result.structuredContent)});
+            if (result.isError) throw new Error(content
+              .filter((block) => block.type === 'text')
+              .map((block) => block.text).join('\\n') || 'MCP tool failed.');
+            return {content, details: result.structuredContent || {}};
+          }
+        });
+      }
+    } catch (error) {
+      notReady('Could not initialize MCP mock server "' + server + '": ' + (error instanceof Error ? error.message : String(error)));
     }
   }
   if (instructions.length) pi.on('before_agent_start', (event) => ({

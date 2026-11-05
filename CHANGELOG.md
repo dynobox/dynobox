@@ -20,10 +20,13 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Preserve MCP failure details in local debug logs. Keep MCP mock runs local-only
   and limit mock request sizes.
 - Include required third-party license notices in the CLI package.
-- Report timed-out Pi MCP probes and runs as timeouts, and preserve failure
-  output in local debug logs.
-- Stop Pi MCP runs when a tool-event callback fails, and retain the original
-  callback error and raw process output even if cleanup passes the deadline.
+- Support MCP mock runs with Pi 0.84.2 or newer, with inherited extensions
+  excluded and server instructions preserved. Retain attempted tool calls for
+  evidence checks, expose structured results and mock errors to the model, and
+  allow recovery from failed tool requests.
+- Preserve Pi MCP startup, runtime, timeout, and callback failure details in
+  local debug logs. Preserve literal prompts through stdin and handle streamed
+  Unicode input.
 
 ---
 

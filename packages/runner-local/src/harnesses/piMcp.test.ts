@@ -222,8 +222,8 @@ describe('Pi MCP launch contract', () => {
       '--no-extensions',
       '-e',
       bridge,
-      'Say READY',
     ]);
+    expect(launch[2].input).toBe('Say READY');
     expect(launch[2].env).toMatchObject({
       PI_OFFLINE: '1',
       NO_PROXY: 'upper,lower,127.0.0.1,localhost,::1',
@@ -250,6 +250,35 @@ describe('Pi MCP launch contract', () => {
       category: 'not_ready',
       message: 'Pi did not activate MCP mock tool "mcp__linear__get_issue".',
     });
+  });
+
+  it('returns failed tool attempts even when the bridge never receives them', async () => {
+    const stdout = [
+      JSON.stringify({
+        type: 'tool_execution_start',
+        toolCallId: 'invalid-call',
+        args: {id: 42},
+      }),
+      JSON.stringify({
+        type: 'tool_execution_end',
+        toolCallId: 'invalid-call',
+        toolName: 'mcp__linear__get_issue',
+        isError: true,
+        result: {content: [{type: 'text', text: 'Invalid arguments'}]},
+      }),
+      finalMessage,
+    ].join('\n');
+    mocks.execa.mockResolvedValueOnce({stdout: '0.84.2', failed: false});
+    mocks.execa.mockResolvedValueOnce({stdout, stderr: '', exitCode: 0});
+    const result = await runPiWithMcp(options());
+    expect(result.toolEvents).toEqual([
+      expect.objectContaining({
+        rawName: 'mcp__linear__get_issue',
+        input: {id: 42},
+        status: 'failure',
+        message: 'Invalid arguments',
+      }),
+    ]);
   });
 
   it('rejects Pi zero-exit model errors', async () => {
@@ -324,7 +353,7 @@ describe('Pi MCP launch contract', () => {
           JSON.stringify({
             type: 'tool_execution_start',
             toolCallId: 'call-1',
-            args: {id: 'DYNO-1'},
+            args: {id: 'DYNO-é漢'},
           }),
           JSON.stringify({
             type: 'tool_execution_end',
@@ -338,11 +367,14 @@ describe('Pi MCP launch contract', () => {
         await vi.waitFor(() =>
           expect(stdout.listenerCount('data')).toBeGreaterThan(0),
         );
-        stdout.write(lines);
+        const bytes = Buffer.from(lines);
+        const split = bytes.indexOf(Buffer.from('é')) + 1;
+        stdout.write(bytes.subarray(0, split));
+        stdout.write(bytes.subarray(split));
         expect(onToolEvent).toHaveBeenCalledWith(
           expect.objectContaining({
             rawName: 'mcp__linear__get_issue',
-            input: {id: 'DYNO-1'},
+            input: {id: 'DYNO-é漢'},
           }),
         );
       } finally {

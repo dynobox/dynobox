@@ -3,6 +3,7 @@ import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
+import type {McpToolResult} from '@dynobox/sdk';
 import {execa} from 'execa';
 import {afterEach, describe, expect, it} from 'vitest';
 
@@ -17,7 +18,17 @@ afterEach(async () => {
 });
 
 async function fixture(
-  mode: 'call' | 'negative' | 'failed' | 'denied' | 'hang' = 'call',
+  mode:
+    | 'call'
+    | 'negative'
+    | 'failed'
+    | 'denied'
+    | 'hang'
+    | 'invalid'
+    | 'tool-error'
+    | 'request-error'
+    | 'listing-failed' = 'call',
+  response?: McpToolResult,
 ) {
   const root = await mkdtemp(join(tmpdir(), 'dynobox-pi-native-'));
   cleanup.push(() => rm(root, {recursive: true, force: true}));
@@ -26,8 +37,15 @@ async function fixture(
       instructions: 'MCP_SERVER_INSTRUCTIONS: use issue IDs for Linear tools.',
       tools: {
         get_issue: {
-          inputSchema: {type: 'object'},
-          response: {content: [{type: 'text', text: 'fixture-receipt-42'}]},
+          inputSchema: {
+            type: 'object',
+            properties: {id: {type: 'string'}},
+            required: ['id'],
+          },
+          response: response ?? {
+            ...(mode === 'tool-error' ? {isError: true} : {}),
+            content: [{type: 'text', text: 'fixture-receipt-42'}],
+          },
         },
       },
     },
@@ -37,7 +55,12 @@ async function fixture(
   );
   const requests: Record<string, unknown>[] = [];
   let realContacts = 0;
+  let rejectedRequest = false;
   const provider = createServer(async (request, response) => {
+    if (request.url === '/proxy-mcp' && request.method !== 'POST') {
+      response.writeHead(405).end();
+      return;
+    }
     if (request.url === '/denied') {
       response.writeHead(403).end();
       return;
@@ -50,6 +73,32 @@ async function fixture(
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const body = JSON.parse(Buffer.concat(chunks).toString());
+    if (request.url === '/proxy-mcp') {
+      if (
+        (mode === 'listing-failed' && body.method === 'tools/list') ||
+        (mode === 'request-error' &&
+          body.method === 'tools/call' &&
+          !rejectedRequest)
+      ) {
+        rejectedRequest = true;
+        response.writeHead(503).end('Temporary fixture failure');
+        return;
+      }
+      const forwarded = await fetch(controller.urls.linear!, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+        },
+        body: JSON.stringify(body),
+      });
+      response.writeHead(forwarded.status, {
+        'content-type':
+          forwarded.headers.get('content-type') ?? 'application/json',
+      });
+      response.end(await forwarded.text());
+      return;
+    }
     requests.push(body);
     if (mode === 'hang') return;
     const tool = body.tools?.find((entry: {function?: {name?: string}}) =>
@@ -59,7 +108,13 @@ async function fixture(
       'fixture-receipt-42',
     );
     const call =
-      mode === 'call' && !hasReceipt && !!tool && requests.length < 10;
+      !!tool &&
+      !hasReceipt &&
+      (mode === 'call' ||
+        mode === 'request-error' ||
+        ((mode === 'invalid' || mode === 'tool-error') &&
+          requests.length === 1)) &&
+      requests.length < 10;
     const delta = call
       ? {
           tool_calls: [
@@ -69,7 +124,8 @@ async function fixture(
               type: 'function',
               function: {
                 name: tool?.function.name ?? 'missing',
-                arguments: '{"id":"DYNO-1"}',
+                arguments:
+                  mode === 'invalid' ? '{"unexpected":42}' : '{"id":"DYNO-1"}',
               },
             },
           ],
@@ -189,7 +245,9 @@ Say fixture.
             ? `${base}/denied`
             : mode === 'failed'
               ? `http://127.0.0.1:1/${'a'.repeat(48)}`
-              : controller.urls.linear!,
+              : mode === 'request-error' || mode === 'listing-failed'
+                ? `${base}/proxy-mcp`
+                : controller.urls.linear!,
         tools: ['get_issue'],
       },
     },
@@ -282,19 +340,134 @@ describe.skipIf(!executable)(
       'does not let %s startup pass a negative assertion',
       async (mode) => {
         const f = await fixture(mode);
-        let ready = false;
-        try {
-          ready = (await runPiWithMcp(f.options)).harnessReady;
-        } catch {
-          /* Also valid: startup rejected. */
-        }
+        await expect(runPiWithMcp(f.options)).rejects.toMatchObject({
+          category: 'not_ready',
+          message: expect.stringContaining('Could not connect'),
+        });
         const observation = await f.controller.finalize({
-          harnessReady: ready,
-          harnessSucceeded: ready,
+          harnessReady: false,
+          harnessSucceeded: false,
         });
         expect(f.requests).toHaveLength(0);
         expect(observation.ready).toBe(false);
         expect(observation.failures.length).toBeGreaterThan(0);
+      },
+      30000,
+    );
+
+    it('retains a schema-rejected attempt that never reached the mock', async () => {
+      const f = await fixture('invalid');
+      const result = await runPiWithMcp(f.options);
+      const observation = await f.controller.finalize({
+        harnessReady: true,
+        harnessSucceeded: true,
+      });
+      expect(observation.calls).toHaveLength(0);
+      expect(result.toolEvents).toEqual([
+        expect.objectContaining({
+          rawName: 'mcp__linear__get_issue',
+          input: {unexpected: 42},
+          status: 'failure',
+        }),
+      ]);
+    }, 30000);
+
+    it('returns mock errors to the model as plain text', async () => {
+      const f = await fixture('tool-error');
+      const result = await runPiWithMcp(f.options);
+      expect(result.toolEvents).toEqual([
+        expect.objectContaining({
+          status: 'failure',
+          message: 'fixture-receipt-42',
+        }),
+      ]);
+      const messages = f.requests.at(-1)?.messages as {
+        role: string;
+        content: unknown;
+      }[];
+      expect(messages.find((message) => message.role === 'tool')?.content).toBe(
+        'fixture-receipt-42',
+      );
+    }, 30000);
+
+    it.each([
+      {withText: false, isError: false},
+      {withText: true, isError: false},
+      {withText: false, isError: true},
+      {withText: true, isError: true},
+    ])(
+      'exposes structured output to the model (text: $withText, error: $isError)',
+      async ({withText, isError}) => {
+        const structuredContent = {
+          receipt: 'structured-receipt-42',
+          ok: !isError,
+        };
+        const f = await fixture(isError ? 'tool-error' : 'call', {
+          content: withText ? [{type: 'text', text: 'fixture-receipt-42'}] : [],
+          structuredContent,
+          isError,
+        });
+        const result = await runPiWithMcp(f.options);
+        const expected = [
+          ...(withText ? ['fixture-receipt-42'] : []),
+          JSON.stringify(structuredContent),
+        ].join('\n');
+        expect(result.toolEvents?.[0]).toMatchObject({
+          status: isError ? 'failure' : 'success',
+          message: expect.stringContaining(JSON.stringify(structuredContent)),
+        });
+        if (withText)
+          expect(result.toolEvents?.[0]?.message).toContain(
+            'fixture-receipt-42',
+          );
+        const messages = f.requests.at(-1)?.messages as {
+          role: string;
+          content: unknown;
+        }[];
+        expect(
+          messages.find((message) => message.role === 'tool')?.content,
+        ).toBe(expected);
+      },
+      30000,
+    );
+
+    it('lets the model recover from a failed tool request', async () => {
+      const f = await fixture('request-error');
+      const result = await runPiWithMcp(f.options);
+      expect(result.toolEvents?.map((event) => event.status)).toEqual([
+        'failure',
+        'success',
+      ]);
+      expect(result.toolEvents?.[0]?.message).toContain(
+        'Temporary fixture failure',
+      );
+      const observation = await f.controller.finalize({
+        harnessReady: true,
+        harnessSucceeded: true,
+      });
+      expect(observation.calls).toHaveLength(1);
+    }, 30000);
+
+    it('classifies tool-discovery failure as not ready before model execution', async () => {
+      const f = await fixture('listing-failed');
+      await expect(runPiWithMcp(f.options)).rejects.toMatchObject({
+        category: 'not_ready',
+        message: expect.stringContaining(
+          'Could not initialize MCP mock server',
+        ),
+      });
+      expect(f.requests).toHaveLength(0);
+    }, 30000);
+
+    it.each(['- list the open issues', '@literal prompt'])(
+      'passes the literal prompt %s to the model',
+      async (prompt) => {
+        const f = await fixture('negative');
+        await runPiWithMcp({
+          ...f.options,
+          input: {...f.options.input, prompt},
+        });
+        expect(JSON.stringify(f.requests)).toContain(prompt);
       },
       30000,
     );

@@ -72,17 +72,12 @@ export class PiHarness implements Harness {
     const toolInputs = new Map<string, unknown>();
     return runStreamingHarness({
       executable: this.executable,
-      args: buildPiArgs(
-        input.prompt,
-        this.extraArgs,
-        input.model,
-        input.permissionMode,
-      ),
+      args: buildPiArgs(this.extraArgs, input.model, input.permissionMode),
       input: {
         ...input,
         env: {...input.env, PI_OFFLINE: '1'},
       },
-      stdin: 'ignore',
+      processInput: input.prompt,
       parseLine: (line, lineNumber) =>
         parsePiJsonLine(line, lineNumber, toolInputs),
     });
@@ -104,7 +99,6 @@ export class PiHarness implements Harness {
 }
 
 export function buildPiArgs(
-  prompt: string,
   extraArgs: readonly string[] = [],
   model?: string,
   permissionMode?: PermissionMode,
@@ -116,7 +110,6 @@ export function buildPiArgs(
     ...piPermissionArgs(permissionMode),
     ...(model === undefined ? [] : ['--model', model]),
     ...extraArgs,
-    prompt,
   ];
 }
 

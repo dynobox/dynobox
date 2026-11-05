@@ -79,9 +79,7 @@ fi
   });
 
   it('builds isolated non-interactive JSON arguments', () => {
-    expect(
-      buildPiArgs('Say hello.', ['--tools', 'bash'], 'openai/gpt-5.1'),
-    ).toEqual([
+    expect(buildPiArgs(['--tools', 'bash'], 'openai/gpt-5.1')).toEqual([
       '--mode',
       'json',
       '--no-session',
@@ -90,63 +88,60 @@ fi
       'openai/gpt-5.1',
       '--tools',
       'bash',
-      'Say hello.',
     ]);
   });
 
   it('approves project resources only in dangerous permission mode', () => {
-    expect(buildPiArgs('Say hello.', [], undefined, 'dangerous')).toEqual([
+    expect(buildPiArgs([], undefined, 'dangerous')).toEqual([
       '--mode',
       'json',
       '--no-session',
       '--approve',
-      'Say hello.',
     ]);
   });
 
-  it('disables Pi startup network operations and emits streamed tool events', async () => {
-    const scratchRoot = createScratchRoot();
-    const executable = join(scratchRoot, 'fake-pi');
-    const configLog = join(scratchRoot, 'config.log');
-    const stdinLog = join(scratchRoot, 'stdin.log');
-    writeFileSync(
-      executable,
-      `#!/bin/sh
+  it.each(['- list the open issues', '@literal prompt'])(
+    'sends %s through stdin and emits streamed tool events',
+    async (prompt) => {
+      const scratchRoot = createScratchRoot();
+      const executable = join(scratchRoot, 'fake-pi');
+      const configLog = join(scratchRoot, 'config.log');
+      const stdinLog = join(scratchRoot, 'stdin.log');
+      writeFileSync(
+        executable,
+        `#!/bin/sh
 printf '%s' "$PI_OFFLINE" > '${configLog}'
-if IFS= read -r _; then
-  printf 'input' > '${stdinLog}'
-else
-  printf 'eof' > '${stdinLog}'
-fi
+cat > '${stdinLog}'
 cat <<'JSONL'
 {"type":"tool_execution_start","toolCallId":"call-1","toolName":"bash","args":{"command":"pnpm test"}}
 {"type":"tool_execution_end","toolCallId":"call-1","toolName":"bash","result":{"content":[{"type":"text","text":"tests passed"}],"details":{}},"isError":false}
 JSONL
 `,
-      {mode: 0o755},
-    );
-    const toolEvents: ToolEvent[] = [];
-    const output = await new PiHarness({executable}).run({
-      prompt: 'Run tests.',
-      workDir: scratchRoot,
-      env: {},
-      onToolEvent: (event) => toolEvents.push(event),
-    });
+        {mode: 0o755},
+      );
+      const toolEvents: ToolEvent[] = [];
+      const output = await new PiHarness({executable}).run({
+        prompt,
+        workDir: scratchRoot,
+        env: {},
+        onToolEvent: (event) => toolEvents.push(event),
+      });
 
-    expect(output.exitCode).toBe(0);
-    expect(readFileSync(configLog, 'utf8')).toBe('1');
-    expect(readFileSync(stdinLog, 'utf8')).toBe('eof');
-    expect(toolEvents).toEqual([
-      {
-        kind: 'shell',
-        rawName: 'bash',
-        input: {command: 'pnpm test'},
-        command: 'pnpm test',
-        status: 'success',
-        message: 'tests passed',
-      },
-    ]);
-  });
+      expect(output.exitCode).toBe(0);
+      expect(readFileSync(configLog, 'utf8')).toBe('1');
+      expect(readFileSync(stdinLog, 'utf8')).toBe(prompt);
+      expect(toolEvents).toEqual([
+        {
+          kind: 'shell',
+          rawName: 'bash',
+          input: {command: 'pnpm test'},
+          command: 'pnpm test',
+          status: 'success',
+          message: 'tests passed',
+        },
+      ]);
+    },
+  );
 
   it('extracts transcript, final message, tool events, and assistant errors', () => {
     const stdout = jsonl(
