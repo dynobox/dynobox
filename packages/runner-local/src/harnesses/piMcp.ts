@@ -21,7 +21,39 @@ import type {
 // Oldest release whose `--no-extensions` isolation was verified natively.
 const MIN_VERSION = '0.84.2';
 // Extensions can register their own MCP servers beside the mocks.
-const EXTENSION_FLAGS = new Set(['-e', '--extension', '--extensions']);
+const VALUE_FLAGS = new Set([
+  '--thinking',
+  '--tools',
+  '-t',
+  '--exclude-tools',
+  '-xt',
+  '--provider',
+  '--model',
+  '--api-key',
+  '--system-prompt',
+  '--append-system-prompt',
+  '--skill',
+  '--theme',
+  '--use-theme',
+]);
+const SWITCH_FLAGS = new Set([
+  '--no-tools',
+  '-nt',
+  '--no-builtin-tools',
+  '-nbt',
+  '--no-skills',
+  '-ns',
+  '--no-prompt-templates',
+  '-np',
+  '--no-themes',
+  '--no-context-files',
+  '-nc',
+  '--verbose',
+  '--offline',
+  '--no-extensions',
+  '-ne',
+]);
+const READY_MARKER = 'DYNOBOX_MCP_READY';
 const NOT_READY_MARKER = 'DYNOBOX_MCP_NOT_READY:';
 
 export async function runPiWithMcp(options: {
@@ -33,13 +65,23 @@ export async function runPiWithMcp(options: {
   const started = Date.now();
   const {input, servers, executable} = options;
   const remaining = mcpDeadline(input.timeoutMs, input.signal);
-  for (const arg of options.extraArgs ?? []) {
-    const flag = arg.split('=')[0]!;
-    if (EXTENSION_FLAGS.has(flag))
-      throw new McpHarnessError(
-        'configuration_failed',
-        `Pi extra argument ${flag} conflicts with MCP mocking.`,
-      );
+  const extraArgs = options.extraArgs ?? [];
+  for (let index = 0; index < extraArgs.length; index++) {
+    const flag = extraArgs[index]!;
+    if (SWITCH_FLAGS.has(flag)) continue;
+    if (VALUE_FLAGS.has(flag)) {
+      const value = extraArgs[++index];
+      if (
+        value !== undefined &&
+        !value.startsWith('-') &&
+        !value.startsWith('@')
+      )
+        continue;
+    }
+    throw new McpHarnessError(
+      'configuration_failed',
+      `Pi extra argument ${flag} is unsupported or missing a value for MCP mocking.`,
+    );
   }
   const tools = piToolNames(servers);
   const env: NodeJS.ProcessEnv = {
@@ -53,7 +95,6 @@ export async function runPiWithMcp(options: {
     env,
     extendEnv: false,
     reject: false as const,
-    forceKillAfterDelay: 1000,
     ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
   };
   const probe = await startOwnedProcess(executable, ['--version'], {
@@ -85,7 +126,7 @@ export async function runPiWithMcp(options: {
     const child = startOwnedProcess(
       executable,
       buildPiArgs(
-        [...(options.extraArgs ?? []), '--no-extensions', '-e', bridge],
+        ['--no-extensions', '-e', bridge, ...extraArgs],
         input.model,
         input.permissionMode,
       ),
@@ -135,11 +176,16 @@ export async function runPiWithMcp(options: {
         'execution_failed',
         `Pi exited with code ${result.exitCode ?? 'unknown'}.`,
       );
+    if (!result.stderr.split(/\r?\n/).includes(READY_MARKER))
+      throw new McpHarnessError(
+        'not_ready',
+        'Pi did not confirm MCP bridge readiness.',
+      );
     const parsed = parsePiJson(result.stdout);
-    if (parsed.terminalFailure || !parsed.finalMessage)
+    if (parsed.terminalFailure || result.stdout.trim() === '')
       throw new McpHarnessError(
         'execution_failed',
-        parsed.errorMessage ?? 'Pi finished without a final message.',
+        parsed.errorMessage ?? 'Pi finished without execution output.',
       );
     return {
       harnessReady: true,
@@ -228,6 +274,7 @@ export default async function(pi) {
     const active = pi.getActiveTools();
     const missing = tools.find((name) => !active.includes(name));
     if (missing) notReady('Pi did not activate MCP mock tool "' + missing + '".');
+    writeSync(2, ${JSON.stringify(READY_MARKER)} + '\\n');
   });
   pi.on('session_shutdown', () => Promise.all(clients.map((client) => client.close())));
 }

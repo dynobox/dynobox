@@ -27,7 +27,10 @@ async function fixture(
     | 'invalid'
     | 'tool-error'
     | 'request-error'
-    | 'listing-failed' = 'call',
+    | 'listing-failed'
+    | 'provider-retry'
+    | 'invalid-retry'
+    | 'tool-only' = 'call',
   response?: McpToolResult,
 ) {
   const root = await mkdtemp(join(tmpdir(), 'dynobox-pi-native-'));
@@ -100,6 +103,10 @@ async function fixture(
       return;
     }
     requests.push(body);
+    if (mode === 'provider-retry' && requests.length === 1) {
+      response.writeHead(503).end('Temporary provider failure');
+      return;
+    }
     if (mode === 'hang') return;
     const tool = body.tools?.find((entry: {function?: {name?: string}}) =>
       entry.function?.name?.startsWith('mcp__'),
@@ -111,6 +118,9 @@ async function fixture(
       !!tool &&
       !hasReceipt &&
       (mode === 'call' ||
+        mode === 'provider-retry' ||
+        mode === 'invalid-retry' ||
+        mode === 'tool-only' ||
         mode === 'request-error' ||
         ((mode === 'invalid' || mode === 'tool-error') &&
           requests.length === 1)) &&
@@ -125,12 +135,22 @@ async function fixture(
               function: {
                 name: tool?.function.name ?? 'missing',
                 arguments:
-                  mode === 'invalid' ? '{"unexpected":42}' : '{"id":"DYNO-1"}',
+                  mode === 'invalid' ||
+                  (mode === 'invalid-retry' && requests.length === 1)
+                    ? '{"unexpected":42}'
+                    : '{"id":"DYNO-1"}',
               },
             },
           ],
         }
-      : {content: hasReceipt ? 'fixture-receipt-42' : 'No calls needed.'};
+      : {
+          content:
+            mode === 'tool-only'
+              ? ''
+              : hasReceipt
+                ? 'fixture-receipt-42'
+                : 'No calls needed.',
+        };
     response.writeHead(200, {'content-type': 'text/event-stream'});
     for (const [part, finish] of [
       [{role: 'assistant', ...delta}, null],
@@ -478,7 +498,42 @@ describe.skipIf(!executable)(
         runPiWithMcp({...f.options, extraArgs: ['--tools', 'read']}),
       ).rejects.toMatchObject({category: 'not_ready'});
       expect(f.requests).toHaveLength(0);
-    });
+    }, 30000);
+
+    it.each(['provider-retry', 'invalid-retry', 'tool-only'] as const)(
+      'accepts successful completion after %s',
+      async (mode) => {
+        const f = await fixture(mode);
+        const result = await runPiWithMcp(f.options);
+        expect(result.harnessReady).toBe(true);
+        const parsed = new PiHarness().extractResult(result.output);
+        expect(parsed.exitCode).toBe(0);
+        expect(parsed.errorMessage).toBeUndefined();
+        expect(parsed.toolEvents.at(-1)?.status).toBe('success');
+        if (mode === 'invalid-retry')
+          expect(parsed.toolEvents.map((event) => event.status)).toEqual([
+            'failure',
+            'success',
+          ]);
+        if (mode === 'tool-only') expect(parsed.finalMessage).toBeUndefined();
+      },
+      30000,
+    );
+
+    it.each([['--'], ['--thinking'], ['@file'], ['extra prompt']])(
+      'rejects unsafe arguments before loading inherited extensions: %j',
+      async (...extraArgs) => {
+        const f = await fixture('negative');
+        await expect(
+          runPiWithMcp({...f.options, extraArgs}),
+        ).rejects.toMatchObject({
+          category: 'configuration_failed',
+        });
+        expect(f.contacts()).toBe(0);
+        expect(f.requests).toHaveLength(0);
+      },
+      30000,
+    );
 
     it('keeps default project trust and user skills', async () => {
       const f = await fixture('negative');

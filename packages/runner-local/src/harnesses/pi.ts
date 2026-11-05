@@ -18,7 +18,7 @@ import type {
   PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
-import {createVersionProbe} from './version.js';
+import {createVersionProbe, isAtLeastVersion} from './version.js';
 
 export type PiHarnessOptions = {
   executable?: string;
@@ -70,14 +70,23 @@ export class PiHarness implements Harness {
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
     const toolInputs = new Map<string, unknown>();
+    const version = await this.version();
+    const legacy = version !== null && !isAtLeastVersion(version, '0.65.1');
+    if (legacy && /^[-@]/.test(input.prompt))
+      throw new Error(
+        'Pi 0.65.1 or newer is required for prompts beginning with - or @.',
+      );
     return runStreamingHarness({
       executable: this.executable,
-      args: buildPiArgs(this.extraArgs, input.model, input.permissionMode),
+      args: [
+        ...buildPiArgs(this.extraArgs, input.model, input.permissionMode),
+        ...(legacy ? [input.prompt] : []),
+      ],
       input: {
         ...input,
         env: {...input.env, PI_OFFLINE: '1'},
       },
-      processInput: input.prompt,
+      ...(legacy ? {stdin: 'ignore' as const} : {processInput: input.prompt}),
       parseLine: (line, lineNumber) =>
         parsePiJsonLine(line, lineNumber, toolInputs),
     });
@@ -129,9 +138,11 @@ export function parsePiJson(stdout: string): PiParsedOutput {
   for (const {line, lineNumber} of jsonLines(stdout)) {
     const parsed = parsePiJsonLine(line, lineNumber, toolInputs);
     toolEvents.push(...parsed.toolEvents);
-    if (parsed.finalMessage !== undefined) finalMessage = parsed.finalMessage;
-    if (parsed.errorMessage !== undefined) errorMessage = parsed.errorMessage;
-    if (parsed.terminalFailure === true) terminalFailure = true;
+    if (parsed.terminalFailure !== undefined) {
+      finalMessage = parsed.finalMessage;
+      terminalFailure = parsed.terminalFailure;
+      errorMessage = parsed.errorMessage;
+    }
   }
 
   return {finalMessage, toolEvents, errorMessage, terminalFailure};
@@ -215,6 +226,6 @@ function parseAssistantMessage(message: JsonObject): PiParsedLine {
     toolEvents: [],
     ...(finalMessage === undefined ? {} : {finalMessage}),
     ...(errorMessage === undefined ? {} : {errorMessage}),
-    ...(terminalFailure ? {terminalFailure} : {}),
+    terminalFailure,
   };
 }

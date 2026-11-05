@@ -200,6 +200,34 @@ describe('MCP tool evidence', () => {
       passes: true,
     },
     {
+      name: 'received success recovers an earlier rejected attempt',
+      received: ['1'],
+      attempts: [
+        {id: 'invalid', status: 'failure'},
+        {id: '1', status: 'success'},
+      ],
+      passes: true,
+    },
+    {
+      name: 'received success recovers several rejected attempts',
+      received: ['1'],
+      attempts: [
+        {id: 'invalid', status: 'failure'},
+        {id: 'invalid', status: 'failure'},
+        {id: '1', status: 'success'},
+      ],
+      passes: true,
+    },
+    {
+      name: 'an unreceived success cannot be recovered',
+      received: ['1'],
+      attempts: [
+        {id: 'invalid', status: 'success'},
+        {id: '1', status: 'success'},
+      ],
+      passes: false,
+    },
+    {
       name: 'earlier call cannot cover a later failure',
       received: ['1'],
       attempts: [

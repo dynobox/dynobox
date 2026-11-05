@@ -42,10 +42,18 @@ const options = () => ({
 
 beforeEach(() => {
   bridge = undefined;
+  vi.spyOn(process, 'exit').mockImplementation(() => {
+    throw new Error('Bridge requested process exit');
+  });
   mocks.execa.mockReset().mockImplementation(async (_executable, args) => {
     if (args[0] === '--version') return {stdout: '0.84.2', failed: false};
     bridge = args[args.indexOf('-e') + 1];
-    return {stdout: finalMessage, stderr: '', failed: false, exitCode: 0};
+    return {
+      stdout: finalMessage,
+      stderr: 'DYNOBOX_MCP_READY',
+      failed: false,
+      exitCode: 0,
+    };
   });
 });
 afterEach(() => {
@@ -176,12 +184,16 @@ describe('Pi MCP launch contract', () => {
         .mockResolvedValueOnce({
           exitCode,
           stdout,
-          stderr: 'PRIVATE_STDERR_SENTINEL',
+          stderr: 'DYNOBOX_MCP_READY\nPRIVATE_STDERR_SENTINEL',
           failed: exitCode !== 0,
         });
       await expect(runPiWithMcp(options())).rejects.toMatchObject({
         category: 'execution_failed',
-        output: {exitCode, stdout, stderr: 'PRIVATE_STDERR_SENTINEL'},
+        output: {
+          exitCode,
+          stdout,
+          stderr: 'DYNOBOX_MCP_READY\nPRIVATE_STDERR_SENTINEL',
+        },
       });
       const args = mocks.execa.mock.calls[1]![1] as string[];
       await expect(
@@ -217,11 +229,11 @@ describe('Pi MCP launch contract', () => {
       'json',
       '--no-session',
       '--no-approve',
-      '--thinking',
-      'low',
       '--no-extensions',
       '-e',
       bridge,
+      '--thinking',
+      'low',
     ]);
     expect(launch[2].input).toBe('Say READY');
     expect(launch[2].env).toMatchObject({
@@ -269,7 +281,11 @@ describe('Pi MCP launch contract', () => {
       finalMessage,
     ].join('\n');
     mocks.execa.mockResolvedValueOnce({stdout: '0.84.2', failed: false});
-    mocks.execa.mockResolvedValueOnce({stdout, stderr: '', exitCode: 0});
+    mocks.execa.mockResolvedValueOnce({
+      stdout,
+      stderr: 'DYNOBOX_MCP_READY',
+      exitCode: 0,
+    });
     const result = await runPiWithMcp(options());
     expect(result.toolEvents).toEqual([
       expect.objectContaining({
@@ -287,7 +303,7 @@ describe('Pi MCP launch contract', () => {
       return {
         failed: false,
         exitCode: 0,
-        stderr: '',
+        stderr: 'DYNOBOX_MCP_READY',
         stdout: JSON.stringify({
           type: 'message_end',
           message: {
@@ -313,6 +329,73 @@ describe('Pi MCP launch contract', () => {
       {category: 'configuration_failed'},
     );
     expect(mocks.execa).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['--'],
+    ['--thinking'],
+    ['--thinking', '--no-extensions'],
+    ['extra prompt'],
+    ['@file'],
+    ['--mode', 'text'],
+    ['--print', 'extra'],
+  ])('rejects unsafe or incomplete arguments %j', async (...extraArgs) => {
+    await expect(runPiWithMcp({...options(), extraArgs})).rejects.toMatchObject(
+      {
+        category: 'configuration_failed',
+      },
+    );
+    expect(mocks.execa).not.toHaveBeenCalled();
+  });
+
+  it('requires positive readiness even after a successful assistant response', async () => {
+    mocks.execa.mockResolvedValueOnce({stdout: '0.84.2', failed: false});
+    mocks.execa.mockResolvedValueOnce({
+      stdout: finalMessage,
+      stderr: '',
+      exitCode: 0,
+    });
+    await expect(runPiWithMcp(options())).rejects.toMatchObject({
+      category: 'not_ready',
+    });
+  });
+
+  it('accepts a successful assistant completion without text', async () => {
+    mocks.execa.mockResolvedValueOnce({stdout: '0.84.2', failed: false});
+    mocks.execa.mockResolvedValueOnce({
+      stdout: JSON.stringify({
+        type: 'message_end',
+        message: {
+          role: 'assistant',
+          stopReason: 'stop',
+          content: [],
+        },
+      }),
+      stderr: 'DYNOBOX_MCP_READY',
+      exitCode: 0,
+    });
+    expect((await runPiWithMcp(options())).harnessReady).toBe(true);
+  });
+
+  it('contains process exit when an in-process bridge connection fails', async () => {
+    mocks.execa.mockImplementation(async (_executable, args) => {
+      if (args[0] === '--version') return {stdout: '0.84.2', failed: false};
+      const extension = await import(
+        pathToFileURL(args[args.indexOf('-e') + 1]).href
+      );
+      await extension.default({registerTool: vi.fn(), on: vi.fn()});
+      throw new Error('unreachable');
+    });
+    const f = options();
+    await expect(
+      runPiWithMcp({
+        ...f,
+        servers: {
+          linear: {url: 'http://127.0.0.1:1/linear', tools: ['get_issue']},
+        },
+      }),
+    ).rejects.toThrow('Bridge requested process exit');
+    expect(process.exit).toHaveBeenCalledWith(1);
   });
 
   it('keeps the portable mcp__server__tool names', () => {
@@ -378,7 +461,12 @@ describe('Pi MCP launch contract', () => {
           }),
         );
       } finally {
-        finish({exitCode, stdout: lines, stderr: '', durationMs: 1});
+        finish({
+          exitCode,
+          stdout: lines,
+          stderr: 'DYNOBOX_MCP_READY',
+          durationMs: 1,
+        });
       }
       const outcome = await pending;
       if (exitCode === 0)
@@ -414,7 +502,7 @@ describe('Pi MCP launch contract', () => {
         ) => handlers.set(name, handler),
       });
       await handlers.get('session_shutdown')?.({systemPrompt: ''});
-      return {stdout: finalMessage, stderr: '', exitCode: 0};
+      return {stdout: finalMessage, stderr: 'DYNOBOX_MCP_READY', exitCode: 0};
     });
     try {
       const f = options();

@@ -143,6 +143,33 @@ JSONL
     },
   );
 
+  it.each(['0.47.0', '0.65.0', '0.65.1'])(
+    'selects compatible prompt transport for Pi %s',
+    async (version) => {
+      const root = createScratchRoot();
+      const executable = join(root, 'fake-pi');
+      const log = join(root, 'prompt');
+      writeFileSync(
+        executable,
+        `#!/bin/sh
+if [ "$1" = "--version" ]; then printf '${version}'; exit 0; fi
+if [ '${version}' = '0.65.1' ]; then cat > '${log}'; else
+  for arg in "$@"; do printf '%s' "$arg" > '${log}'; done
+fi
+printf '%s' '{"type":"message_end","message":{"role":"assistant","stopReason":"stop","content":[{"type":"text","text":"OK"}]}}'
+`,
+        {mode: 0o755},
+      );
+      const output = await new PiHarness({executable}).run({
+        workDir: root,
+        env: {},
+        prompt: 'Run the tests.',
+      });
+      expect(readFileSync(log, 'utf8')).toBe('Run the tests.');
+      expect(new PiHarness().extractResult(output).finalMessage).toBe('OK');
+    },
+  );
+
   it('extracts transcript, final message, tool events, and assistant errors', () => {
     const stdout = jsonl(
       {
@@ -264,6 +291,42 @@ describe('parsePiJson', () => {
         message: 'permission denied',
       },
     ]);
+  });
+
+  it('uses the last assistant outcome after a provider retry', () => {
+    const error = {
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        stopReason: 'error',
+        errorMessage: 'Temporary 503',
+      },
+    };
+    const success = {
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        stopReason: 'stop',
+        content: [{type: 'text', text: 'Recovered'}],
+      },
+    };
+    expect(parsePiJson(jsonl(error, success))).toMatchObject({
+      terminalFailure: false,
+      errorMessage: undefined,
+      finalMessage: 'Recovered',
+    });
+    expect(
+      parsePiJson(
+        jsonl(success, {
+          type: 'message_end',
+          message: {role: 'assistant', stopReason: 'stop', content: []},
+        }),
+      ),
+    ).toMatchObject({finalMessage: undefined, terminalFailure: false});
+    expect(parsePiJson(jsonl(success, error))).toMatchObject({
+      terminalFailure: true,
+      errorMessage: 'Temporary 503',
+    });
   });
 
   it('rejects malformed JSON with its line number', () => {

@@ -23,10 +23,13 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Support MCP mock runs with Pi 0.84.2 or newer, with inherited extensions
   excluded and server instructions preserved. Retain attempted tool calls for
   evidence checks, expose structured results and mock errors to the model, and
-  allow recovery from failed tool requests.
+  allow recovery from failed tool requests and transient provider errors. Require
+  positive bridge readiness and validate extra arguments before execution.
+  Accept successful tool-only runs without requiring a final text response.
 - Preserve Pi MCP startup, runtime, timeout, and callback failure details in
-  local debug logs. Preserve literal prompts through stdin and handle streamed
-  Unicode input.
+  local debug logs and handle streamed Unicode input. Pass prompts through
+  stdin on Pi 0.65.1 or newer (subject to Pi's whitespace trimming), retaining
+  argument transport for ordinary prompts on older non-MCP Pi versions.
 
 ---
 

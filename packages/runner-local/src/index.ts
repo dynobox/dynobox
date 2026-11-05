@@ -381,16 +381,24 @@ export async function runJob(
         allowedMcpTools.map(({server, tool}) => `mcp__${server}__${tool}`),
       );
       const unmatched = [...mcpObservation.calls];
-      for (const event of mcpToolEvents ?? []) {
+      // Reserve receipts for later attempts first. A received successful retry
+      // can recover an earlier rejected attempt, but never a later failure.
+      const recoveredTools = new Set<string>();
+      for (const event of [...(mcpToolEvents ?? [])].reverse()) {
         if (!mockNames.has(event.rawName)) continue;
         const index = unmatched.findIndex(
           (call) => event.rawName === `mcp__${call.server}__${call.tool}`,
         );
-        if (index === -1)
+        if (index === -1) {
+          if (event.status === 'failure' && recoveredTools.has(event.rawName))
+            continue;
           mcpDiagnostics.push(
             `Harness reported ${event.rawName}, but the MCP mock did not receive a matching call. Check permissions, tool arguments, and the MCP connection.`,
           );
-        else unmatched.splice(index, 1);
+        } else {
+          unmatched.splice(index, 1);
+          if (event.status === 'success') recoveredTools.add(event.rawName);
+        }
       }
       if (mcpDiagnostics.length > 0) {
         mcpObservation = {
