@@ -380,24 +380,33 @@ export async function runJob(
       const mockNames = new Set(
         allowedMcpTools.map(({server, tool}) => `mcp__${server}__${tool}`),
       );
-      const unmatched = [...mcpObservation.calls];
-      // Reserve receipts for later attempts first. A received successful retry
-      // can recover an earlier rejected attempt, but never a later failure.
+      const events = (mcpToolEvents ?? []).filter((event) =>
+        mockNames.has(event.rawName),
+      );
+      const count = (counts: Map<string, number>, name: string) =>
+        counts.set(name, (counts.get(name) ?? 0) + 1);
+      const receipts = new Map<string, number>();
+      for (const call of mcpObservation.calls)
+        count(receipts, `mcp__${call.server}__${call.tool}`);
+      const olderSuccesses = new Map<string, number>();
+      for (const event of events)
+        if (event.status === 'success') count(olderSuccesses, event.rawName);
+      // Walk newest first. Every success needs a receipt, and a failure takes
+      // one only when no older success still needs it. An unreceived failure
+      // is excused only when a later success of that tool was received.
       const recoveredTools = new Set<string>();
-      for (const event of [...(mcpToolEvents ?? [])].reverse()) {
-        if (!mockNames.has(event.rawName)) continue;
-        const index = unmatched.findIndex(
-          (call) => event.rawName === `mcp__${call.server}__${call.tool}`,
-        );
-        if (index === -1) {
-          if (event.status === 'failure' && recoveredTools.has(event.rawName))
-            continue;
+      for (const event of [...events].reverse()) {
+        const name = event.rawName;
+        const available = receipts.get(name) ?? 0;
+        if (event.status === 'success')
+          olderSuccesses.set(name, olderSuccesses.get(name)! - 1);
+        if (available > (olderSuccesses.get(name) ?? 0)) {
+          receipts.set(name, available - 1);
+          if (event.status === 'success') recoveredTools.add(name);
+        } else if (event.status !== 'failure' || !recoveredTools.has(name)) {
           mcpDiagnostics.push(
-            `Harness reported ${event.rawName}, but the MCP mock did not receive a matching call. Check permissions, tool arguments, and the MCP connection.`,
+            `Harness reported ${name}, but the MCP mock did not receive a matching call. Check permissions, tool arguments, and the MCP connection.`,
           );
-        } else {
-          unmatched.splice(index, 1);
-          if (event.status === 'success') recoveredTools.add(event.rawName);
         }
       }
       if (mcpDiagnostics.length > 0) {

@@ -219,6 +219,36 @@ describe('MCP tool evidence', () => {
       passes: true,
     },
     {
+      name: 'rejected attempt between two received successes',
+      received: ['1', '2'],
+      attempts: [
+        {id: '1', status: 'success'},
+        {id: 'invalid', status: 'failure'},
+        {id: '2', status: 'success'},
+      ],
+      passes: true,
+    },
+    {
+      name: 'received error between two received successes',
+      received: ['1', '1', '2'],
+      attempts: [
+        {id: '1', status: 'success'},
+        {id: '1', status: 'failure'},
+        {id: '2', status: 'success'},
+      ],
+      passes: true,
+    },
+    {
+      name: 'a rejected retry does not cover a missing earlier success',
+      received: ['2'],
+      attempts: [
+        {id: '1', status: 'success'},
+        {id: 'invalid', status: 'failure'},
+        {id: '2', status: 'success'},
+      ],
+      passes: false,
+    },
+    {
       name: 'an unreceived success cannot be recovered',
       received: ['1'],
       attempts: [
