@@ -17,10 +17,16 @@ import type {
   McpHarnessRun,
   McpServerConnections,
 } from './types.js';
+import {isAtLeastVersion} from './version.js';
 
 // Oldest release whose `--no-extensions` isolation was verified natively.
 const MIN_VERSION = '0.84.2';
-// Extensions can register their own MCP servers beside the mocks.
+// First release that applies `before_agent_start` edits to
+// `systemPromptOptions`; older releases only accept a full replacement.
+const APPEND_PROMPT_VERSION = '0.86.0';
+// Extra arguments are allowlisted: extensions can register their own MCP
+// servers beside the mocks, and `--` or positionals can swallow the isolation
+// flags.
 const VALUE_FLAGS = new Set([
   '--thinking',
   '--tools',
@@ -121,7 +127,14 @@ export async function runPiWithMcp(options: {
   let output: HarnessRunOutput | undefined;
   try {
     const bridge = join(directory, 'bridge.mjs');
-    await writeFile(bridge, piBridgeSource(servers, tools));
+    await writeFile(
+      bridge,
+      piBridgeSource(
+        servers,
+        tools,
+        isAtLeastVersion(version, APPEND_PROMPT_VERSION),
+      ),
+    );
     const toolInputs = new Map<string, unknown>();
     const child = startOwnedProcess(
       executable,
@@ -218,6 +231,7 @@ export function piToolNames(servers: McpServerConnections): string[] {
 function piBridgeSource(
   servers: McpServerConnections,
   tools: readonly string[],
+  appendPrompt: boolean,
 ): string {
   return `
 import {writeSync} from 'node:fs';
@@ -225,14 +239,16 @@ import {Client} from ${JSON.stringify(import.meta.resolve('@modelcontextprotocol
 import {StreamableHTTPClientTransport} from ${JSON.stringify(import.meta.resolve('@modelcontextprotocol/sdk/client/streamableHttp.js'))};
 const servers = ${JSON.stringify(servers)};
 const tools = ${JSON.stringify(tools)};
+const appendPrompt = ${JSON.stringify(appendPrompt)};
 const notReady = (reason) => {
   writeSync(2, ${JSON.stringify(NOT_READY_MARKER)} + ' ' + reason + '\\n');
   process.exit(1);
 };
+const initFailed = (server, error) => notReady('Could not initialize MCP mock server "' + server + '": ' + (error instanceof Error ? error.message : String(error)));
 export default async function(pi) {
   const clients = [];
-  const instructions = [];
-  for (const [server, connection] of Object.entries(servers)) {
+  // Servers start in parallel; tools register in server order below.
+  const listings = await Promise.all(Object.entries(servers).map(async ([server, connection]) => {
     const client = new Client({name: 'dynobox-pi', version: '1.0.0'});
     clients.push(client);
     try {
@@ -241,9 +257,15 @@ export default async function(pi) {
       notReady('Could not connect to MCP mock server "' + server + '".');
     }
     try {
-      const guidance = client.getInstructions();
-      if (guidance) instructions.push('MCP server ' + server + ':\\n' + guidance);
-      const listing = await client.listTools();
+      return {server, client, guidance: client.getInstructions(), listing: await client.listTools()};
+    } catch (error) {
+      initFailed(server, error);
+    }
+  }));
+  const instructions = [];
+  for (const {server, client, guidance, listing} of listings) {
+    if (guidance) instructions.push('MCP server ' + server + ':\\n' + guidance);
+    try {
       for (const tool of listing.tools) {
         const name = 'mcp__' + server + '__' + tool.name;
         if (!tools.includes(name)) continue;
@@ -264,12 +286,17 @@ export default async function(pi) {
         });
       }
     } catch (error) {
-      notReady('Could not initialize MCP mock server "' + server + '": ' + (error instanceof Error ? error.message : String(error)));
+      initFailed(server, error);
     }
   }
-  if (instructions.length) pi.on('before_agent_start', (event) => ({
-    systemPrompt: event.systemPrompt + '\\n\\n' + instructions.join('\\n\\n')
-  }));
+  if (instructions.length) pi.on('before_agent_start', (event) => {
+    const guidance = instructions.join('\\n\\n');
+    if (!appendPrompt) return {systemPrompt: event.systemPrompt + '\\n\\n' + guidance};
+    // Appending keeps Pi's per-turn prompt rendering; a returned systemPrompt
+    // would force fixed text for the whole run.
+    const options = event.systemPromptOptions;
+    options.appendSystemPrompt = [options.appendSystemPrompt, guidance].filter(Boolean).join('\\n\\n');
+  });
   pi.on('session_start', () => {
     const active = pi.getActiveTools();
     const missing = tools.find((name) => !active.includes(name));
