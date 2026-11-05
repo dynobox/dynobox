@@ -492,7 +492,7 @@ describe.skipIf(!executable)(
       30000,
     );
 
-    it('rejects a prompt that Pi trims to nothing', async () => {
+    it('rejects a blank prompt before starting Pi', async () => {
       const f = await fixture('negative');
       await expect(
         runPiWithMcp({
@@ -500,8 +500,8 @@ describe.skipIf(!executable)(
           input: {...f.options.input, prompt: '   '},
         }),
       ).rejects.toMatchObject({
-        category: 'execution_failed',
-        message: 'Pi finished without a model response.',
+        category: 'configuration_failed',
+        message: 'Pi cannot run a blank prompt.',
       });
       expect(f.requests).toHaveLength(0);
     }, 30000);

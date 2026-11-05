@@ -28,8 +28,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   Accept successful tool-only runs without requiring a final text response.
 - Preserve Pi MCP startup, runtime, timeout, and callback failure details in
   local debug logs and handle streamed Unicode input. Pass prompts through
-  stdin (subject to Pi's whitespace trimming) and fail runs that end without a
-  model response.
+  stdin (subject to Pi's whitespace trimming) and reject blank prompts before
+  starting Pi.
 
 ---
 

@@ -151,9 +151,9 @@ JSONL
   );
 
   it.each([
-    ['0.85.1', "printf '0.85.1'", '0.85.1'],
-    ['an unknown version', 'exit 1', 'unknown'],
-  ])('refuses to run Pi with %s', async (_label, versionProbe, found) => {
+    ['refuses', "printf '0.85.1'", false],
+    ['allows an unknown version and', 'exit 1', true],
+  ])('%s runs Pi below the minimum', async (_label, versionProbe, runs) => {
     const root = createScratchRoot();
     const executable = join(root, 'fake-pi');
     const ran = join(root, 'ran');
@@ -165,27 +165,43 @@ touch '${ran}'
 `,
       {mode: 0o755},
     );
+    const run = new PiHarness({executable}).run({
+      workDir: root,
+      env: {},
+      prompt: 'Run the tests.',
+    });
+    if (runs) await run;
+    else
+      await expect(run).rejects.toThrow(
+        'Pi 0.86.0 or newer is required (found 0.85.1).',
+      );
+    expect(existsSync(ran)).toBe(runs);
+  });
+
+  it('rejects a blank prompt before starting Pi', async () => {
+    const root = createScratchRoot();
+    const ran = join(root, 'ran');
+    const executable = join(root, 'fake-pi');
+    writeFileSync(executable, `#!/bin/sh\ntouch '${ran}'\n`, {mode: 0o755});
     await expect(
-      new PiHarness({executable}).run({
-        workDir: root,
-        env: {},
-        prompt: 'Run the tests.',
-      }),
-    ).rejects.toThrow(`Pi 0.86.0 or newer is required (found ${found}).`);
+      new PiHarness({executable}).run({workDir: root, env: {}, prompt: '  \n'}),
+    ).rejects.toThrow('Pi cannot run a blank prompt.');
     expect(existsSync(ran)).toBe(false);
   });
 
-  it('fails a run that never reached the model', () => {
-    const result = new PiHarness().extractResult({
-      exitCode: 0,
-      stdout: jsonl({type: 'session', version: 3}),
-      stderr: '',
-      durationMs: 1,
+  it('keeps earlier answer text when the last turn has none', () => {
+    const turn = (stopReason: string, content: unknown[]) => ({
+      type: 'message_end',
+      message: {role: 'assistant', stopReason, content},
     });
-    expect(result).toMatchObject({
-      exitCode: 1,
-      errorMessage: 'Pi finished without a model response.',
-    });
+    const parsed = parsePiJson(
+      jsonl(
+        turn('toolUse', [{type: 'text', text: 'DYNO-1 is titled Foo.'}]),
+        turn('stop', []),
+      ),
+    );
+    expect(parsed.finalMessage).toBe('DYNO-1 is titled Foo.');
+    expect(parsed.terminalFailure).toBe(false);
   });
 
   it('extracts transcript, final message, tool events, and assistant errors', () => {
@@ -340,7 +356,7 @@ describe('parsePiJson', () => {
           message: {role: 'assistant', stopReason: 'stop', content: []},
         }),
       ),
-    ).toMatchObject({finalMessage: undefined, terminalFailure: false});
+    ).toMatchObject({finalMessage: 'Recovered', terminalFailure: false});
     expect(parsePiJson(jsonl(success, error))).toMatchObject({
       terminalFailure: true,
       errorMessage: 'Temporary 503',

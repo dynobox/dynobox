@@ -28,6 +28,8 @@ export type PiHarnessOptions = {
 // Oldest release verified for stdin prompts, `--no-extensions` isolation and
 // `systemPromptOptions` edits from extensions.
 export const PI_MIN_VERSION = '0.86.0';
+// Pi trims stdin and exits 0 without calling the model when nothing is left.
+export const PI_BLANK_PROMPT = 'Pi cannot run a blank prompt.';
 
 export type PiParsedOutput = {
   finalMessage: string | undefined;
@@ -74,10 +76,13 @@ export class PiHarness implements Harness {
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
     const toolInputs = new Map<string, unknown>();
+    if (input.prompt.trim() === '') throw new Error(PI_BLANK_PROMPT);
+    // An unknown version is allowed: the probe can fail transiently, and its
+    // cached result would otherwise block every later run.
     const version = await this.version();
-    if (version === null || !isAtLeastVersion(version, PI_MIN_VERSION))
+    if (version !== null && !isAtLeastVersion(version, PI_MIN_VERSION))
       throw new Error(
-        `Pi ${PI_MIN_VERSION} or newer is required (found ${version ?? 'unknown'}).`,
+        `Pi ${PI_MIN_VERSION} or newer is required (found ${version}).`,
       );
     return runStreamingHarness({
       executable: this.executable,
@@ -135,21 +140,16 @@ export function parsePiJson(stdout: string): PiParsedOutput {
   const toolEvents: ToolEvent[] = [];
   const toolInputs = new Map<string, unknown>();
 
-  let responded = false;
   for (const {line, lineNumber} of jsonLines(stdout)) {
     const parsed = parsePiJsonLine(line, lineNumber, toolInputs);
     toolEvents.push(...parsed.toolEvents);
+    if (parsed.finalMessage !== undefined) finalMessage = parsed.finalMessage;
+    // The last assistant message decides failure, so a retried provider error
+    // does not fail a run that recovered.
     if (parsed.terminalFailure !== undefined) {
-      responded = true;
-      finalMessage = parsed.finalMessage;
       terminalFailure = parsed.terminalFailure;
       errorMessage = parsed.errorMessage;
     }
-  }
-  // Pi trims stdin and exits 0 without calling the model when nothing is left.
-  if (!responded) {
-    terminalFailure = true;
-    errorMessage = 'Pi finished without a model response.';
   }
 
   return {finalMessage, toolEvents, errorMessage, terminalFailure};

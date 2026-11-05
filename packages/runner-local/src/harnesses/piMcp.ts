@@ -13,6 +13,7 @@ import {
   buildPiArgs,
   parsePiJson,
   parsePiJsonLine,
+  PI_BLANK_PROMPT,
   PI_MIN_VERSION,
 } from './pi.js';
 import {ToolEventLineStream} from './runStreamingHarness.js';
@@ -38,8 +39,6 @@ const VALUE_FLAGS = new Set([
   '--system-prompt',
   '--append-system-prompt',
   '--skill',
-  '--theme',
-  '--use-theme',
 ]);
 // `--no-tools` is excluded because it also disables the mock tools.
 const SWITCH_FLAGS = new Set([
@@ -68,6 +67,8 @@ export async function runPiWithMcp(options: {
 }): Promise<McpHarnessRun> {
   const started = Date.now();
   const {input, servers, executable} = options;
+  if (input.prompt.trim() === '')
+    throw new McpHarnessError('configuration_failed', PI_BLANK_PROMPT);
   const remaining = mcpDeadline(input.timeoutMs, input.signal);
   const extraArgs = options.extraArgs ?? [];
   for (let index = 0; index < extraArgs.length; index++) {
@@ -168,25 +169,25 @@ export async function runPiWithMcp(options: {
         'not_ready',
         notReady.slice(NOT_READY_MARKER.length).trim(),
       );
-    const stderrLines = result.stderr.split(/\r?\n/);
-    if (!stderrLines.includes(READY_MARKER)) {
-      // Startup failures such as a bridge that fails to load end here.
-      const reason = stderrLines.filter((line) => line.trim() !== '').at(-1);
+    // Startup failures such as a bridge that fails to load end here. Pi's
+    // stderr stays in the debug output rather than the diagnostic.
+    if (!result.stderr.split(/\r?\n/).includes(READY_MARKER))
       throw new McpHarnessError(
         'not_ready',
-        `Pi did not confirm MCP bridge readiness${reason === undefined ? '.' : `: ${reason.trim()}`}`,
+        'Pi exited before the MCP bridge was ready.',
       );
-    }
     if (result.failed || output.exitCode !== 0)
       throw new McpHarnessError(
         'execution_failed',
         `Pi exited with code ${result.exitCode ?? 'unknown'}.`,
       );
     const parsed = parsePiJson(result.stdout);
-    if (parsed.terminalFailure)
+    // JSON mode always prints a session header, so empty stdout means Pi
+    // never ran the session.
+    if (parsed.terminalFailure || result.stdout.trim() === '')
       throw new McpHarnessError(
         'execution_failed',
-        parsed.errorMessage ?? 'Pi stream ended with an error.',
+        parsed.errorMessage ?? 'Pi finished without output.',
       );
     return {
       harnessReady: true,
@@ -239,8 +240,8 @@ export default async function(pi) {
     clients.push(client);
     try {
       await client.connect(new StreamableHTTPClientTransport(new URL(connection.url)));
-    } catch {
-      notReady('Could not connect to MCP mock server "' + server + '".');
+    } catch (error) {
+      notReady('Could not connect to MCP mock server "' + server + '": ' + (error instanceof Error ? error.message : String(error)));
     }
     try {
       return {server, client, guidance: client.getInstructions(), listing: await client.listTools()};

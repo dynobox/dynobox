@@ -249,6 +249,25 @@ describe('MCP tool evidence', () => {
       passes: false,
     },
     {
+      name: 'received error response after a rejected attempt',
+      received: ['1'],
+      attempts: [
+        {id: 'invalid', status: 'failure'},
+        {id: '1', status: 'failure'},
+      ],
+      passes: true,
+    },
+    {
+      name: 'received call without a status beside a rejected retry',
+      received: ['1', '2'],
+      attempts: [
+        {id: '1', status: undefined},
+        {id: 'invalid', status: 'failure'},
+        {id: '2', status: 'success'},
+      ],
+      passes: true,
+    },
+    {
       name: 'an unreceived success cannot be recovered',
       received: ['1'],
       attempts: [
@@ -258,13 +277,13 @@ describe('MCP tool evidence', () => {
       passes: false,
     },
     {
-      name: 'earlier call cannot cover a later failure',
+      name: 'rejected attempt after a received call',
       received: ['1'],
       attempts: [
         {id: '1', status: 'success'},
-        {id: '1', status: 'failure'},
+        {id: 'invalid', status: 'failure'},
       ],
-      passes: false,
+      passes: true,
     },
     {
       name: 'two received error responses',
@@ -341,7 +360,7 @@ describe('MCP tool evidence', () => {
               rawName:
                 'rawName' in attempt ? attempt.rawName : 'mcp__linear__save',
               input: attempt.id === null ? null : {id: attempt.id},
-              status: attempt.status,
+              ...(attempt.status === undefined ? {} : {status: attempt.status}),
             })),
           };
         },

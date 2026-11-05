@@ -370,28 +370,28 @@ describe('Pi MCP launch contract', () => {
     mocks.execa.mockResolvedValueOnce({stdout: '0.86.0', failed: false});
     mocks.execa.mockResolvedValueOnce({
       stdout: '',
-      stderr: 'Error: Failed to load extension "bridge.mjs"\n',
+      stderr:
+        'Error: Failed to load extension "bridge.mjs": private detail\nHint: Start without extensions using "pi -ne".\n',
       exitCode: 1,
       failed: true,
     });
-    await expect(runPiWithMcp(options())).rejects.toMatchObject({
+    const error = await runPiWithMcp(options()).catch((caught) => caught);
+    expect(error).toMatchObject({
       category: 'not_ready',
-      message:
-        'Pi did not confirm MCP bridge readiness: Error: Failed to load extension "bridge.mjs"',
+      message: 'Pi exited before the MCP bridge was ready.',
+      output: {stderr: expect.stringContaining('private detail')},
     });
   });
 
-  it('rejects a run that never reached the model', async () => {
-    mocks.execa.mockResolvedValueOnce({stdout: '0.86.0', failed: false});
-    mocks.execa.mockResolvedValueOnce({
-      stdout: JSON.stringify({type: 'session', version: 3}),
-      stderr: 'DYNOBOX_MCP_READY',
-      exitCode: 0,
+  it('rejects a blank prompt before starting Pi', async () => {
+    const f = options();
+    await expect(
+      runPiWithMcp({...f, input: {...f.input, prompt: ' \n '}}),
+    ).rejects.toMatchObject({
+      category: 'configuration_failed',
+      message: 'Pi cannot run a blank prompt.',
     });
-    await expect(runPiWithMcp(options())).rejects.toMatchObject({
-      category: 'execution_failed',
-      message: 'Pi finished without a model response.',
-    });
+    expect(mocks.execa).not.toHaveBeenCalled();
   });
 
   it('accepts a successful assistant completion without text', async () => {

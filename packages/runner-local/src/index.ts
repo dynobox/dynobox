@@ -375,39 +375,34 @@ export async function runJob(
         harnessReady: mcpReady,
         harnessSucceeded: succeeded,
       });
-      // Match reported mock attempts one-for-one by tool name. The mock's
-      // received arguments can differ from the harness's reported input.
+      // Compare per-tool counts, because attempts cannot be paired with
+      // receipts reliably: the mock's received arguments can differ from the
+      // harness's reported input. Every reported success must have reached
+      // the mock. Failed or pending attempts may have been rejected before
+      // reaching it, but at least one attempt must have arrived.
       const mockNames = new Set(
         allowedMcpTools.map(({server, tool}) => `mcp__${server}__${tool}`),
       );
-      const events = (mcpToolEvents ?? []).filter((event) =>
-        mockNames.has(event.rawName),
-      );
-      const count = (counts: Map<string, number>, name: string) =>
-        counts.set(name, (counts.get(name) ?? 0) + 1);
       const receipts = new Map<string, number>();
-      for (const call of mcpObservation.calls)
-        count(receipts, `mcp__${call.server}__${call.tool}`);
-      const olderSuccesses = new Map<string, number>();
-      for (const event of events)
-        if (event.status === 'success') count(olderSuccesses, event.rawName);
-      // Walk newest first. Every success needs a receipt, and a failure takes
-      // one only when no older success still needs it. An unreceived failure
-      // is excused only when a later success of that tool was received.
-      const recoveredTools = new Set<string>();
-      for (const event of [...events].reverse()) {
-        const name = event.rawName;
-        const available = receipts.get(name) ?? 0;
-        if (event.status === 'success')
-          olderSuccesses.set(name, olderSuccesses.get(name)! - 1);
-        if (available > (olderSuccesses.get(name) ?? 0)) {
-          receipts.set(name, available - 1);
-          if (event.status === 'success') recoveredTools.add(name);
-        } else if (event.status !== 'failure' || !recoveredTools.has(name)) {
+      for (const {server, tool} of mcpObservation.calls) {
+        const name = `mcp__${server}__${tool}`;
+        receipts.set(name, (receipts.get(name) ?? 0) + 1);
+      }
+      const successes = new Map<string, number>();
+      for (const event of mcpToolEvents ?? []) {
+        if (!mockNames.has(event.rawName)) continue;
+        const count = successes.get(event.rawName) ?? 0;
+        successes.set(
+          event.rawName,
+          count + (event.status === 'success' ? 1 : 0),
+        );
+      }
+      for (const [name, count] of successes) {
+        const received = receipts.get(name) ?? 0;
+        if (received === 0 || count > received)
           mcpDiagnostics.push(
             `Harness reported ${name}, but the MCP mock did not receive a matching call. Check permissions, tool arguments, and the MCP connection.`,
           );
-        }
       }
       if (mcpDiagnostics.length > 0) {
         mcpObservation = {
