@@ -14,6 +14,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   model variants, inherited integration isolation, and subagent tool evidence.
 - Improve MCP call evidence and failure reporting across Claude Code, Codex, and
   OpenCode. Preserve received mock errors and reject incomplete tool attempts.
+  Every MCP tool attempt not reported as failed must reach the mock; failed
+  attempts may be rejected by the harness if another attempt reaches the mock.
 - Stop harness, setup, and verification child processes on timeout, cancellation,
   or exit. Preserve standard exit codes for interrupt and termination signals.
 - Continue valid scenario and harness pairs when another pair cannot be scheduled.

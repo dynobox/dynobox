@@ -377,8 +377,8 @@ export async function runJob(
       });
       // Compare per-tool counts, because attempts cannot be paired with
       // receipts reliably: the mock's received arguments can differ from the
-      // harness's reported input. Every reported success must have reached
-      // the mock. Failed or pending attempts may have been rejected before
+      // harness's reported input. Every attempt not reported as failed must
+      // have reached the mock. Failed attempts may have been rejected before
       // reaching it, but at least one attempt must have arrived.
       const mockNames = new Set(
         allowedMcpTools.map(({server, tool}) => `mcp__${server}__${tool}`),
@@ -388,18 +388,17 @@ export async function runJob(
         const name = `mcp__${server}__${tool}`;
         receipts.set(name, (receipts.get(name) ?? 0) + 1);
       }
-      const successes = new Map<string, number>();
+      const attempted = new Set<string>();
+      const required = new Map<string, number>();
       for (const event of mcpToolEvents ?? []) {
         if (!mockNames.has(event.rawName)) continue;
-        const count = successes.get(event.rawName) ?? 0;
-        successes.set(
-          event.rawName,
-          count + (event.status === 'success' ? 1 : 0),
-        );
+        attempted.add(event.rawName);
+        if (event.status !== 'failure')
+          required.set(event.rawName, (required.get(event.rawName) ?? 0) + 1);
       }
-      for (const [name, count] of successes) {
+      for (const name of attempted) {
         const received = receipts.get(name) ?? 0;
-        if (received === 0 || count > received)
+        if (received === 0 || (required.get(name) ?? 0) > received)
           mcpDiagnostics.push(
             `Harness reported ${name}, but the MCP mock did not receive a matching call. Check permissions, tool arguments, and the MCP connection.`,
           );

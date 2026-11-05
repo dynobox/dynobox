@@ -268,6 +268,16 @@ describe('MCP tool evidence', () => {
       passes: true,
     },
     {
+      name: 'attempts without a status each need a received call',
+      received: ['1'],
+      attempts: [
+        {id: '1', status: undefined},
+        {id: '2', status: undefined},
+        {id: '3', status: undefined},
+      ],
+      passes: false,
+    },
+    {
       name: 'an unreceived success cannot be recovered',
       received: ['1'],
       attempts: [
