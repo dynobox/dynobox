@@ -9,7 +9,12 @@ import {
 } from '../mcpMocks/errors.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
 import {startOwnedProcess} from '../processGroup.js';
-import {buildPiArgs, parsePiJson, parsePiJsonLine} from './pi.js';
+import {
+  buildPiArgs,
+  parsePiJson,
+  parsePiJsonLine,
+  PI_MIN_VERSION,
+} from './pi.js';
 import {ToolEventLineStream} from './runStreamingHarness.js';
 import type {
   HarnessInput,
@@ -17,13 +22,7 @@ import type {
   McpHarnessRun,
   McpServerConnections,
 } from './types.js';
-import {isAtLeastVersion} from './version.js';
 
-// Oldest release whose `--no-extensions` isolation was verified natively.
-const MIN_VERSION = '0.84.2';
-// First release that applies `before_agent_start` edits to
-// `systemPromptOptions`; older releases only accept a full replacement.
-const APPEND_PROMPT_VERSION = '0.86.0';
 // Extra arguments are allowlisted: extensions can register their own MCP
 // servers beside the mocks, and `--` or positionals can swallow the isolation
 // flags.
@@ -42,9 +41,8 @@ const VALUE_FLAGS = new Set([
   '--theme',
   '--use-theme',
 ]);
+// `--no-tools` is excluded because it also disables the mock tools.
 const SWITCH_FLAGS = new Set([
-  '--no-tools',
-  '-nt',
   '--no-builtin-tools',
   '-nbt',
   '--no-skills',
@@ -75,15 +73,8 @@ export async function runPiWithMcp(options: {
   for (let index = 0; index < extraArgs.length; index++) {
     const flag = extraArgs[index]!;
     if (SWITCH_FLAGS.has(flag)) continue;
-    if (VALUE_FLAGS.has(flag)) {
-      const value = extraArgs[++index];
-      if (
-        value !== undefined &&
-        !value.startsWith('-') &&
-        !value.startsWith('@')
-      )
-        continue;
-    }
+    // Pi takes the next argument as the value, even when it starts with -.
+    if (VALUE_FLAGS.has(flag) && extraArgs[++index] !== undefined) continue;
     throw new McpHarnessError(
       'configuration_failed',
       `Pi extra argument ${flag} is unsupported or missing a value for MCP mocking.`,
@@ -111,7 +102,7 @@ export async function runPiWithMcp(options: {
   let version: string;
   try {
     remaining();
-    version = requireMcpVersion('Pi', MIN_VERSION, probe);
+    version = requireMcpVersion('Pi', PI_MIN_VERSION, probe);
   } catch (error) {
     if (error instanceof McpHarnessError)
       throw new McpHarnessError(error.category, error.message, {
@@ -127,14 +118,7 @@ export async function runPiWithMcp(options: {
   let output: HarnessRunOutput | undefined;
   try {
     const bridge = join(directory, 'bridge.mjs');
-    await writeFile(
-      bridge,
-      piBridgeSource(
-        servers,
-        tools,
-        isAtLeastVersion(version, APPEND_PROMPT_VERSION),
-      ),
-    );
+    await writeFile(bridge, piBridgeSource(servers, tools));
     const toolInputs = new Map<string, unknown>();
     const child = startOwnedProcess(
       executable,
@@ -184,21 +168,25 @@ export async function runPiWithMcp(options: {
         'not_ready',
         notReady.slice(NOT_READY_MARKER.length).trim(),
       );
+    const stderrLines = result.stderr.split(/\r?\n/);
+    if (!stderrLines.includes(READY_MARKER)) {
+      // Startup failures such as a bridge that fails to load end here.
+      const reason = stderrLines.filter((line) => line.trim() !== '').at(-1);
+      throw new McpHarnessError(
+        'not_ready',
+        `Pi did not confirm MCP bridge readiness${reason === undefined ? '.' : `: ${reason.trim()}`}`,
+      );
+    }
     if (result.failed || output.exitCode !== 0)
       throw new McpHarnessError(
         'execution_failed',
         `Pi exited with code ${result.exitCode ?? 'unknown'}.`,
       );
-    if (!result.stderr.split(/\r?\n/).includes(READY_MARKER))
-      throw new McpHarnessError(
-        'not_ready',
-        'Pi did not confirm MCP bridge readiness.',
-      );
     const parsed = parsePiJson(result.stdout);
-    if (parsed.terminalFailure || result.stdout.trim() === '')
+    if (parsed.terminalFailure)
       throw new McpHarnessError(
         'execution_failed',
-        parsed.errorMessage ?? 'Pi finished without execution output.',
+        parsed.errorMessage ?? 'Pi stream ended with an error.',
       );
     return {
       harnessReady: true,
@@ -231,7 +219,6 @@ export function piToolNames(servers: McpServerConnections): string[] {
 function piBridgeSource(
   servers: McpServerConnections,
   tools: readonly string[],
-  appendPrompt: boolean,
 ): string {
   return `
 import {writeSync} from 'node:fs';
@@ -239,7 +226,6 @@ import {Client} from ${JSON.stringify(import.meta.resolve('@modelcontextprotocol
 import {StreamableHTTPClientTransport} from ${JSON.stringify(import.meta.resolve('@modelcontextprotocol/sdk/client/streamableHttp.js'))};
 const servers = ${JSON.stringify(servers)};
 const tools = ${JSON.stringify(tools)};
-const appendPrompt = ${JSON.stringify(appendPrompt)};
 const notReady = (reason) => {
   writeSync(2, ${JSON.stringify(NOT_READY_MARKER)} + ' ' + reason + '\\n');
   process.exit(1);
@@ -289,13 +275,11 @@ export default async function(pi) {
       initFailed(server, error);
     }
   }
+  // Appending keeps Pi's per-turn prompt rendering; a returned systemPrompt
+  // would force fixed text for the whole run.
   if (instructions.length) pi.on('before_agent_start', (event) => {
-    const guidance = instructions.join('\\n\\n');
-    if (!appendPrompt) return {systemPrompt: event.systemPrompt + '\\n\\n' + guidance};
-    // Appending keeps Pi's per-turn prompt rendering; a returned systemPrompt
-    // would force fixed text for the whole run.
     const options = event.systemPromptOptions;
-    options.appendSystemPrompt = [options.appendSystemPrompt, guidance].filter(Boolean).join('\\n\\n');
+    options.appendSystemPrompt = [options.appendSystemPrompt, ...instructions].filter(Boolean).join('\\n\\n');
   });
   pi.on('session_start', () => {
     const active = pi.getActiveTools();

@@ -492,6 +492,20 @@ describe.skipIf(!executable)(
       30000,
     );
 
+    it('rejects a prompt that Pi trims to nothing', async () => {
+      const f = await fixture('negative');
+      await expect(
+        runPiWithMcp({
+          ...f.options,
+          input: {...f.options.input, prompt: '   '},
+        }),
+      ).rejects.toMatchObject({
+        category: 'execution_failed',
+        message: 'Pi finished without a model response.',
+      });
+      expect(f.requests).toHaveLength(0);
+    }, 30000);
+
     it('rejects tool restrictions that hide mocks before model execution', async () => {
       const f = await fixture('negative');
       await expect(

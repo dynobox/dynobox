@@ -46,7 +46,7 @@ beforeEach(() => {
     throw new Error('Bridge requested process exit');
   });
   mocks.execa.mockReset().mockImplementation(async (_executable, args) => {
-    if (args[0] === '--version') return {stdout: '0.84.2', failed: false};
+    if (args[0] === '--version') return {stdout: '0.86.0', failed: false};
     bridge = args[args.indexOf('-e') + 1];
     return {
       stdout: finalMessage,
@@ -75,7 +75,7 @@ describe('Pi MCP launch contract', () => {
       );
       mocks.execa.mockImplementation((_executable, args) =>
         args[0] === '--version'
-          ? Promise.resolve({stdout: '0.84.2', failed: false})
+          ? Promise.resolve({stdout: '0.86.0', failed: false})
           : child,
       );
       let now = Date.now();
@@ -129,20 +129,17 @@ describe('Pi MCP launch contract', () => {
     },
   );
 
-  it.each(['0.84.2', '0.86.0', '1.0.0'])(
-    'accepts Pi %s and newer',
-    async (version) => {
-      mocks.execa.mockResolvedValueOnce({stdout: version, failed: false});
-      const result = await runPiWithMcp(options());
-      expect(result.version).toBe(version);
-    },
-  );
+  it.each(['0.86.0', '1.0.0'])('accepts Pi %s and newer', async (version) => {
+    mocks.execa.mockResolvedValueOnce({stdout: version, failed: false});
+    const result = await runPiWithMcp(options());
+    expect(result.version).toBe(version);
+  });
 
   it('rejects versions older than the tested minimum', async () => {
-    mocks.execa.mockResolvedValue({stdout: '0.80.0', failed: false});
+    mocks.execa.mockResolvedValue({stdout: '0.85.1', failed: false});
     await expect(runPiWithMcp(options())).rejects.toMatchObject({
       category: 'unsupported_version',
-      message: expect.stringContaining('0.84.2 or newer'),
+      message: expect.stringContaining('0.86.0 or newer'),
     });
     expect(mocks.execa).toHaveBeenCalledTimes(1);
   });
@@ -154,12 +151,12 @@ describe('Pi MCP launch contract', () => {
       const timeout = {
         failed: true,
         timedOut: true,
-        stdout: stage === 'version' ? '0.84.2' : 'partial run output',
+        stdout: stage === 'version' ? '0.86.0' : 'partial run output',
         stderr: 'PRIVATE_STDERR_SENTINEL',
         durationMs: 10,
       };
       if (stage === 'run')
-        mocks.execa.mockResolvedValueOnce({stdout: '0.84.2', failed: false});
+        mocks.execa.mockResolvedValueOnce({stdout: '0.86.0', failed: false});
       mocks.execa.mockResolvedValueOnce(timeout);
       await expect(runPiWithMcp(options())).rejects.toMatchObject({
         category: 'timed_out',
@@ -180,7 +177,7 @@ describe('Pi MCP launch contract', () => {
     'retains failed run output (exit %s, stdout %j)',
     async (exitCode, stdout) => {
       mocks.execa
-        .mockResolvedValueOnce({stdout: '0.84.2', failed: false})
+        .mockResolvedValueOnce({stdout: '0.86.0', failed: false})
         .mockResolvedValueOnce({
           exitCode,
           stdout,
@@ -249,7 +246,7 @@ describe('Pi MCP launch contract', () => {
 
   it('reports bridge readiness failures with their reason', async () => {
     mocks.execa.mockImplementation(async (_executable, args) => {
-      if (args[0] === '--version') return {stdout: '0.84.2', failed: false};
+      if (args[0] === '--version') return {stdout: '0.86.0', failed: false};
       return {
         failed: true,
         exitCode: 1,
@@ -280,7 +277,7 @@ describe('Pi MCP launch contract', () => {
       }),
       finalMessage,
     ].join('\n');
-    mocks.execa.mockResolvedValueOnce({stdout: '0.84.2', failed: false});
+    mocks.execa.mockResolvedValueOnce({stdout: '0.86.0', failed: false});
     mocks.execa.mockResolvedValueOnce({
       stdout,
       stderr: 'DYNOBOX_MCP_READY',
@@ -299,7 +296,7 @@ describe('Pi MCP launch contract', () => {
 
   it('rejects Pi zero-exit model errors', async () => {
     mocks.execa.mockImplementation(async (_executable, args) => {
-      if (args[0] === '--version') return {stdout: '0.84.2', failed: false};
+      if (args[0] === '--version') return {stdout: '0.86.0', failed: false};
       return {
         failed: false,
         exitCode: 0,
@@ -334,7 +331,8 @@ describe('Pi MCP launch contract', () => {
   it.each([
     ['--'],
     ['--thinking'],
-    ['--thinking', '--no-extensions'],
+    ['-nt'],
+    ['--no-tools'],
     ['extra prompt'],
     ['@file'],
     ['--mode', 'text'],
@@ -348,8 +346,16 @@ describe('Pi MCP launch contract', () => {
     expect(mocks.execa).not.toHaveBeenCalled();
   });
 
+  it('passes flag values that begin with a dash', async () => {
+    const extraArgs = ['--append-system-prompt', '- Be terse'];
+    await runPiWithMcp({...options(), extraArgs});
+    expect(mocks.execa.mock.calls[1]![1]).toEqual(
+      expect.arrayContaining(extraArgs),
+    );
+  });
+
   it('requires positive readiness even after a successful assistant response', async () => {
-    mocks.execa.mockResolvedValueOnce({stdout: '0.84.2', failed: false});
+    mocks.execa.mockResolvedValueOnce({stdout: '0.86.0', failed: false});
     mocks.execa.mockResolvedValueOnce({
       stdout: finalMessage,
       stderr: '',
@@ -360,8 +366,36 @@ describe('Pi MCP launch contract', () => {
     });
   });
 
+  it('classifies a startup exit before readiness as not ready', async () => {
+    mocks.execa.mockResolvedValueOnce({stdout: '0.86.0', failed: false});
+    mocks.execa.mockResolvedValueOnce({
+      stdout: '',
+      stderr: 'Error: Failed to load extension "bridge.mjs"\n',
+      exitCode: 1,
+      failed: true,
+    });
+    await expect(runPiWithMcp(options())).rejects.toMatchObject({
+      category: 'not_ready',
+      message:
+        'Pi did not confirm MCP bridge readiness: Error: Failed to load extension "bridge.mjs"',
+    });
+  });
+
+  it('rejects a run that never reached the model', async () => {
+    mocks.execa.mockResolvedValueOnce({stdout: '0.86.0', failed: false});
+    mocks.execa.mockResolvedValueOnce({
+      stdout: JSON.stringify({type: 'session', version: 3}),
+      stderr: 'DYNOBOX_MCP_READY',
+      exitCode: 0,
+    });
+    await expect(runPiWithMcp(options())).rejects.toMatchObject({
+      category: 'execution_failed',
+      message: 'Pi finished without a model response.',
+    });
+  });
+
   it('accepts a successful assistant completion without text', async () => {
-    mocks.execa.mockResolvedValueOnce({stdout: '0.84.2', failed: false});
+    mocks.execa.mockResolvedValueOnce({stdout: '0.86.0', failed: false});
     mocks.execa.mockResolvedValueOnce({
       stdout: JSON.stringify({
         type: 'message_end',
@@ -379,7 +413,7 @@ describe('Pi MCP launch contract', () => {
 
   it('contains process exit when an in-process bridge connection fails', async () => {
     mocks.execa.mockImplementation(async (_executable, args) => {
-      if (args[0] === '--version') return {stdout: '0.84.2', failed: false};
+      if (args[0] === '--version') return {stdout: '0.86.0', failed: false};
       const extension = await import(
         pathToFileURL(args[args.indexOf('-e') + 1]).href
       );
@@ -419,7 +453,7 @@ describe('Pi MCP launch contract', () => {
       );
       mocks.execa.mockImplementation((_executable, args) =>
         args[0] === '--version'
-          ? Promise.resolve({stdout: '0.84.2', failed: false})
+          ? Promise.resolve({stdout: '0.86.0', failed: false})
           : child,
       );
       const onToolEvent = vi.fn();
@@ -476,7 +510,7 @@ describe('Pi MCP launch contract', () => {
     },
   );
 
-  it('adds server instructions to the existing system prompt', async () => {
+  it('appends server instructions without forcing the system prompt', async () => {
     const controller = await startMcpMockController({
       linear: {
         instructions: 'Use issue IDs when calling Linear.',
@@ -485,23 +519,21 @@ describe('Pi MCP launch contract', () => {
         },
       },
     });
-    const handlers = new Map<
-      string,
-      (event: {systemPrompt: string}) => unknown
-    >();
+    type Event = {systemPromptOptions: {appendSystemPrompt: string}};
+    const handlers = new Map<string, (event: Event) => unknown>();
     mocks.execa.mockImplementation(async (_executable, args) => {
-      if (args[0] === '--version') return {stdout: '0.84.2', failed: false};
+      if (args[0] === '--version') return {stdout: '0.86.0', failed: false};
       const extension = await import(
         pathToFileURL(args[args.indexOf('-e') + 1]).href
       );
       await extension.default({
         registerTool: vi.fn(),
-        on: (
-          name: string,
-          handler: (event: {systemPrompt: string}) => unknown,
-        ) => handlers.set(name, handler),
+        on: (name: string, handler: (event: Event) => unknown) =>
+          handlers.set(name, handler),
       });
-      await handlers.get('session_shutdown')?.({systemPrompt: ''});
+      await handlers.get('session_shutdown')?.({
+        systemPromptOptions: {appendSystemPrompt: ''},
+      });
       return {stdout: finalMessage, stderr: 'DYNOBOX_MCP_READY', exitCode: 0};
     });
     try {
@@ -510,14 +542,13 @@ describe('Pi MCP launch contract', () => {
         ...f,
         servers: {linear: {url: controller.urls.linear!, tools: ['get_issue']}},
       });
-      expect(
-        handlers.get('before_agent_start')?.({
-          systemPrompt: 'Existing instructions.',
-        }),
-      ).toEqual({
-        systemPrompt:
-          'Existing instructions.\n\nMCP server linear:\nUse issue IDs when calling Linear.',
-      });
+      const event = {
+        systemPromptOptions: {appendSystemPrompt: 'Existing instructions.'},
+      };
+      expect(handlers.get('before_agent_start')?.(event)).toBeUndefined();
+      expect(event.systemPromptOptions.appendSystemPrompt).toBe(
+        'Existing instructions.\n\nMCP server linear:\nUse issue IDs when calling Linear.',
+      );
     } finally {
       await controller.finalize({harnessReady: true, harnessSucceeded: true});
     }

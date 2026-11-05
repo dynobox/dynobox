@@ -1,4 +1,10 @@
-import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -110,6 +116,7 @@ fi
       writeFileSync(
         executable,
         `#!/bin/sh
+if [ "$1" = "--version" ]; then printf '0.86.0'; exit 0; fi
 printf '%s' "$PI_OFFLINE" > '${configLog}'
 cat > '${stdinLog}'
 cat <<'JSONL'
@@ -143,32 +150,43 @@ JSONL
     },
   );
 
-  it.each(['0.47.0', '0.65.0', '0.65.1'])(
-    'selects compatible prompt transport for Pi %s',
-    async (version) => {
-      const root = createScratchRoot();
-      const executable = join(root, 'fake-pi');
-      const log = join(root, 'prompt');
-      writeFileSync(
-        executable,
-        `#!/bin/sh
-if [ "$1" = "--version" ]; then printf '${version}'; exit 0; fi
-if [ '${version}' = '0.65.1' ]; then cat > '${log}'; else
-  for arg in "$@"; do printf '%s' "$arg" > '${log}'; done
-fi
-printf '%s' '{"type":"message_end","message":{"role":"assistant","stopReason":"stop","content":[{"type":"text","text":"OK"}]}}'
+  it.each([
+    ['0.85.1', "printf '0.85.1'", '0.85.1'],
+    ['an unknown version', 'exit 1', 'unknown'],
+  ])('refuses to run Pi with %s', async (_label, versionProbe, found) => {
+    const root = createScratchRoot();
+    const executable = join(root, 'fake-pi');
+    const ran = join(root, 'ran');
+    writeFileSync(
+      executable,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then ${versionProbe}; exit 0; fi
+touch '${ran}'
 `,
-        {mode: 0o755},
-      );
-      const output = await new PiHarness({executable}).run({
+      {mode: 0o755},
+    );
+    await expect(
+      new PiHarness({executable}).run({
         workDir: root,
         env: {},
         prompt: 'Run the tests.',
-      });
-      expect(readFileSync(log, 'utf8')).toBe('Run the tests.');
-      expect(new PiHarness().extractResult(output).finalMessage).toBe('OK');
-    },
-  );
+      }),
+    ).rejects.toThrow(`Pi 0.86.0 or newer is required (found ${found}).`);
+    expect(existsSync(ran)).toBe(false);
+  });
+
+  it('fails a run that never reached the model', () => {
+    const result = new PiHarness().extractResult({
+      exitCode: 0,
+      stdout: jsonl({type: 'session', version: 3}),
+      stderr: '',
+      durationMs: 1,
+    });
+    expect(result).toMatchObject({
+      exitCode: 1,
+      errorMessage: 'Pi finished without a model response.',
+    });
+  });
 
   it('extracts transcript, final message, tool events, and assistant errors', () => {
     const stdout = jsonl(
