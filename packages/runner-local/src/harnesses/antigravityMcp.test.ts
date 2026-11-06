@@ -428,7 +428,7 @@ reply=kept
 touch '${root}'/active-$$
 mkdir -p '${toolDir}'
 case "$*" in *fail*) rm -f '${root}'/active-$$; exit 1 ;; esac
-sleep 0.4
+sleep 0.5
 for other in '${root}'/active-*; do [ "$other" = '${root}'/active-$$ ] || reply=overlap; done
 [ -d '${toolDir}' ] || reply=removed
 rm -f '${root}'/active-$$
@@ -447,7 +447,7 @@ printf '{"event":"result","result":{"status":"SUCCESS","response":"%s"}}\\n' "$r
         env: {HOME: prompt === 'last' ? alias : home},
         prompt,
         // Shorter than the three runs together: waiting uses no budget.
-        timeoutMs: 1000,
+        timeoutMs: 1200,
         ...(prompt === 'cancelled' ? {signal: abort.signal} : {}),
       },
       servers: {
@@ -455,18 +455,23 @@ printf '{"event":"result","result":{"status":"SUCCESS","response":"%s"}}\\n' "$r
       },
     });
     // Duration also starts with the run's turn.
-    expect(output.durationMs).toBeLessThan(1000);
+    expect(output.durationMs).toBeLessThan(1200);
     return new AntigravityHarness().extractResult(output).finalMessage;
   };
-  const runs = Promise.allSettled([
-    run('first'),
-    run('fail'),
-    run('cancelled'),
-    run('second'),
-    run('last'),
+  // Start the others once the first holds the turn, so the cancelled run is
+  // still waiting when it is cancelled.
+  const firstRun = run('first');
+  await vi.waitFor(async () =>
+    expect(
+      (await readdir(root)).some((name) => name.startsWith('active-')),
+    ).toBe(true),
+  );
+  const others = [run('fail'), run('cancelled'), run('second'), run('last')];
+  abort.abort();
+  const [first, failed, cancelled, second, last] = await Promise.allSettled([
+    firstRun,
+    ...others,
   ]);
-  setTimeout(() => abort.abort(), 50);
-  const [first, failed, cancelled, second, last] = await runs;
   expect(failed).toMatchObject({status: 'rejected'});
   expect(cancelled).toMatchObject({
     status: 'rejected',

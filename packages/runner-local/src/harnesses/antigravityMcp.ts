@@ -69,6 +69,10 @@ async function inTurn<T>(
   // runs ahead of it.
   const tail = previous.then(() => current);
   turns.set(home, tail);
+  // Forget the HOME only once every run queued so far has finished.
+  void tail.then(() => {
+    if (turns.get(home) === tail) turns.delete(home);
+  });
   try {
     await new Promise<void>((resolve, reject) => {
       const cancel = () =>
@@ -85,7 +89,6 @@ async function inTurn<T>(
     return await run();
   } finally {
     release();
-    if (turns.get(home) === tail) turns.delete(home);
   }
 }
 
