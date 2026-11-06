@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import {
   mkdir,
   mkdtemp,
@@ -26,6 +27,18 @@ afterEach(async () => {
   vi.restoreAllMocks();
   for (const close of cleanup.splice(0).reverse()) await close();
 });
+
+const queueDir = (home: string) => join(home, '.gemini', 'dynobox-mcp-queue');
+
+/** A ticket left by a run that was killed before its cleanup. */
+async function leaveDeadTicket(home: string): Promise<string> {
+  const child = execa(process.execPath, ['-e', '']);
+  await child;
+  const name = `${child.pid}.${randomUUID()}`;
+  await mkdir(queueDir(home), {recursive: true});
+  await writeFile(join(queueDir(home), name), '');
+  return name;
+}
 
 async function fixture(mode: 'call' | 'negative' | 'hang') {
   const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-native-'));
@@ -472,6 +485,10 @@ printf '{"event":"result","result":{"status":"SUCCESS","response":"%s"}}\\n' "$r
         : await runAntigravityWithMcp(options);
       return new AntigravityHarness().extractResult(output).finalMessage;
     };
+    // Every run recovers these at the same time.
+    await leaveDeadTicket(home);
+    await leaveDeadTicket(home);
+    await writeFile(join(queueDir(home), '.DS_Store'), '');
     const [first, failed, last] = await Promise.allSettled([
       run('first'),
       run('fail'),
@@ -493,8 +510,9 @@ it.each(['timeout', 'cancel'])(
     cleanup.push(() => rm(root, {recursive: true, force: true}));
     const home = join(root, 'home');
     const work = join(root, 'work');
-    const lock = join(home, '.gemini', 'dynobox-mcp.lock');
-    await mkdir(lock, {recursive: true});
+    const live = `${process.pid}.${randomUUID()}`;
+    await mkdir(queueDir(home), {recursive: true});
+    await writeFile(join(queueDir(home), live), '');
     await mkdir(work);
     const abort = new AbortController();
     const timer =
@@ -517,7 +535,7 @@ it.each(['timeout', 'cancel'])(
       ).rejects.toMatchObject({
         category: mode === 'timeout' ? 'timed_out' : 'execution_failed',
       });
-      expect(await readdir(lock)).toEqual([]);
+      expect(await readdir(queueDir(home))).toEqual([live]);
       expect(await readdir(work)).toEqual([]);
     } finally {
       clearTimeout(timer);
@@ -617,9 +635,7 @@ else if (mode === 'failure' && stage === 'run') process.exitCode = 2;
   await expect(
     readFile(join(work, '.agents', 'mcp_config.json')),
   ).rejects.toMatchObject({code: 'ENOENT'});
-  await expect(
-    readdir(join(home, '.gemini', 'dynobox-mcp.lock')),
-  ).rejects.toMatchObject({code: 'ENOENT'});
+  await expect(readdir(queueDir(home))).resolves.toEqual([]);
   expect(
     await readdir(join(home, '.gemini', 'config', 'projects')).catch(() => []),
   ).toEqual([]);
@@ -668,9 +684,7 @@ if (stage !== process.env.CHILD_STAGE) {
       await vi.waitFor(() =>
         expect(() => process.kill(childPid!, 0)).toThrow(),
       );
-      await expect(
-        readdir(join(home, '.gemini', 'dynobox-mcp.lock')),
-      ).rejects.toMatchObject({code: 'ENOENT'});
+      await expect(readdir(queueDir(home))).resolves.toEqual([]);
     } finally {
       if (childPid !== undefined) {
         try {
@@ -823,55 +837,68 @@ printf '%s\\n' '${JSON.stringify(step)}' '${JSON.stringify(result)}'
   ]);
 });
 
-it('takes over a HOME lock whose owner has exited', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-lock-'));
+it('runs after a run sharing its HOME was killed mid-run', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-killed-'));
   cleanup.push(() => rm(root, {recursive: true, force: true}));
   const home = join(root, 'home');
-  const work = join(root, 'work');
-  const lock = join(home, '.gemini', 'dynobox-mcp.lock');
-  await mkdir(lock, {recursive: true});
-  await mkdir(work);
-  const exited = execa(process.execPath, ['-e', 'process.exit(0)']);
-  await exited;
-  await writeFile(join(lock, 'pid'), String(exited.pid));
-  // Passing the lock reaches the version probe of a missing binary.
-  await expect(
-    runAntigravityWithMcp({
-      executable: join(root, 'missing-agy'),
-      input: {
-        workDir: work,
-        env: {HOME: home},
-        prompt: 'Reply.',
-        timeoutMs: 5000,
-      },
-      servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
-    }),
-  ).rejects.toMatchObject({category: 'unsupported_version'});
-  expect(await readdir(join(home, '.gemini'))).not.toContain(
-    'dynobox-mcp.lock',
+  const fake = join(root, 'fake-agy');
+  const hung = join(root, 'hung');
+  await writeFile(
+    fake,
+    `#!/bin/sh
+case "$1" in
+  --version) echo 1.2.11; exit 0 ;;
+  plugin) echo 'No imported plugins.'; exit 0 ;;
+esac
+if [ "$AGY_MODE" = hang ]; then echo $$ > '${hung}'; exec sleep 30; fi
+printf '{"event":"result","result":{"status":"SUCCESS","response":"done"}}\\n'
+`,
+    {mode: 0o755},
   );
-});
-
-it('waits for a HOME lock whose owner is still running', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-lock-'));
-  cleanup.push(() => rm(root, {recursive: true, force: true}));
-  const home = join(root, 'home');
-  const work = join(root, 'work');
-  const lock = join(home, '.gemini', 'dynobox-mcp.lock');
-  await mkdir(lock, {recursive: true});
-  await mkdir(work);
-  await writeFile(join(lock, 'pid'), String(process.pid));
-  await expect(
-    runAntigravityWithMcp({
-      executable: join(root, 'must-not-start'),
-      input: {
-        workDir: work,
-        env: {HOME: home},
-        prompt: 'Reply.',
-        timeoutMs: 100,
-      },
-      servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
-    }),
-  ).rejects.toMatchObject({category: 'timed_out'});
-  expect(await readdir(lock)).toEqual(['pid']);
+  const options = (prompt: string, env: Record<string, string> = {}) => ({
+    executable: fake,
+    input: {
+      workDir: join(root, prompt),
+      env: {HOME: home, ...env},
+      prompt,
+      timeoutMs: 10_000,
+    },
+    servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
+  });
+  await mkdir(join(root, 'killed'));
+  await mkdir(join(root, 'next'));
+  const killed = execa(
+    process.execPath,
+    [
+      '--import',
+      import.meta.resolve('tsx'),
+      '--input-type=module',
+      '-e',
+      `import {runAntigravityWithMcp} from ${JSON.stringify(new URL('./antigravityMcp.ts', import.meta.url).href)};
+       await runAntigravityWithMcp(JSON.parse(process.env.RUN_OPTIONS));`,
+    ],
+    {
+      env: {RUN_OPTIONS: JSON.stringify(options('killed', {AGY_MODE: 'hang'}))},
+      reject: false,
+    },
+  );
+  let sleeper: number | undefined;
+  cleanup.push(async () => {
+    if (sleeper !== undefined) process.kill(sleeper, 'SIGKILL');
+  });
+  await vi.waitFor(
+    async () => {
+      sleeper = Number(await readFile(hung, 'utf8'));
+      expect(sleeper).toBeGreaterThan(0);
+    },
+    {timeout: 10_000},
+  );
+  killed.kill('SIGKILL');
+  await killed;
+  expect(await readdir(queueDir(home))).toHaveLength(1);
+  const result = await runAntigravityWithMcp(options('next'));
+  expect(
+    new AntigravityHarness().extractResult(result.output).finalMessage,
+  ).toBe('done');
+  expect(await readdir(queueDir(home))).toEqual([]);
 });

@@ -4,7 +4,6 @@ import {
   readdir,
   readFile,
   realpath,
-  rename,
   rm,
   rmdir,
   writeFile,
@@ -54,64 +53,46 @@ const WORKSPACE_FLAGS = new Set([
 
 // Antigravity keeps each MCP tool definition in HOME, keyed only by server
 // name, and concurrent agy processes rewrite it under each other; a run could
-// then start without the mock tool. The atomic directory also excludes runs
-// in other processes. Never remove a lock owned by another live run.
+// then start without the mock tool, so runs sharing a HOME take turns, also
+// across processes. Each waiter creates a ticket named after its pid and runs
+// only while no other live process holds one; contending waiters withdraw and
+// retry after a random delay. A ticket exists only with its owner's pid, and
+// names are never reused, so a ticket left by a killed run can be removed
+// without ever removing a live one.
+const TICKET = /^(\d+)\.[0-9a-f-]{36}$/;
+
 async function inTurn<T>(
   home: string,
   remaining: () => number,
   signal: AbortSignal | undefined,
   run: () => Promise<T>,
 ): Promise<T> {
-  const lock = join(home, '.gemini', 'dynobox-mcp.lock');
-  await mkdir(dirname(lock), {recursive: true});
-  for (;;) {
-    remaining();
-    try {
-      await mkdir(lock);
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      if (await removeAbandonedLock(lock)) continue;
-      await delay(Math.min(50, remaining()), undefined, {signal}).catch(() =>
-        remaining(),
-      );
-    }
-  }
+  const queue = join(home, '.gemini', 'dynobox-mcp-queue');
+  const name = `${process.pid}.${randomUUID()}`;
+  const ticket = join(queue, name);
+  await mkdir(queue, {recursive: true});
   try {
-    await writeFile(join(lock, 'pid'), String(process.pid));
+    for (;;) {
+      remaining();
+      await writeFile(ticket, '', {flag: 'wx'});
+      let contended = false;
+      for (const entry of await readdir(queue)) {
+        const pid = Number(TICKET.exec(entry)?.[1]);
+        if (entry === name || !(pid > 0)) continue;
+        if (isRunning(pid)) contended = true;
+        else await rm(join(queue, entry), {force: true});
+      }
+      if (!contended) break;
+      await rm(ticket, {force: true});
+      await delay(Math.min(25 + Math.random() * 75, remaining()), undefined, {
+        signal,
+      }).catch(() => remaining());
+    }
     remaining();
     return await run();
   } finally {
-    await rm(lock, {recursive: true, force: true});
+    await rm(ticket, {force: true}).catch(() => {});
   }
-}
-
-/**
- * A run killed before its cleanup (SIGKILL, crash) leaves its lock behind,
- * which would block every later run on this HOME. Remove it once its owner
- * has exited. Renaming first means a lock another run has just taken over is
- * never removed.
- */
-async function removeAbandonedLock(lock: string): Promise<boolean> {
-  const owner = async (directory: string) =>
-    Number(await readFile(join(directory, 'pid'), 'utf8').catch(() => ''));
-  const pid = await owner(lock);
-  // No pid yet means the owner is between mkdir and writing it.
-  if (!Number.isInteger(pid) || pid <= 0 || isRunning(pid)) return false;
-  const moved = `${lock}.${randomUUID()}`;
-  try {
-    await rename(lock, moved);
-  } catch {
-    // Another waiter moved it first; try to take the lock again.
-    return true;
-  }
-  if ((await owner(moved)) !== pid) {
-    // Another run took the lock over before the rename; put it back.
-    await rename(moved, lock).catch(() => {});
-    return false;
-  }
-  await rm(moved, {recursive: true, force: true});
-  return true;
 }
 
 function isRunning(pid: number): boolean {
