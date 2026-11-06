@@ -428,7 +428,7 @@ reply=kept
 touch '${root}'/active-$$
 mkdir -p '${toolDir}'
 case "$*" in *fail*) rm -f '${root}'/active-$$; exit 1 ;; esac
-sleep 0.5
+sleep 0.8
 for other in '${root}'/active-*; do [ "$other" = '${root}'/active-$$ ] || reply=overlap; done
 [ -d '${toolDir}' ] || reply=removed
 rm -f '${root}'/active-$$
@@ -446,8 +446,9 @@ printf '{"event":"result","result":{"status":"SUCCESS","response":"%s"}}\\n' "$r
         workDir: work,
         env: {HOME: prompt === 'last' ? alias : home},
         prompt,
-        // Shorter than the three runs together: waiting uses no budget.
-        timeoutMs: 1200,
+        // The last run finishes about 2.4s in, so this budget only holds if
+        // waiting uses none of it, while leaving each run ample headroom.
+        timeoutMs: 2000,
         ...(prompt === 'cancelled' ? {signal: abort.signal} : {}),
       },
       servers: {
@@ -455,7 +456,7 @@ printf '{"event":"result","result":{"status":"SUCCESS","response":"%s"}}\\n' "$r
       },
     });
     // Duration also starts with the run's turn.
-    expect(output.durationMs).toBeLessThan(1200);
+    expect(output.durationMs).toBeLessThan(2000);
     return new AntigravityHarness().extractResult(output).finalMessage;
   };
   // Start the others once the first holds the turn, so the cancelled run is
@@ -466,7 +467,14 @@ printf '{"event":"result","result":{"status":"SUCCESS","response":"%s"}}\\n' "$r
       (await readdir(root)).some((name) => name.startsWith('active-')),
     ).toBe(true),
   );
-  const others = [run('fail'), run('cancelled'), run('second'), run('last')];
+  let firstDone = Infinity;
+  void firstRun.finally(() => (firstDone = Date.now()));
+  let cancelledAt = Infinity;
+  const cancelledRun = run('cancelled');
+  void cancelledRun.catch(() => (cancelledAt = Date.now()));
+  const others = [run('fail'), cancelledRun, run('second'), run('last')];
+  // By now every run is queued behind the first, which is still running.
+  await new Promise((resolve) => setTimeout(resolve, 200));
   abort.abort();
   const [first, failed, cancelled, second, last] = await Promise.allSettled([
     firstRun,
@@ -477,6 +485,8 @@ printf '{"event":"result","result":{"status":"SUCCESS","response":"%s"}}\\n' "$r
     status: 'rejected',
     reason: {category: 'execution_failed'},
   });
+  // Cancelling a waiting run settles it at once, not when its turn comes.
+  expect(cancelledAt).toBeLessThan(firstDone);
   expect(await readdir(join(root, 'cancelled'))).toEqual([]);
   expect([first, second, last]).toEqual([
     {status: 'fulfilled', value: 'kept'},

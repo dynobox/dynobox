@@ -188,7 +188,8 @@ JSONL
     const output = await new AntigravityHarness({executable}).run({
       prompt: 'Run tests.',
       workDir: scratchRoot,
-      env: {},
+      // Project-record cleanup must not touch the real HOME.
+      env: {HOME: scratchRoot},
       onToolEvent: (event) => toolEvents.push(event),
     });
 
