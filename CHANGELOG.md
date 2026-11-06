@@ -32,6 +32,9 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   local debug logs and handle streamed Unicode input. Pass prompts through
   stdin (subject to Pi's whitespace trimming) and reject blank prompts before
   starting Pi.
+- Support MCP mock runs with Antigravity 1.2.11 and newer. Report mock calls
+  under `mcp__<server>__<tool>` names and recover the shared HOME lock after
+  an interrupted run.
 - Report timed-out Antigravity MCP probes and runs as timeouts, and preserve
   failure output in local debug logs.
 - Enable local MCP mock runs without an experimental environment flag. Each

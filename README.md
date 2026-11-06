@@ -71,7 +71,8 @@ MCP runs cannot be uploaded.
 
 Mock server and tool names can use only letters, digits, `_` and `-`. Dynobox
 reports each tool as `mcp__<server>__<tool>`, and that name must be 64 characters
-or fewer. OpenCode exposes tools to the model as `<server>_<tool>`.
+or fewer. OpenCode exposes tools to the model as `<server>_<tool>`, and Antigravity
+calls them through its `call_mcp_tool` tool.
 `dynobox validate` rejects other names. A Codex or OpenCode run fails
 if your harness config already has an MCP server with the same name as a mock.
 To use the mock, rename or remove that server. OpenCode also fails when two
@@ -83,7 +84,7 @@ separate permission flag is needed. If a harness still refuses a mock call,
 the job fails, so a `mcp.notCalled` assertion cannot pass on a refused call.
 
 Each adapter requires a minimum harness version (Claude Code 2.1.263, Codex
-0.153.4, OpenCode 2.2.5, Pi 0.84.2, Antigravity 1.2.11). OpenCode MCP mock jobs
+0.153.4, OpenCode 2.2.5, Pi 0.86.0, Antigravity 1.2.11). OpenCode MCP mock jobs
 support only the 2.x release series. They reject file policies that can override
 mock isolation and macOS managed preferences. See the [CI requirements](docs/ci.md).
 MCP jobs follow the same timeout as other jobs and report a `timed_out`
