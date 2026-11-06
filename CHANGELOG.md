@@ -32,6 +32,25 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   local debug logs and handle streamed Unicode input. Pass prompts through
   stdin (subject to Pi's whitespace trimming) and reject blank prompts before
   starting Pi.
+- Support MCP mock runs with Antigravity 1.2.11 and newer, reporting mock calls
+  under `mcp__<server>__<tool>` names. Antigravity MCP jobs that share a HOME
+  take turns within one run, and waiting does not count against their timeout.
+  Separate `dynobox` processes sharing a HOME are not coordinated.
+- Report timed-out Antigravity MCP probes and runs as timeouts, and preserve
+  failure output in local debug logs.
+- Enable local MCP mock runs without an experimental environment flag. Each
+  scenario grants its declared mock tools automatically, and MCP runs remain
+  ineligible for upload.
+- Stop a run on the first SIGINT or SIGTERM: running harness processes are
+  cancelled, no further jobs start, mocks clean up, and the CLI exits with code
+  130 for SIGINT or 143 for SIGTERM. A second signal exits immediately. Once jobs
+  finish, restore normal signal handling so Ctrl-C can interrupt a `--save-run`
+  upload.
+
+### `@dynobox/runner-local`
+
+- Isolate MCP mock runs from inherited harness servers and report refused mock
+  calls as failures, so negative call assertions cannot pass on a refusal.
 
 ---
 

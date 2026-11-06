@@ -13,6 +13,7 @@ export default [
       '**/.astro/**',
       '**/.turbo/**',
       '**/.wrangler/**',
+      '**/.personal/**',
     ],
   },
   js.configs.recommended,

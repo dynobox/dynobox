@@ -1,7 +1,11 @@
 import {realpathSync} from 'node:fs';
+import {readdir, readFile, rm, stat} from 'node:fs/promises';
+import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
 
 import type {PermissionMode} from '@dynobox/sdk';
 
+import {prepareMcpHarness} from '../mcpMocks/resolveExecutable.js';
 import {
   createToolEvent,
   isRecord,
@@ -15,6 +19,7 @@ import type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
+  PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
 import {createVersionProbe} from './version.js';
@@ -29,6 +34,8 @@ export type AntigravityParsedOutput = {
   toolEvents: ToolEvent[];
   errorMessage: string | undefined;
   terminalFailure: boolean;
+  /** The permission check denied at least one MCP tool call. */
+  deniedMcp: boolean;
 };
 
 export type AntigravityParsedLine = {
@@ -36,6 +43,7 @@ export type AntigravityParsedLine = {
   finalMessage?: string;
   errorMessage?: string;
   terminalFailure?: boolean;
+  deniedMcp?: boolean;
 };
 
 export class AntigravityHarness implements Harness {
@@ -55,23 +63,42 @@ export class AntigravityHarness implements Harness {
     return this.probeVersion();
   }
 
-  run(input: HarnessInput): Promise<HarnessRunOutput> {
-    const workDir = realpathSync(input.workDir);
-    return runStreamingHarness({
-      executable: this.executable,
-      args: buildAntigravityArgs(
-        workDir,
-        input.prompt,
-        this.extraArgs,
-        input.model,
-        input.permissionMode,
-        input.timeoutMs,
-      ),
+  async prepareMcp(
+    input: Pick<HarnessInput, 'workDir' | 'env'>,
+  ): Promise<PreparedMcpHarness> {
+    const {runAntigravityWithMcp} = await import('./antigravityMcp.js');
+    return prepareMcpHarness(
+      this.executable,
+      this.extraArgs,
       input,
-      cwd: workDir,
-      stdin: 'ignore',
-      parseLine: parseAntigravityJsonLine,
-    });
+      runAntigravityWithMcp,
+    );
+  }
+
+  async run(input: HarnessInput): Promise<HarnessRunOutput> {
+    const workDir = realpathSync(input.workDir);
+    const home = input.env.HOME ?? process.env.HOME;
+    await removeDynoboxProjectRecords(home);
+    try {
+      return await runStreamingHarness({
+        executable: this.executable,
+        args: buildAntigravityArgs(
+          workDir,
+          input.prompt,
+          this.extraArgs,
+          input.model,
+          input.permissionMode,
+          input.timeoutMs,
+        ),
+        input,
+        cwd: workDir,
+        stdin: 'ignore',
+        parseLine: parseAntigravityJsonLine,
+      });
+    } finally {
+      // `--new-project` leaves a record for this work directory behind.
+      await removeDynoboxProjectRecords(home, workDir);
+    }
   }
 
   extractResult(raw: HarnessRunOutput): HarnessResult {
@@ -92,6 +119,58 @@ export class AntigravityHarness implements Harness {
 /** AGY print mode defaults to 5m; other harnesses have no inner cap. */
 const DEFAULT_ANTIGRAVITY_PRINT_TIMEOUT = '30m';
 
+// Records this old cannot belong to a run that is still active.
+const STALE_PROJECT_MS = 24 * 60 * 60 * 1000;
+
+// Names dynobox creates: `dynobox-job-*` work dirs (named after the folder)
+// and `dynobox-<uuid>` MCP projects. Other `dynobox-*` names are the user's.
+const DYNOBOX_PROJECT_NAME =
+  /^dynobox-(?:job-|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$)/;
+
+/**
+ * Best effort: Antigravity keeps a project record for every run in the real
+ * HOME. Remove dynobox records that are over a day old (from interrupted
+ * runs), plus the record for `workDir` when given.
+ */
+export async function removeDynoboxProjectRecords(
+  home: string | undefined,
+  workDir?: string,
+): Promise<void> {
+  if (!home) return;
+  const directory = join(home, '.gemini', 'config', 'projects');
+  const folder =
+    workDir === undefined ? undefined : pathToFileURL(workDir).href;
+  const names = await readdir(directory).catch(() => [] as string[]);
+  await Promise.all(
+    names.map(async (name) => {
+      const path = join(directory, name);
+      try {
+        const record: unknown = JSON.parse(await readFile(path, 'utf8'));
+        if (
+          !isRecord(record) ||
+          typeof record.name !== 'string' ||
+          !DYNOBOX_PROJECT_NAME.test(record.name)
+        )
+          return;
+        const resources = isRecord(record.projectResources)
+          ? record.projectResources.resources
+          : undefined;
+        const ownsWorkDir =
+          folder !== undefined &&
+          Array.isArray(resources) &&
+          resources.some(
+            (resource) => isRecord(resource) && resource.folderUri === folder,
+          );
+        const stale =
+          Date.now() - (await stat(path)).mtimeMs > STALE_PROJECT_MS;
+        if (ownsWorkDir || stale) await rm(path, {force: true});
+      } catch {
+        // Skip records that are unreadable or already gone.
+      }
+    }),
+  );
+}
+
 export function buildAntigravityArgs(
   workDir: string,
   prompt: string,
@@ -99,11 +178,12 @@ export function buildAntigravityArgs(
   model?: string,
   permissionMode?: PermissionMode,
   timeoutMs?: number,
+  projectId?: string,
 ): string[] {
   return [
-    '--new-project',
-    '--add-dir',
-    workDir,
+    ...(projectId === undefined
+      ? ['--new-project', '--add-dir', workDir]
+      : ['--project', projectId]),
     '-p',
     prompt,
     '--output-format',
@@ -124,6 +204,7 @@ export function parseAntigravityJson(stdout: string): AntigravityParsedOutput {
   let finalMessage: string | undefined;
   let errorMessage: string | undefined;
   let terminalFailure = false;
+  let deniedMcp = false;
   const toolEvents: ToolEvent[] = [];
 
   for (const {line, lineNumber} of jsonLines(stdout)) {
@@ -132,9 +213,10 @@ export function parseAntigravityJson(stdout: string): AntigravityParsedOutput {
     if (parsed.finalMessage !== undefined) finalMessage = parsed.finalMessage;
     if (parsed.errorMessage !== undefined) errorMessage = parsed.errorMessage;
     if (parsed.terminalFailure === true) terminalFailure = true;
+    if (parsed.deniedMcp === true) deniedMcp = true;
   }
 
-  return {finalMessage, toolEvents, errorMessage, terminalFailure};
+  return {finalMessage, toolEvents, errorMessage, terminalFailure, deniedMcp};
 }
 
 export function parseAntigravityJsonLine(
@@ -190,12 +272,18 @@ function parseResult(result: JsonObject): AntigravityParsedLine {
     ? (stringFromUnknown(result.error) ??
       `Antigravity run ended with status ${status}`)
     : undefined;
+  const deniedMcp =
+    Array.isArray(result.denied_actions) &&
+    result.denied_actions.some(
+      (denied) => isRecord(denied) && denied.action === 'mcp',
+    );
 
   return {
     toolEvents: [],
     ...(finalMessage === undefined ? {} : {finalMessage}),
     ...(errorMessage === undefined ? {} : {errorMessage}),
     ...(terminalFailure ? {terminalFailure: true} : {}),
+    ...(deniedMcp ? {deniedMcp: true} : {}),
   };
 }
 
