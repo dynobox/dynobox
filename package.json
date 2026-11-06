@@ -17,7 +17,7 @@
     "lint": "eslint .",
     "lint:write": "eslint . --fix",
     "test": "pnpm -r test",
-    "typecheck": "pnpm run build && pnpm -r typecheck && tsc -p dynos/tsconfig.json",
+    "typecheck": "pnpm run build && pnpm -r typecheck",
     "write": "pnpm run format:write && pnpm run lint:write"
   },
   "devDependencies": {

@@ -35,3 +35,6 @@ pnpm-debug.log*
 .plans/
 .claude/
 .personal
+
+# Local example dynos
+dynos/
