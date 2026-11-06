@@ -17,7 +17,8 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import {startMcpMockController} from '../mcpMocks/controller.js';
 import * as processGroup from '../processGroup.js';
 import {AntigravityHarness} from './antigravity.js';
-import {runAntigravityWithMcp} from './antigravityMcp.js';
+import {logicalMcpToolEvents, runAntigravityWithMcp} from './antigravityMcp.js';
+import {createToolEvent} from './parsing.js';
 
 const executable = process.env.DYNOBOX_ANTIGRAVITY_MCP_EXECUTABLE;
 const cleanup: (() => Promise<unknown>)[] = [];
@@ -89,8 +90,6 @@ async function fixture(mode: 'call' | 'negative' | 'hang') {
                 ServerName: 'linear',
                 ToolName: 'get_issue',
                 Arguments: {id: 'DYNO-1'},
-                toolAction: 'Reading issue',
-                toolSummary: 'Issue lookup',
               },
             },
           }
@@ -173,6 +172,13 @@ describe.skipIf(!executable)(
           failures: [],
         });
         expect(observation.calls).toHaveLength(mode === 'call' ? 1 : 0);
+        expect(
+          result.toolEvents?.filter(
+            (event) => event.rawName === 'mcp__linear__get_issue',
+          ),
+        ).toMatchObject(
+          mode === 'call' ? [{input: {id: 'DYNO-1'}, status: 'success'}] : [],
+        );
         expect(
           new AntigravityHarness().extractResult(result.output).finalMessage,
         ).toContain(mode === 'call' ? 'agy-receipt-42' : 'READY');
@@ -736,4 +742,136 @@ it('allows an empty workspace plugin list', async () => {
       servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
     }),
   ).rejects.toMatchObject({category: 'unsupported_version'});
+});
+
+it('reports mock calls under logical names', () => {
+  const servers = {
+    linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']},
+  };
+  const call = (input: unknown) =>
+    createToolEvent('call_mcp_tool', input, 'failure', 'mock error');
+  const unmapped = [
+    call({ServerName: 'linear', ToolName: 'save_issue', Arguments: {}}),
+    call({ServerName: 'github', ToolName: 'get_issue', Arguments: {}}),
+    call({ServerName: 'toString', ToolName: 'get_issue'}),
+    call('not an object'),
+    createToolEvent('read_file', {}),
+  ];
+  expect(
+    logicalMcpToolEvents(
+      [
+        call({ServerName: 'linear', ToolName: 'get_issue', Arguments: {id: 1}}),
+        ...unmapped,
+      ],
+      servers,
+    ),
+  ).toEqual([
+    expect.objectContaining({
+      rawName: 'mcp__linear__get_issue',
+      input: {id: 1},
+      status: 'failure',
+      message: 'mock error',
+    }),
+    ...unmapped,
+  ]);
+});
+
+it('accepts the empty plugin list wording of newer releases', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-plugins-'));
+  cleanup.push(() => rm(root, {recursive: true, force: true}));
+  const work = join(root, 'work');
+  const fake = join(root, 'fake-agy');
+  await mkdir(work);
+  const step = {
+    event: 'step_update',
+    step_update: {
+      state: 'DONE',
+      step_type: 'tool',
+      tool_info: {
+        name: 'call_mcp_tool',
+        parameters: {
+          ServerName: 'linear',
+          ToolName: 'get_issue',
+          Arguments: {id: 'DYNO-1'},
+        },
+        output: '{}',
+      },
+    },
+  };
+  const result = {
+    event: 'result',
+    result: {status: 'SUCCESS', response: 'Done.'},
+  };
+  await writeFile(
+    fake,
+    `#!/bin/sh
+case "$1" in
+  --version) echo 1.4.9; exit 0 ;;
+  plugin) echo 'No plugins installed.'; exit 0 ;;
+esac
+printf '%s\\n' '${JSON.stringify(step)}' '${JSON.stringify(result)}'
+`,
+    {mode: 0o755},
+  );
+  const run = await runAntigravityWithMcp({
+    executable: fake,
+    input: {workDir: work, env: {HOME: join(root, 'home')}, prompt: 'Reply.'},
+    servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
+  });
+  expect(run.toolEvents).toMatchObject([
+    {rawName: 'mcp__linear__get_issue', input: {id: 'DYNO-1'}},
+  ]);
+});
+
+it('takes over a HOME lock whose owner has exited', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-lock-'));
+  cleanup.push(() => rm(root, {recursive: true, force: true}));
+  const home = join(root, 'home');
+  const work = join(root, 'work');
+  const lock = join(home, '.gemini', 'dynobox-mcp.lock');
+  await mkdir(lock, {recursive: true});
+  await mkdir(work);
+  const exited = execa(process.execPath, ['-e', 'process.exit(0)']);
+  await exited;
+  await writeFile(join(lock, 'pid'), String(exited.pid));
+  // Passing the lock reaches the version probe of a missing binary.
+  await expect(
+    runAntigravityWithMcp({
+      executable: join(root, 'missing-agy'),
+      input: {
+        workDir: work,
+        env: {HOME: home},
+        prompt: 'Reply.',
+        timeoutMs: 5000,
+      },
+      servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
+    }),
+  ).rejects.toMatchObject({category: 'unsupported_version'});
+  expect(await readdir(join(home, '.gemini'))).not.toContain(
+    'dynobox-mcp.lock',
+  );
+});
+
+it('waits for a HOME lock whose owner is still running', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-lock-'));
+  cleanup.push(() => rm(root, {recursive: true, force: true}));
+  const home = join(root, 'home');
+  const work = join(root, 'work');
+  const lock = join(home, '.gemini', 'dynobox-mcp.lock');
+  await mkdir(lock, {recursive: true});
+  await mkdir(work);
+  await writeFile(join(lock, 'pid'), String(process.pid));
+  await expect(
+    runAntigravityWithMcp({
+      executable: join(root, 'must-not-start'),
+      input: {
+        workDir: work,
+        env: {HOME: home},
+        prompt: 'Reply.',
+        timeoutMs: 100,
+      },
+      servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
+    }),
+  ).rejects.toMatchObject({category: 'timed_out'});
+  expect(await readdir(lock)).toEqual(['pid']);
 });

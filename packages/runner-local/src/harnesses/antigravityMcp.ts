@@ -4,6 +4,7 @@ import {
   readdir,
   readFile,
   realpath,
+  rename,
   rm,
   rmdir,
   writeFile,
@@ -24,16 +25,20 @@ import {
   parseAntigravityJson,
   removeDynoboxProjectRecords,
 } from './antigravity.js';
-import {asRecord, isRecord} from './parsing.js';
+import {asRecord, createToolEvent, isRecord} from './parsing.js';
 import type {
   HarnessInput,
   HarnessRunOutput,
   McpHarnessRun,
   McpServerConnections,
+  ToolEvent,
 } from './types.js';
 
 // Oldest release whose project-scoped MCP config was verified natively.
 const MIN_VERSION = '1.2.11';
+
+// `agy plugin list` output with nothing installed, across supported releases.
+const NO_PLUGINS = new Set(['No imported plugins.', 'No plugins installed.']);
 
 // Extra arguments that change the workspace, project or agent, and with it the
 // MCP sources Antigravity loads beside the mocks.
@@ -50,7 +55,7 @@ const WORKSPACE_FLAGS = new Set([
 // Antigravity keeps each MCP tool definition in HOME, keyed only by server
 // name, and concurrent agy processes rewrite it under each other; a run could
 // then start without the mock tool. The atomic directory also excludes runs
-// in other processes. Never remove a lock owned by another run.
+// in other processes. Never remove a lock owned by another live run.
 async function inTurn<T>(
   home: string,
   remaining: () => number,
@@ -66,17 +71,85 @@ async function inTurn<T>(
       break;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      if (await removeAbandonedLock(lock)) continue;
       await delay(Math.min(50, remaining()), undefined, {signal}).catch(() =>
         remaining(),
       );
     }
   }
   try {
+    await writeFile(join(lock, 'pid'), String(process.pid));
     remaining();
     return await run();
   } finally {
-    await rmdir(lock);
+    await rm(lock, {recursive: true, force: true});
   }
+}
+
+/**
+ * A run killed before its cleanup (SIGKILL, crash) leaves its lock behind,
+ * which would block every later run on this HOME. Remove it once its owner
+ * has exited. Renaming first means a lock another run has just taken over is
+ * never removed.
+ */
+async function removeAbandonedLock(lock: string): Promise<boolean> {
+  const owner = async (directory: string) =>
+    Number(await readFile(join(directory, 'pid'), 'utf8').catch(() => ''));
+  const pid = await owner(lock);
+  // No pid yet means the owner is between mkdir and writing it.
+  if (!Number.isInteger(pid) || pid <= 0 || isRunning(pid)) return false;
+  const moved = `${lock}.${randomUUID()}`;
+  try {
+    await rename(lock, moved);
+  } catch {
+    // Another waiter moved it first; try to take the lock again.
+    return true;
+  }
+  if ((await owner(moved)) !== pid) {
+    // Another run took the lock over before the rename; put it back.
+    await rename(moved, lock).catch(() => {});
+    return false;
+  }
+  await rm(moved, {recursive: true, force: true});
+  return true;
+}
+
+function isRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/**
+ * Antigravity calls every MCP tool through one native `call_mcp_tool` tool.
+ * Report mock calls under their logical `mcp__<server>__<tool>` names, so
+ * evidence checks can compare them with the mock's receipts.
+ */
+export function logicalMcpToolEvents(
+  events: readonly ToolEvent[],
+  servers: McpServerConnections,
+): ToolEvent[] {
+  return events.map((event) => {
+    if (event.rawName !== 'call_mcp_tool' || !isRecord(event.input))
+      return event;
+    const {ServerName: server, ToolName: tool, Arguments: args} = event.input;
+    if (
+      typeof server !== 'string' ||
+      typeof tool !== 'string' ||
+      !Object.hasOwn(servers, server) ||
+      !servers[server]!.tools.includes(tool)
+    )
+      return event;
+    return createToolEvent(
+      `mcp__${server}__${tool}`,
+      args ?? {},
+      event.status,
+      event.message,
+    );
+  });
 }
 
 /**
@@ -163,7 +236,7 @@ export async function runAntigravityWithMcp(options: {
       requireMcpVersion('Antigravity', MIN_VERSION, result),
     );
     await preflight(['plugin', 'list'], (plugins) => {
-      if (plugins.failed || plugins.stdout.trim() !== 'No imported plugins.')
+      if (plugins.failed || !NO_PLUGINS.has(plugins.stdout.trim()))
         throw new McpHarnessError(
           'configuration_failed',
           'Antigravity has imported plugins that could load other MCP servers; remove them to use MCP mocks.',
@@ -258,11 +331,13 @@ export async function runAntigravityWithMcp(options: {
           parsed.errorMessage ??
             'Antigravity finished without a final message.',
         );
-      for (const event of parsed.toolEvents) input.onToolEvent?.(event);
+      const toolEvents = logicalMcpToolEvents(parsed.toolEvents, servers);
+      for (const event of toolEvents) input.onToolEvent?.(event);
       return {
         harnessReady: true,
         version,
         output,
+        toolEvents,
       };
     } catch (error) {
       if (output !== undefined)
