@@ -34,6 +34,8 @@ export type AntigravityParsedOutput = {
   toolEvents: ToolEvent[];
   errorMessage: string | undefined;
   terminalFailure: boolean;
+  /** The permission check denied at least one MCP tool call. */
+  deniedMcp: boolean;
 };
 
 export type AntigravityParsedLine = {
@@ -41,6 +43,7 @@ export type AntigravityParsedLine = {
   finalMessage?: string;
   errorMessage?: string;
   terminalFailure?: boolean;
+  deniedMcp?: boolean;
 };
 
 export class AntigravityHarness implements Harness {
@@ -201,6 +204,7 @@ export function parseAntigravityJson(stdout: string): AntigravityParsedOutput {
   let finalMessage: string | undefined;
   let errorMessage: string | undefined;
   let terminalFailure = false;
+  let deniedMcp = false;
   const toolEvents: ToolEvent[] = [];
 
   for (const {line, lineNumber} of jsonLines(stdout)) {
@@ -209,9 +213,10 @@ export function parseAntigravityJson(stdout: string): AntigravityParsedOutput {
     if (parsed.finalMessage !== undefined) finalMessage = parsed.finalMessage;
     if (parsed.errorMessage !== undefined) errorMessage = parsed.errorMessage;
     if (parsed.terminalFailure === true) terminalFailure = true;
+    if (parsed.deniedMcp === true) deniedMcp = true;
   }
 
-  return {finalMessage, toolEvents, errorMessage, terminalFailure};
+  return {finalMessage, toolEvents, errorMessage, terminalFailure, deniedMcp};
 }
 
 export function parseAntigravityJsonLine(
@@ -267,12 +272,18 @@ function parseResult(result: JsonObject): AntigravityParsedLine {
     ? (stringFromUnknown(result.error) ??
       `Antigravity run ended with status ${status}`)
     : undefined;
+  const deniedMcp =
+    Array.isArray(result.denied_actions) &&
+    result.denied_actions.some(
+      (denied) => isRecord(denied) && denied.action === 'mcp',
+    );
 
   return {
     toolEvents: [],
     ...(finalMessage === undefined ? {} : {finalMessage}),
     ...(errorMessage === undefined ? {} : {errorMessage}),
     ...(terminalFailure ? {terminalFailure: true} : {}),
+    ...(deniedMcp ? {deniedMcp: true} : {}),
   };
 }
 

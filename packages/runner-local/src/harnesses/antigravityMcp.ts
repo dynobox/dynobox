@@ -9,7 +9,6 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import {dirname, join} from 'node:path';
-import {setTimeout as delay} from 'node:timers/promises';
 import {pathToFileURL} from 'node:url';
 
 import {
@@ -53,54 +52,40 @@ const WORKSPACE_FLAGS = new Set([
 
 // Antigravity keeps each MCP tool definition in HOME, keyed only by server
 // name, and concurrent agy processes rewrite it under each other; a run could
-// then start without the mock tool, so runs sharing a HOME take turns, also
-// across processes. Each waiter creates a ticket named after its pid and runs
-// only while no other live process holds one; contending waiters withdraw and
-// retry after a random delay. A ticket exists only with its owner's pid, and
-// names are never reused, so a ticket left by a killed run can be removed
-// without ever removing a live one.
-const TICKET = /^(\d+)\.[0-9a-f-]{36}$/;
+// then start without the mock tool. Runs in this process that share a HOME
+// therefore take turns. Separate dynobox processes sharing a HOME are not
+// coordinated.
+const turns = new Map<string, Promise<void>>();
 
 async function inTurn<T>(
   home: string,
-  remaining: () => number,
   signal: AbortSignal | undefined,
   run: () => Promise<T>,
 ): Promise<T> {
-  const queue = join(home, '.gemini', 'dynobox-mcp-queue');
-  const name = `${process.pid}.${randomUUID()}`;
-  const ticket = join(queue, name);
-  await mkdir(queue, {recursive: true});
+  const previous = turns.get(home) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => (release = resolve));
+  // A cancelled waiter releases at once, but later runs still wait for the
+  // runs ahead of it.
+  const tail = previous.then(() => current);
+  turns.set(home, tail);
   try {
-    for (;;) {
-      remaining();
-      await writeFile(ticket, '', {flag: 'wx'});
-      let contended = false;
-      for (const entry of await readdir(queue)) {
-        const pid = Number(TICKET.exec(entry)?.[1]);
-        if (entry === name || !(pid > 0)) continue;
-        if (isRunning(pid)) contended = true;
-        else await rm(join(queue, entry), {force: true});
-      }
-      if (!contended) break;
-      await rm(ticket, {force: true});
-      await delay(Math.min(25 + Math.random() * 75, remaining()), undefined, {
-        signal,
-      }).catch(() => remaining());
-    }
-    remaining();
+    await new Promise<void>((resolve, reject) => {
+      const cancel = () =>
+        reject(
+          new McpHarnessError('execution_failed', 'MCP run was cancelled.'),
+        );
+      if (signal?.aborted) return cancel();
+      signal?.addEventListener('abort', cancel, {once: true});
+      void previous.then(() => {
+        signal?.removeEventListener('abort', cancel);
+        resolve();
+      });
+    });
     return await run();
   } finally {
-    await rm(ticket, {force: true}).catch(() => {});
-  }
-}
-
-function isRunning(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
+    release();
+    if (turns.get(home) === tail) turns.delete(home);
   }
 }
 
@@ -143,7 +128,6 @@ export async function runAntigravityWithMcp(options: {
   servers: McpServerConnections;
   extraArgs?: readonly string[];
 }): Promise<McpHarnessRun> {
-  const started = Date.now();
   const {input, servers, executable} = options;
   for (const arg of options.extraArgs ?? []) {
     const flag = arg.split('=')[0]!;
@@ -153,7 +137,6 @@ export async function runAntigravityWithMcp(options: {
         `Antigravity extra argument ${flag} conflicts with MCP mocking.`,
       );
   }
-  const remaining = mcpDeadline(input.timeoutMs, input.signal);
   const cwd = input.workDir;
   const requestedHome = input.env.HOME ?? process.env.HOME;
   if (!requestedHome)
@@ -164,7 +147,10 @@ export async function runAntigravityWithMcp(options: {
   await mkdir(requestedHome, {recursive: true});
   const home = await realpath(requestedHome);
 
-  return inTurn(home, remaining, input.signal, async () => {
+  return inTurn(home, input.signal, async () => {
+    // Waiting for a turn does not count against the run's timeout.
+    const started = Date.now();
+    const remaining = mcpDeadline(input.timeoutMs, input.signal);
     await assertNoInheritedMcpSources(cwd, home);
     await removeDynoboxProjectRecords(home);
     const env = {
@@ -297,6 +283,19 @@ export async function runAntigravityWithMcp(options: {
         stderr: result.stderr,
         durationMs: Date.now() - started,
       };
+      let parsed: ReturnType<typeof parseAntigravityJson> | undefined;
+      let parseError: unknown;
+      try {
+        parsed = parseAntigravityJson(result.stdout);
+      } catch (error) {
+        parseError = error;
+      }
+      // Report attempted calls even when the run then fails.
+      const toolEvents = logicalMcpToolEvents(
+        parsed?.toolEvents ?? [],
+        servers,
+      );
+      for (const event of toolEvents) input.onToolEvent?.(event);
       remaining();
       if (result.timedOut)
         throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');
@@ -305,15 +304,22 @@ export async function runAntigravityWithMcp(options: {
           'execution_failed',
           `Antigravity exited with code ${result.exitCode ?? 'unknown'}.`,
         );
-      const parsed = parseAntigravityJson(result.stdout);
-      if (parsed.terminalFailure || !parsed.finalMessage)
+      if (parsed === undefined) throw parseError;
+      if (parsed.deniedMcp)
+        throw new McpHarnessError(
+          'execution_failed',
+          'Antigravity denied a mock tool call. Check the permission mode.',
+        );
+      // A successful run may end with tool calls and no text.
+      if (
+        parsed.terminalFailure ||
+        (!parsed.finalMessage && toolEvents.length === 0)
+      )
         throw new McpHarnessError(
           'execution_failed',
           parsed.errorMessage ??
             'Antigravity finished without a final message.',
         );
-      const toolEvents = logicalMcpToolEvents(parsed.toolEvents, servers);
-      for (const event of toolEvents) input.onToolEvent?.(event);
       return {
         harnessReady: true,
         version,
@@ -331,12 +337,15 @@ export async function runAntigravityWithMcp(options: {
         );
       throw error;
     } finally {
+      // Best effort: a cleanup error must not replace the run's result.
       await Promise.all([
-        rm(projectConfig, {force: true}).then(() =>
-          // Keep the directory if the agent wrote other files into it.
-          createdAgentsDir ? rmdir(dirname(projectConfig)).catch(() => {}) : {},
-        ),
-        rm(projectRecord, {force: true}),
+        rm(projectConfig, {force: true})
+          .then(() =>
+            // Keep the directory if the agent wrote other files into it.
+            createdAgentsDir ? rmdir(dirname(projectConfig)) : undefined,
+          )
+          .catch(() => {}),
+        rm(projectRecord, {force: true}).catch(() => {}),
         ...toolDirs.map((dir) =>
           rm(dir, {recursive: true, force: true}).catch(() => {}),
         ),
