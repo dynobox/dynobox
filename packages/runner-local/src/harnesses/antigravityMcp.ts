@@ -439,12 +439,15 @@ async function runSession(options: {
             isRecord(item) &&
             (item.modelId === input.model || item.name === input.model),
         );
-      if (!isRecord(model))
-        throw new McpHarnessError(
-          'configuration_failed',
-          `Antigravity model "${input.model}" is unavailable in ACP.`,
-        );
-      await rpc('session/set_model', {sessionId, modelId: model.modelId}, 5000);
+      // ACP accepts valid base IDs that availableModels does not enumerate.
+      await rpc(
+        'session/set_model',
+        {
+          sessionId,
+          modelId: isRecord(model) ? model.modelId : input.model,
+        },
+        5000,
+      );
     }
     const deadline = Date.now() + Math.min(5000, remaining());
     while (

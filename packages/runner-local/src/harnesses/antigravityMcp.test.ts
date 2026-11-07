@@ -356,33 +356,37 @@ describe.skipIf(!executable)(
       },
     );
 
-    it('grants only the declared mock tools in normal permission mode', async () => {
-      const f = await fixture('call');
-      const result = await runAntigravityWithMcp({
-        ...f.options,
-        input: {
-          ...f.options.input,
-          permissionMode: 'default',
-          allowedMcpTools: [{server: 'linear', tool: 'get_issue'}],
-        },
-      });
-      expect(result.toolEvents).toMatchObject([
-        {rawName: 'mcp__linear__get_issue', status: 'success'},
-      ]);
-      const observation = await f.controller.finalize({
-        harnessReady: result.harnessReady,
-        harnessSucceeded: true,
-      });
-      expect(observation.calls).toHaveLength(1);
-      expect(
-        JSON.parse(
-          await readFile(
-            join(f.home, '.gemini', 'antigravity-cli', 'settings.json'),
-            'utf8',
+    it.each(['Gemini 3.8 Flash (Low)', 'gemini-3.8-flash'])(
+      'accepts model %s with scoped normal-permission mock grants',
+      async (model) => {
+        const f = await fixture('call');
+        const result = await runAntigravityWithMcp({
+          ...f.options,
+          input: {
+            ...f.options.input,
+            model,
+            permissionMode: 'default',
+            allowedMcpTools: [{server: 'linear', tool: 'get_issue'}],
+          },
+        });
+        expect(result.toolEvents).toMatchObject([
+          {rawName: 'mcp__linear__get_issue', status: 'success'},
+        ]);
+        const observation = await f.controller.finalize({
+          harnessReady: result.harnessReady,
+          harnessSucceeded: true,
+        });
+        expect(observation.calls).toHaveLength(1);
+        expect(
+          JSON.parse(
+            await readFile(
+              join(f.home, '.gemini', 'antigravity-cli', 'settings.json'),
+              'utf8',
+            ),
           ),
-        ),
-      ).toEqual({modelProvider: 'gemini'});
-    });
+        ).toEqual({modelProvider: 'gemini'});
+      },
+    );
 
     it('retains evidence of a denied mock attempt for receipt reconciliation', async () => {
       const f = await fixture('call');
