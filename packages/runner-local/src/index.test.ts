@@ -164,7 +164,7 @@ describe('MCP adapter availability', () => {
         }),
       ).rejects.toThrow(
         'mcpMocks' in scenario
-          ? 'does not implement isolated MCP execution'
+          ? 'does not implement MCP mock execution'
           : 'MCP assertions require mcpMocks on the scenario',
       );
       expect(existsSync(marker)).toBe(false);

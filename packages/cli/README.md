@@ -8,6 +8,7 @@ behavior, and evaluates assertions against what actually happened.
 
 - Site: [dynobox.xyz](https://dynobox.xyz)
 - Docs: [docs.dynobox.xyz](https://docs.dynobox.xyz)
+- MCP fixtures and consent: [MCP Mocks](https://docs.dynobox.xyz/mcp-mocking)
 - GitHub: [github.com/dynobox/dynobox](https://github.com/dynobox/dynobox)
 
 ## Install

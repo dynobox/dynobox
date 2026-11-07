@@ -38,6 +38,11 @@ export default defineDyno({
 See the [Config Authoring reference](https://docs.dynobox.xyz/config-authoring)
 for setup, fixtures, harness options, YAML, and every assertion type.
 
+Use scenario `mcpMocks` for HTTP MCP tool fixtures and `mcp.called` /
+`mcp.notCalled` for received-call assertions. See
+[MCP Mocks](https://docs.dynobox.xyz/mcp-mocking) for authoring and consent when
+other real servers may load.
+
 ## Experimental CLI Mocks
 
 Scenario `cliMocks` can replace bare executable calls with static or ordered

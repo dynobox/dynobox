@@ -156,7 +156,7 @@ export async function runJob(
         ?.prepareMcp
     )
       throw new DynoboxConfigError(
-        'The registered harness does not implement isolated MCP execution.',
+        'The registered harness does not implement MCP mock execution.',
       );
   }
   // --- 2. Work directory ---------------------------------------------------
@@ -265,8 +265,22 @@ export async function runJob(
   if (usesMcp) {
     try {
       preparedMcp = await awaitMcpPreparation(
-        (signal) =>
-          harness.prepareMcp!({workDir, env: options.env ?? {}, signal}),
+        async (signal) => {
+          const env = options.env ?? {};
+          if (!options.allowUnmockedMcp && harness.inspectMcp) {
+            const inventory = await harness.inspectMcp({workDir, env});
+            if (
+              !inventory.complete ||
+              inventory.servers.some((name) => !Object.hasOwn(mocks!, name))
+            )
+              throw new McpHarnessError(
+                'configuration_failed',
+                'Other MCP servers may load during this run. Set allowUnmockedMcp to true to permit them.',
+              );
+          }
+          signal.throwIfAborted();
+          return harness.prepareMcp!({workDir, env, signal});
+        },
         options.timeoutMs === undefined ? undefined : remainingMcpTime(),
         options.signal,
       );

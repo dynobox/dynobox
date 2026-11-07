@@ -15,6 +15,7 @@ const docFiles = [
   'how-it-works.md',
   'agent-skills.md',
   'config-authoring.md',
+  'mcp-mocking.md',
   'cli.md',
   'ci.md',
 ] as const;
@@ -156,6 +157,19 @@ const docMetadata: Record<
       'pi',
       'cursor',
       'antigravity',
+    ],
+  },
+  'mcp-mocking.md': {
+    agentSummary:
+      'Provide HTTP MCP tool fixtures with mcpMocks, assert on received calls, and permit unrelated real servers through shared confirmation or --allow-unmocked-mcp.',
+    description:
+      'Mock MCP services, check tool calls, and control unrelated MCP servers in interactive and CI runs.',
+    topics: [
+      'MCP',
+      'mcpMocks',
+      'mcp.called',
+      'mcp.notCalled',
+      '--allow-unmocked-mcp',
     ],
   },
   'cli.md': {

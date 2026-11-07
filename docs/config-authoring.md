@@ -71,10 +71,14 @@ type ScenarioInput = {
   setup?: string[];
   fixtures?: string | string[];
   cliMocks?: ScenarioCliMocks;
+  mcpMocks?: ScenarioMcpMocks;
   endpoints?: Record<string, Endpoint>;
   assertions?: Assertion[];
 };
 ```
+
+Use [MCP mocks](./mcp-mocking.md) to provide HTTP MCP tool fixtures and assert
+on received calls with `mcp.called` and `mcp.notCalled`.
 
 Each scenario runs in a fresh temporary work directory. Setup commands run in
 that directory before the harness prompt, fixture directories are copied into

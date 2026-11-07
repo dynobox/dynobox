@@ -94,6 +94,44 @@ async function fixture(
 }
 
 describe('MCP runner lifecycle', () => {
+  it.each([
+    {servers: ['linear', 'github'], complete: true},
+    {servers: ['linear'], complete: false},
+  ])(
+    'requires consent for an unmocked or unknown environment: %j',
+    async (inventory) => {
+      const {harness, job, options} = await fixture('negative');
+      Object.assign(harness, {inspectMcp: async () => inventory});
+      const prepare = vi.spyOn(harness, 'prepareMcp');
+      const start = vi.spyOn(controllerModule, 'startMcpMockController');
+      const result = await runJob(job, options);
+      expect(result.status).toBe('harness_failed');
+      expect(result.mcp?.ready).toBe(false);
+      expect(result.mcp?.failures).toContain('configuration_failed');
+      expect(result.diagnostics.join(' ')).toContain('allowUnmockedMcp');
+      expect(prepare).not.toHaveBeenCalled();
+      expect(start).not.toHaveBeenCalled();
+    },
+  );
+
+  it('permits an explicitly accepted environment', async () => {
+    const {harness, job, options} = await fixture();
+    Object.assign(harness, {
+      inspectMcp: async () => ({servers: [], complete: false}),
+    });
+    const result = await runJob(job, {...options, allowUnmockedMcp: true});
+    expect(result.status).toBe('passed');
+    expect(result.mcp?.ready).toBe(true);
+  });
+
+  it('needs no consent when the complete inventory contains only mock targets', async () => {
+    const {harness, job, options} = await fixture();
+    Object.assign(harness, {
+      inspectMcp: async () => ({servers: ['linear'], complete: true}),
+    });
+    expect((await runJob(job, options)).status).toBe('passed');
+  });
+
   it('rejects Cursor MCP mocking with an actionable isolation error', () => {
     expect(() => assertMcpExecutionSupported(scenario(), 'cursor')).toThrow(
       'plugin-provided MCP servers cannot be isolated',

@@ -200,10 +200,17 @@ validated config and a final summary record.
 --config <path>            Use a specific dyno.config.json file.
 --save-run                 Upload a compact run summary to the dashboard or
                            DYNOBOX_UPLOAD_URL (see Saving Runs below).
+--allow-unmocked-mcp        Permit other real MCP servers when a scenario
+                           declares MCP mocks; skip interactive confirmation.
 ```
 
 Harness IDs are `claude-code`, `codex`, `opencode`, `pi`, `cursor`, and
 `antigravity`.
+
+See [MCP mocks](./mcp-mocking.md) for fixture authoring, confirmation behavior,
+and the explicit opt-in required for noninteractive runs that may load other
+MCP servers. The flag retains warnings; mock startup and assertion checks
+still apply.
 
 Examples:
 

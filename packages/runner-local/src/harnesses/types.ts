@@ -76,6 +76,13 @@ export type PreparedMcpHarness = {
   ): Promise<McpHarnessRun>;
 };
 
+/** Passive configuration inventory; this must never initialize MCP clients. */
+export type McpInventory = {
+  servers: readonly string[];
+  /** False when plugins, managed settings, or other sources may add servers. */
+  complete: boolean;
+};
+
 /**
  * A harness drives an agent CLI (Claude Code, Codex, etc.).
  *
@@ -91,6 +98,14 @@ export interface Harness {
 
   /** Best-effort installed executable version for run provenance. */
   version?(): Promise<string | null>;
+
+  /**
+   * Inspect configured MCPs without starting the harness or connecting to them.
+   * Adapters that omit this method must isolate execution to declared mocks.
+   */
+  inspectMcp?(
+    input: Pick<HarnessInput, 'workDir' | 'env'>,
+  ): Promise<McpInventory>;
 
   /**
    * Resolve executable on the original PATH, before CLI mocks are installed.
