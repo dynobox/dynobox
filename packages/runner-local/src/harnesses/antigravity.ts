@@ -19,6 +19,7 @@ import type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
+  McpInventory,
   PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
@@ -61,6 +62,11 @@ export class AntigravityHarness implements Harness {
 
   version(): Promise<string | null> {
     return this.probeVersion();
+  }
+
+  async inspectMcp(input: Pick<HarnessInput, 'env'>): Promise<McpInventory> {
+    const {inspectAntigravityMcp} = await import('./antigravityMcp.js');
+    return inspectAntigravityMcp(input);
   }
 
   async prepareMcp(
@@ -206,9 +212,18 @@ export function parseAntigravityJson(stdout: string): AntigravityParsedOutput {
   let terminalFailure = false;
   let deniedMcp = false;
   const toolEvents: ToolEvent[] = [];
+  const parseAcp = createAntigravityAcpParser();
 
   for (const {line, lineNumber} of jsonLines(stdout)) {
-    const parsed = parseAntigravityJsonLine(line, lineNumber);
+    const event = parseJsonObjectLine(
+      line,
+      lineNumber,
+      'Antigravity JSON event',
+    );
+    const parsed =
+      event.jsonrpc === '2.0'
+        ? parseAcp(event)
+        : parseAntigravityJsonLine(line, lineNumber);
     toolEvents.push(...parsed.toolEvents);
     if (parsed.finalMessage !== undefined) finalMessage = parsed.finalMessage;
     if (parsed.errorMessage !== undefined) errorMessage = parsed.errorMessage;
@@ -216,7 +231,84 @@ export function parseAntigravityJson(stdout: string): AntigravityParsedOutput {
     if (parsed.deniedMcp === true) deniedMcp = true;
   }
 
-  return {finalMessage, toolEvents, errorMessage, terminalFailure, deniedMcp};
+  return {
+    finalMessage: finalMessage || undefined,
+    toolEvents,
+    errorMessage,
+    terminalFailure,
+    deniedMcp,
+  };
+}
+
+/** ACP updates can omit fields supplied by an earlier update for the same call. */
+export function createAntigravityAcpParser(): (
+  event: JsonObject,
+) => AntigravityParsedLine {
+  const calls = new Map<string, JsonObject>();
+  const completed = new Set<string>();
+  let text = '';
+  return (event) => {
+    if (isRecord(event.error))
+      return {
+        toolEvents: [],
+        terminalFailure: true,
+        errorMessage:
+          stringFromUnknown(event.error) ?? 'Antigravity ACP failed.',
+      };
+    if (isRecord(event.result) && typeof event.result.stopReason === 'string')
+      return {
+        toolEvents: [],
+        ...(event.result.stopReason === 'end_turn' && calls.size === 0
+          ? {}
+          : {
+              terminalFailure: true,
+              errorMessage: calls.size
+                ? 'Antigravity finished with incomplete tool calls.'
+                : `Antigravity stopped: ${event.result.stopReason}.`,
+            }),
+      };
+    const update = isRecord(event.params) && event.params.update;
+    if (!isRecord(update)) return {toolEvents: []};
+    if (
+      update.sessionUpdate === 'agent_message_chunk' &&
+      isRecord(update.content) &&
+      update.content.type === 'text' &&
+      typeof update.content.text === 'string'
+    ) {
+      text += update.content.text;
+      return {toolEvents: [], finalMessage: text};
+    }
+    if (
+      !['tool_call', 'tool_call_update'].includes(
+        String(update.sessionUpdate),
+      ) ||
+      typeof update.toolCallId !== 'string'
+    )
+      return {toolEvents: []};
+    const id = update.toolCallId;
+    if (completed.has(id)) return {toolEvents: []};
+    const reset = calls.has(id) ? {} : {finalMessage: ''};
+    if (!calls.has(id)) text = '';
+    const call = {...calls.get(id), ...update};
+    calls.set(id, call);
+    if (call.status !== 'completed' && call.status !== 'failed')
+      return {toolEvents: [], ...reset};
+    if (typeof call.name !== 'string')
+      throw new Error('Antigravity ACP completed a tool call without a name.');
+    completed.add(id);
+    calls.delete(id);
+    return {
+      ...reset,
+      toolEvents: [
+        createToolEvent(
+          call.name,
+          normalizeToolInput(call.rawInput ?? call.args ?? {}),
+          call.status === 'failed' ? 'failure' : 'success',
+          stringFromUnknown(call.rawOutput),
+        ),
+      ],
+    };
+  };
 }
 
 export function parseAntigravityJsonLine(

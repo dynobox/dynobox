@@ -357,6 +357,124 @@ JSONL
   });
 });
 
+describe('Antigravity ACP transcript', () => {
+  const update = (value: Record<string, unknown>) => ({
+    jsonrpc: '2.0',
+    method: 'session/update',
+    params: {sessionId: 'session', update: value},
+  });
+  const text = (value: string) =>
+    update({
+      sessionUpdate: 'agent_message_chunk',
+      content: {type: 'text', text: value},
+    });
+  const call = update({
+    sessionUpdate: 'tool_call',
+    toolCallId: 'call-1',
+    name: 'call_mcp_tool',
+    rawInput: {
+      ServerName: 'linear',
+      ToolName: 'get_issue',
+      Arguments: {id: '1'},
+    },
+    status: 'in_progress',
+  });
+  const done = (status = 'completed') =>
+    update({
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'call-1',
+      status,
+      rawOutput: 'service response',
+    });
+  const end = (stopReason = 'end_turn') => ({
+    jsonrpc: '2.0',
+    id: 4,
+    result: {stopReason},
+  });
+
+  it('joins final chunks and reconstructs partial tool updates once', () => {
+    const parsed = parseAntigravityJson(
+      jsonl(
+        text('I will look it up.'),
+        call,
+        done(),
+        done(),
+        text('Found '),
+        text('it.'),
+        end(),
+      ),
+    );
+    expect(parsed).toMatchObject({
+      finalMessage: 'Found it.',
+      terminalFailure: false,
+    });
+    expect(parsed.toolEvents).toEqual([
+      {
+        rawName: 'call_mcp_tool',
+        kind: 'unknown',
+        input: {
+          ServerName: 'linear',
+          ToolName: 'get_issue',
+          Arguments: {id: '1'},
+        },
+        status: 'success',
+        message: 'service response',
+      },
+    ]);
+  });
+
+  it('does not reuse earlier prose when the final turn contains only a tool', () => {
+    const parsed = parseAntigravityJson(
+      jsonl(text('Checking.'), call, done(), end()),
+    );
+    expect(parsed.finalMessage).toBeUndefined();
+    expect(parsed.terminalFailure).toBe(false);
+    expect(parsed.toolEvents).toHaveLength(1);
+  });
+
+  it('retains failed attempts without treating service text as a turn failure', () => {
+    const parsed = parseAntigravityJson(
+      jsonl(call, done('failed'), text('Done.'), end()),
+    );
+    expect(parsed.terminalFailure).toBe(false);
+    expect(parsed.toolEvents[0]).toMatchObject({
+      status: 'failure',
+      message: 'service response',
+    });
+  });
+
+  it.each(['cancelled', 'max_tokens', 'refusal'])(
+    'rejects %s turns',
+    (reason) => {
+      expect(parseAntigravityJson(jsonl(end(reason)))).toMatchObject({
+        terminalFailure: true,
+      });
+    },
+  );
+
+  it('rejects a finished turn with an open tool call', () => {
+    expect(parseAntigravityJson(jsonl(call, end()))).toMatchObject({
+      terminalFailure: true,
+      errorMessage: 'Antigravity finished with incomplete tool calls.',
+    });
+  });
+
+  it('reports native protocol errors', () => {
+    expect(
+      parseAntigravityJson(
+        jsonl({
+          jsonrpc: '2.0',
+          id: 1,
+          error: {code: -32000, message: 'Authentication required'},
+        }),
+      ),
+    ).toMatchObject({
+      terminalFailure: true,
+      errorMessage: 'Authentication required',
+    });
+  });
+});
+
 describe('removeDynoboxProjectRecords', () => {
   it('removes old dynobox records and the work dir record, keeping others', async () => {
     const home = createScratchRoot();
