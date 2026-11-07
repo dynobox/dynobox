@@ -9,7 +9,6 @@ import {cancelledExitCode, configErrorExitCode} from './exitCodes.js';
 type Request = {
   harness: Harness['id'];
   mocks: readonly string[];
-  workDir: string;
 };
 
 /** One invocation-wide consent gate, before setup, probes, or MCP clients. */
@@ -30,16 +29,11 @@ export async function confirmUnmockedMcp(input: {
       const harness = input.harnesses.find((h) => h.id === request.harness);
       // An adapter without inspection must execute with mocks only.
       if (!harness?.inspectMcp) return undefined;
-      const key = `${request.harness}\0${request.workDir}`;
+      const key = request.harness;
       let inspection = inspections.get(key);
       if (!inspection) {
         inspection = Promise.resolve()
-          .then(() =>
-            harness.inspectMcp!({
-              workDir: request.workDir,
-              env: input.env ?? {},
-            }),
-          )
+          .then(() => harness.inspectMcp!({env: input.env ?? {}}))
           .catch(() => ({servers: [], complete: false}));
         inspections.set(key, inspection);
       }
@@ -103,14 +97,18 @@ export async function confirmUnmockedMcp(input: {
         output: process.stderr,
         terminal: true,
       });
-  reader?.on('SIGINT', () => reader.close());
+  let interrupted = false;
+  reader?.on('SIGINT', () => {
+    interrupted = true;
+    reader.close();
+  });
   const lines = reader?.[Symbol.asyncIterator]();
   const readLine = input.readLine ?? (async () => (await lines!.next()).value);
   try {
     for (;;) {
       input.writeStderr('Continue? [Y/n] ');
       const line = await readLine();
-      const answer = line?.trim().toLowerCase();
+      const answer = interrupted ? undefined : line?.trim().toLowerCase();
       if (answer === '' || answer === 'y' || answer === 'yes') return true;
       if (answer === undefined || answer === 'n' || answer === 'no') {
         input.writeStderr('Run cancelled.\n');

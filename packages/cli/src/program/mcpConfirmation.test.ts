@@ -4,6 +4,8 @@ import {describe, expect, it, vi} from 'vitest';
 import {cancelledExitCode, configErrorExitCode} from './exitCodes.js';
 import {confirmUnmockedMcp} from './mcpConfirmation.js';
 
+vi.mock('node:readline', () => ({createInterface: vi.fn()}));
+
 function fixture(servers = ['linear', 'github'], complete = true) {
   const inspectMcp = vi.fn(async () => ({servers, complete}));
   const harness: Harness = {
@@ -15,7 +17,7 @@ function fixture(servers = ['linear', 'github'], complete = true) {
   const writeStderr = vi.fn();
   const readLine = vi.fn<() => Promise<string | undefined>>(async () => '');
   const input: Parameters<typeof confirmUnmockedMcp>[0] = {
-    requests: [{harness: 'claude-code', mocks: ['linear'], workDir: '/work'}],
+    requests: [{harness: 'claude-code', mocks: ['linear']}],
     harnesses: [harness],
     env: {CI: '1'},
     allow: false,
@@ -36,6 +38,7 @@ describe('MCP consent', () => {
       expect(await confirmUnmockedMcp(f.input)).toBe(true);
       expect(f.readLine).toHaveBeenCalledTimes(1);
       expect(f.inspectMcp).toHaveBeenCalledTimes(1);
+      expect(f.inspectMcp).toHaveBeenCalledWith({env: f.input.env});
       expect(f.stderr()).toContain('other configured MCPs: "github"');
       expect(f.stderr()).not.toContain('"linear"');
       expect(f.stderr()).toContain('Continue? [Y/n]');
@@ -60,6 +63,44 @@ describe('MCP consent', () => {
     expect(f.readLine).toHaveBeenCalledTimes(2);
     expect(f.stderr()).toContain('Please answer y or n.');
   });
+
+  it.each(['', 'y'])(
+    'cancels even when Ctrl-C follows buffered %j',
+    async (answer) => {
+      const f = fixture();
+      f.input.env = {CI: ''};
+      f.input.readLine = undefined;
+      const events = new EventEmitter();
+      const terminal = Object.assign(events, {
+        close: vi.fn(),
+        [Symbol.asyncIterator]: () => ({
+          next: async () => {
+            events.emit('SIGINT');
+            return {done: false, value: answer};
+          },
+        }),
+      });
+      const tty = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+      Object.defineProperty(process.stdin, 'isTTY', {
+        value: true,
+        configurable: true,
+      });
+      vi.mocked(createInterface).mockReturnValue(
+        terminal as unknown as ReturnType<typeof createInterface>,
+      );
+      try {
+        await expect(confirmUnmockedMcp(f.input)).rejects.toMatchObject({
+          exitCode: cancelledExitCode,
+        });
+        expect(f.harness.run).not.toHaveBeenCalled();
+        expect(terminal.close).toHaveBeenCalled();
+      } finally {
+        if (tty) Object.defineProperty(process.stdin, 'isTTY', tty);
+        else Reflect.deleteProperty(process.stdin, 'isTTY');
+        vi.mocked(createInterface).mockReset();
+      }
+    },
+  );
 
   it('requires explicit opt-in in CI without reading input', async () => {
     const f = fixture();
@@ -117,7 +158,7 @@ describe('MCP consent', () => {
     const f = fixture();
     f.input.requests = [
       ...f.input.requests,
-      {harness: 'claude-code', mocks: ['github'], workDir: '/work'},
+      {harness: 'claude-code', mocks: ['github']},
     ];
     expect(await confirmUnmockedMcp(f.input)).toBe(true);
     expect(f.stderr()).toContain('other configured MCPs: "github", "linear"');
@@ -128,7 +169,7 @@ describe('MCP consent', () => {
     f.input.harnesses = [...f.input.harnesses, {...f.harness, id: 'codex'}];
     f.input.requests = [
       ...f.input.requests,
-      {harness: 'codex', mocks: ['linear'], workDir: '/work'},
+      {harness: 'codex', mocks: ['linear']},
     ];
     expect(await confirmUnmockedMcp(f.input)).toBe(true);
     expect(f.stderr()).toContain('claude-code: other configured MCPs');
@@ -143,3 +184,5 @@ describe('MCP consent', () => {
     expect(f.stderr()).not.toContain('\u001b');
   });
 });
+import {EventEmitter} from 'node:events';
+import {createInterface} from 'node:readline';

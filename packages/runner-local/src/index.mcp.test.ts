@@ -1,4 +1,4 @@
-import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {mkdtemp, readdir, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -100,17 +100,20 @@ describe('MCP runner lifecycle', () => {
   ])(
     'requires consent for an unmocked or unknown environment: %j',
     async (inventory) => {
-      const {harness, job, options} = await fixture('negative');
-      Object.assign(harness, {inspectMcp: async () => inventory});
+      const {root, harness, job, options} = await fixture('negative');
+      job.scenario = {
+        ...job.scenario,
+        setup: [`touch ${join(root, 'setup-ran')}`],
+      };
+      const inspectMcp = vi.fn(async () => inventory);
+      Object.assign(harness, {inspectMcp});
       const prepare = vi.spyOn(harness, 'prepareMcp');
       const start = vi.spyOn(controllerModule, 'startMcpMockController');
-      const result = await runJob(job, options);
-      expect(result.status).toBe('harness_failed');
-      expect(result.mcp?.ready).toBe(false);
-      expect(result.mcp?.failures).toContain('configuration_failed');
-      expect(result.diagnostics.join(' ')).toContain('allowUnmockedMcp');
+      await expect(runJob(job, options)).rejects.toThrow('allowUnmockedMcp');
+      expect(inspectMcp).toHaveBeenCalledWith({env: {}});
       expect(prepare).not.toHaveBeenCalled();
       expect(start).not.toHaveBeenCalled();
+      expect(await readdir(root)).toEqual([]);
     },
   );
 

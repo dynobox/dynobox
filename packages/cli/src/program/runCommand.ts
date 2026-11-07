@@ -257,7 +257,7 @@ export async function runCommandAction(
 
   if (usesMcp) {
     runOptions.allowUnmockedMcp = await confirmUnmockedMcp({
-      requests: dynoGroups.flatMap(({entry, jobs: groupJobs}) =>
+      requests: dynoGroups.flatMap(({jobs: groupJobs}) =>
         groupJobs.flatMap((job) =>
           job.scenario.mcpMocks === undefined
             ? []
@@ -265,7 +265,6 @@ export async function runCommandAction(
                 {
                   harness: job.harness,
                   mocks: Object.keys(job.scenario.mcpMocks),
-                  workDir: dirname(entry.filePath),
                 },
               ],
         ),

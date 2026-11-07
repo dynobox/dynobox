@@ -79,7 +79,7 @@ export type PreparedMcpHarness = {
 /** Passive configuration inventory; this must never initialize MCP clients. */
 export type McpInventory = {
   servers: readonly string[];
-  /** False when plugins, managed settings, or other sources may add servers. */
+  /** False when project, setup, plugin, or managed sources may add servers. */
   complete: boolean;
 };
 
@@ -100,12 +100,12 @@ export interface Harness {
   version?(): Promise<string | null>;
 
   /**
-   * Inspect configured MCPs without starting the harness or connecting to them.
+   * Inspect stable profile configuration before a job workspace exists.
+   * Never start the harness or connect to MCPs. Report incomplete inventory
+   * whenever project or setup-generated configuration can add servers.
    * Adapters that omit this method must isolate execution to declared mocks.
    */
-  inspectMcp?(
-    input: Pick<HarnessInput, 'workDir' | 'env'>,
-  ): Promise<McpInventory>;
+  inspectMcp?(input: Pick<HarnessInput, 'env'>): Promise<McpInventory>;
 
   /**
    * Resolve executable on the original PATH, before CLI mocks are installed.
