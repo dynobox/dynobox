@@ -18,6 +18,8 @@ shipping a prompt, skill, or workflow change.
   and debugging failed runs.
 - [Config Authoring](./config-authoring.md): write JavaScript, TypeScript, or
   YAML dynos with the `@dynobox/sdk` helpers.
+- [MCP Mocks](./mcp-mocking.md): provide HTTP tool fixtures, assert on received
+  calls, and control whether other real MCP servers can load.
 - [CLI Reference](./cli.md): commands, flags, output modes, JSON reports, and
   exit behavior.
 - [CI Integration](./ci.md): temporary GitHub Actions pattern from the

@@ -88,6 +88,8 @@ export type RunJobOptions = {
   env?: Record<string, string>;
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** Permit unrelated real MCP servers to remain available during mock runs. */
+  allowUnmockedMcp?: boolean;
   onProgress?: (event: RunJobProgressEvent) => void;
 };
 

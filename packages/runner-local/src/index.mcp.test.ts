@@ -1,4 +1,4 @@
-import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {mkdtemp, readdir, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -94,6 +94,79 @@ async function fixture(
 }
 
 describe('MCP runner lifecycle', () => {
+  it.each([
+    {servers: ['linear', 'github'], complete: true},
+    {servers: ['linear'], complete: false},
+  ])(
+    'requires consent for an unmocked or unknown environment: %j',
+    async (inventory) => {
+      const {root, harness, job, options} = await fixture('negative');
+      job.scenario = {
+        ...job.scenario,
+        setup: [`touch ${join(root, 'setup-ran')}`],
+      };
+      const inspectMcp = vi.fn(async () => inventory);
+      Object.assign(harness, {inspectMcp});
+      const prepare = vi.spyOn(harness, 'prepareMcp');
+      const start = vi.spyOn(controllerModule, 'startMcpMockController');
+      await expect(runJob(job, options)).rejects.toThrow('allowUnmockedMcp');
+      expect(inspectMcp).toHaveBeenCalledWith({env: {}});
+      expect(prepare).not.toHaveBeenCalled();
+      expect(start).not.toHaveBeenCalled();
+      expect(await readdir(root)).toEqual([]);
+    },
+  );
+
+  it('permits an explicitly accepted environment', async () => {
+    const {harness, job, options} = await fixture();
+    Object.assign(harness, {
+      inspectMcp: async () => ({servers: [], complete: false}),
+    });
+    const result = await runJob(job, {...options, allowUnmockedMcp: true});
+    expect(result.status).toBe('passed');
+    expect(result.mcp?.ready).toBe(true);
+  });
+
+  it.each(['timeout', 'abort'] as const)(
+    'stops waiting for inventory on %s before creating a workspace',
+    async (mode) => {
+      const {root, harness, job, options} = await fixture();
+      let began!: () => void;
+      const inspecting = new Promise<void>((resolve) => {
+        began = resolve;
+      });
+      Object.assign(harness, {
+        inspectMcp: () => {
+          began();
+          return new Promise<never>(() => {});
+        },
+      });
+      const abort = new AbortController();
+      const pending = runJob(job, {
+        ...options,
+        timeoutMs: mode === 'timeout' ? 10 : 3000,
+        signal: abort.signal,
+      });
+      const stopped = expect(pending).rejects.toMatchObject(
+        mode === 'timeout'
+          ? {category: 'timed_out'}
+          : {message: 'cancel inventory'},
+      );
+      await inspecting;
+      if (mode === 'abort') abort.abort(new Error('cancel inventory'));
+      await stopped;
+      expect(await readdir(root)).toEqual([]);
+    },
+  );
+
+  it('needs no consent when the complete inventory contains only mock targets', async () => {
+    const {harness, job, options} = await fixture();
+    Object.assign(harness, {
+      inspectMcp: async () => ({servers: ['linear'], complete: true}),
+    });
+    expect((await runJob(job, options)).status).toBe('passed');
+  });
+
   it('rejects Cursor MCP mocking with an actionable isolation error', () => {
     expect(() => assertMcpExecutionSupported(scenario(), 'cursor')).toThrow(
       'plugin-provided MCP servers cannot be isolated',
