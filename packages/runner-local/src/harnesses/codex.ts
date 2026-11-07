@@ -206,8 +206,22 @@ export function parseCodexJsonLine(
     item?.type === 'mcp_tool_call' &&
     typeof item.server === 'string' &&
     Object.hasOwn(mcpAliases, item.server)
-  )
-    event.item = {...item, server: mcpAliases[item.server]};
+  ) {
+    const logical = mcpAliases[item.server]!;
+    const error = isRecord(item.error) ? item.error : undefined;
+    event.item = {
+      ...item,
+      server: logical,
+      ...(typeof error?.message === 'string'
+        ? {
+            error: {
+              ...error,
+              message: error.message.split(item.server).join(logical),
+            },
+          }
+        : {}),
+    };
+  }
   const toolEvents = parseToolEvents(event);
   const finalMessage = parseFinalMessage(event);
 

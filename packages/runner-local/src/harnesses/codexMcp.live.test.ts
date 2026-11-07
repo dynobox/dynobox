@@ -19,6 +19,7 @@ import * as processGroup from '../processGroup.js';
 import type {LocalRunnerJob} from '../runTypes.js';
 import {CodexHarness} from './codex.js';
 import {runCodexWithMcp} from './codexMcp.js';
+import type {ToolEvent} from './types.js';
 
 // Real CLI, synthetic profiles and local Responses fixture. No copied auth or
 // paid model requests. Run with an absolute DYNOBOX_CODEX_MCP_EXECUTABLE path.
@@ -47,6 +48,35 @@ afterEach(async () => {
 });
 
 describe.skipIf(!executable)('native Codex MCP gates', () => {
+  it('keeps transport errors logical in callbacks and extraction, with raw native debug output', async () => {
+    const f = await nativeFixture('call');
+    f.mode = 'transport-error';
+    const events: ToolEvent[] = [];
+    const run = await f.mockRun(undefined, (event) => events.push(event));
+    expect(events.length).toBeGreaterThan(0);
+    expect(run.toolEvents).toEqual(events);
+    expect(new CodexHarness().extractResult(run.output).toolEvents).toEqual(
+      events,
+    );
+    for (const event of events) {
+      expect(event).toMatchObject({
+        rawName: 'mcp__service__lookup',
+        status: 'failure',
+      });
+      expect(event.message).toContain('service/lookup');
+      expect(event.message).not.toContain('dxb_');
+    }
+    expect(run.output.stdout).toContain('dxb_');
+    expect(
+      (
+        await f.controller.finalize({
+          harnessReady: true,
+          harnessSucceeded: true,
+        })
+      ).calls,
+    ).toEqual([]);
+  }, 30000);
+
   it.each(['call', 'negative'] as const)(
     'runs %s through the public runner with logical MCP assertion names',
     async (mode) => {
@@ -493,7 +523,7 @@ async function nativeFixture(
   );
   const requests: unknown[] = [];
   const state = {
-    mode: initialMode as 'call' | 'negative' | 'hang',
+    mode: initialMode as 'call' | 'negative' | 'hang' | 'transport-error',
     phase: 'unknown',
   };
   const mockContacts: {phase: string; inherited: boolean}[] = [];
@@ -506,6 +536,15 @@ async function nativeFixture(
       try {
         const chunks: Buffer[] = [];
         for await (const chunk of request) chunks.push(Buffer.from(chunk));
+        if (
+          state.mode === 'transport-error' &&
+          request.method === 'POST' &&
+          JSON.parse(Buffer.concat(chunks).toString('utf8')).method ===
+            'tools/call'
+        ) {
+          response.writeHead(503).end();
+          return;
+        }
         const forwarded = await fetch(controller.urls.service!, {
           method: request.method ?? 'GET',
           headers: {
@@ -542,7 +581,9 @@ async function nativeFixture(
             'MCP_FIXTURE_RECEIPT',
           );
           const call =
-            state.mode === 'call' && !hasResult && requests.length < 4;
+            (state.mode === 'call' || state.mode === 'transport-error') &&
+            !hasResult &&
+            requests.length < 4;
           const offered = [
             ...(body.tools ?? []),
             ...(body.input ?? []).flatMap(
@@ -755,7 +796,7 @@ async function nativeFixture(
         expect(await readFile(path, 'utf8')).toBe(text);
     },
     /** Run Codex with the fixture mock server and its tool grant. */
-    mockRun: (signal?: AbortSignal) =>
+    mockRun: (signal?: AbortSignal, onToolEvent?: (event: ToolEvent) => void) =>
       runCodexWithMcp({
         executable: executable!,
         input: {
@@ -765,6 +806,7 @@ async function nativeFixture(
           timeoutMs: 20_000,
           allowedMcpTools: [{server: 'service', tool: 'lookup'}],
           ...(signal ? {signal} : {}),
+          ...(onToolEvent ? {onToolEvent} : {}),
         },
         servers: {
           service: {

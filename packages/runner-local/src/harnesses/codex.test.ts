@@ -32,6 +32,49 @@ function jsonl(...events: unknown[]): string {
 }
 
 describe('CodexHarness', () => {
+  it('maps native transport errors while preserving received service-error content', () => {
+    const base = {
+      type: 'item.completed',
+      item: {
+        type: 'mcp_tool_call',
+        server: 'private_service',
+        tool: 'lookup',
+        arguments: {server: 'private_service'},
+        status: 'failed',
+        error: {message: 'tool call failed for `private_service/lookup`'},
+      },
+    };
+    const aliases = {private_service: 'service'};
+    const failed = parseCodexJsonLine(JSON.stringify(base), 1, aliases);
+    expect(failed.toolEvents[0]).toMatchObject({
+      rawName: 'mcp__service__lookup',
+      message: 'tool call failed for `service/lookup`',
+      input: {server: 'private_service'},
+    });
+    const response = parseCodexJsonLine(
+      JSON.stringify({
+        ...base,
+        item: {
+          ...base.item,
+          status: 'completed',
+          error: null,
+          result: {
+            isError: true,
+            content: [
+              {type: 'text', text: 'private_service is a service response'},
+            ],
+          },
+        },
+      }),
+      1,
+      aliases,
+    );
+    expect(response.toolEvents[0]).toMatchObject({
+      status: 'failure',
+      message: 'private_service is a service response',
+    });
+  });
+
   it('maps private MCP identities without changing arguments or unrelated servers', () => {
     const event = {
       type: 'item.completed',
