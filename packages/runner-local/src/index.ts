@@ -160,9 +160,14 @@ export async function runJob(
       );
     options.signal?.throwIfAborted();
     if (!options.allowUnmockedMcp && adapter.inspectMcp) {
-      const inventory = await Promise.resolve()
-        .then(() => adapter.inspectMcp!({env: options.env ?? {}}))
-        .catch(() => ({servers: [], complete: false}));
+      const inventory = await awaitMcpPreparation(
+        () =>
+          Promise.resolve()
+            .then(() => adapter.inspectMcp!({env: options.env ?? {}}))
+            .catch(() => ({servers: [], complete: false})),
+        options.timeoutMs,
+        options.signal,
+      );
       options.signal?.throwIfAborted();
       if (
         !inventory.complete ||

@@ -127,6 +127,38 @@ describe('MCP runner lifecycle', () => {
     expect(result.mcp?.ready).toBe(true);
   });
 
+  it.each(['timeout', 'abort'] as const)(
+    'stops waiting for inventory on %s before creating a workspace',
+    async (mode) => {
+      const {root, harness, job, options} = await fixture();
+      let began!: () => void;
+      const inspecting = new Promise<void>((resolve) => {
+        began = resolve;
+      });
+      Object.assign(harness, {
+        inspectMcp: () => {
+          began();
+          return new Promise<never>(() => {});
+        },
+      });
+      const abort = new AbortController();
+      const pending = runJob(job, {
+        ...options,
+        timeoutMs: mode === 'timeout' ? 10 : 3000,
+        signal: abort.signal,
+      });
+      const stopped = expect(pending).rejects.toMatchObject(
+        mode === 'timeout'
+          ? {category: 'timed_out'}
+          : {message: 'cancel inventory'},
+      );
+      await inspecting;
+      if (mode === 'abort') abort.abort(new Error('cancel inventory'));
+      await stopped;
+      expect(await readdir(root)).toEqual([]);
+    },
+  );
+
   it('needs no consent when the complete inventory contains only mock targets', async () => {
     const {harness, job, options} = await fixture();
     Object.assign(harness, {
