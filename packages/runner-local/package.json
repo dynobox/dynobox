@@ -19,6 +19,7 @@
     "test": "pnpm run build && vitest run"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "2.4.0",
     "@dynobox/evaluators": "workspace:*",
     "@dynobox/sdk": "workspace:*",
     "@modelcontextprotocol/sdk": "1.30.0",

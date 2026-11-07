@@ -10,8 +10,11 @@ import {
 } from 'node:fs/promises';
 import {homedir} from 'node:os';
 import {isAbsolute, join} from 'node:path';
+import {Readable, Writable} from 'node:stream';
+import {StringDecoder} from 'node:string_decoder';
 import {setTimeout as delay} from 'node:timers/promises';
 
+import * as acp from '@agentclientprotocol/sdk';
 import {parse, type ParseError} from 'jsonc-parser';
 
 import {
@@ -325,30 +328,10 @@ async function runSession(options: {
     ],
     {...options.processOptions, timeout: remaining()},
   );
-  let sequence = 0;
-  let failure: unknown;
   let taskStarted = false;
-  const pending = new Map<
-    number,
-    {
-      resolve(value: JsonObject): void;
-      reject(error: unknown): void;
-      timer: ReturnType<typeof setTimeout>;
-    }
-  >();
+  let protocolError: unknown;
   const parseAcp = createAntigravityAcpParser();
   const toolEvents: ToolEvent[] = [];
-  const send = (value: unknown) =>
-    child.stdin?.write(JSON.stringify(value) + '\n');
-  const fail = (error: unknown) => {
-    failure ??= error;
-    for (const request of pending.values()) {
-      clearTimeout(request.timer);
-      request.reject(error);
-    }
-    pending.clear();
-    child.stop();
-  };
   const lines = lineSplitter((line) => {
     if (!line.trim()) return;
     try {
@@ -361,86 +344,64 @@ async function runSession(options: {
         toolEvents.push(tool);
         input.onToolEvent?.(tool);
       }
-      if (typeof event.method === 'string' && event.id !== undefined) {
-        if (event.method === 'session/request_permission') {
-          const params = asRecord(event.params),
-            call = asRecord(params.toolCall),
-            args = asRecord(call.rawInput ?? call.args);
-          const allowed =
-            call.name === 'call_mcp_tool' &&
-            input.allowedMcpTools?.some(
-              ({server, tool}) =>
-                server === args.ServerName && tool === args.ToolName,
-            );
-          const option =
-            Array.isArray(params.options) &&
-            params.options.find(
-              (item) =>
-                isRecord(item) &&
-                item.kind === (allowed ? 'allow_once' : 'reject_once'),
-            );
-          send({
-            jsonrpc: '2.0',
-            id: event.id,
-            result: {
-              outcome:
-                option && isRecord(option)
-                  ? {outcome: 'selected', optionId: option.optionId}
-                  : {outcome: 'cancelled'},
-            },
-          });
-        } else
-          send({
-            jsonrpc: '2.0',
-            id: event.id,
-            error: {
-              code: -32601,
-              message: 'This client does not implement interactive requests.',
-            },
-          });
-      } else if (typeof event.id === 'number') {
-        const request = pending.get(event.id);
-        if (request) {
-          pending.delete(event.id);
-          clearTimeout(request.timer);
-          if (event.error)
-            request.reject(
-              new Error(
-                String(
-                  asRecord(event.error).message ??
-                    'Antigravity ACP request failed.',
-                ),
-              ),
-            );
-          else request.resolve(asRecord(event.result));
-        }
-      }
     } catch (error) {
-      fail(error);
+      protocolError = error;
+      // Let EOF close the SDK stream after this stdout callback returns.
+      child.stop();
     }
   });
-  child.stdout?.setEncoding('utf8');
-  child.stdout?.on('data', (chunk: string) => lines.write(chunk));
-  void child.then(() => {
+  const decoder = new StringDecoder('utf8');
+  child.stdout!.on('data', (chunk: Buffer | string) =>
+    lines.write(typeof chunk === 'string' ? chunk : decoder.write(chunk)),
+  );
+  child.stdout!.on('end', () => {
+    lines.write(decoder.end());
     lines.flush();
-    fail(new Error('Antigravity ACP exited before completing the request.'));
-  }, fail);
-  const rpc = (method: string, params: unknown, budget = remaining()) =>
-    new Promise<JsonObject>((resolve, reject) => {
-      if (failure) return reject(failure);
-      const id = ++sequence;
-      const timer = setTimeout(
-        () =>
-          fail(
-            new Error(
-              `Antigravity ACP ${method} exceeded its startup timeout.`,
-            ),
-          ),
-        Math.min(budget, remaining()),
+  });
+  const connection = acp
+    .client({name: 'dynobox'})
+    .onRequest(acp.methods.client.session.requestPermission, ({params}) => {
+      const call = params.toolCall,
+        args = asRecord(call.rawInput);
+      const allowed =
+        call.name === 'call_mcp_tool' &&
+        input.allowedMcpTools?.some(
+          ({server, tool}) =>
+            server === args.ServerName && tool === args.ToolName,
+        );
+      const option = params.options.find(
+        (item) => item.kind === (allowed ? 'allow_once' : 'reject_once'),
       );
-      pending.set(id, {resolve, reject, timer});
-      send({jsonrpc: '2.0', id, method, params});
-    });
+      return {
+        outcome: option
+          ? {outcome: 'selected', optionId: option.optionId}
+          : {outcome: 'cancelled'},
+      };
+    })
+    .connect(
+      acp.ndJsonStream(
+        Writable.toWeb(child.stdin!),
+        Readable.toWeb(child.stdout!) as ReadableStream<Uint8Array>,
+      ),
+    );
+  const rpc = async (method: string, params: unknown, budget = remaining()) => {
+    const signal = AbortSignal.timeout(Math.min(budget, remaining()));
+    try {
+      return await connection.agent.request<JsonObject>(method, params, {
+        cancellationSignal: signal,
+        stopWaitingOnCancel: true,
+      });
+    } catch (error) {
+      if (signal.aborted) {
+        remaining();
+        throw new McpHarnessError(
+          'configuration_failed',
+          `Antigravity ACP ${method} exceeded its startup timeout.`,
+        );
+      }
+      throw error;
+    }
+  };
   try {
     const init = await rpc(
       'initialize',
@@ -507,6 +468,7 @@ async function runSession(options: {
     child.stop();
     const native = await child;
     remaining();
+    if (protocolError) throw protocolError;
     const parsed = parseAntigravityJson(native.stdout);
     if (
       parsed.terminalFailure ||
@@ -529,7 +491,7 @@ async function runSession(options: {
   } catch (error) {
     child.stop();
     const native = await child;
-    let cause = error;
+    let cause = protocolError ?? error;
     // Deadline/cancellation takes precedence over the resulting EOF error.
     try {
       remaining();
@@ -551,7 +513,7 @@ async function runSession(options: {
       },
     );
   } finally {
-    for (const request of pending.values()) clearTimeout(request.timer);
+    connection.close();
     child.stop();
   }
 }
