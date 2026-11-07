@@ -41,9 +41,16 @@ scenarios:
 ```
 
 The server key (`linear`) identifies the MCP server; tool keys identify the
-tools it exposes. Use the exact effective server identity when replacing a
-configured service. Plugins can give their servers different, scoped names.
-Dynobox grants permission for the declared mock tools automatically.
+tools it exposes. Use the configured unscoped server name when replacing a
+service. Plugins can give their servers different, scoped names. Dynobox
+grants permission for the declared mock tools automatically.
+
+Claude-generated plugin and connector namespaces reserve the server prefixes
+`plugin_` and `claude_ai_`; use an unscoped server name for a Claude mock.
+Dynobox rejects these prefixes before launching Claude and rejects other
+detected ambiguous native identities during readiness validation. Plugin and
+connector servers remain subject to the other-server consent and normal
+harness permissions.
 
 `mcp.called` checks calls received by the mock, including matching arguments
 when `input` is provided. `mcp.notCalled` requires a usable mock environment and

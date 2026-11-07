@@ -108,6 +108,35 @@ async function fixture(mode = 'call', mixed = false) {
 }
 
 describe('MCP CLI execution', () => {
+  it('fails a reserved Claude namespace instead of passing a negative assertion', async () => {
+    const {path, options, log} = await fixture('negative');
+    const source = JSON.parse(await readFile(path, 'utf8'));
+    const name = 'plugin_fixture-plugin_service';
+    source.scenarios[0].mcpMocks = {
+      [name]: source.scenarios[0].mcpMocks.linear,
+    };
+    source.scenarios[0].assertions = [
+      {type: 'mcp.notCalled', server: name, tool: 'get_issue'},
+    ];
+    await writeFile(path, JSON.stringify(source));
+    const result = await executeCli(
+      ['run', path, '--reporter', 'json', '--allow-unmocked-mcp'],
+      options,
+    );
+    expect(result.exitCode).toBe(1);
+    const job = JSON.parse(result.stdout.split('\n')[0]!);
+    expect(job.status).toBe('harness_failed');
+    expect(job.mcp).toMatchObject({
+      ready: false,
+      failures: expect.arrayContaining(['configuration_failed']),
+      callCount: 0,
+    });
+    expect(job.diagnostics.join(' ')).toContain(
+      'native plugin or connector tool namespace',
+    );
+    await expect(readFile(log)).rejects.toThrow();
+  });
+
   it.each(['n', undefined])(
     'cancels before setup or invocation on %j',
     async (answer) => {

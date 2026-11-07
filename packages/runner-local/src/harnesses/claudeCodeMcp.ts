@@ -71,6 +71,12 @@ export async function runClaudeCodeWithMcp(
   const {input, servers, executable} = options;
   const remaining = mcpDeadline(input.timeoutMs, input.signal);
   const names = Object.keys(servers);
+  const reserved = names.find((name) => /^(plugin_|claude_ai_)/.test(name));
+  if (reserved !== undefined)
+    throw new McpHarnessError(
+      'configuration_failed',
+      `Claude Code cannot mock "${reserved}" because it uses a native plugin or connector tool namespace. Use an unscoped server name.`,
+    );
   const tools = new Set(
     names.flatMap((server) =>
       servers[server]!.tools.map((tool) => `mcp__${server}__${tool}`),
@@ -303,6 +309,15 @@ function startupProblem(
   const loaded = (
     Array.isArray(event.mcp_servers) ? event.mcp_servers : []
   ).filter(isRecord);
+  for (const name of names) {
+    const owners = loaded.filter(
+      (server) =>
+        typeof server.name === 'string' &&
+        server.name.replace(/[^a-zA-Z0-9_-]/g, '_') === name,
+    );
+    if (owners.length > 1 || owners.some((server) => server.name !== name))
+      return `Claude Code loaded multiple MCP identities for mock tool namespace "${name}". Use an unambiguous, unscoped server name.`;
+  }
   const connected = new Set(
     loaded
       .filter((server) => server.status === 'connected')
