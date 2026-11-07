@@ -7,8 +7,10 @@ import {setTimeout as delay} from 'node:timers/promises';
 
 import {afterEach, describe, expect, it} from 'vitest';
 
+import {runJob} from '../index.js';
 import {startMcpMockController} from '../mcpMocks/controller.js';
 import {startOwnedProcess} from '../processGroup.js';
+import type {LocalRunnerJob} from '../runTypes.js';
 import {OpenCodeHarness} from './opencode.js';
 import {runOpenCodeWithMcp} from './opencodeMcp.js';
 
@@ -57,6 +59,14 @@ async function fixture(
   cleanup.push(() =>
     controller.finalize({harnessReady: false, harnessSucceeded: false}),
   );
+  const extra = await startMcpMockController({
+    remote: {
+      tools: {ping: {inputSchema: {type: 'object'}, response: {content: []}}},
+    },
+  });
+  cleanup.push(() =>
+    extra.finalize({harnessReady: false, harnessSucceeded: false}),
+  );
   const requests: Record<string, unknown>[] = [];
   let modelStarted!: () => void;
   const started = new Promise<void>((resolve) => {
@@ -65,11 +75,16 @@ async function fixture(
   let invalidSent = false;
   let realContacts = 0;
   let globalContacts = 0;
+  let originalContacts = 0;
+  let inheritedHeader = false;
   let bashCalled = false;
   let taskCalled = false;
   const provider = createServer(async (request, response) => {
     if (request.url === '/real-mcp') {
       realContacts++;
+    }
+    if (request.url === '/original-mcp') {
+      originalContacts++;
       response.writeHead(503).end();
       return;
     }
@@ -80,6 +95,33 @@ async function fixture(
     }
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    if (request.url === '/real-mcp' || request.url === '/mock-mcp') {
+      if (request.url === '/mock-mcp' && request.headers['x-original'])
+        inheritedHeader = true;
+      try {
+        const forwarded = await fetch(
+          request.url === '/real-mcp'
+            ? extra.urls.remote!
+            : controller.urls.linear!,
+          {
+            method: request.method ?? 'GET',
+            headers: {
+              'content-type': 'application/json',
+              accept: 'application/json, text/event-stream',
+            },
+            ...(request.method === 'POST' ? {body: Buffer.concat(chunks)} : {}),
+          },
+        );
+        response.writeHead(forwarded.status, {
+          'content-type':
+            forwarded.headers.get('content-type') ?? 'application/json',
+        });
+        response.end(await forwarded.text());
+      } catch {
+        response.writeHead(503).end();
+      }
+      return;
+    }
     const body = JSON.parse(Buffer.concat(chunks).toString());
     requests.push(body);
     modelStarted();
@@ -219,6 +261,12 @@ async function fixture(
     },
     mcp: {
       servers: {
+        linear: {
+          type: 'remote',
+          url: `${base}/original-mcp`,
+          oauth: false,
+          headers: {'x-original': 'synthetic-credential'},
+        },
         real_linear: {
           type: 'local',
           command: [
@@ -227,7 +275,12 @@ async function fixture(
             `require('fs').writeFileSync(${JSON.stringify(marker)}, 'started')`,
           ],
         },
-        remote: {type: 'remote', url: `${base}/real-mcp`, oauth: false},
+        remote: {
+          type: 'remote',
+          url: `${base}/real-mcp`,
+          oauth: false,
+          codemode: false,
+        },
       },
     },
     ...(mode === 'denied'
@@ -260,6 +313,12 @@ async function fixture(
     $schema: 'https://opencode.ai/config.json',
     mcp: {
       servers: {
+        linear: {
+          type: 'remote',
+          url: `${base}/original-mcp`,
+          oauth: false,
+          headers: {'x-original': 'synthetic-credential'},
+        },
         global: {type: 'remote', url: `${base}/global-mcp`, oauth: false},
       },
     },
@@ -315,8 +374,9 @@ async function fixture(
         url:
           mode === 'failed'
             ? `http://127.0.0.1:1/${'a'.repeat(48)}`
-            : controller.urls.linear!,
+            : `${base}/mock-mcp`,
         tools: ['get_issue'],
+        isDiscovered: () => controller.isDiscovered('linear'),
       },
     },
   };
@@ -324,6 +384,7 @@ async function fixture(
     options,
     started,
     controller,
+    extra,
     requests,
     marker,
     configPath,
@@ -333,12 +394,77 @@ async function fixture(
     pluginMarkers,
     contacts: () => realContacts,
     globalContacts: () => globalContacts,
+    originalContacts: () => originalContacts,
+    inheritedHeader: () => inheritedHeader,
   };
 }
 
 describe.skipIf(!executable)(
   'native OpenCode MCP runtime (local model, no credits)',
   () => {
+    it.each(['call', 'negative'] as const)(
+      'runs %s through the public runner and genuine discovery observer',
+      async (mode) => {
+        const f = await fixture(mode);
+        const job: LocalRunnerJob = {
+          id: 'native-opencode',
+          harness: 'opencode',
+          model: 'fixture/fixture',
+          permissionMode: 'default',
+          iteration: 0,
+          scenario: {
+            id: 'issue',
+            name: 'Read issue',
+            prompt: f.options.input.prompt,
+            harnesses: [{id: 'opencode'}],
+            setup: [],
+            fixtures: [],
+            cliMocks: {},
+            endpoints: [],
+            mcpMocks: {
+              linear: {
+                tools: {
+                  get_issue: {
+                    inputSchema: {
+                      type: 'object',
+                      properties: {id: {type: 'string'}},
+                    },
+                    response: {
+                      content: [{type: 'text', text: 'fixture-receipt-42'}],
+                    },
+                  },
+                },
+              },
+            },
+            assertions: [
+              {
+                id: 'received',
+                type: mode === 'call' ? 'mcp.called' : 'mcp.notCalled',
+                server: 'linear',
+                tool: 'get_issue',
+              },
+            ],
+          },
+        };
+        const result = await runJob(job, {
+          harnesses: [new OpenCodeHarness({executable: executable!})],
+          scratchRoot: f.options.input.workDir,
+          env: f.options.input.env,
+          timeoutMs: 20000,
+          allowUnmockedMcp: true,
+        });
+        expect(result.status, result.diagnostics.join('\n')).toBe('passed');
+        expect(result.mcp).toMatchObject({
+          ready: true,
+          finalized: true,
+          failures: [],
+        });
+        expect(result.mcp?.calls).toHaveLength(mode === 'call' ? 1 : 0);
+        expect(f.originalContacts()).toBe(0);
+      },
+      30000,
+    );
+
     it('loads the planted v2 plugins without the adapter block', async () => {
       const f = await fixture('negative');
       const child = startOwnedProcess(
@@ -392,7 +518,7 @@ describe.skipIf(!executable)(
     }, 15000);
 
     it.each(['call', 'negative'] as const)(
-      'runs %s with inherited servers excluded',
+      'runs %s with targets replaced and unrelated servers available',
       async (mode) => {
         const f = await fixture(mode);
         const result = await runOpenCodeWithMcp(f.options);
@@ -411,15 +537,17 @@ describe.skipIf(!executable)(
         ).toContain(
           mode === 'call' ? 'fixture-receipt-42' : 'No calls needed.',
         );
-        expect(f.contacts()).toBe(0);
-        expect(f.globalContacts()).toBe(0);
-        await expect(readFile(f.marker)).rejects.toMatchObject({
-          code: 'ENOENT',
-        });
+        expect(f.originalContacts()).toBe(0);
+        expect(f.inheritedHeader()).toBe(false);
+        expect(f.contacts()).toBeGreaterThan(0);
+        expect(f.globalContacts()).toBeGreaterThan(0);
+        expect(await readFile(f.marker, 'utf8')).toBe('started');
         for (const marker of f.pluginMarkers)
-          await expect(readFile(marker)).rejects.toMatchObject({
-            code: 'ENOENT',
-          });
+          expect(await readFile(marker, 'utf8')).toBe('loaded');
+        expect(
+          await f.extra.finalize({harnessReady: true, harnessSucceeded: true}),
+        ).toMatchObject({ready: true});
+        expect(JSON.stringify(f.requests)).toContain('remote_ping');
         expect(await readFile(f.configPath, 'utf8')).toBe(f.source);
         expect(await readFile(f.globalConfigPath, 'utf8')).toBe(f.globalSource);
         expect(f.requests.length).toBeGreaterThan(0);
@@ -437,7 +565,7 @@ describe.skipIf(!executable)(
     );
 
     it.each(['integration.use', 'plugin.use', 'mcp.use', '*', 'integration.*'])(
-      'rejects global %s allow policy before inherited integrations load',
+      'preserves global %s allow policies while replacing the target',
       async (action) => {
         const f = await fixture('call');
         await writeFile(
@@ -446,15 +574,19 @@ describe.skipIf(!executable)(
             policies: [{action, resource: '*', effect: 'allow'}],
           }),
         );
-        await expect(runOpenCodeWithMcp(f.options)).rejects.toMatchObject({
-          category: 'configuration_failed',
-          message: expect.stringContaining('can override MCP mock isolation'),
-        });
-        expect(f.requests).toHaveLength(0);
-        expect(f.contacts()).toBe(0);
-        expect(f.globalContacts()).toBe(0);
+        expect((await runOpenCodeWithMcp(f.options)).harnessReady).toBe(true);
+        expect(
+          (
+            await f.controller.finalize({
+              harnessReady: true,
+              harnessSucceeded: true,
+            })
+          ).calls,
+        ).toHaveLength(1);
+        expect(f.originalContacts()).toBe(0);
+        expect(f.inheritedHeader()).toBe(false);
         for (const marker of f.pluginMarkers)
-          expect(existsSync(marker)).toBe(false);
+          expect(existsSync(marker)).toBe(true);
       },
       30000,
     );
@@ -595,8 +727,8 @@ describe.skipIf(!executable)(
       });
       expect(observation).toMatchObject({ready: true, failures: []});
       expect(observation.calls).toHaveLength(1);
-      expect(f.contacts()).toBe(0);
-      expect(f.globalContacts()).toBe(0);
+      expect(f.originalContacts()).toBe(0);
+      expect(f.inheritedHeader()).toBe(false);
     }, 30000);
 
     it('keeps simultaneous sessions and controller logs independent', async () => {

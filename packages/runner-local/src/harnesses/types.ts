@@ -56,7 +56,15 @@ export type HarnessResult = {
 
 /** Loopback mock server URLs and declared tool names for one invocation. */
 export type McpServerConnections = Readonly<
-  Record<string, {url: string; tools: readonly string[]}>
+  Record<
+    string,
+    {
+      url: string;
+      tools: readonly string[];
+      /** Observe actual fixture discovery before admitting a task, when supported. */
+      isDiscovered?: () => boolean;
+    }
+  >
 >;
 
 /** Result of one MCP adapter invocation. */

@@ -287,6 +287,72 @@ printf '%s\\n' '${event}'
 });
 
 describe('parseOpenCodeJson', () => {
+  it('deduplicates native part IDs while retaining reused provider call IDs', () => {
+    const first = {
+      type: 'tool_use',
+      part: {
+        type: 'tool',
+        partID: 'part-1',
+        id: 'provider-call',
+        messageID: 'message-1',
+        tool: 'linear_lookup',
+        state: {status: 'completed', input: {id: 1}},
+      },
+    };
+    const second = {
+      type: 'tool_use',
+      part: {
+        type: 'tool',
+        partID: 'part-2',
+        id: 'provider-call',
+        messageID: 'message-2',
+        tool: 'linear_lookup',
+        state: {status: 'completed', input: {id: 2}},
+      },
+    };
+    const parsed = parseOpenCodeJson(jsonl(first, first, second));
+    expect(parsed.toolEvents.map((event) => event.input)).toEqual([
+      {id: 1},
+      {id: 2},
+    ]);
+  });
+
+  it('does not reuse an earlier answer after a textless assistant turn', () => {
+    const parsed = parseOpenCodeJson(
+      jsonl(
+        {
+          type: 'text',
+          part: {type: 'text', messageID: 'earlier', text: 'Old answer'},
+        },
+        {
+          type: 'step_finish',
+          part: {type: 'step-finish', messageID: 'final', reason: 'stop'},
+        },
+      ),
+    );
+    expect(parsed.finalMessage).toBeUndefined();
+  });
+
+  it('keeps the primary answer when child events arrive later', () => {
+    const parsed = parseOpenCodeJson(
+      jsonl(
+        {
+          type: 'text',
+          sessionID: 'parent',
+          part: {type: 'text', messageID: 'answer', text: 'Parent answer'},
+        },
+        {
+          type: 'text',
+          sessionID: 'child',
+          part: {type: 'text', messageID: 'child-answer', text: 'Child answer'},
+        },
+      ),
+      [],
+      'parent',
+    );
+    expect(parsed.finalMessage).toBe('Parent answer');
+  });
+
   it('combines text parts from the last assistant message', () => {
     const parsed = parseOpenCodeJson(
       jsonl(

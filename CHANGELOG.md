@@ -18,7 +18,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Document MCP fixture authoring, received-call assertions, and which other MCP
   servers stay real during mock runs.
 - Support MCP mock runs with OpenCode 2.2.5 and later 2.x releases, including
-  model variants, inherited integration isolation, and subagent tool evidence.
+  model variants and subagent tool evidence. Replace declared MCP targets while
+  preserving other servers, plugins, skills, and model authentication after
+  shared confirmation. Use the native CLI for task execution and permissions,
+  with mock discovery and configuration checks before task startup.
 - Improve MCP call evidence and failure reporting across Claude Code, Codex, and
   OpenCode. Preserve received mock errors and reject incomplete tool attempts.
   Every MCP tool attempt not reported as failed must reach the mock; failed
@@ -56,8 +59,9 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `@dynobox/runner-local`
 
-- Isolate MCP mock runs from inherited harness servers and report refused mock
-  calls as failures, so negative call assertions cannot pass on a refusal.
+- Replace declared MCP targets on Claude Code and OpenCode; other adapters
+  currently isolate inherited servers. Report refused mock calls as failures,
+  so negative call assertions cannot pass on a refusal.
 
 ---
 
