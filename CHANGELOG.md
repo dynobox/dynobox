@@ -12,7 +12,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 - Replace declared Claude Code MCP targets for each run while retaining other
   configured servers after shared confirmation. Preserve normal model login,
-  skills, and permissions without editing user MCP configuration.
+  skills, and permissions without editing user MCP configuration. Reject
+  reserved native namespaces before launch and ambiguous identities at readiness.
 - Document MCP fixture authoring, received-call assertions, and which other MCP
   servers stay real during mock runs.
 - Support MCP mock runs with OpenCode 2.2.5 and later 2.x releases, including

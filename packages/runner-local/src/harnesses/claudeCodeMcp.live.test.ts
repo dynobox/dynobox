@@ -13,7 +13,7 @@ import {
   type ServerResponse,
 } from 'node:http';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {dirname, join} from 'node:path';
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
@@ -34,6 +34,42 @@ afterEach(async () => {
 });
 
 describe.skipIf(!executable)('native Claude Code MCP gates', () => {
+  it('rejects a normalized plugin namespace before granting or starting tools', async () => {
+    const name = 'plugin_fixture-plugin_service';
+    const fixture = await nativeFixture(
+      'call',
+      false,
+      'MCP_FIXTURE_RECEIPT',
+      `mcp__${name}__lookup`,
+    );
+    await writeFile(
+      join(dirname(fixture.options.input.workDir), 'plugin', '.mcp.json'),
+      JSON.stringify({
+        mcpServers: {
+          service: {type: 'http', url: fixture.extra.urls.inherited_http!},
+        },
+      }),
+    );
+    fixture.options.servers = {[name]: fixture.options.servers.service!};
+    fixture.options.input.allowedMcpTools = [{server: name, tool: 'lookup'}];
+    await expect(runClaudeCodeWithMcp(fixture.options)).rejects.toMatchObject({
+      category: 'configuration_failed',
+      message: expect.stringContaining(
+        'native plugin or connector tool namespace',
+      ),
+    });
+    expect(fixture.requests).toEqual([]);
+    expect(fixture.contacts()).toBe(0);
+    expect(fixture.originalContacts()).toBe(0);
+    for (const controller of [fixture.controller, fixture.extra])
+      expect(
+        await controller.finalize({
+          harnessReady: false,
+          harnessSucceeded: false,
+        }),
+      ).toMatchObject({ready: false, calls: []});
+  });
+
   it('replaces colliding HTTP targets while retaining skills and unrelated MCPs', async () => {
     const fixture = await nativeFixture('call');
     const run = await runClaudeCodeWithMcp(fixture.options);
@@ -284,6 +320,7 @@ async function nativeFixture(
   initialMode: 'call' | 'negative',
   denied = false,
   receipt = 'MCP_FIXTURE_RECEIPT',
+  toolName = 'mcp__service__lookup',
 ) {
   const root = await realpath(
     await mkdtemp(join(tmpdir(), 'dynobox-claude-native-')),
@@ -453,7 +490,12 @@ async function nativeFixture(
               (part: {type: string}) => part.type === 'tool_result',
             ),
         );
-        respond(response, mode === 'call' && !hasResult, body.stream === true);
+        respond(
+          response,
+          mode === 'call' && !hasResult,
+          body.stream === true,
+          toolName,
+        );
       } catch {
         response.writeHead(500).end();
       }
@@ -514,12 +556,17 @@ async function nativeFixture(
   };
 }
 
-function respond(response: ServerResponse, call: boolean, stream: boolean) {
+function respond(
+  response: ServerResponse,
+  call: boolean,
+  stream: boolean,
+  toolName: string,
+) {
   const block = call
     ? {
         type: 'tool_use',
         id: 'toolu_fixture',
-        name: 'mcp__service__lookup',
+        name: toolName,
         input: {key: 'receipt'},
       }
     : {type: 'text', text: 'OK'};

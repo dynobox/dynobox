@@ -116,6 +116,39 @@ describe('selective Claude Code MCP invocation', () => {
     ).toEqual({servers: [], complete: false});
   });
 
+  it.each(['plugin_fixture-plugin_service', 'claude_ai_Linear'])(
+    'rejects reserved namespace %s before starting or granting tools',
+    async (name) => {
+      const {options, launches} = await fixture();
+      options.servers = {[name]: options.servers.service!};
+      options.input.allowedMcpTools = [{server: name, tool: 'lookup'}];
+      const start = vi.spyOn(processGroup, 'startOwnedProcess');
+      await expect(runClaudeCodeWithMcp(options)).rejects.toMatchObject({
+        category: 'configuration_failed',
+        message: expect.stringContaining(
+          'native plugin or connector tool namespace',
+        ),
+      });
+      expect(start).not.toHaveBeenCalled();
+      await expect(launches()).rejects.toThrow();
+    },
+  );
+
+  it.each([
+    ['namespace-collision', 'ser_vice'],
+    ['duplicate-server', 'service'],
+  ])('rejects ambiguous readiness for %s', async (mode, name) => {
+    const {options, controller} = await fixture(mode);
+    options.servers = {[name!]: options.servers.service!};
+    await expect(runClaudeCodeWithMcp(options)).rejects.toMatchObject({
+      category: 'not_ready',
+      message: expect.stringContaining('multiple MCP identities'),
+    });
+    expect(
+      await controller.finalize({harnessReady: false, harnessSucceeded: false}),
+    ).toMatchObject({ready: false, calls: []});
+  });
+
   it('preserves environment, settings and literal prompt arguments', async () => {
     const {options, launches, controller, root} = await fixture();
     const original = JSON.stringify({
@@ -489,7 +522,7 @@ describe('selective Claude Code MCP invocation', () => {
   );
 });
 
-// A child-process test double, not evidence that native Claude excludes sources.
+// A child-process test double, not evidence of native Claude routing behavior.
 // It uses actual HTTP initialization/discovery/calls against our controller.
 const FAKE_CLAUDE = `#!${process.execPath}
 import {spawn} from 'node:child_process';
@@ -514,7 +547,8 @@ appendFileSync(process.env.PROBE_LOG, JSON.stringify({args, path, config, cwd: p
 if (mode === 'hang') await new Promise(() => setInterval(() => {}, 1000));
 if (mode === 'exit') { console.error('SECRET stderr ' + path); process.exit(1); }
 if (mode === 'malformed') { console.log('SECRET invalid JSON'); process.exit(0); }
-const url = config.mcpServers.service.url;
+const serverName = Object.keys(config.mcpServers)[0];
+const url = config.mcpServers[serverName].url;
 let id = 0;
 async function rpc(method, params) {
   const response = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json', Accept: 'application/json, text/event-stream'},
@@ -525,10 +559,12 @@ if (mode !== 'no-discovery') {
   await rpc('initialize', {protocolVersion: '2025-03-26', capabilities: {}, clientInfo: {name: 'claude-test-double', version: '1'}});
   await rpc('tools/list', {});
 }
-const init = {type: 'system', subtype: 'init', mcp_servers: [{name: 'service', status: 'connected'}], tools: ['Read', 'mcp__service__lookup']};
+const init = {type: 'system', subtype: 'init', mcp_servers: [{name: serverName, status: 'connected'}], tools: ['Read', 'mcp__' + serverName + '__lookup']};
 if (mode === 'failed' || mode === 'denied') init.mcp_servers[0].status = mode;
 if (mode === 'missing-server') init.mcp_servers = [];
 if (mode === 'extra-server') init.mcp_servers.push({name: 'claude.ai Linear', status: 'connected'});
+if (mode === 'namespace-collision') init.mcp_servers.push({name: 'ser:vice', status: 'connected'});
+if (mode === 'duplicate-server') init.mcp_servers.push({name: serverName, status: 'connected'});
 if (mode === 'missing-tool') init.tools = ['Read'];
 if (mode !== 'no-init') console.log(JSON.stringify(init));
 let result = 'No tools called.';
