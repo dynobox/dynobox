@@ -1,5 +1,9 @@
+import {randomBytes} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
 import {homedir} from 'node:os';
-import {join, resolve} from 'node:path';
+import {isAbsolute, join} from 'node:path';
+
+import {parse} from 'smol-toml';
 
 import {
   mcpDeadline,
@@ -13,27 +17,17 @@ import {
   createCodexToolEventDeduper,
   parseCodexJsonLine,
 } from './codex.js';
-import {cachedCodexPluginServers} from './codexMcpPlugins.js';
 import {asRecord, isRecord} from './parsing.js';
 import {lineSplitter} from './runStreamingHarness.js';
 import type {
   HarnessInput,
   McpHarnessRun,
+  McpInventory,
   McpServerConnections,
   ToolEvent,
 } from './types.js';
 
-// Oldest release whose overlay isolation was verified natively.
 const MIN_VERSION = '0.153.4';
-// Features that can attach MCP servers the overlay cannot enumerate.
-const GUARDED_FEATURES = [
-  'apps',
-  'remote_plugin',
-  'skill_mcp_dependency_install',
-] as const;
-const GUARDS = GUARDED_FEATURES.flatMap((name) => ['--disable', name]);
-// Extra arguments that would change the configuration the overlay is built on.
-// -C/--cd moves the project whose config Codex loads away from the snapshot's.
 const CONFIG_FLAGS = new Set([
   '-C',
   '--cd',
@@ -44,10 +38,11 @@ const CONFIG_FLAGS = new Set([
   '--enable',
   '--disable',
   '--ignore-user-config',
+  '--',
+  'resume',
+  'review',
 ]);
 type RecordValue = Record<string, unknown>;
-type Plugin = {id: string; servers: string[]};
-type Snapshot = {config: RecordValue; plugins: Plugin[]};
 
 export type CodexMcpOptions = {
   executable: string;
@@ -56,12 +51,38 @@ export type CodexMcpOptions = {
   extraArgs?: readonly string[];
 };
 
-/**
- * Run Codex with MCP mock servers only.
- *
- * Read the active configuration. Disable inherited MCP servers, including plugin
- * servers. Keep skills and other settings unchanged.
- */
+/** Passive user-profile names only; projects, plugins and managed sources can add more. */
+export async function inspectCodexMcp(
+  input: Pick<HarnessInput, 'env'>,
+): Promise<McpInventory> {
+  const env = {...process.env, ...input.env};
+  const home = env.CODEX_HOME || join(env.HOME || homedir(), '.codex');
+  if (!isAbsolute(home)) return {servers: [], complete: false};
+  let text: string;
+  try {
+    text = await readFile(join(home, 'config.toml'), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+      return {servers: [], complete: false};
+    throw new McpHarnessError(
+      'configuration_failed',
+      'Cannot read Codex user configuration for MCP inventory.',
+    );
+  }
+  try {
+    return {
+      servers: Object.keys(asRecord(parse(text).mcp_servers)),
+      complete: false,
+    };
+  } catch {
+    throw new McpHarnessError(
+      'configuration_failed',
+      'Codex user configuration must contain valid TOML.',
+    );
+  }
+}
+
+/** Replace HTTP targets using fresh native identities; retain the normal profile and login. */
 export async function runCodexWithMcp(
   options: CodexMcpOptions,
 ): Promise<McpHarnessRun> {
@@ -77,18 +98,17 @@ export async function runCodexWithMcp(
         `Codex extra argument ${flag} conflicts with MCP mocking.`,
       );
   }
-  const cwd = input.workDir;
   const env = {...process.env, ...input.env};
   Object.assign(env, mcpProxyEnv(env));
   const processOptions = {
-    cwd,
+    cwd: input.workDir,
     env,
     extendEnv: false,
     reject: false as const,
     forceKillAfterDelay: 1000,
-    ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
+    ...(input.signal ? {cancelSignal: input.signal} : {}),
   };
-  const probe = await startOwnedProcess(executable, [...GUARDS, '--version'], {
+  const probe = await startOwnedProcess(executable, ['--version'], {
     ...processOptions,
     stdin: 'ignore',
     timeout: Math.min(5000, remaining()),
@@ -112,8 +132,27 @@ export async function runCodexWithMcp(
       });
     throw error;
   }
-
-  // Model, permission and CLI-mock settings must also apply to the config read.
+  const aliases: Record<string, string> = {};
+  const mcp: RecordValue = {};
+  for (const [name, connection] of Object.entries(servers)) {
+    const alias = `dxb_${randomBytes(16).toString('hex')}`;
+    aliases[alias] = name;
+    // A disabled entry still needs a valid transport when no original exists.
+    // Existing HTTP credentials remain confined to this disabled entry.
+    mcp[name] = {url: 'http://127.0.0.1:1', enabled: false};
+    mcp[alias] = {
+      url: connection.url,
+      enabled: true,
+      required: true,
+      startup_timeout_sec: 10,
+      tools: Object.fromEntries(
+        (input.allowedMcpTools ?? [])
+          .filter((grant) => grant.server === name)
+          .map((grant) => [grant.tool, {approval_mode: 'approve'}]),
+      ),
+    };
+  }
+  const overlay = ['-c', `mcp_servers=${toml(mcp)}`];
   const ordinary = buildCodexArgs(
     '',
     [],
@@ -121,33 +160,68 @@ export async function runCodexWithMcp(
     input.permissionMode,
     input.cliMocksEnabled ? input.env : undefined,
   ).slice(1, -1);
-  const configArgs: string[] = [...GUARDS];
-  for (let index = 0; index < ordinary.length; index++) {
-    if (ordinary[index] === '-c') configArgs.push('-c', ordinary[++index]!);
-  }
-  // --sandbox/--model are exec-only flags; represent them as config for reads.
+  const configArgs: string[] = [];
+  for (let i = 0; i < ordinary.length; i++)
+    if (ordinary[i] === '-c') configArgs.push('-c', ordinary[++i]!);
   if (input.permissionMode === 'dangerous')
     configArgs.push('-c', 'sandbox_mode="danger-full-access"');
   if (input.model !== undefined)
     configArgs.push('-c', `model=${toml(input.model)}`);
-
-  const snapshot = await readSnapshot(
-    executable,
-    configArgs,
-    cwd,
-    env,
-    processOptions,
-    remaining,
-  );
-  const {overlay} = buildOverlay(
-    snapshot,
-    servers,
-    input.allowedMcpTools ?? [],
-  );
-
+  for (const [alias, name] of Object.entries(aliases)) {
+    const args = [...configArgs, ...overlay];
+    const original = await readDefinition(
+      executable,
+      args,
+      name,
+      processOptions,
+      remaining,
+    );
+    const mock = await readDefinition(
+      executable,
+      args,
+      alias,
+      processOptions,
+      remaining,
+    );
+    const transport = asRecord(mock.transport);
+    if (
+      original.enabled !== false ||
+      mock.enabled !== true ||
+      mock.disabled_reason != null ||
+      transport.type !== 'streamable_http' ||
+      transport.url !== servers[name]!.url ||
+      transport.bearer_token_env_var != null ||
+      transport.http_headers_helper != null ||
+      Object.keys(asRecord(transport.http_headers)).length ||
+      Object.keys(asRecord(transport.env_http_headers)).length
+    )
+      throw new McpHarnessError(
+        'configuration_failed',
+        `Codex cannot replace HTTP MCP target "${name}". Check managed configuration and target transport.`,
+      );
+    const enabled = mock.enabled_tools;
+    const disabled = mock.disabled_tools;
+    if (
+      (enabled != null && !Array.isArray(enabled)) ||
+      (disabled != null && !Array.isArray(disabled))
+    )
+      throw new McpHarnessError(
+        'configuration_failed',
+        'Codex returned invalid MCP tool availability.',
+      );
+    for (const tool of servers[name]!.tools)
+      if (
+        (Array.isArray(enabled) && !enabled.includes(tool)) ||
+        (Array.isArray(disabled) && disabled.includes(tool))
+      )
+        throw new McpHarnessError(
+          'not_ready',
+          `Codex configuration hides MCP mock tool "${name}.${tool}".`,
+        );
+  }
   const child = startOwnedProcess(
     executable,
-    ['exec', ...ordinary, ...extras, ...GUARDS, ...overlay, '--', input.prompt],
+    ['exec', ...ordinary, ...extras, ...overlay, '--', input.prompt],
     {...processOptions, stdin: 'ignore', timeout: remaining()},
   );
   let completed = false;
@@ -155,76 +229,36 @@ export async function runCodexWithMcp(
   let failure: McpHarnessError | undefined;
   const toolEvents: ToolEvent[] = [];
   const shouldEmit = createCodexToolEventDeduper();
-  const emit = (event: ToolEvent) => {
-    toolEvents.push(event);
-    try {
-      input.onToolEvent?.(event);
-    } catch (error) {
-      throw new McpHarnessError(
-        'execution_failed',
-        `Codex tool-event callback failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  };
-  /** Read one JSON event and check the run status. */
-  const consume = (line: string) => {
+  const lines = lineSplitter((line) => {
     if (!line.trim() || failure) return;
-    let event: unknown;
     try {
-      event = JSON.parse(line);
-    } catch {
-      failure = new McpHarnessError(
-        'execution_failed',
-        'Codex emitted unparseable JSON output.',
-      );
-      child.stop();
-      return;
-    }
-    try {
+      const event: unknown = JSON.parse(line);
       if (!isRecord(event)) return;
-      // Codex also reports recoverable problems (stream reconnects) as
-      // `error` events; only a failed or unfinished turn is fatal.
-      if (event.type === 'error') lastError = errorText(event);
+      if (event.type === 'error') lastError = errorText(event, aliases);
       if (event.type === 'turn.failed')
         throw new McpHarnessError(
           'execution_failed',
-          `Codex reported ${event.type}: ${errorText(event)}`,
+          `Codex reported ${event.type}: ${errorText(event, aliases)}`,
         );
       if (event.type === 'turn.completed') completed = true;
-      const item = event.item;
-      if (
-        event.type === 'item.completed' &&
-        isRecord(item) &&
-        item.type === 'mcp_tool_call'
-      ) {
-        const server = String(item.server);
-        if (!Object.hasOwn(servers, server))
-          throw new McpHarnessError(
-            'not_ready',
-            `Codex called MCP server "${server}", which is not a mock.`,
-          );
-        // An incomplete call can be a refusal or a transport failure. Neither
-        // proves that the mock received the attempted call.
-        if (item.status !== 'completed')
-          throw new McpHarnessError(
-            'execution_failed',
-            `Codex did not complete mock tool mcp__${server}__${String(item.tool)}: ${errorText(item)}. Check permissions and the MCP connection.`,
-          );
+      for (const tool of parseCodexJsonLine(line, 1, aliases).toolEvents) {
+        if (!shouldEmit(tool, line)) continue;
+        toolEvents.push(tool);
+        input.onToolEvent?.(tool);
       }
-      for (const tool of parseCodexJsonLine(line).toolEvents)
-        if (shouldEmit(tool, line)) emit(tool);
     } catch (error) {
       failure =
         error instanceof McpHarnessError
           ? error
           : new McpHarnessError(
               'execution_failed',
-              `Codex event processing failed: ${error instanceof Error ? error.message : String(error)}`,
+              error instanceof SyntaxError
+                ? 'Codex emitted unparseable JSON output.'
+                : `Codex event processing failed: ${error instanceof Error ? error.message : String(error)}`,
             );
       child.stop();
     }
-  };
-  const lines = lineSplitter(consume);
+  });
   child.stdout?.setEncoding('utf8');
   child.stdout?.on('data', (chunk: string) => lines.write(chunk));
   const result = await child;
@@ -233,6 +267,7 @@ export async function runCodexWithMcp(
     stdout: result.stdout,
     stderr: result.stderr,
     durationMs: Date.now() - started,
+    metadata: {codexMcpAliases: aliases},
   };
   try {
     lines.flush();
@@ -250,281 +285,83 @@ export async function runCodexWithMcp(
         'execution_failed',
         `Codex exited without completing its turn${lastError === undefined ? '' : ` (last error: ${lastError})`}.`,
       );
+    for (const [name, connection] of Object.entries(servers))
+      if (connection.isDiscovered?.() === false)
+        throw new McpHarnessError(
+          'not_ready',
+          `Codex did not discover MCP mock server "${name}".`,
+        );
     return {harnessReady: true, version, toolEvents, output};
   } catch (error) {
-    if (error instanceof McpHarnessError)
-      throw new McpHarnessError(error.category, error.message, output);
-    throw error;
+    throw new McpHarnessError(
+      error instanceof McpHarnessError ? error.category : 'execution_failed',
+      error instanceof Error ? error.message : String(error),
+      output,
+    );
   }
 }
 
-/** Read the active configuration and the MCP server names for each enabled plugin. */
-async function readSnapshot(
+/** Native metadata only; unlike mcp list, get does not initialize MCP clients. */
+async function readDefinition(
   executable: string,
   args: string[],
-  cwd: string,
-  env: NodeJS.ProcessEnv,
+  name: string,
   processOptions: Parameters<typeof startOwnedProcess>[2],
   remaining: () => number,
-): Promise<Snapshot> {
-  const child = startOwnedProcess(
+): Promise<RecordValue> {
+  const result = await startOwnedProcess(
     executable,
-    [...args, 'app-server', '--stdio'],
+    [...args, 'mcp', 'get', '--json', '--', name],
     {
       ...processOptions,
-      timeout: remaining(),
+      stdin: 'ignore',
+      timeout: Math.min(5000, remaining()),
     },
   );
-  const pending = new Map<
-    number,
-    {method: string; resolve(value: unknown): void; reject(error: Error): void}
-  >();
-  let nextId = 0;
-  let exited = false;
-  let exitFailure: McpHarnessError | undefined;
-  /** Make an error for a request that stops when the process exits. */
-  const exitError = (method: string) => {
-    try {
-      remaining();
-    } catch (deadline) {
-      // Report cancellation or timeout rather than the resulting exit.
-      return deadline as McpHarnessError;
-    }
-    exitFailure = new McpHarnessError(
-      'configuration_failed',
-      `Codex app-server exited during ${method}.`,
-    );
-    return exitFailure;
-  };
-  const rejectAll = () => {
-    exited = true;
-    for (const waiter of pending.values())
-      waiter.reject(exitError(waiter.method));
-    pending.clear();
-  };
-  const lines = lineSplitter(
-    /** Read a JSON response and complete its request. */
-    (line) => {
-      let message: unknown;
-      try {
-        message = JSON.parse(line);
-      } catch {
-        return;
-      }
-      if (
-        !isRecord(message) ||
-        typeof message.id !== 'number' ||
-        Object.hasOwn(message, 'method')
-      )
-        return;
-      const waiter = pending.get(message.id);
-      if (!waiter) return;
-      pending.delete(message.id);
-      if (message.error !== undefined || !Object.hasOwn(message, 'result'))
-        waiter.reject(
-          new McpHarnessError(
-            'configuration_failed',
-            `Codex app-server ${waiter.method} failed.`,
-          ),
-        );
-      else waiter.resolve(message.result);
-    },
-  );
-  child.stdout?.setEncoding('utf8');
-  child.stdout?.on('data', (chunk: string) => lines.write(chunk));
-  child.then(rejectAll, rejectAll);
-  /** Send a request to the app-server and wait for its response. */
-  const rpc = async (method: string, params: object): Promise<RecordValue> => {
-    remaining();
-    const id = ++nextId;
-    const value = await new Promise<unknown>((resolve, reject) => {
-      // A request written after exit would never get a reply.
-      if (exited) return reject(exitError(method));
-      pending.set(id, {method, resolve, reject});
-      child.stdin!.write(`${JSON.stringify({id, method, params})}\n`);
-    });
-    return isRecord(value) ? value : {};
-  };
   try {
-    await rpc('initialize', {
-      clientInfo: {name: 'dynobox', version: '1'},
-      capabilities: {experimentalApi: true},
-    });
-    const config = asRecord(
-      (await rpc('config/read', {includeLayers: false, cwd})).config,
-    );
-    for (const name of GUARDED_FEATURES)
-      if (asRecord(config.features)[name] !== false)
-        throw new McpHarnessError(
-          'configuration_failed',
-          `Codex feature "${name}" is forced on and could load MCP servers beside the mocks.`,
-        );
-    const catalog = await rpc('plugin/list', {
-      cwds: [cwd],
-      forceRefetch: false,
-    });
-    const codexHome = resolve(
-      cwd,
-      env.CODEX_HOME ?? join(env.HOME ?? homedir(), '.codex'),
-    );
-    const plugins: Plugin[] = [];
-    const seen = new Set<string>();
-    const marketplaces = Array.isArray(catalog.marketplaces)
-      ? catalog.marketplaces
-      : [];
-    for (const marketplace of marketplaces.filter(isRecord)) {
-      const entries = Array.isArray(marketplace.plugins)
-        ? marketplace.plugins
-        : [];
-      for (const plugin of entries.filter(isRecord)) {
-        if (
-          !plugin.installed ||
-          !plugin.enabled ||
-          typeof plugin.id !== 'string'
-        )
-          continue;
-        seen.add(plugin.id);
-        const detail = asRecord(
-          (
-            await rpc('plugin/read', {
-              ...(typeof marketplace.path === 'string'
-                ? {marketplacePath: marketplace.path}
-                : {remoteMarketplaceName: marketplace.name}),
-              pluginName: plugin.name,
-            })
-          ).plugin,
-        );
-        const listed = Array.isArray(detail.mcpServers)
-          ? detail.mcpServers.map(String)
-          : [];
-        plugins.push({
-          id: plugin.id,
-          servers: [
-            ...new Set([
-              ...listed,
-              ...(await cachedCodexPluginServers(codexHome, plugin.id)),
-            ]),
-          ],
-        });
-      }
-    }
-    // Enabled cached plugins can load even after their marketplace disappears.
-    for (const [id, value] of Object.entries(asRecord(config.plugins)))
-      if (asRecord(value).enabled !== false && !seen.has(id))
-        plugins.push({
-          id,
-          servers: await cachedCodexPluginServers(codexHome, id),
-        });
-    return {config, plugins};
+    remaining();
+    if (result.timedOut)
+      throw new McpHarnessError(
+        'timed_out',
+        'Codex MCP configuration check exceeded its timeout.',
+      );
+    if (result.failed) throw new Error('configuration check');
+    const value: unknown = JSON.parse(result.stdout);
+    if (!isRecord(value) || value.name !== name) throw new Error('definition');
+    return value;
   } catch (error) {
-    child.stop();
-    const result = await child;
-    let failure = error;
-    // Only replace a process-exit error with its timeout cause. Keep explicit
-    // configuration or protocol errors that occurred before cleanup.
-    if (exitFailure !== undefined && error === exitFailure) {
-      try {
-        remaining();
-        if (result.timedOut)
-          throw new McpHarnessError(
-            'timed_out',
-            'MCP run exceeded its timeout.',
-          );
-      } catch (deadline) {
-        failure = deadline;
-      }
-    }
-    if (failure instanceof McpHarnessError)
-      throw new McpHarnessError(failure.category, failure.message, {
+    throw new McpHarnessError(
+      error instanceof McpHarnessError
+        ? error.category
+        : 'configuration_failed',
+      error instanceof McpHarnessError
+        ? error.message
+        : 'Codex could not load HTTP MCP mock configuration. Check target transports and managed configuration; see --debug for details.',
+      {
         exitCode: result.exitCode ?? 1,
         stdout: result.stdout,
         stderr: result.stderr,
         durationMs: result.durationMs,
-      });
-    throw failure;
-  } finally {
-    child.stop();
-    await child;
+      },
+    );
   }
 }
 
-/** Make configuration changes that disable other servers and add mock servers. */
-function buildOverlay(
-  snapshot: Snapshot,
-  servers: McpServerConnections,
-  grants: readonly {server: string; tool: string}[],
-) {
-  const inherited = asRecord(snapshot.config.mcp_servers);
-  // Disabling needs a valid transport, but never the inherited one.
-  const mcp: RecordValue = Object.fromEntries(
-    Object.entries(inherited).map(([name, value]) => [
-      name,
-      {
-        enabled: false,
-        ...(typeof asRecord(value).command === 'string'
-          ? {command: process.execPath}
-          : {url: 'http://127.0.0.1:1'}),
-      },
-    ]),
-  );
-  // Start from the effective plugins table so each plugin keeps its own
-  // settings (such as `enabled`) whether Codex merges or replaces the table.
-  const plugins: RecordValue = {...asRecord(snapshot.config.plugins)};
-  const occupied = new Set(Object.keys(inherited));
-  for (const plugin of snapshot.plugins) {
-    const current = asRecord(plugins[plugin.id]);
-    plugins[plugin.id] = {
-      ...current,
-      mcp_servers: {
-        ...asRecord(current.mcp_servers),
-        ...Object.fromEntries(
-          plugin.servers.map((name) => [name, {enabled: false}]),
-        ),
-      },
-    };
-    for (const name of plugin.servers) occupied.add(name);
-  }
-  for (const [name, server] of Object.entries(servers)) {
-    // Renaming the mock would show the model a different tool name than
-    // other harnesses, so a name clash fails instead.
-    if (occupied.has(name))
-      throw new McpHarnessError(
-        'configuration_failed',
-        `Codex config already has an MCP server named "${name}"; rename or remove it to use this mock.`,
-      );
-    const entry: RecordValue = {
-      url: server.url,
-      enabled: true,
-      required: true,
-      startup_timeout_sec: 10,
-    };
-    for (const grant of grants.filter((grant) => grant.server === name))
-      entry.tools = {
-        ...asRecord(entry.tools),
-        [grant.tool]: {approval_mode: 'approve'},
-      };
-    mcp[name] = entry;
-  }
-  return {
-    overlay: [
-      '-c',
-      `mcp_servers=${toml(mcp)}`,
-      '-c',
-      `plugins=${toml(plugins)}`,
-    ],
-  };
-}
-
-function errorText(event: RecordValue): string {
+function errorText(
+  event: RecordValue,
+  aliases: Readonly<Record<string, string>>,
+): string {
   const error = asRecord(event.error);
-  return String(error.message ?? event.message ?? 'no details');
+  let message = String(error.message ?? event.message ?? 'no details');
+  for (const [native, logical] of Object.entries(aliases))
+    message = message.split(native).join(logical);
+  return message;
 }
 
-/** Convert a value to TOML text. */
+/** Convert the small generated overlay to TOML, keeping original credentials out of arguments. */
 function toml(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(toml).join(',')}]`;
   if (isRecord(value))
-    // TOML has no null; an absent key means the same.
     return `{${Object.entries(value)
       .filter(([, item]) => item !== null && item !== undefined)
       .map(([key, item]) => `${JSON.stringify(key)}=${toml(item)}`)

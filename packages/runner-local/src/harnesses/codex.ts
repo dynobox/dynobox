@@ -17,6 +17,7 @@ import type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
+  McpInventory,
   PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
@@ -54,6 +55,11 @@ export class CodexHarness implements Harness {
     return this.probeVersion();
   }
 
+  async inspectMcp(input: Pick<HarnessInput, 'env'>): Promise<McpInventory> {
+    const {inspectCodexMcp} = await import('./codexMcp.js');
+    return inspectCodexMcp(input);
+  }
+
   /** Resolve the Codex executable before CLI mocks change PATH. */
   async prepareMcp(
     input: Pick<HarnessInput, 'workDir' | 'env'>,
@@ -86,7 +92,18 @@ export class CodexHarness implements Harness {
   }
 
   extractResult(raw: HarnessRunOutput): HarnessResult {
-    const parsed = parseCodexJson(raw.stdout);
+    const aliases = raw.metadata?.codexMcpAliases;
+    const parsed = parseCodexJson(
+      raw.stdout,
+      isRecord(aliases)
+        ? Object.fromEntries(
+            Object.entries(aliases).filter(
+              (entry): entry is [string, string] =>
+                typeof entry[1] === 'string',
+            ),
+          )
+        : {},
+    );
     return {
       exitCode: raw.exitCode,
       durationMs: raw.durationMs,
@@ -159,12 +176,15 @@ function codexPermissionArgs(
   return ['--sandbox', 'danger-full-access', '-c', 'approval_policy="never"'];
 }
 
-export function parseCodexJson(stdout: string): CodexParsedOutput {
+export function parseCodexJson(
+  stdout: string,
+  mcpAliases: Readonly<Record<string, string>> = {},
+): CodexParsedOutput {
   let finalMessage: string | undefined;
   const toolEvents: ToolEvent[] = [];
 
   for (const {line, lineNumber} of jsonLines(stdout)) {
-    const parsed = parseCodexJsonLine(line, lineNumber);
+    const parsed = parseCodexJsonLine(line, lineNumber, mcpAliases);
     toolEvents.push(...parsed.toolEvents);
 
     if (parsed.finalMessage !== undefined) {
@@ -178,8 +198,16 @@ export function parseCodexJson(stdout: string): CodexParsedOutput {
 export function parseCodexJsonLine(
   line: string,
   lineNumber = 1,
+  mcpAliases: Readonly<Record<string, string>> = {},
 ): CodexParsedLine {
   const event = parseJsonObjectLine(line, lineNumber, 'Codex JSON line');
+  const item = isRecord(event.item) ? event.item : undefined;
+  if (
+    item?.type === 'mcp_tool_call' &&
+    typeof item.server === 'string' &&
+    Object.hasOwn(mcpAliases, item.server)
+  )
+    event.item = {...item, server: mcpAliases[item.server]};
   const toolEvents = parseToolEvents(event);
   const finalMessage = parseFinalMessage(event);
 
