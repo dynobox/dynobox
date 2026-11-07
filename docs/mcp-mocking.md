@@ -70,10 +70,19 @@ servers. A fresh profile also needs its own model login.
 
 ## Availability and reporting
 
-MCP mocks currently run locally with Claude Code, Codex, OpenCode, Pi, and
-Antigravity. Cursor MCP mocking is unavailable until its runtime replacement
-and evidence checks are verified. Each adapter enforces its supported CLI
-version. Unsupported versions and configuration conflicts fail explicitly.
+MCP mocks run locally. Each adapter enforces its supported CLI version;
+unsupported versions and configuration conflicts fail explicitly.
+
+| Harness | Minimum CLI | Other MCP servers |
+| --- | --- | --- |
+| Claude Code | 2.1.263 | Remain available after consent. Declared targets are replaced for this run. |
+| Codex | 0.153.4 | Excluded by the current adapter. |
+| OpenCode | 2.2.5 (2.x) | Excluded by the current adapter. |
+| Pi | 0.86.0 | Excluded by the current adapter. |
+| Antigravity | 1.2.11 | Excluded by the current adapter. |
+| Cursor | — | MCP mocking unavailable. |
+
+The fixture schema and call assertions are the same across supported harnesses.
 
 Mock arguments, response payloads, and temporary connection URLs are omitted
 from normal reports. `--debug` keeps harness output in local debug files.

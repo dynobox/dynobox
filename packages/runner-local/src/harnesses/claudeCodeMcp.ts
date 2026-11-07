@@ -1,6 +1,6 @@
-import {mkdtemp, rm, writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {homedir, tmpdir} from 'node:os';
+import {isAbsolute, join} from 'node:path';
 
 import type {ToolEvent} from '@dynobox/sdk';
 
@@ -21,12 +21,13 @@ import type {
   HarnessInput,
   HarnessRunOutput,
   McpHarnessRun,
+  McpInventory,
   McpServerConnections,
 } from './types.js';
 
-// Oldest release whose `--strict-mcp-config` isolation was verified natively.
+// Minimum native MCP protocol version; selective overlays need no new flag.
 const MIN_VERSION = '2.1.263';
-// Flags that would load MCP servers beyond the generated mock config.
+// Flags that conflict with the run-owned target overlay.
 const MCP_CONFIG_FLAGS = new Set(['--mcp-config', '--strict-mcp-config']);
 const ALLOWED_TOOLS_FLAGS = new Set(['--allowedTools', '--allowed-tools']);
 
@@ -37,6 +38,31 @@ export type ClaudeCodeMcpOptions = {
   servers: McpServerConnections;
   extraArgs?: readonly string[];
 };
+
+/** List known user-profile names without evaluating any MCP connection. */
+export async function inspectClaudeCodeMcp(
+  input: Pick<HarnessInput, 'env'>,
+): Promise<McpInventory> {
+  const env = {...process.env, ...input.env};
+  const path = env.CLAUDE_CONFIG_DIR
+    ? join(env.CLAUDE_CONFIG_DIR, '.claude.json')
+    : join(env.HOME ?? homedir(), '.claude.json');
+  // Relative profile paths depend on the future execution workspace.
+  if (!isAbsolute(path)) return {servers: [], complete: false};
+  let profile: unknown;
+  try {
+    profile = JSON.parse(await readFile(path, 'utf8'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  return {
+    servers:
+      isRecord(profile) && isRecord(profile.mcpServers)
+        ? Object.keys(profile.mcpServers)
+        : [],
+    complete: false,
+  };
+}
 
 export async function runClaudeCodeWithMcp(
   options: ClaudeCodeMcpOptions,
@@ -110,7 +136,6 @@ export async function runClaudeCodeWithMcp(
         ...extraArgs,
         '--mcp-config',
         configPath,
-        '--strict-mcp-config',
         '--',
         input.prompt,
       ],
@@ -218,7 +243,7 @@ export async function runClaudeCodeWithMcp(
 }
 
 /**
- * Reject flags that load other MCP servers and fold declared mock tools into
+ * Protect the generated MCP overlay and fold declared mock tools into
  * any `--allowedTools` list the harness already passes.
  */
 function mergeExtraArgs(
@@ -278,12 +303,6 @@ function startupProblem(
   const loaded = (
     Array.isArray(event.mcp_servers) ? event.mcp_servers : []
   ).filter(isRecord);
-  // Strict config should load only the mocks; any other server breaks isolation.
-  const inherited = loaded.find(
-    (server) => !names.includes(String(server.name)),
-  );
-  if (inherited !== undefined)
-    return `Claude Code loaded MCP server "${String(inherited.name)}", which is not a mock.`;
   const connected = new Set(
     loaded
       .filter((server) => server.status === 'connected')

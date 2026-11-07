@@ -9,6 +9,7 @@ import {McpHarnessError} from '../mcpMocks/errors.js';
 import * as processGroup from '../processGroup.js';
 import {
   type ClaudeCodeMcpOptions,
+  inspectClaudeCodeMcp,
   runClaudeCodeWithMcp,
 } from './claudeCodeMcp.js';
 
@@ -68,7 +69,53 @@ afterEach(async () => {
   );
 });
 
-describe('isolated Claude Code MCP invocation', () => {
+describe('selective Claude Code MCP invocation', () => {
+  it.each([false, true])(
+    'inspects profile names without starting clients (custom directory: %s)',
+    async (custom) => {
+      const root = await fs.mkdtemp(
+        join(tmpdir(), 'dynobox-claude-inventory-'),
+      );
+      roots.push(root);
+      const profile = custom ? join(root, 'profile') : root;
+      await fs.mkdir(profile, {recursive: true});
+      await fs.writeFile(
+        join(profile, '.claude.json'),
+        JSON.stringify({
+          mcpServers: {
+            service: {
+              type: 'http',
+              url: 'https://private.example/mcp',
+              headers: {Authorization: 'private-credential'},
+            },
+            github: {command: 'must-never-run'},
+          },
+          projects: {
+            '/source': {mcpServers: {source_only: {command: 'must-never-run'}}},
+          },
+        }),
+      );
+      const start = vi.spyOn(processGroup, 'startOwnedProcess');
+      const inventory = await inspectClaudeCodeMcp({
+        env: {HOME: root, CLAUDE_CONFIG_DIR: custom ? profile : ''},
+      });
+      expect(inventory).toEqual({
+        servers: ['service', 'github'],
+        complete: false,
+      });
+      expect(JSON.stringify(inventory)).not.toMatch(
+        /private|must-never-run|source_only/,
+      );
+      expect(start).not.toHaveBeenCalled();
+    },
+  );
+
+  it('reports unknown inventory for a profile relative to the future workspace', async () => {
+    expect(
+      await inspectClaudeCodeMcp({env: {CLAUDE_CONFIG_DIR: '.profile'}}),
+    ).toEqual({servers: [], complete: false});
+  });
+
   it('preserves environment, settings and literal prompt arguments', async () => {
     const {options, launches, controller, root} = await fixture();
     const original = JSON.stringify({
@@ -102,9 +149,8 @@ describe('isolated Claude Code MCP invocation', () => {
       no_proxy: 'upper.example,lower.example,127.0.0.1,localhost,::1',
     });
     expect(launch.args.slice(-2)).toEqual(['--', options.input.prompt]);
-    expect(launch.args).toEqual(
-      expect.arrayContaining(['--effort=low', '--strict-mcp-config']),
-    );
+    expect(launch.args).toEqual(expect.arrayContaining(['--effort=low']));
+    expect(launch.args).not.toContain('--strict-mcp-config');
     expect(launch.args).not.toContain('--permission-mode');
     await expect(fs.stat(dirname(launch.path))).rejects.toThrow();
     expect(await fs.readFile(join(root, '.mcp.json'), 'utf8')).toBe(original);
@@ -240,28 +286,29 @@ describe('isolated Claude Code MCP invocation', () => {
     await expect(launches()).rejects.toThrow();
   });
 
-  it.each([
-    'failed',
-    'denied',
-    'missing-server',
-    'missing-tool',
-    'no-init',
-    'extra-server',
-  ])('fails readiness and cleans config for %s', async (mode) => {
-    const {options, launches, controller} = await fixture(mode);
-    await expect(runClaudeCodeWithMcp(options)).rejects.toMatchObject({
-      category: 'not_ready',
-    });
-    await expect(
-      fs.stat(dirname((await launches())[0].path)),
-    ).rejects.toThrow();
-    const observation = await controller.finalize({
-      harnessReady: false,
-      harnessSucceeded: false,
-    });
-    // The adapter reported not_ready; the controller saw discovery succeed.
-    expect(observation.ready).toBe(false);
-    expect(observation.failures).toEqual([]);
+  it.each(['failed', 'denied', 'missing-server', 'missing-tool', 'no-init'])(
+    'fails readiness and cleans config for %s',
+    async (mode) => {
+      const {options, launches, controller} = await fixture(mode);
+      await expect(runClaudeCodeWithMcp(options)).rejects.toMatchObject({
+        category: 'not_ready',
+      });
+      await expect(
+        fs.stat(dirname((await launches())[0].path)),
+      ).rejects.toThrow();
+      const observation = await controller.finalize({
+        harnessReady: false,
+        harnessSucceeded: false,
+      });
+      // The adapter reported not_ready; the controller saw discovery succeed.
+      expect(observation.ready).toBe(false);
+      expect(observation.failures).toEqual([]);
+    },
+  );
+
+  it('allows unrelated servers while checking that declared mocks are usable', async () => {
+    const {options} = await fixture('extra-server');
+    expect((await runClaudeCodeWithMcp(options)).harnessReady).toBe(true);
   });
 
   it('cannot use startup listings as controller discovery evidence', async () => {

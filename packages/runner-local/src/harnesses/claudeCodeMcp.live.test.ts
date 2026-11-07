@@ -6,11 +6,15 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
-import {createServer, type Server, type ServerResponse} from 'node:http';
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import {execa} from 'execa';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {startMcpMockController} from '../mcpMocks/controller.js';
@@ -30,7 +34,7 @@ afterEach(async () => {
 });
 
 describe.skipIf(!executable)('native Claude Code MCP gates', () => {
-  it('excludes active inherited sources while preserving skills and normal permissions', async () => {
+  it('replaces colliding HTTP targets while retaining skills and unrelated MCPs', async () => {
     const fixture = await nativeFixture('call');
     const run = await runClaudeCodeWithMcp(fixture.options);
     const init = run.output.stdout
@@ -40,6 +44,7 @@ describe.skipIf(!executable)('native Claude Code MCP gates', () => {
       .find((event) => event.type === 'system' && event.subtype === 'init');
     expect(init.slash_commands).toContain('fixture-skill');
     expect(init.permissionMode).not.toBe('bypassPermissions');
+    expect(init.tools).toContain('mcp__inherited_http__lookup');
     expect(
       fixture.requests.some((request) =>
         JSON.stringify(request).includes('MCP_SKILL_DESCRIPTION_SENTINEL'),
@@ -73,38 +78,20 @@ describe.skipIf(!executable)('native Claude Code MCP gates', () => {
         JSON.stringify(request).includes('MCP_FIXTURE_RECEIPT'),
       ),
     ).toBe(true);
-    expect(fixture.contacts()).toBe(0);
-    await expect(readFile(fixture.marker, 'utf8')).rejects.toThrow();
-    await fixture.assertOriginals();
-
-    // Positive control: all planted sources must actually start/contact without
-    // strict mode. A silently inactive fixture cannot prove source exclusion.
-    fixture.setMode('negative');
-    const control = await execa(
-      executable!,
-      [
-        '-p',
-        '--verbose',
-        '--output-format',
-        'stream-json',
-        '--no-session-persistence',
-        '--',
-        'Reply OK.',
-      ],
-      {
-        cwd: fixture.options.input.workDir,
-        env: fixture.options.input.env,
-        stdin: 'ignore',
-        reject: false,
-        timeout: 30_000,
-      },
-    );
-    expect(control.exitCode).toBe(0);
+    expect(fixture.originalContacts()).toBe(0);
+    expect(fixture.inheritedHeader()).toBe(false);
     const starts = (await readFile(fixture.marker, 'utf8')).trim().split('\n');
     expect(starts).toEqual(
       expect.arrayContaining(['user', 'local', 'project', 'plugin']),
     );
     expect(fixture.contacts()).toBeGreaterThan(0);
+    expect(
+      await fixture.extra.finalize({
+        harnessReady: true,
+        harnessSucceeded: true,
+      }),
+    ).toMatchObject({ready: true, failures: []});
+    await fixture.assertOriginals();
   }, 60_000);
 
   it('establishes readiness for a negative-only run with actual discovery', async () => {
@@ -116,8 +103,8 @@ describe.skipIf(!executable)('native Claude Code MCP gates', () => {
         harnessSucceeded: true,
       }),
     ).toMatchObject({ready: true, failures: [], calls: []});
-    expect(fixture.contacts()).toBe(0);
-    await expect(readFile(fixture.marker, 'utf8')).rejects.toThrow();
+    expect(fixture.originalContacts()).toBe(0);
+    expect(fixture.inheritedHeader()).toBe(false);
   }, 30_000);
 
   it('preserves tool denial from normal project permissions', async () => {
@@ -185,8 +172,8 @@ describe.skipIf(!executable)('native Claude Code MCP gates', () => {
         })
       ).ready,
     ).toBe(false);
-    expect(fixture.contacts()).toBe(0);
-    await expect(readFile(fixture.marker, 'utf8')).rejects.toThrow();
+    expect(fixture.originalContacts()).toBe(0);
+    expect(fixture.inheritedHeader()).toBe(false);
   }, 30_000);
 
   it.each(['disconnected', 'denied'] as const)(
@@ -209,8 +196,8 @@ describe.skipIf(!executable)('native Claude Code MCP gates', () => {
           })
         ).ready,
       ).toBe(false);
-      expect(fixture.contacts()).toBe(0);
-      await expect(readFile(fixture.marker, 'utf8')).rejects.toThrow();
+      expect(fixture.originalContacts()).toBe(0);
+      expect(fixture.inheritedHeader()).toBe(false);
       await fixture.assertOriginals();
     },
     30_000,
@@ -238,8 +225,8 @@ describe.skipIf(!executable)('native Claude Code MCP gates', () => {
       expect(requests).not.toContain(
         index === 0 ? 'SECOND_RECEIPT' : 'FIRST_RECEIPT',
       );
-      expect(fixture.contacts()).toBe(0);
-      await expect(readFile(fixture.marker, 'utf8')).rejects.toThrow();
+      expect(fixture.originalContacts()).toBe(0);
+      expect(fixture.inheritedHeader()).toBe(false);
       await expect(fetch(fixture.controller.urls.service!)).rejects.toThrow();
     }
   }, 30_000);
@@ -261,6 +248,36 @@ async function listen(server: Server): Promise<string> {
   if (address === null || typeof address === 'string')
     throw new Error('Listener did not bind');
   return `http://127.0.0.1:${address.port}`;
+}
+
+async function relayMcp(
+  url: string,
+  observe: (request: IncomingMessage) => void,
+): Promise<string> {
+  return listen(
+    createServer(async (request, response) => {
+      observe(request);
+      try {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) chunks.push(Buffer.from(chunk));
+        const forwarded = await fetch(url, {
+          method: request.method ?? 'GET',
+          headers: {
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+          },
+          ...(request.method === 'POST' ? {body: Buffer.concat(chunks)} : {}),
+        });
+        response.writeHead(forwarded.status, {
+          'content-type':
+            forwarded.headers.get('content-type') ?? 'application/json',
+        });
+        response.end(await forwarded.text());
+      } catch {
+        response.writeHead(503).end();
+      }
+    }),
+  );
 }
 
 async function nativeFixture(
@@ -302,32 +319,50 @@ async function nativeFixture(
     args: [sentinel, marker, source],
   });
   let contacts = 0;
-  const sentinelUrl = await listen(
+  const extra = await startMcpMockController({
+    inherited_http: {
+      tools: {lookup: {inputSchema: {type: 'object'}, response: {content: []}}},
+    },
+  });
+  cleanups.push(() =>
+    extra.finalize({harnessReady: false, harnessSucceeded: false}),
+  );
+  const sentinelUrl = await relayMcp(extra.urls.inherited_http!, () => {
+    contacts++;
+  });
+  let originalContacts = 0;
+  const originalUrl = await listen(
     createServer((_request, response) => {
-      contacts++;
+      originalContacts++;
       response.writeHead(503).end();
     }),
   );
+  const original = {
+    type: 'http',
+    url: originalUrl,
+    headers: {'x-original': 'synthetic-credential'},
+  };
   await write(join(configDir, '.claude.json'), {
     hasCompletedOnboarding: true,
     mcpServers: {
+      service: original,
       user_sentinel: stdio('user'),
       inherited_http: {type: 'http', url: `${sentinelUrl}/mcp`},
     },
     projects: {
       [project]: {
         hasTrustDialogAccepted: true,
-        mcpServers: {local_sentinel: stdio('local')},
+        mcpServers: {service: original, local_sentinel: stdio('local')},
       },
     },
   });
   await write(join(project, '.mcp.json'), {
-    mcpServers: {project_sentinel: stdio('project')},
+    mcpServers: {service: original, project_sentinel: stdio('project')},
   });
   await write(join(plugin, '.claude-plugin', 'plugin.json'), {
     name: 'fixture-plugin',
     version: '1.0.0',
-    description: 'Local MCP exclusion sentinel',
+    description: 'Local MCP coexistence sentinel',
   });
   await write(join(plugin, '.mcp.json'), {
     mcpServers: {plugin_sentinel: stdio('plugin')},
@@ -383,6 +418,10 @@ async function nativeFixture(
   cleanups.push(() =>
     controller.finalize({harnessReady: false, harnessSucceeded: false}),
   );
+  let inheritedHeader = false;
+  const mockUrl = await relayMcp(controller.urls.service!, (request) => {
+    if (request.headers['x-original']) inheritedHeader = true;
+  });
   const requests: unknown[] = [];
   let mode: 'call' | 'negative' | 'hang' = initialMode;
   const modelUrl = await listen(
@@ -443,14 +482,17 @@ async function nativeFixture(
       },
     },
     extraArgs: ['--no-session-persistence'],
-    servers: {service: {url: controller.urls.service!, tools: ['lookup']}},
+    servers: {service: {url: mockUrl, tools: ['lookup']}},
   };
   return {
     options,
     controller,
+    extra,
     requests,
     marker,
     contacts: () => contacts,
+    originalContacts: () => originalContacts,
+    inheritedHeader: () => inheritedHeader,
     setMode: (value: typeof mode) => {
       mode = value;
     },
