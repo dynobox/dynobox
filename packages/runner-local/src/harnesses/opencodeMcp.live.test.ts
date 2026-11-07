@@ -33,8 +33,10 @@ async function fixture(
     | 'ask'
     | 'ask-continue'
     | 'question'
+    | 'failed-shell'
     | 'ask-bash'
     | 'ask-subagent' = 'call',
+  responseText = 'fixture-receipt-42',
 ) {
   const root = await mkdtemp(join(tmpdir(), 'dynobox-opencode-native-'));
   cleanup.push(() => rm(root, {recursive: true, force: true}));
@@ -49,7 +51,7 @@ async function fixture(
             additionalProperties: false,
           },
           response: {
-            content: [{type: 'text', text: 'fixture-receipt-42'}],
+            content: [{type: 'text', text: responseText}],
             ...(mode === 'mock-error' ? {isError: true} : {}),
           },
         },
@@ -127,7 +129,7 @@ async function fixture(
     modelStarted();
     if (mode === 'hang') return;
     const tool = body.tools?.find((entry: {function?: {name?: string}}) =>
-      mode === 'question' || mode === 'ask-bash'
+      mode === 'question' || mode === 'ask-bash' || mode === 'failed-shell'
         ? entry.function?.name === (mode === 'question' ? 'question' : 'shell')
         : entry.function?.name?.endsWith('_get_issue'),
     );
@@ -187,12 +189,13 @@ async function fixture(
         mode === 'ask' ||
         mode === 'ask-continue' ||
         mode === 'question' ||
-        (mode === 'ask-bash' && !bashCalled)) &&
+        ((mode === 'ask-bash' || mode === 'failed-shell') && !bashCalled)) &&
         !hasReceipt &&
         !!tool &&
         requests.length < 10);
     if (call && mode === 'invalid-arguments') invalidSent = true;
-    if (call && mode === 'ask-bash') bashCalled = true;
+    if (call && (mode === 'ask-bash' || mode === 'failed-shell'))
+      bashCalled = true;
     const delta = call
       ? {
           tool_calls: [
@@ -205,9 +208,12 @@ async function fixture(
                 arguments:
                   mode === 'question'
                     ? '{"questions":[{"question":"Which issue?","header":"Issue","options":[{"label":"DYNO-1","description":"First"}]}]}'
-                    : mode === 'ask-bash'
+                    : mode === 'ask-bash' || mode === 'failed-shell'
                       ? JSON.stringify({
-                          command: 'touch bash-ran',
+                          command:
+                            mode === 'failed-shell'
+                              ? 'printf failed; exit 7'
+                              : 'touch bash-ran',
                           description: 'Mark the run',
                         })
                       : mode === 'invalid-arguments'
@@ -636,20 +642,19 @@ describe.skipIf(!executable)(
     }, 30000);
 
     it.each(['ask', 'ask-continue'] as const)(
-      'fails a %s run whose mock call is rejected instead of waiting',
+      'reports a failed attempt and no receipt after %s permission rejection',
       async (mode) => {
         const f = await fixture(mode);
-        await expect(
-          runOpenCodeWithMcp({
-            ...f.options,
-            input: {...f.options.input, permissionMode: 'default'},
-          }),
-        ).rejects.toMatchObject({
-          category: 'execution_failed',
-          message: expect.stringContaining(
-            'rejected permission for a mock tool',
-          ),
+        const result = await runOpenCodeWithMcp({
+          ...f.options,
+          input: {...f.options.input, permissionMode: 'default'},
         });
+        expect(result.toolEvents).toContainEqual(
+          expect.objectContaining({
+            rawName: 'mcp__linear__get_issue',
+            status: 'failure',
+          }),
+        );
         const observation = await f.controller.finalize({
           harnessReady: true,
           harnessSucceeded: true,
@@ -812,20 +817,40 @@ describe.skipIf(!executable)(
       );
     }, 30000);
 
-    it('retains a received mock error as call evidence', async () => {
-      const f = await fixture('mock-error');
+    it.each([
+      'fixture-receipt-42',
+      'fixture-receipt-42: Permission denied: missing issue access',
+    ])(
+      'retains received service error "%s" as call evidence',
+      async (message) => {
+        const f = await fixture('mock-error', message);
+        const result = await runOpenCodeWithMcp(f.options);
+        const observation = await f.controller.finalize({
+          harnessReady: true,
+          harnessSucceeded: true,
+        });
+        expect(observation.calls).toHaveLength(1);
+        expect(observation.calls[0]?.category).toBe('tool_error');
+        expect(result.toolEvents).toContainEqual(
+          expect.objectContaining({
+            rawName: 'mcp__linear__get_issue',
+            status: 'failure',
+            message: expect.stringContaining(message),
+          }),
+        );
+      },
+      30000,
+    );
+
+    it('classifies a nonzero native shell exit as a failed tool', async () => {
+      const f = await fixture('failed-shell');
       const result = await runOpenCodeWithMcp(f.options);
-      const observation = await f.controller.finalize({
-        harnessReady: true,
-        harnessSucceeded: true,
-      });
-      expect(observation.calls).toHaveLength(1);
-      expect(observation.calls[0]?.category).toBe('tool_error');
       expect(result.toolEvents).toContainEqual(
         expect.objectContaining({
-          rawName: 'mcp__linear__get_issue',
+          kind: 'shell',
+          rawName: 'shell',
           status: 'failure',
-          message: expect.stringContaining('fixture-receipt-42'),
+          message: expect.stringContaining('failed'),
         }),
       );
     }, 30000);

@@ -268,7 +268,13 @@ function parseToolEvent(
 }
 
 function parseToolStatus(state: JsonObject): ToolEvent['status'] | undefined {
-  const metadata = isRecord(state.metadata) ? state.metadata : undefined;
+  const outer = isRecord(state.metadata) ? state.metadata : undefined;
+  const metadata =
+    outer !== undefined && 'exit' in outer
+      ? outer
+      : isRecord(outer?.metadata)
+        ? outer.metadata
+        : undefined;
   const exitCode = metadata?.exit;
   if (typeof exitCode === 'number') {
     return exitCode === 0 ? 'success' : 'failure';

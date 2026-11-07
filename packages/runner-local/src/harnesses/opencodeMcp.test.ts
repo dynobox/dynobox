@@ -481,19 +481,22 @@ describe('OpenCode public CLI execution', () => {
     });
   });
 
-  it('retains a received tool error without converting it to infrastructure failure', async () => {
-    const {options} = await fixture();
-    const event = tool();
-    Object.assign(event.part.state, {status: 'error', error: 'Issue missing'});
-    options.input.env.DXB_EVENTS = JSON.stringify([event, ...answer()]);
-    expect((await runOpenCodeWithMcp(options)).toolEvents).toContainEqual(
-      expect.objectContaining({
-        rawName: 'mcp__linear__get_issue',
-        status: 'failure',
-        message: 'Issue missing',
-      }),
-    );
-  });
+  it.each(['Issue missing', 'Permission denied: missing issue access'])(
+    'retains service error "%s" without inferring infrastructure failure',
+    async (message) => {
+      const {options} = await fixture();
+      const event = tool();
+      Object.assign(event.part.state, {status: 'error', error: message});
+      options.input.env.DXB_EVENTS = JSON.stringify([event, ...answer()]);
+      expect((await runOpenCodeWithMcp(options)).toolEvents).toContainEqual(
+        expect.objectContaining({
+          rawName: 'mcp__linear__get_issue',
+          status: 'failure',
+          message,
+        }),
+      );
+    },
+  );
 
   it.each(['child-single', 'child-paged', 'child-nested'])(
     'retains %s tool evidence and the parent answer',

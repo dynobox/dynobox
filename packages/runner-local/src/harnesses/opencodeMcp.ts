@@ -605,17 +605,6 @@ export async function runOpenCodeWithMcp(options: {
     const parsed = parseOpenCodeJson(output.stdout, prefixes, session.id);
     const toolEvents = parsed.toolEvents.map((event) => {
       const name = prepared.mockTools.get(event.rawName);
-      if (
-        name &&
-        event.status === 'failure' &&
-        /permission.*(reject|denied)|(reject|denied).*permission/i.test(
-          event.message ?? '',
-        )
-      )
-        throw new McpHarnessError(
-          'execution_failed',
-          'OpenCode rejected permission for a mock tool. Allow the tool in the OpenCode configuration.',
-        );
       return name
         ? createToolEvent(name, event.input, event.status, event.message)
         : event;

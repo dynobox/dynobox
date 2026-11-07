@@ -456,6 +456,29 @@ describe('parseOpenCodeJson', () => {
     ]);
   });
 
+  it.each([
+    {exit: 0, status: 'success'},
+    {exit: 7, status: 'failure'},
+    {exit: null, status: 'failure'},
+  ])('reads native CLI shell exit $exit as $status', ({exit, status}) => {
+    const parsed = parseOpenCodeJson(
+      jsonl(
+        toolUse(
+          'shell',
+          {command: 'echo result'},
+          {
+            status: 'completed',
+            output: 'result',
+            metadata: {metadata: {exit}},
+          },
+        ),
+      ),
+    );
+    expect(parsed.toolEvents[0]).toMatchObject({kind: 'shell', status});
+    if (status === 'failure')
+      expect(parsed.toolEvents[0]?.message).toBe('result');
+  });
+
   it('treats a completed shell command with a null exit as failure', () => {
     const parsed = parseOpenCodeJson(
       jsonl(
