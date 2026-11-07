@@ -97,6 +97,9 @@ async function fixture(mode = 'call', mixed = false) {
       harnesses: [new ClaudeCodeHarness({executable})],
       timeoutMs: 3000,
       env: {
+        HOME: root,
+        CLAUDE_CONFIG_DIR: join(root, 'profile'),
+        CI: '1',
         MCP_TEST_LOG: log,
         MCP_TEST_MODE: mode,
       } as Record<string, string>,
@@ -105,6 +108,35 @@ async function fixture(mode = 'call', mixed = false) {
 }
 
 describe('MCP CLI execution', () => {
+  it('fails a reserved Claude namespace instead of passing a negative assertion', async () => {
+    const {path, options, log} = await fixture('negative');
+    const source = JSON.parse(await readFile(path, 'utf8'));
+    const name = 'plugin_fixture-plugin_service';
+    source.scenarios[0].mcpMocks = {
+      [name]: source.scenarios[0].mcpMocks.linear,
+    };
+    source.scenarios[0].assertions = [
+      {type: 'mcp.notCalled', server: name, tool: 'get_issue'},
+    ];
+    await writeFile(path, JSON.stringify(source));
+    const result = await executeCli(
+      ['run', path, '--reporter', 'json', '--allow-unmocked-mcp'],
+      options,
+    );
+    expect(result.exitCode).toBe(1);
+    const job = JSON.parse(result.stdout.split('\n')[0]!);
+    expect(job.status).toBe('harness_failed');
+    expect(job.mcp).toMatchObject({
+      ready: false,
+      failures: expect.arrayContaining(['configuration_failed']),
+      callCount: 0,
+    });
+    expect(job.diagnostics.join(' ')).toContain(
+      'native plugin or connector tool namespace',
+    );
+    await expect(readFile(log)).rejects.toThrow();
+  });
+
   it.each(['n', undefined])(
     'cancels before setup or invocation on %j',
     async (answer) => {
@@ -186,7 +218,7 @@ describe('MCP CLI execution', () => {
         : ['cursor'];
       await writeFile(path, JSON.stringify(source));
       const result = await executeCli(
-        ['run', path, '--reporter', 'json'],
+        ['run', '--allow-unmocked-mcp', path, '--reporter', 'json'],
         options,
       );
       expect(result.exitCode).toBe(configErrorExitCode);
@@ -221,7 +253,15 @@ describe('MCP CLI execution', () => {
     await writeFile(path, JSON.stringify(source));
     await writeFile(join(root, 'plain.dyno.yaml'), JSON.stringify(plain));
     const result = await executeCli(
-      ['run', root, '--scenario', 'Lookup', '--reporter', 'json'],
+      [
+        'run',
+        '--allow-unmocked-mcp',
+        root,
+        '--scenario',
+        'Lookup',
+        '--reporter',
+        'json',
+      ],
       options,
     );
     expect(result.exitCode).toBe(configErrorExitCode);
@@ -248,7 +288,7 @@ describe('MCP CLI execution', () => {
       }
       if (allUnsupported) await rm(path);
       const result = await executeCli(
-        ['run', root, '--reporter', 'json'],
+        ['run', '--allow-unmocked-mcp', root, '--reporter', 'json'],
         options,
       );
       expect(result.exitCode).toBe(configErrorExitCode);
@@ -279,11 +319,11 @@ describe('MCP CLI execution', () => {
   it('runs a YAML dyno through Claude preparation, controller, assertions and v3 JSON', async () => {
     const {path, options, log} = await fixture();
     const result = await executeCli(
-      ['run', path, '--reporter', 'json'],
+      ['run', '--allow-unmocked-mcp', path, '--reporter', 'json'],
       options,
     );
     expect(result.exitCode).toBe(0);
-    expect(result.stderr).toBe('');
+    expect(result.stderr).toContain('inventory is incomplete');
     const [job, summary] = result.stdout
       .trim()
       .split('\n')
@@ -339,7 +379,7 @@ describe('MCP CLI execution', () => {
   it('returns assertion_failed when a required MCP call is absent', async () => {
     const {path, options} = await fixture('negative');
     const result = await executeCli(
-      ['run', path, '--reporter', 'json'],
+      ['run', '--allow-unmocked-mcp', path, '--reporter', 'json'],
       options,
     );
     expect(result.exitCode).toBe(1);
@@ -354,7 +394,7 @@ describe('MCP CLI execution', () => {
   it('returns safe failure categories for rejected startup', async () => {
     const {path, options} = await fixture('failed');
     const result = await executeCli(
-      ['run', path, '--reporter', 'json'],
+      ['run', '--allow-unmocked-mcp', path, '--reporter', 'json'],
       options,
     );
     expect(result.exitCode).toBe(1);
@@ -379,7 +419,14 @@ describe('MCP CLI execution', () => {
         const {path, options} = await fixture(mode);
         if (mode === 'timeout') options.timeoutMs = 500;
         const result = await executeCli(
-          ['run', path, '--reporter', 'json', ...(debug ? ['--debug'] : [])],
+          [
+            'run',
+            '--allow-unmocked-mcp',
+            path,
+            '--reporter',
+            'json',
+            ...(debug ? ['--debug'] : []),
+          ],
           options,
         );
         expect(result.exitCode).toBe(1);
@@ -413,10 +460,10 @@ describe('MCP CLI execution', () => {
   it('grants only the declared MCP tools in a run that mixes scenarios', async () => {
     const {path, options, log} = await fixture('call', true);
     const result = await executeCli(
-      ['run', path, '--reporter', 'json'],
+      ['run', '--allow-unmocked-mcp', path, '--reporter', 'json'],
       options,
     );
-    expect(result.stderr).toBe('');
+    expect(result.stderr).toContain('inventory is incomplete');
     expect(result.exitCode).toBe(0);
     const jobs = result.stdout
       .trim()
@@ -455,7 +502,10 @@ describe('MCP CLI execution', () => {
       options.env.DYNOBOX_UPLOAD_URL = 'http://127.0.0.1:9/upload';
     const args = upload ? ['--save-run'] : ['--harness', 'cursor'];
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    const result = await executeCli(['run', path, ...args], options);
+    const result = await executeCli(
+      ['run', '--allow-unmocked-mcp', path, ...args],
+      options,
+    );
     expect(result.exitCode).toBe(configErrorExitCode);
     expect(result.stderr).toContain(
       upload ? 'local-only' : 'plugin-provided MCP servers cannot be isolated',
