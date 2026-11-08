@@ -339,13 +339,15 @@ export default async function(pi) {
   const {createMcpExtension,getAgentDir,getPackageDir} = nativeSdk;
   const {loadMcpConfig} = await import(pathToFileURL(join(getPackageDir(),'dist','extensions','mcp','config.js')).href);
   const identity = (name) => name.replace(/-/g, '_');
+  const checkStdio = (entries) => {
+   const targets = new Set(Object.keys(mocks).map(identity));
+   for (const entry of entries) if(targets.has(identity(entry.name)) && 'command' in entry.config)
+    configurationError='Pi MCP target "'+entry.name+'" uses stdio; selective mocking supports HTTP targets.';
+  };
   createMcpExtension({startupWaitMs:5000,loadConfig(ctx) {
    const loaded = loadMcpConfig({agentDir:getAgentDir(),cwd:ctx.cwd,projectTrusted:ctx.isProjectTrusted()});
    const targets = new Set(Object.keys(mocks).map(identity));
-   for (const entry of [...loaded.servers,...pi.getMcpServers().map(({name,config})=>({name,config}))]) {
-    if (targets.has(identity(entry.name)) && 'command' in entry.config)
-     configurationError='Pi MCP target "'+entry.name+'" uses stdio; selective mocking supports HTTP targets.';
-   }
+   checkStdio([...loaded.servers,...pi.getMcpServers()]);
    return {...loaded,servers:[...loaded.servers.filter(entry=>!targets.has(identity(entry.name))),
     ...Object.entries(mocks).map(([server,connection])=>({name:server,config:{url:connection.url,exposure:'direct'},scope:'extension',source:'dynobox MCP mocks'}))]};
   }})({...pi,
@@ -372,11 +374,9 @@ export default async function(pi) {
     pi.registerTool(definition);
    }
   });
- } catch(error) {
-  writeSync(2,String(error)+'\\n');
-  configurationError='Pi MCP mocks require an npm installation of Pi 1.5.0 or newer with its native MCP SDK.';
- }
-  pi.on('before_agent_start', (event,ctx) => {
+  // Inherited session_start handlers may register targets after loadConfig.
+  pi.on('agent_start',(_event,ctx)=>{
+   checkStdio(pi.getMcpServers());
    if(configurationError)return fail(ctx,configurationError,true);
    const active = new Set(pi.getActiveTools());
    const all = pi.getAllTools();
@@ -387,13 +387,21 @@ export default async function(pi) {
     try {owned=realpathSync(registered?.sourceInfo.path)===source;}catch{}
     if(!name||!active.has(name)||!owned)return fail(ctx,'Pi did not activate MCP mock tool "'+server+'/'+tool+'" under an unambiguous native identity.');
    }
+   writeSync(2,${JSON.stringify(READY_MARKER)}+JSON.stringify(tools)+'\\n');
+  });
+ } catch(error) {
+  writeSync(2,String(error)+'\\n');
+  configurationError='Pi MCP mocks require an npm installation of Pi 1.5.0 or newer with its native MCP SDK.';
+ }
+  pi.on('before_agent_start', (event,ctx) => {
+   if(configurationError)return fail(ctx,configurationError,true);
+   const all = pi.getAllTools();
    const guidance=[];
    for(const server of Object.keys(mocks)) {
     const namespace=all.find(tool=>tool.namespace?.aliases?.includes(server))?.namespace;
     if(namespace?.instructions)guidance.push('MCP server '+server+':\\n'+namespace.instructions);
    }
    if(guidance.length)event.systemPromptOptions.appendSystemPrompt=[event.systemPromptOptions.appendSystemPrompt,...guidance].filter(Boolean).join('\\n\\n');
-   writeSync(2,${JSON.stringify(READY_MARKER)}+JSON.stringify(tools)+'\\n');
   });
 }
 `;

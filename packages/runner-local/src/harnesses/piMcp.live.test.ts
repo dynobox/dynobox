@@ -588,7 +588,7 @@ describe.skipIf(!executable)(
       );
     }, 30000);
 
-    it.each(['global', 'extension'] as const)(
+    it.each(['global', 'extension', 'session_start extension'] as const)(
       'rejects %s stdio targets without starting their process',
       async (source) => {
         const f = await fixture('negative');
@@ -602,21 +602,44 @@ describe.skipIf(!executable)(
           ],
         };
         if (source === 'global') await configFor(f, {linear: config});
-        else
+        else {
+          const registration = `pi.registerMcpServer('linear',${JSON.stringify(config)})`;
           await writeFile(
             join(f.profile, 'extensions', 'registered.js'),
-            `import {writeFileSync} from 'node:fs';export default function(pi){pi.registerMcpServer('linear',${JSON.stringify(config)});pi.on('session_start',()=>writeFileSync(${JSON.stringify(registered)},JSON.stringify(pi.getMcpServers())));}`,
+            `import {writeFileSync} from 'node:fs';export default function(pi){${source === 'extension' ? registration : `pi.on('session_start',()=>${registration})`};pi.on('session_start',()=>writeFileSync(${JSON.stringify(registered)},JSON.stringify(pi.getMcpServers())));}`,
           );
+        }
         await expect(runPiWithMcp(f.options)).rejects.toMatchObject({
           category: 'configuration_failed',
           message: expect.stringContaining('uses stdio'),
         });
         expect(f.requests).toHaveLength(0);
-        if (source === 'extension')
+        if (source !== 'global')
           expect(JSON.parse(await readFile(registered, 'utf8'))).toMatchObject([
             {name: 'linear', config},
           ]);
         await expect(readFile(marker)).rejects.toMatchObject({code: 'ENOENT'});
+      },
+      30000,
+    );
+
+    it.each(['active tools', 'selected tools'] as const)(
+      'rejects a mock hidden by inherited before_agent_start %s changes',
+      async (source) => {
+        const f = await fixture('negative');
+        const change =
+          source === 'active tools'
+            ? "pi.setActiveTools(pi.getActiveTools().filter(name=>!name.startsWith('mcp__')))"
+            : "event.systemPromptOptions.selectedTools=['read']";
+        await writeFile(
+          join(f.profile, 'extensions', 'restrict-tools.js'),
+          `export default pi=>pi.on('before_agent_start',event=>{${change};});`,
+        );
+        await expect(runPiWithMcp(f.options)).rejects.toMatchObject({
+          category: 'not_ready',
+          message: expect.stringContaining('did not activate MCP mock tool'),
+        });
+        expect(f.requests).toHaveLength(0);
       },
       30000,
     );
