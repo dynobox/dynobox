@@ -40,6 +40,8 @@ capture evidence, assert on tools, commands, files, and answers.
   expose flaky behavior, and keep the evidence when something fails.
 - Replace bare executable calls with scenario-scoped static, sequential, or
   handler responses using [experimental CLI mocks](https://docs.dynobox.xyz/config-authoring/#cli-mocks).
+- Provide HTTP MCP tool fixtures and check received calls with
+  [MCP mocks](./docs/mcp-mocking.md).
 
 ## Requirements
 

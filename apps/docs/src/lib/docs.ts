@@ -15,6 +15,7 @@ const docFiles = [
   'how-it-works.md',
   'agent-skills.md',
   'config-authoring.md',
+  'mcp-mocking.md',
   'cli.md',
   'ci.md',
 ] as const;
@@ -157,6 +158,13 @@ const docMetadata: Record<
       'cursor',
       'antigravity',
     ],
+  },
+  'mcp-mocking.md': {
+    agentSummary:
+      'Provide HTTP MCP tool fixtures with mcpMocks and assert on received calls. Only declared servers are mocked; other servers in the harness profile stay real.',
+    description:
+      'Mock MCP services, check tool calls, and understand which MCP servers stay real.',
+    topics: ['MCP', 'mcpMocks', 'mcp.called', 'mcp.notCalled'],
   },
   'cli.md': {
     agentSummary:

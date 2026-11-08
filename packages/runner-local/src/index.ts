@@ -156,7 +156,7 @@ export async function runJob(
         ?.prepareMcp
     )
       throw new DynoboxConfigError(
-        'The registered harness does not implement isolated MCP execution.',
+        'The registered harness does not implement MCP mock execution.',
       );
   }
   // --- 2. Work directory ---------------------------------------------------

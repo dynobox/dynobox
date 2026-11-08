@@ -10,6 +10,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Document MCP fixture authoring, received-call assertions, and which other MCP
+  servers stay real during mock runs.
 - Support MCP mock runs with OpenCode 2.2.5 and later 2.x releases, including
   model variants, inherited integration isolation, and subagent tool evidence.
 - Improve MCP call evidence and failure reporting across Claude Code, Codex, and
