@@ -19,8 +19,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   servers stay real during mock runs.
 - Support MCP mock runs with OpenCode 2.2.5 and later 2.x releases, including
   model variants and subagent tool evidence. Replace declared MCP targets while
-  preserving other servers, plugins, skills, and model authentication after
-  shared confirmation. Use the native CLI for task execution and permissions,
+  preserving other servers, plugins, skills, and model authentication. Use the
+  native CLI for task execution and permissions,
   with mock discovery and configuration checks before task startup.
 - Improve MCP call evidence and failure reporting across Claude Code, Codex, and
   OpenCode. Preserve received mock errors and reject incomplete tool attempts.

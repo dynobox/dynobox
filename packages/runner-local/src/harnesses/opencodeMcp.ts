@@ -1,7 +1,7 @@
 import {randomBytes} from 'node:crypto';
 import {readFile, realpath, stat} from 'node:fs/promises';
-import {homedir, userInfo} from 'node:os';
-import {isAbsolute, join} from 'node:path';
+import {userInfo} from 'node:os';
+import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 
 import {parse, type ParseError} from 'jsonc-parser';
@@ -19,7 +19,6 @@ import type {
   HarnessInput,
   HarnessRunOutput,
   McpHarnessRun,
-  McpInventory,
   McpServerConnections,
 } from './types.js';
 
@@ -80,35 +79,6 @@ function serverNames(config: Config): string[] {
         .map(([name]) => name),
     ]),
   ];
-}
-
-/** Stable profile names only; project, plugin, and managed sources remain unknown. */
-export async function inspectOpenCodeMcp(
-  input: Pick<HarnessInput, 'env'>,
-): Promise<McpInventory> {
-  const env = {...process.env, ...input.env};
-  const global = join(
-    env.XDG_CONFIG_HOME || join(env.HOME || homedir(), '.config'),
-    'opencode',
-  );
-  const directories = [
-    global,
-    ...(env.OPENCODE_CONFIG_DIR ? [env.OPENCODE_CONFIG_DIR] : []),
-  ];
-  const paths = new Set(
-    directories
-      .filter(isAbsolute)
-      .flatMap((directory) =>
-        ['config.json', 'opencode.json', 'opencode.jsonc'].map((name) =>
-          join(directory, name),
-        ),
-      ),
-  );
-  if (env.OPENCODE_CONFIG && isAbsolute(env.OPENCODE_CONFIG))
-    paths.add(env.OPENCODE_CONFIG);
-  const configs = await Promise.all([...paths].map(readConfig));
-  configs.push(inlineConfig(env.OPENCODE_CONFIG_CONTENT));
-  return {servers: [...new Set(configs.flatMap(serverNames))], complete: false};
 }
 
 /** Managed definitions can outrank the run overlay; preserve the existing refusal. */

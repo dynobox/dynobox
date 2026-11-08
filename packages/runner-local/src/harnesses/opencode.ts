@@ -17,7 +17,6 @@ import type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
-  McpInventory,
   PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
@@ -64,11 +63,6 @@ export class OpenCodeHarness implements Harness {
 
   version(): Promise<string | null> {
     return this.probeVersion();
-  }
-
-  async inspectMcp(input: Pick<HarnessInput, 'env'>): Promise<McpInventory> {
-    const {inspectOpenCodeMcp} = await import('./opencodeMcp.js');
-    return inspectOpenCodeMcp(input);
   }
 
   async prepareMcp(

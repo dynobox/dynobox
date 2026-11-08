@@ -1,4 +1,4 @@
-import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -6,7 +6,6 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {OpenCodeHarness} from './opencode.js';
 import {
-  inspectOpenCodeMcp,
   prepareOpenCodeMcpConfiguration,
   runOpenCodeWithMcp,
 } from './opencodeMcp.js';
@@ -215,23 +214,6 @@ describe('OpenCode selective configuration', () => {
       {action: 'linear_get_issue', resource: '*', effect: 'allow'},
     ]);
     expect(await readFile(path, 'utf8')).toBe(JSON.stringify(inherited));
-  });
-
-  it('inspects stable JSONC profiles without executing the CLI', async () => {
-    const {options, root, log} = await fixture();
-    const directory = join(root, 'config', 'opencode');
-    await mkdir(directory, {recursive: true});
-    await writeFile(
-      join(directory, 'opencode.jsonc'),
-      '{/* profile */"mcp":{"servers":{"github":{"url":"https://private.example","headers":{"secret":"PRIVATE_TOKEN"}}}},}',
-    );
-    options.input.env.OPENCODE_CONFIG_CONTENT =
-      '{"mcp":{"servers":{"linear":{"type":"remote"}}}}';
-    expect(await inspectOpenCodeMcp({env: options.input.env})).toEqual({
-      servers: ['github', 'linear'],
-      complete: false,
-    });
-    await expect(readFile(log)).rejects.toThrow();
   });
 
   it.each(['1.18.26', '2.2.4', '3.0.0'])(

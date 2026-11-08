@@ -457,7 +457,6 @@ describe.skipIf(!executable)(
           scratchRoot: f.options.input.workDir,
           env: f.options.input.env,
           timeoutMs: 20000,
-          allowUnmockedMcp: true,
         });
         expect(result.status, result.diagnostics.join('\n')).toBe('passed');
         expect(result.mcp).toMatchObject({
