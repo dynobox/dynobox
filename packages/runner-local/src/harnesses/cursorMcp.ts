@@ -20,7 +20,6 @@ import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/st
 import type {Transport} from '@modelcontextprotocol/sdk/shared/transport.js';
 import {ErrorCode, McpError} from '@modelcontextprotocol/sdk/types.js';
 import {parse, type ParseError} from 'jsonc-parser';
-import picomatch from 'picomatch';
 
 import {
   mcpDeadline,
@@ -82,8 +81,12 @@ function deniesMock(rule: string, server: string, tool: string): boolean {
   ].every(([glob, value]) => {
     const normalized = glob!.trim().toLowerCase(),
       target = value!.trim().toLowerCase();
+    // Cursor permissions expand only '*'; other glob/regex syntax is literal.
+    const source = normalized
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/\\\*/g, '.*');
     try {
-      return picomatch(normalized, {dot: true})(target);
+      return new RegExp(`^${source}$`).test(target);
     } catch {
       return normalized === target;
     }

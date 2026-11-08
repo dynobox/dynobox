@@ -53,7 +53,7 @@ importers:
         version: 8.59.0(eslint@10.2.1)(typescript@6.0.3)
       vitest:
         specifier: ^4.1.5
-        version: 4.1.5(@types/node@22.19.17)(jsdom@29.1.1)(vite@8.1.5(@types/node@22.19.17)(esbuild@0.27.7)(tsx@4.23.1)(yaml@2.8.4))
+        version: 4.1.5(@types/node@22.19.17)(jsdom@29.1.1)(vite@8.1.5(@types/node@22.19.17)(esbuild@0.28.1)(tsx@4.23.1)(yaml@2.8.4))
       zod:
         specifier: ^4.1.12
         version: 4.3.6
@@ -203,9 +203,6 @@ importers:
       mockttp:
         specifier: ^4.4.1
         version: 4.4.1
-      picomatch:
-        specifier: 4.0.5
-        version: 4.0.5
       signal-exit:
         specifier: ^4.1.0
         version: 4.1.0
@@ -213,9 +210,6 @@ importers:
       '@types/node':
         specifier: ^22.19.17
         version: 22.19.17
-      '@types/picomatch':
-        specifier: ^4.0.3
-        version: 4.0.3
       smol-toml:
         specifier: 1.7.0
         version: 1.7.0
@@ -227,7 +221,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.5
-        version: 4.1.5(@types/node@22.19.17)(jsdom@29.1.1)(vite@8.1.5(@types/node@22.19.17)(esbuild@0.28.1)(tsx@4.23.1)(yaml@2.8.4))
+        version: 4.1.5(@types/node@22.19.17)(jsdom@29.1.1)(vite@8.1.5(@types/node@22.19.17)(esbuild@0.27.7)(tsx@4.23.1)(yaml@2.8.4))
 
   packages/sdk:
     dependencies:
@@ -1571,9 +1565,6 @@ packages:
 
   '@types/node@22.19.17':
     resolution: {integrity: sha512-wGdMcf+vPYM6jikpS/qhg6WiqSV/OhG+jeeHT/KlVqxYfD40iYJf9/AE1uQxVWFvU7MipKRkRv8NSHiCGgPr8Q==}
-
-  '@types/picomatch@4.0.3':
-    resolution: {integrity: sha512-iG0T6+nYJ9FAPmx9SsUlnwcq1ZVRuCXcVEvWnntoPlrOpwtSTKNDC9uVAxTsC3PUvJ+99n4RpAcNgBbHX3JSnQ==}
 
   '@types/react@19.2.15':
     resolution: {integrity: sha512-eRwcGNHve+E8qtEQSSRl6urh+rFop4v8gm6O8rGv25CodbvFdLjA1vVQ1KkiFE0w0UPOnb8tDiFKL5lp0rtY5Q==}
@@ -5061,8 +5052,6 @@ snapshots:
   '@types/node@22.19.17':
     dependencies:
       undici-types: 6.21.0
-
-  '@types/picomatch@4.0.3': {}
 
   '@types/react@19.2.15':
     dependencies:

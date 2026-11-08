@@ -258,12 +258,7 @@ describe('Cursor MCP launch contract', () => {
     });
   });
 
-  it.each([
-    'Mcp(*:*)',
-    'Mcp(dxb_*:get_*)',
-    'Mcp(*:GET_ISSUE)',
-    'Mcp(*:[g]et_issue)',
-  ])(
+  it.each(['Mcp(*:*)', 'Mcp(dxb_*:get_*)', 'Mcp(*:GET_ISSUE)'])(
     'rejects the native deny rule %s before MCP initialization',
     async (rule) => {
       const f = await fixture();
@@ -278,6 +273,18 @@ describe('Cursor MCP launch contract', () => {
       expect((await readFile(f.log, 'utf8')).trim().split('\n')).toHaveLength(
         1,
       );
+    },
+  );
+
+  it.each(['Mcp(*:[g]et_issue)', 'Mcp(*:get_issu?)'])(
+    'treats non-star pattern syntax literally (%s)',
+    async (rule) => {
+      const f = await fixture();
+      await writeFile(
+        join(f.home, '.cursor', 'cli-config.json'),
+        JSON.stringify({permissions: {deny: [rule]}}),
+      );
+      expect((await runCursorWithMcp(f.options)).harnessReady).toBe(true);
     },
   );
 

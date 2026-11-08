@@ -628,6 +628,22 @@ describe.skipIf(!executable)(
       30000,
     );
 
+    it('keeps bracket patterns literal like native Cursor permissions', async () => {
+      const f = await fixture();
+      await writeFile(
+        join(f.work, '.cursor', 'cli.json'),
+        JSON.stringify({
+          permissions: {allow: [], deny: ['Mcp(*:[g]et_issue)']},
+        }),
+      );
+      const result = await runCursorWithMcp(f.options);
+      expect(result.harnessReady).toBe(true);
+      expect(result.toolEvents).toMatchObject([
+        {rawName: 'mcp__linear__get_issue', status: 'success'},
+      ]);
+      expect(f.originals()).toBe(0);
+    }, 30000);
+
     it('does not pass a public negative assertion when inherited policy denies mocks', async () => {
       const f = await fixture('negative');
       const path = join(f.profile, 'cli-config.json');
