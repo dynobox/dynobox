@@ -68,7 +68,61 @@ afterEach(async () => {
   );
 });
 
-describe('isolated Claude Code MCP invocation', () => {
+describe('selective Claude Code MCP invocation', () => {
+  it.each(['plugin_fixture-plugin_service', 'claude_ai_Linear'])(
+    'rejects reserved namespace %s before starting or granting tools',
+    async (name) => {
+      const {options, launches} = await fixture();
+      options.servers = {[name]: options.servers.service!};
+      options.input.allowedMcpTools = [{server: name, tool: 'lookup'}];
+      const start = vi.spyOn(processGroup, 'startOwnedProcess');
+      await expect(runClaudeCodeWithMcp(options)).rejects.toMatchObject({
+        category: 'configuration_failed',
+        message: expect.stringContaining(
+          'native plugin or connector tool namespace',
+        ),
+      });
+      expect(start).not.toHaveBeenCalled();
+      await expect(launches()).rejects.toThrow();
+    },
+  );
+
+  it.each([
+    ['linear__beta', 'lookup'],
+    ['service', 'get__issue'],
+  ])(
+    'rejects "__" in server %s or tool %s before starting or granting tools',
+    async (server, tool) => {
+      const {options, launches} = await fixture();
+      options.servers = {
+        [server]: {...options.servers.service!, tools: [tool]},
+      };
+      options.input.allowedMcpTools = [{server, tool}];
+      const start = vi.spyOn(processGroup, 'startOwnedProcess');
+      await expect(runClaudeCodeWithMcp(options)).rejects.toMatchObject({
+        category: 'configuration_failed',
+        message: expect.stringContaining('contain "__"'),
+      });
+      expect(start).not.toHaveBeenCalled();
+      await expect(launches()).rejects.toThrow();
+    },
+  );
+
+  it.each([
+    ['namespace-collision', 'ser_vice'],
+    ['duplicate-server', 'service'],
+  ])('rejects ambiguous readiness for %s', async (mode, name) => {
+    const {options, controller} = await fixture(mode);
+    options.servers = {[name!]: options.servers.service!};
+    await expect(runClaudeCodeWithMcp(options)).rejects.toMatchObject({
+      category: 'not_ready',
+      message: expect.stringContaining('multiple MCP identities'),
+    });
+    expect(
+      await controller.finalize({harnessReady: false, harnessSucceeded: false}),
+    ).toMatchObject({ready: false, calls: []});
+  });
+
   it('preserves environment, settings and literal prompt arguments', async () => {
     const {options, launches, controller, root} = await fixture();
     const original = JSON.stringify({
@@ -102,9 +156,8 @@ describe('isolated Claude Code MCP invocation', () => {
       no_proxy: 'upper.example,lower.example,127.0.0.1,localhost,::1',
     });
     expect(launch.args.slice(-2)).toEqual(['--', options.input.prompt]);
-    expect(launch.args).toEqual(
-      expect.arrayContaining(['--effort=low', '--strict-mcp-config']),
-    );
+    expect(launch.args).toEqual(expect.arrayContaining(['--effort=low']));
+    expect(launch.args).not.toContain('--strict-mcp-config');
     expect(launch.args).not.toContain('--permission-mode');
     await expect(fs.stat(dirname(launch.path))).rejects.toThrow();
     expect(await fs.readFile(join(root, '.mcp.json'), 'utf8')).toBe(original);
@@ -240,28 +293,29 @@ describe('isolated Claude Code MCP invocation', () => {
     await expect(launches()).rejects.toThrow();
   });
 
-  it.each([
-    'failed',
-    'denied',
-    'missing-server',
-    'missing-tool',
-    'no-init',
-    'extra-server',
-  ])('fails readiness and cleans config for %s', async (mode) => {
-    const {options, launches, controller} = await fixture(mode);
-    await expect(runClaudeCodeWithMcp(options)).rejects.toMatchObject({
-      category: 'not_ready',
-    });
-    await expect(
-      fs.stat(dirname((await launches())[0].path)),
-    ).rejects.toThrow();
-    const observation = await controller.finalize({
-      harnessReady: false,
-      harnessSucceeded: false,
-    });
-    // The adapter reported not_ready; the controller saw discovery succeed.
-    expect(observation.ready).toBe(false);
-    expect(observation.failures).toEqual([]);
+  it.each(['failed', 'denied', 'missing-server', 'missing-tool', 'no-init'])(
+    'fails readiness and cleans config for %s',
+    async (mode) => {
+      const {options, launches, controller} = await fixture(mode);
+      await expect(runClaudeCodeWithMcp(options)).rejects.toMatchObject({
+        category: 'not_ready',
+      });
+      await expect(
+        fs.stat(dirname((await launches())[0].path)),
+      ).rejects.toThrow();
+      const observation = await controller.finalize({
+        harnessReady: false,
+        harnessSucceeded: false,
+      });
+      // The adapter reported not_ready; the controller saw discovery succeed.
+      expect(observation.ready).toBe(false);
+      expect(observation.failures).toEqual([]);
+    },
+  );
+
+  it('allows unrelated servers while checking that declared mocks are usable', async () => {
+    const {options} = await fixture('extra-server');
+    expect((await runClaudeCodeWithMcp(options)).harnessReady).toBe(true);
   });
 
   it('cannot use startup listings as controller discovery evidence', async () => {
@@ -442,7 +496,7 @@ describe('isolated Claude Code MCP invocation', () => {
   );
 });
 
-// A child-process test double, not evidence that native Claude excludes sources.
+// A child-process test double, not evidence of native Claude routing behavior.
 // It uses actual HTTP initialization/discovery/calls against our controller.
 const FAKE_CLAUDE = `#!${process.execPath}
 import {spawn} from 'node:child_process';
@@ -467,7 +521,8 @@ appendFileSync(process.env.PROBE_LOG, JSON.stringify({args, path, config, cwd: p
 if (mode === 'hang') await new Promise(() => setInterval(() => {}, 1000));
 if (mode === 'exit') { console.error('SECRET stderr ' + path); process.exit(1); }
 if (mode === 'malformed') { console.log('SECRET invalid JSON'); process.exit(0); }
-const url = config.mcpServers.service.url;
+const serverName = Object.keys(config.mcpServers)[0];
+const url = config.mcpServers[serverName].url;
 let id = 0;
 async function rpc(method, params) {
   const response = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json', Accept: 'application/json, text/event-stream'},
@@ -478,10 +533,12 @@ if (mode !== 'no-discovery') {
   await rpc('initialize', {protocolVersion: '2025-03-26', capabilities: {}, clientInfo: {name: 'claude-test-double', version: '1'}});
   await rpc('tools/list', {});
 }
-const init = {type: 'system', subtype: 'init', mcp_servers: [{name: 'service', status: 'connected'}], tools: ['Read', 'mcp__service__lookup']};
+const init = {type: 'system', subtype: 'init', mcp_servers: [{name: serverName, status: 'connected'}], tools: ['Read', 'mcp__' + serverName + '__lookup']};
 if (mode === 'failed' || mode === 'denied') init.mcp_servers[0].status = mode;
 if (mode === 'missing-server') init.mcp_servers = [];
 if (mode === 'extra-server') init.mcp_servers.push({name: 'claude.ai Linear', status: 'connected'});
+if (mode === 'namespace-collision') init.mcp_servers.push({name: 'ser:vice', status: 'connected'});
+if (mode === 'duplicate-server') init.mcp_servers.push({name: serverName, status: 'connected'});
 if (mode === 'missing-tool') init.tools = ['Read'];
 if (mode !== 'no-init') console.log(JSON.stringify(init));
 let result = 'No tools called.';

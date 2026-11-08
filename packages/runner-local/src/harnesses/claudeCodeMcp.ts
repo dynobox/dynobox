@@ -24,9 +24,9 @@ import type {
   McpServerConnections,
 } from './types.js';
 
-// Oldest release whose `--strict-mcp-config` isolation was verified natively.
+// Minimum native MCP protocol version; selective overlays need no new flag.
 const MIN_VERSION = '2.1.263';
-// Flags that would load MCP servers beyond the generated mock config.
+// Flags that conflict with the run-owned target overlay.
 const MCP_CONFIG_FLAGS = new Set(['--mcp-config', '--strict-mcp-config']);
 const ALLOWED_TOOLS_FLAGS = new Set(['--allowedTools', '--allowed-tools']);
 
@@ -45,6 +45,23 @@ export async function runClaudeCodeWithMcp(
   const {input, servers, executable} = options;
   const remaining = mcpDeadline(input.timeoutMs, input.signal);
   const names = Object.keys(servers);
+  const reserved = names.find((name) => /^(plugin_|claude_ai_)/.test(name));
+  if (reserved !== undefined)
+    throw new McpHarnessError(
+      'configuration_failed',
+      `Claude Code cannot mock "${reserved}" because it uses a native plugin or connector tool namespace. Use an unscoped server name.`,
+    );
+  // mcp__a__b__c could be server a__b + tool c or server a + tool b__c.
+  const ambiguous = names.find(
+    (name) =>
+      name.includes('__') ||
+      servers[name]!.tools.some((tool) => tool.includes('__')),
+  );
+  if (ambiguous !== undefined)
+    throw new McpHarnessError(
+      'configuration_failed',
+      `Claude Code cannot mock "${ambiguous}" because its server or tool names contain "__", which Claude uses to separate MCP tool namespaces.`,
+    );
   const tools = new Set(
     names.flatMap((server) =>
       servers[server]!.tools.map((tool) => `mcp__${server}__${tool}`),
@@ -110,7 +127,6 @@ export async function runClaudeCodeWithMcp(
         ...extraArgs,
         '--mcp-config',
         configPath,
-        '--strict-mcp-config',
         '--',
         input.prompt,
       ],
@@ -218,7 +234,7 @@ export async function runClaudeCodeWithMcp(
 }
 
 /**
- * Reject flags that load other MCP servers and fold declared mock tools into
+ * Protect the generated MCP overlay and fold declared mock tools into
  * any `--allowedTools` list the harness already passes.
  */
 function mergeExtraArgs(
@@ -278,12 +294,15 @@ function startupProblem(
   const loaded = (
     Array.isArray(event.mcp_servers) ? event.mcp_servers : []
   ).filter(isRecord);
-  // Strict config should load only the mocks; any other server breaks isolation.
-  const inherited = loaded.find(
-    (server) => !names.includes(String(server.name)),
-  );
-  if (inherited !== undefined)
-    return `Claude Code loaded MCP server "${String(inherited.name)}", which is not a mock.`;
+  for (const name of names) {
+    const owners = loaded.filter(
+      (server) =>
+        typeof server.name === 'string' &&
+        server.name.replace(/[^a-zA-Z0-9_-]/g, '_') === name,
+    );
+    if (owners.length > 1 || owners.some((server) => server.name !== name))
+      return `Claude Code loaded multiple MCP identities for mock tool namespace "${name}". Use an unambiguous, unscoped server name.`;
+  }
   const connected = new Set(
     loaded
       .filter((server) => server.status === 'connected')
