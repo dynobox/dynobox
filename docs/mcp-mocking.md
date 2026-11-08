@@ -51,9 +51,11 @@ grants permission for the declared mock tools automatically.
 
 Claude-generated plugin and connector namespaces reserve the server prefixes
 `plugin_` and `claude_ai_`; use an unscoped server name for a Claude mock.
-Dynobox rejects these prefixes before launching Claude and rejects other
-detected ambiguous native identities during readiness validation. Plugin and
-connector servers stay real and remain subject to normal harness permissions.
+Claude joins server and tool names with `__`, so Claude mock server and tool
+names cannot contain `__`. Dynobox rejects these names before launching Claude
+and rejects other detected ambiguous native identities during readiness
+validation. Plugin and connector servers stay real and remain subject to
+normal harness permissions.
 
 `mcp.called` checks calls received by the mock, including matching arguments
 when `input` is provided. `mcp.notCalled` requires a usable mock environment and

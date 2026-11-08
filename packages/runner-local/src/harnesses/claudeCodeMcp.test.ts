@@ -88,6 +88,27 @@ describe('selective Claude Code MCP invocation', () => {
   );
 
   it.each([
+    ['linear__beta', 'lookup'],
+    ['service', 'get__issue'],
+  ])(
+    'rejects "__" in server %s or tool %s before starting or granting tools',
+    async (server, tool) => {
+      const {options, launches} = await fixture();
+      options.servers = {
+        [server]: {...options.servers.service!, tools: [tool]},
+      };
+      options.input.allowedMcpTools = [{server, tool}];
+      const start = vi.spyOn(processGroup, 'startOwnedProcess');
+      await expect(runClaudeCodeWithMcp(options)).rejects.toMatchObject({
+        category: 'configuration_failed',
+        message: expect.stringContaining('contain "__"'),
+      });
+      expect(start).not.toHaveBeenCalled();
+      await expect(launches()).rejects.toThrow();
+    },
+  );
+
+  it.each([
     ['namespace-collision', 'ser_vice'],
     ['duplicate-server', 'service'],
   ])('rejects ambiguous readiness for %s', async (mode, name) => {

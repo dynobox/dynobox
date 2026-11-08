@@ -51,6 +51,17 @@ export async function runClaudeCodeWithMcp(
       'configuration_failed',
       `Claude Code cannot mock "${reserved}" because it uses a native plugin or connector tool namespace. Use an unscoped server name.`,
     );
+  // mcp__a__b__c could be server a__b + tool c or server a + tool b__c.
+  const ambiguous = names.find(
+    (name) =>
+      name.includes('__') ||
+      servers[name]!.tools.some((tool) => tool.includes('__')),
+  );
+  if (ambiguous !== undefined)
+    throw new McpHarnessError(
+      'configuration_failed',
+      `Claude Code cannot mock "${ambiguous}" because its server or tool names contain "__", which Claude uses to separate MCP tool namespaces.`,
+    );
   const tools = new Set(
     names.flatMap((server) =>
       servers[server]!.tools.map((tool) => `mcp__${server}__${tool}`),
