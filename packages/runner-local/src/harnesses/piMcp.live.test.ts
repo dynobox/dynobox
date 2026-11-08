@@ -588,7 +588,12 @@ describe.skipIf(!executable)(
       );
     }, 30000);
 
-    it.each(['global', 'extension', 'session_start extension'] as const)(
+    it.each([
+      'global',
+      'extension',
+      'session_start extension',
+      'agent_start extension',
+    ] as const)(
       'rejects %s stdio targets without starting their process',
       async (source) => {
         const f = await fixture('negative');
@@ -606,7 +611,7 @@ describe.skipIf(!executable)(
           const registration = `pi.registerMcpServer('linear',${JSON.stringify(config)})`;
           await writeFile(
             join(f.profile, 'extensions', 'registered.js'),
-            `import {writeFileSync} from 'node:fs';export default function(pi){${source === 'extension' ? registration : `pi.on('session_start',()=>${registration})`};pi.on('session_start',()=>writeFileSync(${JSON.stringify(registered)},JSON.stringify(pi.getMcpServers())));}`,
+            `import {writeFileSync} from 'node:fs';export default function(pi){${source === 'extension' ? registration : `pi.on('${source.split(' ')[0]}',()=>${registration})`};pi.on('${source === 'agent_start extension' ? 'agent_start' : 'session_start'}',()=>writeFileSync(${JSON.stringify(registered)},JSON.stringify(pi.getMcpServers())));}`,
           );
         }
         await expect(runPiWithMcp(f.options)).rejects.toMatchObject({

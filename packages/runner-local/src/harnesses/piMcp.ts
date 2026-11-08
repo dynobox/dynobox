@@ -344,6 +344,11 @@ export default async function(pi) {
    for (const entry of entries) if(targets.has(identity(entry.name)) && 'command' in entry.config)
     configurationError='Pi MCP target "'+entry.name+'" uses stdio; selective mocking supports HTTP targets.';
   };
+  // Registry changes may come from any inherited lifecycle hook.
+  pi.on('mcp_servers_change',(_event,ctx)=>{
+   checkStdio(pi.getMcpServers());
+   if(configurationError)fail(ctx,configurationError,true);
+  });
   createMcpExtension({startupWaitMs:5000,loadConfig(ctx) {
    const loaded = loadMcpConfig({agentDir:getAgentDir(),cwd:ctx.cwd,projectTrusted:ctx.isProjectTrusted()});
    const targets = new Set(Object.keys(mocks).map(identity));
