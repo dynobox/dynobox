@@ -15,6 +15,7 @@ import type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
+  McpInventory,
   PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
@@ -25,8 +26,7 @@ export type PiHarnessOptions = {
   extraArgs?: readonly string[];
 };
 
-// Oldest release verified for stdin prompts, `--no-extensions` isolation and
-// `systemPromptOptions` edits from extensions.
+// Oldest release verified for ordinary Pi runs with stdin prompts.
 export const PI_MIN_VERSION = '0.86.0';
 // Pi trims stdin and exits 0 without calling the model when nothing is left.
 export const PI_BLANK_PROMPT = 'Pi cannot run a blank prompt.';
@@ -45,6 +45,19 @@ export type PiParsedLine = {
   terminalFailure?: boolean;
 };
 
+/** Native identities supplied by the MCP adapter; public names stay logical. */
+export type PiMcpTools = Readonly<Record<string, string>>;
+
+function mcpToolsFromMetadata(value: unknown): PiMcpTools {
+  return isRecord(value)
+    ? Object.fromEntries(
+        Object.entries(value).filter(
+          (entry): entry is [string, string] => typeof entry[1] === 'string',
+        ),
+      )
+    : {};
+}
+
 export class PiHarness implements Harness {
   readonly id = 'pi' as const;
 
@@ -60,6 +73,11 @@ export class PiHarness implements Harness {
 
   version(): Promise<string | null> {
     return this.probeVersion();
+  }
+
+  async inspectMcp(input: Pick<HarnessInput, 'env'>): Promise<McpInventory> {
+    const {inspectPiMcp} = await import('./piMcp.js');
+    return inspectPiMcp(input);
   }
 
   async prepareMcp(
@@ -98,7 +116,10 @@ export class PiHarness implements Harness {
   }
 
   extractResult(raw: HarnessRunOutput): HarnessResult {
-    const parsed = parsePiJson(raw.stdout);
+    const parsed = parsePiJson(
+      raw.stdout,
+      mcpToolsFromMetadata(raw.metadata?.piMcpTools),
+    );
     return {
       exitCode: raw.exitCode === 0 && parsed.terminalFailure ? 1 : raw.exitCode,
       durationMs: raw.durationMs,
@@ -133,7 +154,10 @@ function piPermissionArgs(
   return [permissionMode === 'dangerous' ? '--approve' : '--no-approve'];
 }
 
-export function parsePiJson(stdout: string): PiParsedOutput {
+export function parsePiJson(
+  stdout: string,
+  mcpTools: PiMcpTools = {},
+): PiParsedOutput {
   let finalMessage: string | undefined;
   let errorMessage: string | undefined;
   let terminalFailure = false;
@@ -141,7 +165,7 @@ export function parsePiJson(stdout: string): PiParsedOutput {
   const toolInputs = new Map<string, unknown>();
 
   for (const {line, lineNumber} of jsonLines(stdout)) {
-    const parsed = parsePiJsonLine(line, lineNumber, toolInputs);
+    const parsed = parsePiJsonLine(line, lineNumber, toolInputs, mcpTools);
     toolEvents.push(...parsed.toolEvents);
     if (parsed.finalMessage !== undefined) finalMessage = parsed.finalMessage;
     // The last assistant message decides failure, so a retried provider error
@@ -152,13 +176,19 @@ export function parsePiJson(stdout: string): PiParsedOutput {
     }
   }
 
-  return {finalMessage, toolEvents, errorMessage, terminalFailure};
+  return {
+    finalMessage,
+    toolEvents,
+    errorMessage,
+    terminalFailure,
+  };
 }
 
 export function parsePiJsonLine(
   line: string,
   lineNumber = 1,
   toolInputs = new Map<string, unknown>(),
+  mcpTools: PiMcpTools = {},
 ): PiParsedLine {
   const event = parseJsonObjectLine(line, lineNumber, 'Pi JSON event');
   if (event.type === 'tool_execution_start') {
@@ -167,7 +197,7 @@ export function parsePiJsonLine(
   }
 
   if (event.type === 'tool_execution_end') {
-    return {toolEvents: parseToolEnd(event, toolInputs)};
+    return {toolEvents: parseToolEnd(event, toolInputs, mcpTools)};
   }
 
   if (event.type !== 'message_end' || !isRecord(event.message)) {
@@ -188,6 +218,7 @@ function rememberToolInput(
 function parseToolEnd(
   event: JsonObject,
   toolInputs: Map<string, unknown>,
+  mcpTools: PiMcpTools,
 ): ToolEvent[] {
   if (
     typeof event.toolCallId !== 'string' ||
@@ -200,7 +231,10 @@ function parseToolEnd(
   toolInputs.delete(event.toolCallId);
   const status = event.isError === true ? 'failure' : 'success';
   const message = textFromPiContent(event.result);
-  return [createToolEvent(event.toolName, input, status, message)];
+  const name = Object.hasOwn(mcpTools, event.toolName)
+    ? mcpTools[event.toolName]!
+    : event.toolName;
+  return [createToolEvent(name, input, status, message)];
 }
 
 function textFromPiContent(content: unknown): string | undefined {
