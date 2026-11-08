@@ -17,11 +17,7 @@ import {runJob} from '../index.js';
 import {startMcpMockController} from '../mcpMocks/controller.js';
 import type {LocalRunnerJob} from '../runTypes.js';
 import {AntigravityHarness} from './antigravity.js';
-import {
-  inspectAntigravityMcp,
-  logicalMcpToolEvents,
-  runAntigravityWithMcp,
-} from './antigravityMcp.js';
+import {logicalMcpToolEvents, runAntigravityWithMcp} from './antigravityMcp.js';
 import {createToolEvent} from './parsing.js';
 import type {ToolEvent} from './types.js';
 
@@ -235,7 +231,6 @@ describe.skipIf(!executable)(
           harnesses: [new AntigravityHarness({executable: executable!})],
           scratchRoot: f.root,
           env: f.options.input.env,
-          allowUnmockedMcp: true,
           timeoutMs: 20000,
         });
         expect(result.status, result.diagnostics.join('\n')).toBe('passed');
@@ -244,7 +239,7 @@ describe.skipIf(!executable)(
       },
     );
 
-    it('allows an unrelated HTTP tool after consent while the declared mock remains unused', async () => {
+    it('allows an unrelated HTTP tool while the declared mock remains unused', async () => {
       const f = await fixture('call');
       f.callServer('other');
       const extra = await startMcpMockController({
@@ -608,23 +603,6 @@ readline.createInterface({input:process.stdin}).on('line', line => {
   };
   return {root, home, work, capture, options};
 }
-
-it('passively inventories JSONC profile names and reports incomplete inventory', async () => {
-  const f = await fakeFixture();
-  const path = await globalConfig(f.home, {});
-  await writeFile(
-    path,
-    '{// config\n"mcpServers":{"linear":{"serverUrl":"https://example.invalid"},"other":{"command":"never-run"},},}',
-  );
-  expect(await inspectAntigravityMcp({env: {HOME: f.home}})).toEqual({
-    servers: ['linear', 'other'],
-    complete: false,
-  });
-  expect(
-    await new AntigravityHarness().inspectMcp({env: {HOME: f.home}}),
-  ).toEqual({servers: ['linear', 'other'], complete: false});
-  await expect(readFile(f.capture)).rejects.toMatchObject({code: 'ENOENT'});
-});
 
 it('replaces whole target definitions while retaining profile/login directory identity', async () => {
   const f = await fakeFixture();

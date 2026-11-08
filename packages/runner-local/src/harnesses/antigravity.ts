@@ -19,7 +19,6 @@ import type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
-  McpInventory,
   PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
@@ -62,11 +61,6 @@ export class AntigravityHarness implements Harness {
 
   version(): Promise<string | null> {
     return this.probeVersion();
-  }
-
-  async inspectMcp(input: Pick<HarnessInput, 'env'>): Promise<McpInventory> {
-    const {inspectAntigravityMcp} = await import('./antigravityMcp.js');
-    return inspectAntigravityMcp(input);
   }
 
   async prepareMcp(

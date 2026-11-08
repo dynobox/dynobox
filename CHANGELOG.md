@@ -51,7 +51,7 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   starting Pi.
 - Require Antigravity 1.5.2 or newer for selective HTTP MCP mocking. Replace
   declared targets without contacting their original endpoints while retaining
-  normal model login, skills, plugins, and unrelated MCPs after shared consent.
+  normal model login, skills, plugins, and unrelated MCPs.
   Use native ACP sessions with scoped mock grants and logical assertion names;
   remove inherited-source rejection and handwritten project records. Reject
   same-named global stdio targets and incompatible print-only extra arguments.

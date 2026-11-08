@@ -38,7 +38,6 @@ import {lineSplitter} from './runStreamingHarness.js';
 import type {
   HarnessInput,
   McpHarnessRun,
-  McpInventory,
   McpServerConnections,
   ToolEvent,
 } from './types.js';
@@ -160,19 +159,6 @@ async function readConfig(path: string): Promise<JsonObject> {
       'Antigravity MCP configuration must contain a valid mcpServers object.',
     );
   return value;
-}
-
-/** Passive profile inventory; workspace, plugin, and managed sources may add MCPs. */
-export async function inspectAntigravityMcp(
-  input: Pick<HarnessInput, 'env'>,
-): Promise<McpInventory> {
-  const home = input.env.HOME ?? process.env.HOME ?? homedir();
-  return {
-    servers: Object.keys(
-      asRecord((await readConfig(configPath(home))).mcpServers),
-    ),
-    complete: false,
-  };
 }
 
 /** Keep the original directory layout and native login paths; own only MCP config. */

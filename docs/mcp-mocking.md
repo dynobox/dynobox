@@ -87,7 +87,7 @@ unsupported versions and configuration conflicts fail explicitly.
 | Codex | 0.153.4 | Remain available. Declared HTTP targets are replaced for this run. |
 | OpenCode | 2.2.5 (2.x) | Remain available. Declared targets are replaced for this run. |
 | Pi | 0.86.0 | Excluded by the current adapter. |
-| Antigravity | 1.5.2 | Remain available after consent. Declared HTTP targets are replaced for this run. |
+| Antigravity | 1.5.2 | Remain available. Declared HTTP targets are replaced for this run. |
 | Cursor | — | MCP mocking unavailable. |
 
 The fixture schema and call assertions are the same across supported harnesses.
