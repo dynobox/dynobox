@@ -1,6 +1,7 @@
 import {
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   realpath,
   rm,
@@ -11,6 +12,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {gunzipSync} from 'node:zlib';
 
+import {execa} from 'execa';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {runJob} from '../index.js';
@@ -126,6 +128,8 @@ async function fixture(
   let call: Buffer;
   let requests = 0;
   let selectedServer: string | undefined;
+  let disabledContacts = 0;
+  const taskBoundaries: boolean[] = [];
   const contexts: string[] = [],
     modelHeaders: (string | undefined)[] = [],
     receipts: string[] = [],
@@ -163,6 +167,11 @@ async function fixture(
     stream = undefined;
   };
   const server = createServer(async (request, response) => {
+    if (request.url === '/disabled-other') {
+      disabledContacts++;
+      response.writeHead(503).end();
+      return;
+    }
     if (request.url === '/original-mcp') {
       originals++;
       if (!healthyOriginal) {
@@ -250,7 +259,12 @@ async function fixture(
           const native =
             selectedServer ??
             context?.toString().match(/dxb_[a-f0-9]{20}/)?.[0];
-          if (!native)
+          const identifier =
+            selectedServer ??
+            context
+              ?.toString()
+              .match(/plugin-dxb_plugin_[a-f0-9]{12}-dxb_[a-f0-9]{20}/)?.[0];
+          if (!native || !identifier)
             throw new Error('Native context did not expose the mock server.');
           call = Buffer.concat([
             field(1, 'get_issue'),
@@ -261,7 +275,7 @@ async function fixture(
             field(3, 'call-fixture'),
             field(4, native),
             field(5, 'get_issue'),
-            field(9, native),
+            field(9, identifier),
           ]);
           stream.write(frame(update(2)));
           stream.write(
@@ -294,6 +308,12 @@ async function fixture(
         .end(field(1, model));
     else if (path.endsWith('/RunSSE')) {
       requests++;
+      taskBoundaries.push(
+        await readFile(join(work, '.git')).then(
+          () => true,
+          () => false,
+        ),
+      );
       modelHeaders.push(request.headers.authorization);
       stream = response;
       response.writeHead(200, {'content-type': 'application/connect+proto'});
@@ -430,6 +450,8 @@ async function fixture(
     },
     originals: () => originals,
     requests: () => requests,
+    disabledContacts: () => disabledContacts,
+    taskBoundaries,
   };
 }
 
@@ -585,6 +607,179 @@ describe.skipIf(!executable)(
       expect(f.controller.isDiscovered('linear')).toBe(true);
       expect(f.requests()).toBe(0);
       expect(f.originals()).toBe(0);
+    }, 30000);
+
+    it.each(['call', 'negative'] as const)(
+      'rejects a native deny rule before a %s task',
+      async (mode) => {
+        const f = await fixture(mode);
+        await rm(join(f.work, '.cursor', 'cli.json'));
+        const path = join(f.profile, 'cli-config.json');
+        const config = JSON.parse(await readFile(path, 'utf8'));
+        config.permissions.deny.push('Mcp(*:*)');
+        await writeFile(path, JSON.stringify(config));
+        await expect(runCursorWithMcp(f.options)).rejects.toMatchObject({
+          category: 'configuration_failed',
+          message: expect.stringContaining('linear.get_issue'),
+        });
+        expect(f.requests()).toBe(0);
+        expect(f.originals()).toBe(0);
+      },
+      30000,
+    );
+
+    it('does not pass a public negative assertion when inherited policy denies mocks', async () => {
+      const f = await fixture('negative');
+      const path = join(f.profile, 'cli-config.json');
+      const config = JSON.parse(await readFile(path, 'utf8'));
+      config.permissions.deny.push('Mcp(*:*)');
+      await writeFile(path, JSON.stringify(config));
+      const job: LocalRunnerJob = {
+        id: 'native-cursor-policy',
+        harness: 'cursor',
+        model: 'gpt-5',
+        iteration: 0,
+        scenario: {
+          id: 'receipt',
+          name: 'No calls',
+          prompt: 'Reply.',
+          harnesses: [{id: 'cursor'}],
+          setup: [],
+          fixtures: [],
+          cliMocks: {},
+          endpoints: [],
+          mcpMocks: f.definitions,
+          assertions: [
+            {
+              id: 'receipt',
+              type: 'mcp.notCalled',
+              server: 'linear',
+              tool: 'get_issue',
+            },
+          ],
+        },
+      };
+      const result = await runJob(job, {
+        harnesses: [new CursorHarness({executable: executable!})],
+        scratchRoot: f.root,
+        env: f.options.input.env,
+        allowUnmockedMcp: true,
+        timeoutMs: 20000,
+      });
+      expect(result.status).toBe('harness_failed');
+      expect(result.mcp?.ready).toBe(false);
+      expect(result.diagnostics.join('\n')).toContain('linear.get_issue');
+      expect(f.requests()).toBe(0);
+    }, 30000);
+
+    it('runs a nested Git workspace without changing its task Git context', async () => {
+      const f = await fixture();
+      await execa('git', ['init', '--quiet', f.root]);
+      await writeFile(f.paths[1]!, '{}');
+      await writeFile(
+        join(f.root, '.cursor', 'cli.json'),
+        JSON.stringify({
+          permissions: {
+            allow: ['Read(parent/**)'],
+            deny: ['Mcp(*:dangerous_tool)'],
+          },
+        }),
+      );
+      const result = await runCursorWithMcp(f.options);
+      expect(result.harnessReady).toBe(true);
+      expect(
+        (
+          await f.controller.finalize({
+            harnessReady: true,
+            harnessSucceeded: true,
+          })
+        ).calls,
+      ).toHaveLength(1);
+      expect(f.originals()).toBe(0);
+      expect(f.taskBoundaries).toEqual([false]);
+      expect(
+        (await execa('git', ['rev-parse', '--show-toplevel'], {cwd: f.work}))
+          .stdout,
+      ).toBe(f.root);
+      await expect(readFile(join(f.work, '.git'))).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    }, 30000);
+
+    it('runs a public job with scratchRoot inside a checkout', async () => {
+      const f = await fixture();
+      await execa('git', ['init', '--quiet', f.root]);
+      const job: LocalRunnerJob = {
+        id: 'native-cursor-nested',
+        harness: 'cursor',
+        model: 'gpt-5',
+        iteration: 0,
+        scenario: {
+          id: 'receipt',
+          name: 'Read receipt',
+          prompt: f.options.input.prompt,
+          harnesses: [{id: 'cursor'}],
+          setup: [],
+          fixtures: [],
+          cliMocks: {},
+          endpoints: [],
+          mcpMocks: f.definitions,
+          assertions: [
+            {
+              id: 'receipt',
+              type: 'mcp.called',
+              server: 'linear',
+              tool: 'get_issue',
+            },
+          ],
+        },
+      };
+      const result = await runJob(job, {
+        harnesses: [new CursorHarness({executable: executable!})],
+        scratchRoot: f.root,
+        env: f.options.input.env,
+        allowUnmockedMcp: true,
+        timeoutMs: 20000,
+      });
+      expect(
+        result.status,
+        result.diagnostics.join('\n') + '\n' + result.harnessOutput?.stderr,
+      ).toBe('passed');
+      expect(result.mcp?.calls).toHaveLength(1);
+      expect(f.originals()).toBe(0);
+      await expect(
+        readFile(join(result.workDir, '.git')),
+      ).rejects.toMatchObject({code: 'ENOENT'});
+    }, 30000);
+
+    it('keeps an unrelated MCP disabled and preserves its normal state file', async () => {
+      const f = await fixture('negative');
+      const path = join(f.profile, 'mcp.json');
+      const config = JSON.parse(await readFile(path, 'utf8'));
+      config.mcpServers.other = {
+        url: f.options.input.env.CURSOR_API_ENDPOINT + '/disabled-other',
+      };
+      await writeFile(path, JSON.stringify(config));
+      await execa(executable!, ['mcp', 'disable', 'other'], {
+        cwd: f.work,
+        env: f.options.input.env,
+        timeout: 10000,
+      });
+      const projects = join(f.profile, 'projects');
+      const directories = await readdir(projects);
+      const disabled = join(projects, directories[0]!, 'mcp-disabled.json');
+      const original = await readFile(disabled, 'utf8');
+      const baseline = await new CursorHarness({
+        executable: executable!,
+        extraArgs: ['--approve-mcps'],
+      }).run(f.options.input);
+      expect(baseline.exitCode, baseline.stderr).toBe(0);
+      expect(f.disabledContacts()).toBe(0);
+      const originals = f.originals();
+      await runCursorWithMcp(f.options);
+      expect(f.disabledContacts()).toBe(0);
+      expect(f.originals()).toBe(originals);
+      expect(await readFile(disabled, 'utf8')).toBe(original);
     }, 30000);
 
     it('rejects a negative result when only preflight discovery succeeded', async () => {

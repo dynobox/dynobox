@@ -1,17 +1,26 @@
 import {randomBytes} from 'node:crypto';
 import {
+  copyFile,
   lstat,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   realpath,
   rm,
+  stat,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import {homedir, tmpdir} from 'node:os';
-import {join, resolve} from 'node:path';
+import {dirname, join, resolve} from 'node:path';
 
+import {Client} from '@modelcontextprotocol/sdk/client/index.js';
+import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type {Transport} from '@modelcontextprotocol/sdk/shared/transport.js';
+import {ErrorCode, McpError} from '@modelcontextprotocol/sdk/types.js';
 import {parse, type ParseError} from 'jsonc-parser';
+import picomatch from 'picomatch';
 
 import {
   mcpDeadline,
@@ -49,6 +58,68 @@ const VALUE_FLAGS = new Set([
   '--http-version',
 ]);
 const SWITCH_FLAGS = new Set(['--insecure', '-k']);
+
+async function nativeProjectRoot(workDir: string): Promise<string> {
+  for (let directory = workDir; ; directory = dirname(directory)) {
+    const marker = await stat(join(directory, '.git')).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return undefined;
+        throw error;
+      },
+    );
+    if (marker) return directory;
+    if (dirname(directory) === directory) return workDir;
+  }
+}
+
+function deniesMock(rule: string, server: string, tool: string): boolean {
+  const pattern = rule.match(/^\s*Mcp\s*\((.*)\)\s*$/)?.[1];
+  if (pattern === undefined || !pattern.includes(':')) return false;
+  const colon = pattern.indexOf(':');
+  return [
+    [pattern.slice(0, colon), server],
+    [pattern.slice(colon + 1), tool],
+  ].every(([glob, value]) => {
+    const normalized = glob!.trim().toLowerCase(),
+      target = value!.trim().toLowerCase();
+    try {
+      return picomatch(normalized, {dot: true})(target);
+    } catch {
+      return normalized === target;
+    }
+  });
+}
+
+/** Use the directory name produced by Cursor, rather than duplicating its path codec. */
+async function inheritMcpState(
+  data: string,
+  originalData: string,
+): Promise<void> {
+  const projects = (
+    await readdir(join(data, 'projects'), {withFileTypes: true})
+  ).filter((entry) => entry.isDirectory());
+  if (projects.length !== 1)
+    throw new McpHarnessError(
+      'configuration_failed',
+      'Cursor did not create an unambiguous workspace MCP state directory.',
+    );
+  const source = join(originalData, 'projects', projects[0]!.name);
+  const target = join(data, 'projects', projects[0]!.name);
+  const entries = await readdir(source, {withFileTypes: true}).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    },
+  );
+  for (const entry of entries) {
+    if (!entry.name.startsWith('mcp-') || entry.isDirectory()) continue;
+    // Native auth writes through this file, preserving refreshes at the normal path.
+    // Approval, disable, and selection changes remain owned by this run.
+    if (entry.name === 'mcp-auth.json')
+      await symlink(join(source, entry.name), join(target, entry.name));
+    else await copyFile(join(source, entry.name), join(target, entry.name));
+  }
+}
 
 async function readConfig(path: string): Promise<JsonObject> {
   let source: string;
@@ -93,16 +164,25 @@ export async function runCursorWithMcp(options: {
   remaining();
   const extras = options.extraArgs ?? [];
   for (let index = 0; index < extras.length; index++) {
-    const flag = extras[index]!;
-    if (SWITCH_FLAGS.has(flag)) continue;
-    if (VALUE_FLAGS.has(flag) && extras[++index] !== undefined) continue;
+    const argument = extras[index]!;
+    const flag = argument.split('=')[0]!;
+    if (SWITCH_FLAGS.has(flag) && argument === flag) continue;
+    if (VALUE_FLAGS.has(flag)) {
+      if (
+        argument.includes('=')
+          ? argument.slice(flag.length + 1) !== ''
+          : extras[++index] !== undefined
+      )
+        continue;
+    }
     throw new McpHarnessError(
       'configuration_failed',
-      `Cursor extra argument ${flag} is unsupported or missing a value for MCP mocking.`,
+      `Cursor extra argument ${/^--?[A-Za-z][A-Za-z0-9-]*$/.test(flag) ? flag : '(positional value)'} is unsupported or missing a value for MCP mocking.`,
     );
   }
   // Native mcp commands derive state from cwd; --workspace must use the same path.
   const workDir = await realpath(input.workDir);
+  const projectRoot = await nativeProjectRoot(workDir);
   const env = {...process.env, ...input.env};
   Object.assign(env, mcpProxyEnv(env));
   const processOptions = {
@@ -145,8 +225,27 @@ export async function runCursorWithMcp(options: {
     );
   }
   const version = probe.stdout.trim();
+  const git = await startOwnedProcess('git', ['rev-parse', '--show-toplevel'], {
+    ...processOptions,
+    timeout: Math.min(5000, remaining()),
+  });
+  remaining();
+  if (git.timedOut)
+    throw new McpHarnessError(
+      'timed_out',
+      'Cursor Git root check exceeded its timeout.',
+    );
+  const gitRoot =
+    git.failed || git.stdout.trim() === ''
+      ? workDir
+      : await realpath(resolve(workDir, git.stdout.trim()));
+  if (gitRoot !== projectRoot)
+    throw new McpHarnessError(
+      'configuration_failed',
+      'Cursor MCP commands and Git disagree on the project root. Check the workspace Git configuration and any Git mocks.',
+    );
   const directory = join(workDir, '.cursor');
-  const paths = [join(directory, 'mcp.json'), join(directory, 'cli.json')];
+  const paths = [join(directory, 'cli.json')];
   // Never follow a fixture symlink into the user's real configuration.
   for (const path of [directory, ...paths]) {
     const info = await lstat(path).catch((error: NodeJS.ErrnoException) => {
@@ -162,7 +261,7 @@ export async function runCursorWithMcp(options: {
   const home = env.HOME ?? homedir();
   const configs = await Promise.all([
     readConfig(join(home, '.cursor', 'mcp.json')),
-    readConfig(paths[0]!),
+    readConfig(join(projectRoot, '.cursor', 'mcp.json')),
   ]);
   for (const config of configs) {
     if (config.mcpServers !== undefined && !isRecord(config.mcpServers))
@@ -177,29 +276,50 @@ export async function runCursorWithMcp(options: {
           `Cursor MCP target "${name}" uses stdio; selective mocking supports HTTP targets.`,
         );
   }
-  const project = configs[1]!;
-  const permissions = await readConfig(paths[1]!);
+  const permissions = await readConfig(paths[0]!);
   const existing = asRecord(permissions.permissions);
   const profile = env.CURSOR_CONFIG_DIR?.trim()
     ? env.CURSOR_CONFIG_DIR
     : env.XDG_CONFIG_HOME?.trim()
       ? join(env.XDG_CONFIG_HOME, 'cursor')
       : join(home, '.cursor');
-  const inherited = asRecord(
-    (await readConfig(resolve(workDir, profile, 'cli-config.json')))
-      .permissions,
-  );
-  for (const entries of [existing, inherited])
+  const effective = {
+    ...asRecord(
+      (await readConfig(resolve(workDir, profile, 'cli-config.json')))
+        .permissions,
+    ),
+  };
+  const directories: string[] = [];
+  for (let directory = workDir; ; directory = dirname(directory)) {
+    directories.unshift(directory);
+    if (directory === projectRoot) break;
+  }
+  const layers = [
+    effective,
+    ...(await Promise.all(
+      directories.map(async (directory) =>
+        asRecord(
+          (directory === workDir
+            ? permissions
+            : await readConfig(join(directory, '.cursor', 'cli.json'))
+          ).permissions,
+        ),
+      ),
+    )),
+  ];
+  for (const entries of layers)
     for (const key of ['allow', 'deny'])
-      if (
-        entries[key] !== undefined &&
-        (!Array.isArray(entries[key]) ||
-          !entries[key].every((item) => typeof item === 'string'))
-      )
-        throw new McpHarnessError(
-          'configuration_failed',
-          'Cursor permissions allow and deny must be arrays of strings.',
-        );
+      if (entries[key] !== undefined) {
+        if (
+          !Array.isArray(entries[key]) ||
+          !entries[key].every((item) => typeof item === 'string')
+        )
+          throw new McpHarnessError(
+            'configuration_failed',
+            'Cursor permissions allow and deny must be arrays of strings.',
+          );
+        effective[key] = entries[key];
+      }
   const originals = await Promise.all(
     paths.map(async (path) => {
       try {
@@ -211,31 +331,49 @@ export async function runCursorWithMcp(options: {
       }
     }),
   );
-  const data = await mkdtemp(join(tmpdir(), 'dynobox-cursor-mcp-'));
-  env.CURSOR_DATA_DIR = data;
   const aliases: Record<string, string> = {};
-  const definitions = {...asRecord(project.mcpServers)};
+  const definitions: Record<string, {url: string}> = {};
+  const pluginName = 'dxb_plugin_' + randomBytes(6).toString('hex');
   // Cursor replaces permission arrays when a project supplies them. Preserve
   // each inherited array unless this workspace already overrides it.
-  const allow = [...((existing.allow ?? inherited.allow ?? []) as string[])];
-  const deny = existing.deny ?? inherited.deny ?? [];
+  const allow = [...((effective.allow ?? []) as string[])];
+  const deny = (effective.deny ?? []) as string[];
   for (const [logical, connection] of Object.entries(servers)) {
     const native = 'dxb_' + randomBytes(10).toString('hex');
     aliases[native] = logical;
-    // Keep an inert entry so the native disable command works for new targets too.
-    definitions[logical] = {url: connection.url};
+    aliases[`plugin-${pluginName}-${native}`] = logical;
+    for (const tool of connection.tools) {
+      const blocked = deny.find((rule) => deniesMock(rule, native, tool));
+      if (blocked)
+        throw new McpHarnessError(
+          'configuration_failed',
+          `Cursor permissions deny MCP mock tool "${logical}.${tool}" via ${blocked}.`,
+        );
+    }
     definitions[native] = {url: connection.url};
     allow.push(...connection.tools.map((tool) => `Mcp(${native}:${tool})`));
   }
+  const originalData = resolve(
+    workDir,
+    env.CURSOR_DATA_DIR?.trim() ? env.CURSOR_DATA_DIR : join(home, '.cursor'),
+  );
+  const data = await mkdtemp(join(tmpdir(), 'dynobox-cursor-mcp-'));
+  env.CURSOR_DATA_DIR = data;
   try {
+    const plugin = join(data, pluginName);
+    await mkdir(join(plugin, '.cursor-plugin'), {recursive: true});
+    await writeFile(
+      join(plugin, '.cursor-plugin', 'plugin.json'),
+      JSON.stringify({name: pluginName, version: '1.0.0'}),
+    );
+    await writeFile(
+      join(plugin, 'mcp.json'),
+      JSON.stringify({mcpServers: definitions}),
+      {mode: 0o600},
+    );
     await mkdir(directory, {recursive: true});
     await writeFile(
       paths[0]!,
-      JSON.stringify({...project, mcpServers: definitions}),
-      {mode: 0o600},
-    );
-    await writeFile(
-      paths[1]!,
       JSON.stringify({
         ...permissions,
         permissions: {...existing, allow, deny},
@@ -261,24 +399,46 @@ export async function runCursorWithMcp(options: {
         );
       return result.stdout;
     };
-    for (const logical of Object.keys(servers))
+    const targets = Object.keys(servers);
+    await command(['mcp', 'disable', targets[0]!], 'MCP state preparation');
+    await inheritMcpState(data, originalData);
+    for (const logical of targets)
       await command(['mcp', 'disable', logical], 'MCP target disable');
-    for (const [native, logical] of Object.entries(aliases)) {
-      await command(['mcp', 'enable', native], 'mock approval');
-      const listed = await command(
-        ['mcp', 'list-tools', native],
-        'mock discovery',
-      );
-      const tools = new Set(
-        [...listed.matchAll(/^- ([^\s]+) \(/gm)].map((match) => match[1]),
-      );
-      if (
-        servers[logical]!.tools.some((tool) => !tools.has(tool)) ||
-        servers[logical]!.isDiscovered?.() === false
-      )
+    for (const [logical, connection] of Object.entries(servers)) {
+      const client = new Client({
+        name: 'dynobox-cursor-preflight',
+        version: '1',
+      });
+      try {
+        const request = () => ({
+          timeout: Math.min(30000, remaining()),
+          ...(input.signal ? {signal: input.signal} : {}),
+        });
+        await client.connect(
+          new StreamableHTTPClientTransport(
+            new URL(connection.url),
+          ) as Transport,
+          request(),
+        );
+        const listed = await client.listTools({}, request());
+        const tools = new Set(listed.tools.map((tool) => tool.name));
+        if (connection.tools.some((tool) => !tools.has(tool)))
+          throw new Error('Missing declared tool.');
+      } catch (error) {
+        remaining();
+        throw new McpHarnessError(
+          error instanceof McpError && error.code === ErrorCode.RequestTimeout
+            ? 'timed_out'
+            : 'not_ready',
+          `Cursor could not discover every declared MCP mock tool for "${logical}".`,
+        );
+      } finally {
+        await client.close();
+      }
+      if (connection.isDiscovered?.() === false)
         throw new McpHarnessError(
           'not_ready',
-          `Cursor did not discover every declared MCP mock tool for "${logical}".`,
+          `Cursor did not discover MCP mock server "${logical}".`,
         );
     }
     const discoveries = new Map(
@@ -292,7 +452,7 @@ export async function runCursorWithMcp(options: {
       buildCursorArgs(
         workDir,
         input.prompt,
-        extras,
+        [...extras, '--plugin-dir', plugin],
         input.model,
         input.permissionMode,
       ),

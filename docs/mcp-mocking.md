@@ -112,16 +112,19 @@ Same-named stdio targets fail explicitly. Native normalized or hashed tool names
 are mapped to the logical names in assertions, callbacks, and reports. All
 declared tools must be active before the task starts.
 
-Cursor uses its ordinary CLI with temporary workspace configuration and native
-MCP state for each run. It disables original target identifiers before discovery,
-then approves and discovers private HTTP mock connections. Normal model login,
-skills, plugins, and other servers remain available. For plugin targets, use the
-full native server identifier shown by Cursor. Same-named global or project
-stdio targets fail explicitly. Workspace configuration symlinks are unsupported.
+Cursor uses its ordinary CLI with a temporary native plugin for mock connections
+and an owned copy of the workspace's native MCP state. It disables original target
+identifiers before discovery and grants only declared mock tools. Existing MCP
+configuration stays in place. Unrelated disabled servers, approvals, and selections
+are preserved; existing MCP auth files remain at their normal paths. Normal model
+login, skills, plugins, and other servers remain available. For plugin targets, use
+the full native server identifier shown by Cursor. Same-named global or project
+stdio targets fail explicitly. Workspace permission configuration symlinks are
+unsupported, as are inconsistent Git roots between Cursor's MCP commands and Git.
 Assertions, callbacks, and reports retain logical names; skills referencing exact
 native namespaces must account for private connection names, as with Codex.
-Inherited permission rules remain in effect, and grants cover only declared mock
-tools. Native retries remain bounded by the job's timeout when one is configured.
+Inherited permission rules remain in effect; conflicting MCP deny rules fail
+before discovery. Native retries remain bounded by the job's timeout when one is configured.
 Before accepting a result, Dynobox also requires discovery by the actual task
 process; successful preflight discovery alone cannot pass a negative assertion.
 
