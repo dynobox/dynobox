@@ -11,7 +11,7 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 ### `dynobox` (CLI)
 
 - Replace declared Claude Code MCP targets for each run while retaining other
-  configured servers after shared confirmation. Preserve normal model login,
+  configured servers. Preserve normal model login,
   skills, and permissions without editing user MCP configuration. Reject
   reserved native namespaces before launch and ambiguous identities at readiness.
 - Document MCP fixture authoring, received-call assertions, and which other MCP

@@ -1,6 +1,6 @@
-import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
-import {homedir, tmpdir} from 'node:os';
-import {isAbsolute, join} from 'node:path';
+import {mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 
 import type {ToolEvent} from '@dynobox/sdk';
 
@@ -21,7 +21,6 @@ import type {
   HarnessInput,
   HarnessRunOutput,
   McpHarnessRun,
-  McpInventory,
   McpServerConnections,
 } from './types.js';
 
@@ -38,31 +37,6 @@ export type ClaudeCodeMcpOptions = {
   servers: McpServerConnections;
   extraArgs?: readonly string[];
 };
-
-/** List known user-profile names without evaluating any MCP connection. */
-export async function inspectClaudeCodeMcp(
-  input: Pick<HarnessInput, 'env'>,
-): Promise<McpInventory> {
-  const env = {...process.env, ...input.env};
-  const path = env.CLAUDE_CONFIG_DIR
-    ? join(env.CLAUDE_CONFIG_DIR, '.claude.json')
-    : join(env.HOME ?? homedir(), '.claude.json');
-  // Relative profile paths depend on the future execution workspace.
-  if (!isAbsolute(path)) return {servers: [], complete: false};
-  let profile: unknown;
-  try {
-    profile = JSON.parse(await readFile(path, 'utf8'));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-  }
-  return {
-    servers:
-      isRecord(profile) && isRecord(profile.mcpServers)
-        ? Object.keys(profile.mcpServers)
-        : [],
-    complete: false,
-  };
-}
 
 export async function runClaudeCodeWithMcp(
   options: ClaudeCodeMcpOptions,

@@ -9,7 +9,6 @@ import {McpHarnessError} from '../mcpMocks/errors.js';
 import * as processGroup from '../processGroup.js';
 import {
   type ClaudeCodeMcpOptions,
-  inspectClaudeCodeMcp,
   runClaudeCodeWithMcp,
 } from './claudeCodeMcp.js';
 
@@ -70,52 +69,6 @@ afterEach(async () => {
 });
 
 describe('selective Claude Code MCP invocation', () => {
-  it.each([false, true])(
-    'inspects profile names without starting clients (custom directory: %s)',
-    async (custom) => {
-      const root = await fs.mkdtemp(
-        join(tmpdir(), 'dynobox-claude-inventory-'),
-      );
-      roots.push(root);
-      const profile = custom ? join(root, 'profile') : root;
-      await fs.mkdir(profile, {recursive: true});
-      await fs.writeFile(
-        join(profile, '.claude.json'),
-        JSON.stringify({
-          mcpServers: {
-            service: {
-              type: 'http',
-              url: 'https://private.example/mcp',
-              headers: {Authorization: 'private-credential'},
-            },
-            github: {command: 'must-never-run'},
-          },
-          projects: {
-            '/source': {mcpServers: {source_only: {command: 'must-never-run'}}},
-          },
-        }),
-      );
-      const start = vi.spyOn(processGroup, 'startOwnedProcess');
-      const inventory = await inspectClaudeCodeMcp({
-        env: {HOME: root, CLAUDE_CONFIG_DIR: custom ? profile : ''},
-      });
-      expect(inventory).toEqual({
-        servers: ['service', 'github'],
-        complete: false,
-      });
-      expect(JSON.stringify(inventory)).not.toMatch(
-        /private|must-never-run|source_only/,
-      );
-      expect(start).not.toHaveBeenCalled();
-    },
-  );
-
-  it('reports unknown inventory for a profile relative to the future workspace', async () => {
-    expect(
-      await inspectClaudeCodeMcp({env: {CLAUDE_CONFIG_DIR: '.profile'}}),
-    ).toEqual({servers: [], complete: false});
-  });
-
   it.each(['plugin_fixture-plugin_service', 'claude_ai_Linear'])(
     'rejects reserved namespace %s before starting or granting tools',
     async (name) => {
