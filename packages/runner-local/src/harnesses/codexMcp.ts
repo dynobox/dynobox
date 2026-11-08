@@ -3,6 +3,11 @@ import {
   McpHarnessError,
   requireMcpVersion,
 } from '../mcpMocks/errors.js';
+import {
+  collectMcpProcess,
+  mcpProcessOutput,
+  probeMcpVersion,
+} from '../mcpMocks/process.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
 import {startOwnedProcess} from '../processGroup.js';
 import {
@@ -11,7 +16,6 @@ import {
   parseCodexJsonLine,
 } from './codex.js';
 import {asRecord, isRecord} from './parsing.js';
-import {lineSplitter} from './runStreamingHarness.js';
 import type {
   HarnessInput,
   McpHarnessRun,
@@ -69,30 +73,19 @@ export async function runCodexWithMcp(
     forceKillAfterDelay: 1000,
     ...(input.signal ? {cancelSignal: input.signal} : {}),
   };
-  const probe = await startOwnedProcess(executable, ['--version'], {
-    ...processOptions,
-    stdin: 'ignore',
-    timeout: Math.min(5000, remaining()),
-  });
-  let version: string;
-  try {
-    remaining();
-    version = requireMcpVersion(
-      'Codex',
-      MIN_VERSION,
-      probe,
-      (stdout) => /^codex-cli (\d+\.\d+\.\d+)/.exec(stdout.trim())?.[1] ?? null,
-    );
-  } catch (error) {
-    if (error instanceof McpHarnessError)
-      throw new McpHarnessError(error.category, error.message, {
-        exitCode: probe.exitCode ?? 1,
-        stdout: probe.stdout,
-        stderr: probe.stderr,
-        durationMs: probe.durationMs,
-      });
-    throw error;
-  }
+  const version = await probeMcpVersion(
+    executable,
+    processOptions,
+    remaining,
+    (probe) =>
+      requireMcpVersion(
+        'Codex',
+        MIN_VERSION,
+        probe,
+        (stdout) =>
+          /^codex-cli (\d+\.\d+\.\d+)/.exec(stdout.trim())?.[1] ?? null,
+      ),
+  );
   const aliases: Record<string, string> = {};
   const mcp: RecordValue = {};
   for (const [name, connection] of Object.entries(servers)) {
@@ -185,12 +178,11 @@ export async function runCodexWithMcp(
   );
   let completed = false;
   let lastError: string | undefined;
-  let failure: McpHarnessError | undefined;
   const toolEvents: ToolEvent[] = [];
   const shouldEmit = createCodexToolEventDeduper();
-  const lines = lineSplitter((line) => {
-    if (!line.trim() || failure) return;
-    try {
+  const {result, failure} = await collectMcpProcess(child, {
+    label: 'Codex',
+    onLine(line) {
       const event: unknown = JSON.parse(line);
       if (!isRecord(event)) return;
       if (event.type === 'error') lastError = errorText(event, aliases);
@@ -205,31 +197,13 @@ export async function runCodexWithMcp(
         toolEvents.push(tool);
         input.onToolEvent?.(tool);
       }
-    } catch (error) {
-      failure =
-        error instanceof McpHarnessError
-          ? error
-          : new McpHarnessError(
-              'execution_failed',
-              error instanceof SyntaxError
-                ? 'Codex emitted unparseable JSON output.'
-                : `Codex event processing failed: ${error instanceof Error ? error.message : String(error)}`,
-            );
-      child.stop();
-    }
+    },
   });
-  child.stdout?.setEncoding('utf8');
-  child.stdout?.on('data', (chunk: string) => lines.write(chunk));
-  const result = await child;
   const output = {
-    exitCode: result.exitCode ?? 1,
-    stdout: result.stdout,
-    stderr: result.stderr,
-    durationMs: Date.now() - started,
+    ...mcpProcessOutput(result, Date.now() - started),
     metadata: {codexMcpAliases: aliases},
   };
   try {
-    lines.flush();
     if (failure) throw failure;
     remaining();
     if (result.timedOut)
@@ -296,12 +270,7 @@ async function readDefinition(
       error instanceof McpHarnessError
         ? error.message
         : 'Codex could not load HTTP MCP mock configuration. Check target transports and managed configuration; see --debug for details.',
-      {
-        exitCode: result.exitCode ?? 1,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        durationMs: result.durationMs,
-      },
+      mcpProcessOutput(result, result.durationMs),
     );
   }
 }

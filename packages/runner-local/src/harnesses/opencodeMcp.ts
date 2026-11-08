@@ -1,16 +1,16 @@
 import {randomBytes} from 'node:crypto';
-import {readFile, realpath, stat} from 'node:fs/promises';
+import {realpath, stat} from 'node:fs/promises';
 import {userInfo} from 'node:os';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 
-import {parse, type ParseError} from 'jsonc-parser';
-
+import {parseMcpJsonConfig, readMcpJsonConfig} from '../mcpMocks/config.js';
 import {
   mcpDeadline,
   McpHarnessError,
   requireMcpVersion,
 } from '../mcpMocks/errors.js';
+import {mcpProcessOutput} from '../mcpMocks/process.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
 import {startOwnedProcess} from '../processGroup.js';
 import {parseOpenCodeJson} from './opencode.js';
@@ -43,24 +43,17 @@ function inlineConfig(
   source = 'OPENCODE_CONFIG_CONTENT',
 ): Config {
   if (!text?.trim()) return {};
-  const errors: ParseError[] = [];
-  const value: unknown = parse(text, errors, {allowTrailingComma: true});
-  if (errors.length || !isRecord(value))
-    throw new McpHarnessError(
-      'configuration_failed',
-      `${source} must contain a JSON or JSONC object.`,
-    );
-  return value;
+  return parseMcpJsonConfig(
+    text,
+    `${source} must contain a JSON or JSONC object.`,
+  );
 }
 
-async function readConfig(path: string): Promise<Config> {
-  try {
-    return inlineConfig(await readFile(path, 'utf8'), path);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
-    throw error;
-  }
-}
+const readConfig = (path: string) =>
+  readMcpJsonConfig(path, {
+    parse: `${path} must contain a JSON or JSONC object.`,
+    allowEmpty: true,
+  });
 
 function serverNames(config: Config): string[] {
   const mcp = asRecord(config.mcp);
@@ -193,12 +186,7 @@ export async function prepareOpenCodeMcpConfiguration(options: {
         ? error.category
         : 'configuration_failed',
       error instanceof Error ? error.message : String(error),
-      {
-        exitCode: probe.exitCode ?? 1,
-        stdout: probe.stdout,
-        stderr: probe.stderr,
-        durationMs: probe.durationMs,
-      },
+      mcpProcessOutput(probe, probe.durationMs),
     );
   }
   const mockTools = new Map<string, string>();
@@ -531,12 +519,7 @@ export async function runOpenCodeWithMcp(options: {
       {...processOptions, input: input.prompt, timeout: remaining()},
     );
     const completed = await cli;
-    output = {
-      exitCode: completed.exitCode ?? 1,
-      stdout: completed.stdout,
-      stderr: completed.stderr,
-      durationMs: Date.now() - started,
-    };
+    output = mcpProcessOutput(completed, Date.now() - started);
     remaining();
     if (completed.timedOut)
       throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');

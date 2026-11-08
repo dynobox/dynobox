@@ -9,6 +9,11 @@ import {
   McpHarnessError,
   requireMcpVersion,
 } from '../mcpMocks/errors.js';
+import {
+  collectMcpProcess,
+  mcpProcessOutput,
+  probeMcpVersion,
+} from '../mcpMocks/process.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
 import {startOwnedProcess} from '../processGroup.js';
 import {
@@ -16,7 +21,6 @@ import {
   parseClaudeCodeStreamJsonLine,
 } from './claudeCode.js';
 import {isRecord} from './parsing.js';
-import {lineSplitter} from './runStreamingHarness.js';
 import type {
   HarnessInput,
   HarnessRunOutput,
@@ -85,25 +89,12 @@ export async function runClaudeCodeWithMcp(
     ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
   };
 
-  const probeProcess = startOwnedProcess(executable, ['--version'], {
-    ...processOptions,
-    timeout: Math.min(5000, remaining()),
-  });
-  const probe = await probeProcess;
-  let version: string;
-  try {
-    remaining();
-    version = requireMcpVersion('Claude Code', MIN_VERSION, probe);
-  } catch (error) {
-    if (error instanceof McpHarnessError)
-      throw new McpHarnessError(error.category, error.message, {
-        exitCode: probe.exitCode ?? 1,
-        stdout: probe.stdout,
-        stderr: probe.stderr,
-        durationMs: probe.durationMs,
-      });
-    throw error;
-  }
+  const version = await probeMcpVersion(
+    executable,
+    processOptions,
+    remaining,
+    (probe) => requireMcpVersion('Claude Code', MIN_VERSION, probe),
+  );
 
   const directory = await mkdtemp(join(tmpdir(), 'dynobox-claude-mcp-'));
   let output: HarnessRunOutput | undefined;
@@ -135,10 +126,11 @@ export async function runClaudeCodeWithMcp(
     const toolEvents: ToolEvent[] = [];
     let ready = false;
     let completed = false;
-    let failure: McpHarnessError | undefined;
-    const consume = (line: string) => {
-      if (!line.trim() || failure) return;
-      try {
+    const {result, failure} = await collectMcpProcess(child, {
+      label: 'Claude Code',
+      describeError: () =>
+        'Claude Code emitted unparseable stream-json output.',
+      onLine(line) {
         const event: unknown = JSON.parse(line);
         if (!isRecord(event)) return;
         if (event.type === 'system' && event.subtype === 'init') {
@@ -177,28 +169,9 @@ export async function runClaudeCodeWithMcp(
           toolEvents.push(tool);
           input.onToolEvent?.(tool);
         }
-      } catch (error) {
-        failure =
-          error instanceof McpHarnessError
-            ? error
-            : new McpHarnessError(
-                'execution_failed',
-                'Claude Code emitted unparseable stream-json output.',
-              );
-        child.stop();
-      }
-    };
-    const lines = lineSplitter(consume);
-    child.stdout?.setEncoding('utf8');
-    child.stdout?.on('data', (chunk: string) => lines.write(chunk));
-    const result = await child;
-    output = {
-      exitCode: result.exitCode ?? 1,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      durationMs: Date.now() - started,
-    };
-    lines.flush();
+      },
+    });
+    output = mcpProcessOutput(result, Date.now() - started);
     remaining();
     if (result.timedOut)
       throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');
