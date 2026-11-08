@@ -10,11 +10,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
-- Add shared confirmation for MCP adapters that can load unrelated real servers.
-  Ask once before setup, preserve JSON stdout, and require explicit
-  `--allow-unmocked-mcp` opt-in in noninteractive runs. Report incomplete
-  inventories without initializing MCP clients. Document MCP fixture authoring
-  and consent.
+- Document MCP fixture authoring, received-call assertions, and which other MCP
+  servers stay real during mock runs.
 - Support MCP mock runs with OpenCode 2.2.5 and later 2.x releases, including
   model variants, inherited integration isolation, and subagent tool evidence.
 - Improve MCP call evidence and failure reporting across Claude Code, Codex, and
@@ -54,8 +51,6 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `@dynobox/runner-local`
 
-- Support passive MCP inventories and explicit `allowUnmockedMcp` consent for
-  programmatic runs. Adapters that execute with mocks only need no consent.
 - Isolate MCP mock runs from inherited harness servers and report refused mock
   calls as failures, so negative call assertions cannot pass on a refusal.
 

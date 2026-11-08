@@ -28,8 +28,6 @@ export type ExecuteCliOptions = {
   scratchRoot?: string;
   env?: Record<string, string>;
   readStdin?: () => Promise<string>;
-  /** Confirmation input; undefined represents EOF or cancellation. */
-  readConfirmation?: () => Promise<string | undefined>;
   timeoutMs?: number;
   writeStdout?: OutputWriter;
   writeStderr?: OutputWriter;

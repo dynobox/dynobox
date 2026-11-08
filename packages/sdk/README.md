@@ -40,8 +40,8 @@ for setup, fixtures, harness options, YAML, and every assertion type.
 
 Use scenario `mcpMocks` for HTTP MCP tool fixtures and `mcp.called` /
 `mcp.notCalled` for received-call assertions. See
-[MCP Mocks](https://docs.dynobox.xyz/mcp-mocking) for authoring and consent when
-other real servers may load.
+[MCP Mocks](https://docs.dynobox.xyz/mcp-mocking) for authoring and for which
+other MCP servers stay real.
 
 ## Experimental CLI Mocks
 

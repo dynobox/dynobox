@@ -80,7 +80,6 @@ import {
   type IdentityResult,
   resolveApiUrl,
 } from './identityApi.js';
-import {confirmUnmockedMcp} from './mcpConfirmation.js';
 import {
   buildRunJobOptions,
   validateHarnessOverrides,
@@ -107,7 +106,6 @@ export type RunCommandFlags = {
   scenario?: string[];
   iterations?: string;
   permissionMode?: string;
-  allowUnmockedMcp?: boolean;
   config?: string;
 };
 
@@ -253,28 +251,6 @@ export async function runCommandAction(
       'dynobox.mcpUpload',
       'MCP uploads are not enabled',
     );
-  }
-
-  if (usesMcp) {
-    runOptions.allowUnmockedMcp = await confirmUnmockedMcp({
-      requests: dynoGroups.flatMap(({jobs: groupJobs}) =>
-        groupJobs.flatMap((job) =>
-          job.scenario.mcpMocks === undefined
-            ? []
-            : [
-                {
-                  harness: job.harness,
-                  mocks: Object.keys(job.scenario.mcpMocks),
-                },
-              ],
-        ),
-      ),
-      harnesses: runOptions.harnesses ?? [],
-      env: options.env,
-      allow: commandFlags.allowUnmockedMcp === true,
-      writeStderr,
-      readLine: options.readConfirmation,
-    });
   }
 
   // Reject unsupported uploads before authenticating, while still checking

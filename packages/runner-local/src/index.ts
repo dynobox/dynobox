@@ -151,32 +151,13 @@ export async function runJob(
       Object.keys(definition.tools).map((tool) => ({server, tool})),
   );
   if (usesMcp) {
-    const adapter = options.harnesses?.find(
-      (candidate) => candidate.id === job.harness,
-    );
-    if (!adapter?.prepareMcp)
+    if (
+      !options.harnesses?.find((candidate) => candidate.id === job.harness)
+        ?.prepareMcp
+    )
       throw new DynoboxConfigError(
         'The registered harness does not implement MCP mock execution.',
       );
-    options.signal?.throwIfAborted();
-    if (!options.allowUnmockedMcp && adapter.inspectMcp) {
-      const inventory = await awaitMcpPreparation(
-        () =>
-          Promise.resolve()
-            .then(() => adapter.inspectMcp!({env: options.env ?? {}}))
-            .catch(() => ({servers: [], complete: false})),
-        options.timeoutMs,
-        options.signal,
-      );
-      options.signal?.throwIfAborted();
-      if (
-        !inventory.complete ||
-        inventory.servers.some((name) => !Object.hasOwn(mocks!, name))
-      )
-        throw new DynoboxConfigError(
-          'Other MCP servers may load during this run. Set allowUnmockedMcp to true to permit them.',
-        );
-    }
   }
   // --- 2. Work directory ---------------------------------------------------
   const workDir = await createWorkDir(options.scratchRoot);

@@ -161,16 +161,10 @@ const docMetadata: Record<
   },
   'mcp-mocking.md': {
     agentSummary:
-      'Provide HTTP MCP tool fixtures with mcpMocks, assert on received calls, and permit unrelated real servers through shared confirmation or --allow-unmocked-mcp.',
+      'Provide HTTP MCP tool fixtures with mcpMocks and assert on received calls. Only declared servers are mocked; other servers in the harness profile stay real.',
     description:
-      'Mock MCP services, check tool calls, and control unrelated MCP servers in interactive and CI runs.',
-    topics: [
-      'MCP',
-      'mcpMocks',
-      'mcp.called',
-      'mcp.notCalled',
-      '--allow-unmocked-mcp',
-    ],
+      'Mock MCP services, check tool calls, and understand which MCP servers stay real.',
+    topics: ['MCP', 'mcpMocks', 'mcp.called', 'mcp.notCalled'],
   },
   'cli.md': {
     agentSummary:

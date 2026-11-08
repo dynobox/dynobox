@@ -6,7 +6,7 @@ import {ClaudeCodeHarness} from '@dynobox/runner-local';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {executeCli} from './execute.js';
-import {cancelledExitCode, configErrorExitCode} from './exitCodes.js';
+import {configErrorExitCode} from './exitCodes.js';
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -105,77 +105,6 @@ async function fixture(mode = 'call', mixed = false) {
 }
 
 describe('MCP CLI execution', () => {
-  it.each(['n', undefined])(
-    'cancels before setup or invocation on %j',
-    async (answer) => {
-      const {root, path, options, log} = await fixture();
-      Object.assign(options.harnesses[0]!, {
-        inspectMcp: async () => ({
-          servers: ['linear', 'github'],
-          complete: true,
-        }),
-      });
-      const result = await executeCli(['run', path, '--reporter', 'json'], {
-        ...options,
-        readConfirmation: async () => answer,
-      });
-      expect(result.exitCode).toBe(cancelledExitCode);
-      expect(result.stdout).toBe('');
-      expect(result.stderr).toContain('other configured MCPs: "github"');
-      await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();
-      await expect(readFile(log)).rejects.toThrow();
-    },
-  );
-
-  it('requires CI opt-in before setup or invocation', async () => {
-    const {root, path, options, log} = await fixture();
-    Object.assign(options.harnesses[0]!, {
-      inspectMcp: async () => ({servers: [], complete: false}),
-    });
-    options.env.CI = '1';
-    const result = await executeCli(['run', path], options);
-    expect(result.exitCode).toBe(configErrorExitCode);
-    expect(result.stderr).toContain('--allow-unmocked-mcp');
-    await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();
-    await expect(readFile(log)).rejects.toThrow();
-  });
-
-  it.each([false, true])(
-    'accepts once across iterations and preserves JSON (flag: %s)',
-    async (flag) => {
-      const {path, options} = await fixture();
-      Object.assign(options.harnesses[0]!, {
-        inspectMcp: async () => ({
-          servers: ['linear', 'github'],
-          complete: false,
-        }),
-      });
-      const readConfirmation = vi.fn(async () => '');
-      const result = await executeCli(
-        [
-          'run',
-          path,
-          '--reporter',
-          'json',
-          '--iterations',
-          '2',
-          ...(flag ? ['--allow-unmocked-mcp'] : []),
-        ],
-        {...options, readConfirmation},
-      );
-      expect(result.exitCode).toBe(0);
-      const records = result.stdout
-        .trim()
-        .split('\n')
-        .map((line) => JSON.parse(line));
-      expect(records).toHaveLength(3);
-      expect(records[2].totals.passed).toBe(2);
-      expect(readConfirmation).toHaveBeenCalledTimes(flag ? 0 : 1);
-      expect(result.stderr.match(/Other MCPs remain real/g)).toHaveLength(1);
-      expect(result.stderr).toContain('inventory is incomplete');
-    },
-  );
-
   it.each([false, true])(
     'runs valid siblings in one file (supported MCP sibling: %s)',
     async (supportedSibling) => {

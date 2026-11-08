@@ -5,6 +5,10 @@ Dynobox starts HTTP MCP endpoints and supplies their configuration to the
 harness. You do not need real service URLs, accounts, or MCP credentials for
 the mocked tools. Your harness still needs its normal model authentication.
 
+Mocks replace only the servers you declare. Depending on the harness, other
+MCP servers, plugins, and connectors from your profile can stay real during the
+run. See [Other MCP servers](#other-mcp-servers).
+
 ```yaml
 name: Issue lookup
 harnesses: [claude-code]
@@ -52,40 +56,17 @@ assertion pass. Assertions refer to logical server/tool names on every harness.
 
 ## Other MCP servers
 
-When an adapter permits other MCP servers, Dynobox warns before setup or
-harness startup and asks once for the whole invocation:
+Dynobox runs your harness with your normal profile and does not edit its
+configuration. A harness that keeps your other MCP servers loads them as it
+normally would, and the agent can call them with real side effects.
 
-```text
-MCP mocks replace only the declared servers. Other MCPs remain real and may be used during this run.
-claude-code: other configured MCPs: "github", "slack".
-Continue? [Y/n]
-```
+`mcp.called` and `mcp.notCalled` check only calls received by mocks. Calls to
+real servers are not checked, and other servers can influence the agent, so
+results can depend on the loaded profile.
 
-Enter accepts; `n`, EOF, or Ctrl-C cancels. Warnings and prompts go to stderr,
-so `--reporter json` stdout remains machine-readable.
-
-The inventory reads stable profile configuration before a job workspace
-exists; it does not connect to servers or execute commands. Project files,
-setup-generated configuration, plugins, and managed configuration can make
-it incomplete. In that case Dynobox says that additional MCPs may
-load rather than claiming the list is exhaustive. Other servers can influence
-the agent, so results can depend on the loaded profile. User configuration is
-not edited.
-
-For CI and other noninteractive runs, explicitly permit other servers:
-
-```sh
-npx dynobox run --allow-unmocked-mcp
-```
-
-The flag skips the question and retains the warning. Without it, a run that
-may load other MCPs stops with an actionable error. Adapters that guarantee
-only mocks can load do not require confirmation. Ordinary runs without
-`mcpMocks` are unaffected.
-
-Programmatic `runJob` callers use `allowUnmockedMcp: true` to grant the same
-permission. Missing consent fails before workspace creation or setup. Terminal
-prompts belong to the CLI, not to harness adapters.
+For a run that cannot reach real services, mock every server the scenario
+could use, or run the harness with a dedicated profile that has no other MCP
+servers. A fresh profile also needs its own model login.
 
 ## Availability and reporting
 
