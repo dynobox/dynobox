@@ -27,10 +27,6 @@ export function assertMcpExecutionSupported(
       harness === undefined
         ? scenario.harnesses.map((entry) => entry.id)
         : [harness];
-    if (harnessIds.includes('cursor'))
-      throw new DynoboxConfigError(
-        'MCP mocking is unavailable for Cursor: plugin-provided MCP servers cannot be isolated from this CLI run.',
-      );
     if (
       harnessIds.some(
         (id) =>
@@ -38,11 +34,12 @@ export function assertMcpExecutionSupported(
           id !== 'codex' &&
           id !== 'opencode' &&
           id !== 'pi' &&
+          id !== 'cursor' &&
           id !== 'antigravity',
       )
     ) {
       throw new DynoboxConfigError(
-        'MCP mocking is unsupported for this harness. Use claude-code, codex, opencode, pi, or antigravity.',
+        'MCP mocking is unsupported for this harness. Use claude-code, codex, opencode, pi, cursor, or antigravity.',
       );
     }
     if (scenario.mcpMocks === undefined)

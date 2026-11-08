@@ -223,6 +223,56 @@ JSONL
 });
 
 describe('parseCursorJson', () => {
+  it('uses the executed MCP identity and retains it through partial completion', () => {
+    const input = {literal: 'dxb_fixture stays opaque'};
+    const result = parseCursorJson(
+      jsonl(
+        {
+          type: 'tool_call',
+          subtype: 'started',
+          call_id: 'mcp-1',
+          tool_call: {
+            mcpToolCall: {
+              args: {
+                serverIdentifier: 'dxb_fixture',
+                providerIdentifier: 'Display name',
+                toolName: 'get_issue',
+                args: input,
+              },
+            },
+          },
+        },
+        {
+          type: 'tool_call',
+          subtype: 'completed',
+          call_id: 'mcp-1',
+          tool_call: {
+            mcpToolCall: {
+              result: {
+                success: {
+                  isError: true,
+                  content: [
+                    {text: {text: 'dxb_fixture opaque service response'}},
+                  ],
+                },
+              },
+            },
+          },
+        },
+      ),
+      {dxb_fixture: 'linear'},
+    );
+    expect(result.toolEvents).toMatchObject([
+      {
+        rawName: 'mcp__linear__get_issue',
+        input,
+        kind: 'mcp',
+        status: 'failure',
+        message: 'dxb_fixture opaque service response',
+      },
+    ]);
+  });
+
   it('maps failed tools, function calls, and supports incremental parsing', () => {
     const toolInputs = new Map<string, unknown>();
     expect(

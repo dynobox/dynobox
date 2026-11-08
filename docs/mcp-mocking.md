@@ -88,7 +88,7 @@ unsupported versions and configuration conflicts fail explicitly.
 | OpenCode | 2.2.5 (2.x) | Remain available. Declared targets are replaced for this run. |
 | Pi | 1.5.0 (1.x, npm installation) | Remain available. Declared HTTP targets are replaced for this run. |
 | Antigravity | 1.5.2 | Remain available. Declared HTTP targets are replaced for this run. |
-| Cursor | — | MCP mocking unavailable. |
+| Cursor | 2026.10.22 | Remain available. Declared targets are disabled and replaced for this run. |
 
 The fixture schema and call assertions are the same across supported harnesses.
 
@@ -111,6 +111,19 @@ extension registrations, without using their original credentials or endpoints.
 Same-named stdio targets fail explicitly. Native normalized or hashed tool names
 are mapped to the logical names in assertions, callbacks, and reports. All
 declared tools must be active before the task starts.
+
+Cursor uses its ordinary CLI with temporary workspace configuration and native
+MCP state for each run. It disables original target identifiers before discovery,
+then approves and discovers private HTTP mock connections. Normal model login,
+skills, plugins, and other servers remain available. For plugin targets, use the
+full native server identifier shown by Cursor. Same-named global or project
+stdio targets fail explicitly. Workspace configuration symlinks are unsupported.
+Assertions, callbacks, and reports retain logical names; skills referencing exact
+native namespaces must account for private connection names, as with Codex.
+Inherited permission rules remain in effect, and grants cover only declared mock
+tools. Native retries remain bounded by the job's timeout when one is configured.
+Before accepting a result, Dynobox also requires discovery by the actual task
+process; successful preflight discovery alone cannot pass a negative assertion.
 
 Antigravity uses its native ACP session API and a temporary MCP configuration
 view. Normal model login, settings, skills, plugins, and unrelated MCPs remain

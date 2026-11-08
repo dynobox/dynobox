@@ -63,6 +63,8 @@ export type McpServerConnections = Readonly<
       tools: readonly string[];
       /** Observe actual fixture discovery before admitting a task, when supported. */
       isDiscovered?: () => boolean;
+      /** Completed discoveries, when probe and task use different clients. */
+      discoveryCount?: () => number;
     }
   >
 >;

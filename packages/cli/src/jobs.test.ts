@@ -5,7 +5,7 @@ import {describe, expect, it, vi} from 'vitest';
 import {buildLocalRunnerJobs} from './jobs.js';
 
 describe('buildLocalRunnerJobs', () => {
-  it('retains valid scenarios and harnesses when reporting unsupported pairs', () => {
+  it('retains valid scenarios and harnesses when reporting an unknown MCP harness', () => {
     const ir = compile(
       defineDyno({
         harnesses: ['cursor', 'claude-code'],
@@ -28,6 +28,8 @@ describe('buildLocalRunnerJobs', () => {
         ],
       }),
     );
+    ir.scenarios[0]!.harnesses[0]!.id =
+      'future-harness' as (typeof ir.scenarios)[number]['harnesses'][number]['id'];
     const onSchedulingError = vi.fn();
     const jobs = buildLocalRunnerJobs(ir, {iterations: 2, onSchedulingError});
     expect(
@@ -42,12 +44,14 @@ describe('buildLocalRunnerJobs', () => {
     ]);
     expect(onSchedulingError).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
-        message: expect.stringContaining('unavailable for Cursor'),
+        message: expect.stringContaining('unsupported for this harness'),
       }),
       ir.scenarios[0],
-      expect.objectContaining({id: 'cursor'}),
+      expect.objectContaining({id: 'future-harness'}),
     );
-    expect(() => buildLocalRunnerJobs(ir)).toThrow('unavailable for Cursor');
+    expect(() => buildLocalRunnerJobs(ir)).toThrow(
+      'unsupported for this harness',
+    );
     onSchedulingError.mockClear();
     expect(
       buildLocalRunnerJobs(ir, {
@@ -61,6 +65,14 @@ describe('buildLocalRunnerJobs', () => {
   it('schedules MCP scenarios for supported harnesses', () => {
     const ir = compile(
       defineDyno({
+        harnesses: [
+          'claude-code',
+          'codex',
+          'opencode',
+          'pi',
+          'antigravity',
+          'cursor',
+        ],
         scenarios: [
           {
             name: 'MCP',
@@ -79,7 +91,7 @@ describe('buildLocalRunnerJobs', () => {
         ],
       }),
     );
-    expect(buildLocalRunnerJobs(ir)).toHaveLength(1);
+    expect(buildLocalRunnerJobs(ir)).toHaveLength(6);
     expect(buildLocalRunnerJobs(ir, {scenarioPatterns: ['unrelated']})).toEqual(
       [],
     );

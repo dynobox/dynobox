@@ -2,6 +2,7 @@ import {realpathSync} from 'node:fs';
 
 import type {PermissionMode} from '@dynobox/sdk';
 
+import {prepareMcpHarness} from '../mcpMocks/resolveExecutable.js';
 import {
   createToolEvent,
   isRecord,
@@ -16,6 +17,8 @@ import type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
+  McpInventory,
+  PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
 import {createVersionProbe} from './version.js';
@@ -38,7 +41,10 @@ export type CursorParsedLine = {
   finalMessage?: string;
   errorMessage?: string;
   terminalFailure?: boolean;
+  completed?: boolean;
 };
+
+export type CursorMcpAliases = Readonly<Record<string, string>>;
 
 export class CursorHarness implements Harness {
   readonly id = 'cursor' as const;
@@ -55,6 +61,23 @@ export class CursorHarness implements Harness {
 
   version(): Promise<string | null> {
     return this.probeVersion();
+  }
+
+  async inspectMcp(input: Pick<HarnessInput, 'env'>): Promise<McpInventory> {
+    const {inspectCursorMcp} = await import('./cursorMcp.js');
+    return inspectCursorMcp(input);
+  }
+
+  async prepareMcp(
+    input: Pick<HarnessInput, 'workDir' | 'env'>,
+  ): Promise<PreparedMcpHarness> {
+    const {runCursorWithMcp} = await import('./cursorMcp.js');
+    return prepareMcpHarness(
+      this.executable,
+      this.extraArgs,
+      input,
+      runCursorWithMcp,
+    );
   }
 
   async run(input: HarnessInput): Promise<HarnessRunOutput> {
@@ -79,7 +102,18 @@ export class CursorHarness implements Harness {
   }
 
   extractResult(raw: HarnessRunOutput): HarnessResult {
-    const parsed = parseCursorJson(raw.stdout);
+    const aliases = raw.metadata?.cursorMcpAliases;
+    const parsed = parseCursorJson(
+      raw.stdout,
+      isRecord(aliases)
+        ? Object.fromEntries(
+            Object.entries(aliases).filter(
+              (entry): entry is [string, string] =>
+                typeof entry[1] === 'string',
+            ),
+          )
+        : {},
+    );
     return {
       exitCode: raw.exitCode === 0 && parsed.terminalFailure ? 1 : raw.exitCode,
       durationMs: raw.durationMs,
@@ -121,7 +155,10 @@ function cursorPermissionArgs(
   return ['--force', '--sandbox', 'disabled'];
 }
 
-export function parseCursorJson(stdout: string): CursorParsedOutput {
+export function parseCursorJson(
+  stdout: string,
+  aliases: CursorMcpAliases = {},
+): CursorParsedOutput {
   let finalMessage: string | undefined;
   let errorMessage: string | undefined;
   let terminalFailure = false;
@@ -130,7 +167,7 @@ export function parseCursorJson(stdout: string): CursorParsedOutput {
   const seenCallIds = new Set<string>();
 
   for (const {line, lineNumber} of jsonLines(stdout)) {
-    const parsed = parseCursorJsonLine(line, lineNumber, toolInputs);
+    const parsed = parseCursorJsonLine(line, lineNumber, toolInputs, aliases);
     if (parsed.callId === undefined || !seenCallIds.has(parsed.callId)) {
       toolEvents.push(...parsed.toolEvents);
       if (parsed.callId !== undefined) seenCallIds.add(parsed.callId);
@@ -147,11 +184,12 @@ export function parseCursorJsonLine(
   line: string,
   lineNumber = 1,
   toolInputs = new Map<string, unknown>(),
+  aliases: CursorMcpAliases = {},
 ): CursorParsedLine {
   const event = parseJsonObjectLine(line, lineNumber, 'Cursor JSON line');
 
   if (event.type === 'tool_call') {
-    return parseToolCall(event, toolInputs);
+    return parseToolCall(event, toolInputs, aliases);
   }
 
   if (event.type === 'result') {
@@ -172,33 +210,38 @@ export function parseCursorJsonLine(
 function parseToolCall(
   event: JsonObject,
   toolInputs: Map<string, unknown>,
+  aliases: CursorMcpAliases,
 ): CursorParsedLine {
-  const toolCall = isRecord(event.tool_call) ? event.tool_call : undefined;
-  if (toolCall === undefined) return {toolEvents: []};
-
-  const parsed = parseToolCallPayload(toolCall);
-  if (parsed === undefined) return {toolEvents: []};
-
   const callId = typeof event.call_id === 'string' ? event.call_id : undefined;
+  const remembered = callId === undefined ? undefined : toolInputs.get(callId);
+  const prior =
+    isRecord(remembered) && typeof remembered.rawName === 'string'
+      ? (remembered as {rawName: string; input: unknown})
+      : undefined;
+  const toolCall = isRecord(event.tool_call) ? event.tool_call : {};
+  const parsed = parseToolCallPayload(toolCall, aliases);
+  if (parsed === undefined && prior === undefined) return {toolEvents: []};
   if (event.subtype === 'started') {
-    if (callId !== undefined) toolInputs.set(callId, parsed.args);
+    if (callId !== undefined && parsed)
+      toolInputs.set(callId, {rawName: parsed.rawName, input: parsed.args});
     return {toolEvents: []};
   }
 
-  const input =
-    parsed.args ??
-    (callId === undefined ? undefined : toolInputs.get(callId)) ??
-    {};
+  const rawName =
+    parsed?.rawName === 'mcp' && prior
+      ? prior.rawName
+      : (parsed?.rawName ?? prior!.rawName);
+  const input = parsed?.args ?? prior?.input ?? {};
   if (callId !== undefined) toolInputs.delete(callId);
 
   return {
     toolEvents: [
       createToolEvent(
-        parsed.rawName,
+        rawName,
         input,
-        parsed.status,
-        parsed.message,
-        kindOverrideFor(parsed.rawName),
+        parsed?.status,
+        parsed?.message,
+        kindOverrideFor(rawName),
       ),
     ],
     ...(callId === undefined ? {} : {callId}),
@@ -214,18 +257,31 @@ type ParsedToolCall = {
 
 function parseToolCallPayload(
   toolCall: JsonObject,
+  aliases: CursorMcpAliases,
 ): ParsedToolCall | undefined {
   const functionCall = isRecord(toolCall.function)
     ? toolCall.function
     : undefined;
   if (functionCall !== undefined && typeof functionCall.name === 'string') {
     return {
-      rawName: functionCall.name,
+      rawName: logicalMcpName(functionCall.name, aliases),
       args: parseArguments(functionCall.arguments ?? functionCall.args),
       status: parseToolStatus(functionCall),
       message: parseToolMessage(functionCall),
     };
   }
+
+  const mcp = isRecord(toolCall.mcpToolCall) ? toolCall.mcpToolCall : undefined;
+  const args = mcp && isRecord(mcp.args) ? mcp.args : undefined;
+  const server = args?.serverIdentifier || args?.providerIdentifier;
+  const tool = args?.toolName || args?.name;
+  if (mcp && args && typeof server === 'string' && typeof tool === 'string')
+    return {
+      rawName: `mcp__${Object.hasOwn(aliases, server) ? aliases[server] : server}__${tool}`,
+      args: args.args ?? {},
+      status: parseToolStatus(mcp),
+      message: parseToolMessage(mcp),
+    };
 
   for (const [key, value] of Object.entries(toolCall)) {
     if (!key.endsWith('ToolCall') || !isRecord(value)) continue;
@@ -238,6 +294,15 @@ function parseToolCallPayload(
   }
 
   return undefined;
+}
+
+function logicalMcpName(name: string, aliases: CursorMcpAliases): string {
+  for (const [native, logical] of Object.entries(aliases)) {
+    const prefix = `mcp__${native}__`;
+    if (name.startsWith(prefix))
+      return `mcp__${logical}__${name.slice(prefix.length)}`;
+  }
+  return name;
 }
 
 function toolNameFromKey(key: string): string {
@@ -267,6 +332,7 @@ function parseToolStatus(
 
   const success = isRecord(result.success) ? result.success : undefined;
   if (success !== undefined) {
+    if (success.isError === true || success.is_error === true) return 'failure';
     const exitCode = success.exitCode ?? success.exit_code;
     if (typeof exitCode === 'number') {
       return exitCode === 0 ? 'success' : 'failure';
@@ -304,6 +370,14 @@ function parseToolMessage(candidate: JsonObject): string | undefined {
 
   const success = isRecord(result.success) ? result.success : undefined;
   if (success === undefined) return undefined;
+  if (success.isError === true || success.is_error === true)
+    return textFromContent(
+      Array.isArray(success.content)
+        ? success.content.map((part: unknown) =>
+            isRecord(part) && isRecord(part.text) ? part.text : part,
+          )
+        : success.content,
+    );
   const exitCode = success.exitCode ?? success.exit_code;
   if (typeof exitCode !== 'number' || exitCode === 0) return undefined;
   return stringFromUnknown(success.stderr) ?? stringFromUnknown(success.stdout);
@@ -319,6 +393,7 @@ function parseResultEvent(event: JsonObject): CursorParsedLine {
 
   return {
     toolEvents: [],
+    completed: event.subtype === 'success' && !terminalFailure,
     ...(finalMessage === undefined ? {} : {finalMessage}),
     ...(errorMessage === undefined ? {} : {errorMessage}),
     ...(terminalFailure ? {terminalFailure: true} : {}),
@@ -358,7 +433,7 @@ function stringFromUnknown(value: unknown): string | undefined {
   return undefined;
 }
 
-function createCursorToolEventDeduper(): (
+export function createCursorToolEventDeduper(): (
   event: ToolEvent,
   line: string,
 ) => boolean {

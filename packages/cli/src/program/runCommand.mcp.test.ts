@@ -2,7 +2,7 @@ import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 
-import {ClaudeCodeHarness} from '@dynobox/runner-local';
+import {ClaudeCodeHarness, type Harness} from '@dynobox/runner-local';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {executeCli} from './execute.js';
@@ -137,102 +137,45 @@ describe('MCP CLI execution', () => {
   });
 
   it.each([false, true])(
-    'runs valid siblings in one file (supported MCP sibling: %s)',
-    async (supportedSibling) => {
-      const {root, path, options} = await fixture('call', true);
+    'schedules Cursor MCP jobs alongside valid siblings (include Claude: %s)',
+    async (includeClaude) => {
+      const {path, options} = await fixture('call', true);
+      // Exercise CLI scheduling/consent with a deterministic custom adapter.
+      // Cursor's installed native adapter is verified separately in its live suite.
+      const claude = options.harnesses[0]!;
+      const cursor: Harness = {
+        id: 'cursor',
+        executable: claude.executable,
+        version: () => claude.version(),
+        inspectMcp: (input) => claude.inspectMcp(input),
+        prepareMcp: (input) => claude.prepareMcp(input),
+        run: (input) => claude.run(input),
+        extractResult: (output) => claude.extractResult(output),
+      };
       const source = JSON.parse(await readFile(path, 'utf8'));
-      source.scenarios[0].harnesses = supportedSibling
+      source.scenarios[0].harnesses = includeClaude
         ? ['cursor', 'claude-code']
         : ['cursor'];
       await writeFile(path, JSON.stringify(source));
       const result = await executeCli(
-        ['run', path, '--reporter', 'json'],
-        options,
+        ['run', '--allow-unmocked-mcp', path, '--reporter', 'json'],
+        {...options, harnesses: [claude, cursor]},
       );
-      expect(result.exitCode).toBe(configErrorExitCode);
-      expect(result.stderr).toContain(
-        'Lookup (cursor): MCP mocking is unavailable for Cursor',
-      );
-      const output = result.stdout
+      expect(result.exitCode).toBe(0);
+      const records = result.stdout
         .trim()
         .split('\n')
         .map((line) => JSON.parse(line));
-      const summary = output.pop();
-      expect(output).toHaveLength(supportedSibling ? 2 : 1);
-      expect(output.every((job) => job.status === 'passed')).toBe(true);
-      expect(summary.status).toBe('failed');
+      const summary = records.pop();
+      expect(records).toHaveLength(includeClaude ? 3 : 2);
+      expect(records.every((job) => job.status === 'passed')).toBe(true);
+      expect(records.some((job) => job.harness.id === 'cursor')).toBe(true);
+      expect(summary.status).toBe('passed');
       expect(summary.totals).toMatchObject({
-        jobs: supportedSibling ? 2 : 1,
-        passed: supportedSibling ? 2 : 1,
-        configErrors: 1,
+        jobs: includeClaude ? 3 : 2,
+        passed: includeClaude ? 3 : 2,
+        configErrors: 0,
       });
-      if (!supportedSibling) {
-        await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();
-      }
-    },
-  );
-
-  it('reports scheduling failure without a false scenario-filter error', async () => {
-    const {root, path, options} = await fixture('call', true);
-    const source = JSON.parse(await readFile(path, 'utf8'));
-    const plain = {...source, scenarios: [source.scenarios[1]]};
-    source.scenarios = [source.scenarios[0]];
-    source.harnesses = ['cursor'];
-    await writeFile(path, JSON.stringify(source));
-    await writeFile(join(root, 'plain.dyno.yaml'), JSON.stringify(plain));
-    const result = await executeCli(
-      ['run', root, '--scenario', 'Lookup', '--reporter', 'json'],
-      options,
-    );
-    expect(result.exitCode).toBe(configErrorExitCode);
-    expect(result.stderr).toContain(
-      'Lookup (cursor): MCP mocking is unavailable for Cursor',
-    );
-    expect(result.stderr).not.toContain('No scenarios matched');
-    expect(result.stdout).toBe('');
-    await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();
-  });
-
-  it.each([false, true])(
-    'reports each unsupported file and runs valid files (all unsupported: %s)',
-    async (allUnsupported) => {
-      const {root, path, options} = await fixture();
-      const source = JSON.parse(await readFile(path, 'utf8'));
-      source.harnesses = ['cursor'];
-      for (const name of ['a-unsupported', 'b-unsupported']) {
-        source.scenarios[0].setup = [`touch ${join(root, name + '-ran')}`];
-        await writeFile(
-          join(root, name + '.dyno.yaml'),
-          JSON.stringify(source),
-        );
-      }
-      if (allUnsupported) await rm(path);
-      const result = await executeCli(
-        ['run', root, '--reporter', 'json'],
-        options,
-      );
-      expect(result.exitCode).toBe(configErrorExitCode);
-      for (const name of ['a-unsupported', 'b-unsupported']) {
-        expect(result.stderr).toContain(name + '.dyno.yaml');
-        await expect(readFile(join(root, name + '-ran'))).rejects.toThrow();
-      }
-      if (allUnsupported) {
-        expect(result.stdout).toBe('');
-        await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();
-      } else {
-        const [job, summary] = result.stdout
-          .trim()
-          .split('\n')
-          .map((line) => JSON.parse(line));
-        expect(job.status).toBe('passed');
-        expect(summary.status).toBe('failed');
-        expect(summary.totals).toMatchObject({
-          jobs: 1,
-          passed: 1,
-          configErrors: 2,
-        });
-        await expect(readFile(join(root, 'setup-ran'))).resolves.toBeDefined();
-      }
     },
   );
 
@@ -397,31 +340,29 @@ describe('MCP CLI execution', () => {
     ).toBe(false);
   });
 
-  it.each([
-    'unsupported',
-    'custom-upload',
-    'upload-no-token',
-    'upload-with-token',
-  ] as const)('rejects %s before setup or invocation', async (mode) => {
-    const {path, root, options, log} = await fixture();
-    const upload = mode !== 'unsupported';
-    options.env.HOME = join(root, 'missing-home');
-    options.env.DYNOBOX_TOKEN =
-      mode === 'upload-with-token' ? 'test-token' : '';
-    options.env.DYNOBOX_UPLOAD_URL = '';
-    if (mode === 'custom-upload')
-      options.env.DYNOBOX_UPLOAD_URL = 'http://127.0.0.1:9/upload';
-    const args = upload ? ['--save-run'] : ['--harness', 'cursor'];
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    const result = await executeCli(['run', path, ...args], options);
-    expect(result.exitCode).toBe(configErrorExitCode);
-    expect(result.stderr).toContain(
-      upload ? 'local-only' : 'plugin-provided MCP servers cannot be isolated',
-    );
-    await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();
-    await expect(readFile(log)).rejects.toThrow();
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
+  it.each(['custom-upload', 'upload-no-token', 'upload-with-token'] as const)(
+    'rejects %s before setup or invocation',
+    async (mode) => {
+      const {path, root, options, log} = await fixture();
+      options.env.HOME = join(root, 'missing-home');
+      options.env.DYNOBOX_TOKEN =
+        mode === 'upload-with-token' ? 'test-token' : '';
+      options.env.DYNOBOX_UPLOAD_URL = '';
+      if (mode === 'custom-upload')
+        options.env.DYNOBOX_UPLOAD_URL = 'http://127.0.0.1:9/upload';
+      const args = ['--save-run'];
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      const result = await executeCli(
+        ['run', '--allow-unmocked-mcp', path, ...args],
+        options,
+      );
+      expect(result.exitCode).toBe(configErrorExitCode);
+      expect(result.stderr).toContain('local-only');
+      await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();
+      await expect(readFile(log)).rejects.toThrow();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
 });
 
 const CHILD = `#!${process.execPath}

@@ -40,6 +40,8 @@ export type McpMockController = {
   readonly urls: Readonly<Record<string, string>>;
   /** Actual initialize + tools/list traffic, not permission or registry readiness. */
   isDiscovered(server: string): boolean;
+  /** Completed native tool-list requests, to distinguish probe and task clients. */
+  discoveryCount(server: string): number;
   /** Seal the call log. Adapter confirmation must describe the actual child invocation. */
   finalize(outcome: {
     harnessReady: boolean;
@@ -66,6 +68,7 @@ export async function startMcpMockController(
   const failures = new Set<McpMockFailure>();
   const initialized = new Set<string>();
   const discovered = new Set<string>();
+  const discoveries = new Map<string, number>();
   const active = new Set<RequestState>();
   const sockets = new Set<Socket>();
   let sealed = false;
@@ -263,7 +266,10 @@ export async function startMcpMockController(
       if (!sealed && response.statusCode < 400 && delivered) {
         if (method === 'initialize' && server.getClientVersion() !== undefined)
           initialized.add(name);
-        if (listedTools) discovered.add(name);
+        if (listedTools) {
+          discovered.add(name);
+          discoveries.set(name, (discoveries.get(name) ?? 0) + 1);
+        }
       } else if (!sealed) failures.add('protocol_failed');
     } catch {
       if (!sealed) failures.add('protocol_failed');
@@ -326,6 +332,7 @@ export async function startMcpMockController(
   }
 
   return {
+    discoveryCount: (name) => discoveries.get(name) ?? 0,
     isDiscovered: (name) =>
       !sealed && initialized.has(name) && discovered.has(name),
     urls: Object.fromEntries(
