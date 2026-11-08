@@ -140,14 +140,13 @@ describe('MCP CLI execution', () => {
     'schedules Cursor MCP jobs alongside valid siblings (include Claude: %s)',
     async (includeClaude) => {
       const {path, options} = await fixture('call', true);
-      // Exercise CLI scheduling/consent with a deterministic custom adapter.
+      // Exercise CLI scheduling with a deterministic custom adapter.
       // Cursor's installed native adapter is verified separately in its live suite.
       const claude = options.harnesses[0]!;
       const cursor: Harness = {
         id: 'cursor',
         executable: claude.executable,
         version: () => claude.version(),
-        inspectMcp: (input) => claude.inspectMcp(input),
         prepareMcp: (input) => claude.prepareMcp(input),
         run: (input) => claude.run(input),
         extractResult: (output) => claude.extractResult(output),
@@ -157,10 +156,10 @@ describe('MCP CLI execution', () => {
         ? ['cursor', 'claude-code']
         : ['cursor'];
       await writeFile(path, JSON.stringify(source));
-      const result = await executeCli(
-        ['run', '--allow-unmocked-mcp', path, '--reporter', 'json'],
-        {...options, harnesses: [claude, cursor]},
-      );
+      const result = await executeCli(['run', path, '--reporter', 'json'], {
+        ...options,
+        harnesses: [claude, cursor],
+      });
       expect(result.exitCode).toBe(0);
       const records = result.stdout
         .trim()
@@ -352,10 +351,7 @@ describe('MCP CLI execution', () => {
         options.env.DYNOBOX_UPLOAD_URL = 'http://127.0.0.1:9/upload';
       const args = ['--save-run'];
       const fetchSpy = vi.spyOn(globalThis, 'fetch');
-      const result = await executeCli(
-        ['run', '--allow-unmocked-mcp', path, ...args],
-        options,
-      );
+      const result = await executeCli(['run', path, ...args], options);
       expect(result.exitCode).toBe(configErrorExitCode);
       expect(result.stderr).toContain('local-only');
       await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();

@@ -557,7 +557,6 @@ describe.skipIf(!executable)(
           harnesses: [new CursorHarness({executable: executable!})],
           scratchRoot: f.root,
           env: f.options.input.env,
-          allowUnmockedMcp: true,
           timeoutMs: 20000,
         });
         expect(
@@ -679,7 +678,6 @@ describe.skipIf(!executable)(
         harnesses: [new CursorHarness({executable: executable!})],
         scratchRoot: f.root,
         env: f.options.input.env,
-        allowUnmockedMcp: true,
         timeoutMs: 20000,
       });
       expect(result.status).toBe('harness_failed');
@@ -754,7 +752,6 @@ describe.skipIf(!executable)(
         harnesses: [new CursorHarness({executable: executable!})],
         scratchRoot: f.root,
         env: f.options.input.env,
-        allowUnmockedMcp: true,
         timeoutMs: 20000,
       });
       expect(

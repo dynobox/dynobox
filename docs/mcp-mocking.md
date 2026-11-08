@@ -5,9 +5,9 @@ Dynobox starts HTTP MCP endpoints and supplies their configuration to the
 harness. You do not need real service URLs, accounts, or MCP credentials for
 the mocked tools. Your harness still needs its normal model authentication.
 
-Mocks replace only the servers you declare. Depending on the harness, other
-MCP servers, plugins, and connectors from your profile can stay real during the
-run. See [Other MCP servers](#other-mcp-servers).
+Mocks replace only the servers you declare. Other MCP servers, plugins, and
+connectors from your profile stay real during the run. See
+[Other MCP servers](#other-mcp-servers).
 
 ```yaml
 name: Issue lookup
@@ -65,8 +65,8 @@ assertion pass. Assertions refer to logical server/tool names on every harness.
 ## Other MCP servers
 
 Dynobox runs your harness with your normal profile and does not edit its
-configuration. A harness that keeps your other MCP servers loads them as it
-normally would, and the agent can call them with real side effects.
+configuration. The harness loads your other MCP servers as it normally would,
+and the agent can call them with real side effects.
 
 `mcp.called` and `mcp.notCalled` check only calls received by mocks. Calls to
 real servers are not checked, and other servers can influence the agent, so

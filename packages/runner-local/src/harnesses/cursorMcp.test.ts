@@ -14,7 +14,7 @@ import {afterEach, describe, expect, it} from 'vitest';
 
 import {startMcpMockController} from '../mcpMocks/controller.js';
 import {CursorHarness} from './cursor.js';
-import {inspectCursorMcp, runCursorWithMcp} from './cursorMcp.js';
+import {runCursorWithMcp} from './cursorMcp.js';
 
 const roots: string[] = [];
 const controllers: Awaited<ReturnType<typeof startMcpMockController>>[] = [];
@@ -106,19 +106,6 @@ if(mode==='hang'){setInterval(()=>{},1000)}else if(mode==='invalid'){console.log
 }
 
 describe('Cursor MCP launch contract', () => {
-  it('reads passive global JSONC names without starting a process', async () => {
-    const f = await fixture();
-    expect(await inspectCursorMcp(f.options.input)).toEqual({
-      servers: ['linear', 'other'],
-      complete: false,
-    });
-    expect(await new CursorHarness().inspectMcp(f.options.input)).toEqual({
-      servers: ['linear', 'other'],
-      complete: false,
-    });
-    await expect(readFile(f.log)).rejects.toMatchObject({code: 'ENOENT'});
-  });
-
   it('uses one native state directory and canonical workspace, and keeps payloads opaque', async () => {
     const f = await fixture();
     const live: string[] = [];

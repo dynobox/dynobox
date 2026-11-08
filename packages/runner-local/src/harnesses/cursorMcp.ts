@@ -40,7 +40,6 @@ import type {
   HarnessInput,
   HarnessRunOutput,
   McpHarnessRun,
-  McpInventory,
   McpServerConnections,
   ToolEvent,
 } from './types.js';
@@ -143,15 +142,6 @@ async function readConfig(path: string): Promise<JsonObject> {
       'Cursor configuration must contain a valid JSON object.',
     );
   return config;
-}
-
-/** Passive names only; project, plugin and managed sources may add servers. */
-export async function inspectCursorMcp(
-  input: Pick<HarnessInput, 'env'>,
-): Promise<McpInventory> {
-  const home = input.env.HOME ?? process.env.HOME ?? homedir();
-  const config = await readConfig(join(home, '.cursor', 'mcp.json'));
-  return {servers: Object.keys(asRecord(config.mcpServers)), complete: false};
 }
 
 /** Native per-run disable/approval state leaves model login and profiles in place. */
