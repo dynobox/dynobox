@@ -403,7 +403,6 @@ describe.skipIf(!executable)(
           harnesses: [new PiHarness({executable: executable!})],
           scratchRoot: f.root,
           env: f.options.input.env,
-          allowUnmockedMcp: true,
           timeoutMs: 20000,
         });
         expect(result.status, result.diagnostics.join('\n')).toBe('passed');

@@ -1,8 +1,6 @@
-import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
-import {homedir, tmpdir} from 'node:os';
-import {isAbsolute, join} from 'node:path';
-
-import {parse, type ParseError} from 'jsonc-parser';
+import {mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 
 import {
   mcpDeadline,
@@ -11,7 +9,7 @@ import {
 } from '../mcpMocks/errors.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
 import {startOwnedProcess} from '../processGroup.js';
-import {asRecord, isRecord} from './parsing.js';
+import {isRecord} from './parsing.js';
 import {
   buildPiArgs,
   parsePiJson,
@@ -24,7 +22,6 @@ import type {
   HarnessInput,
   HarnessRunOutput,
   McpHarnessRun,
-  McpInventory,
   McpServerConnections,
 } from './types.js';
 
@@ -62,42 +59,6 @@ const MIN_MCP_VERSION = '1.5.0';
 const READY_MARKER = 'DYNOBOX_MCP_READY ';
 const CONFIG_ERROR_MARKER = 'DYNOBOX_MCP_CONFIG_ERROR:';
 const NOT_READY_MARKER = 'DYNOBOX_MCP_NOT_READY:';
-
-/** Passive global names; trusted project and extension registrations may add MCPs. */
-export async function inspectPiMcp(
-  input: Pick<HarnessInput, 'env'>,
-): Promise<McpInventory> {
-  const home = input.env.HOME ?? process.env.HOME ?? homedir();
-  const configured =
-    input.env.PI_CODING_AGENT_DIR ?? process.env.PI_CODING_AGENT_DIR;
-  const directory = configured?.startsWith('~/')
-    ? join(home, configured.slice(2))
-    : configured || join(home, '.pi', 'agent');
-  if (!isAbsolute(directory)) return {servers: [], complete: false};
-  let source: string;
-  try {
-    source = await readFile(join(directory, 'mcp.json'), 'utf8');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
-      return {servers: [], complete: false};
-    throw new McpHarnessError(
-      'configuration_failed',
-      'Cannot read Pi MCP configuration.',
-    );
-  }
-  const errors: ParseError[] = [];
-  const config: unknown = parse(source, errors, {allowTrailingComma: true});
-  if (
-    errors.length ||
-    !isRecord(config) ||
-    (config.mcpServers !== undefined && !isRecord(config.mcpServers))
-  )
-    throw new McpHarnessError(
-      'configuration_failed',
-      'Pi MCP configuration must contain a valid mcpServers object.',
-    );
-  return {servers: Object.keys(asRecord(config.mcpServers)), complete: false};
-}
 
 export async function runPiWithMcp(options: {
   executable: string;

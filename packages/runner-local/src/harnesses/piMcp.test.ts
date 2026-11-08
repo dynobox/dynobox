@@ -1,12 +1,10 @@
-import {access, mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
-import {dirname, join} from 'node:path';
+import {access} from 'node:fs/promises';
+import {dirname} from 'node:path';
 import {PassThrough} from 'node:stream';
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
-import {PiHarness} from './pi.js';
-import {inspectPiMcp, piToolNames, runPiWithMcp} from './piMcp.js';
+import {piToolNames, runPiWithMcp} from './piMcp.js';
 
 const mocks = vi.hoisted(() => ({execa: vi.fn()}));
 vi.mock('execa', () => ({
@@ -517,30 +515,6 @@ describe('Pi MCP launch contract', () => {
     ).rejects.toMatchObject({category: 'execution_failed'});
     expect(mocks.execa).not.toHaveBeenCalled();
   });
-});
-
-it('inventories global Pi JSONC passively without launching the CLI', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'dynobox-pi-inventory-'));
-  try {
-    const profile = join(root, 'profile');
-    await mkdir(profile);
-    await writeFile(
-      join(profile, 'mcp.json'),
-      '{// config\n"mcpServers":{"linear":{"url":"https://example.invalid"},"other":{"command":"never-run"},},}',
-    );
-    const input = {env: {HOME: root, PI_CODING_AGENT_DIR: profile}};
-    expect(await inspectPiMcp(input)).toEqual({
-      servers: ['linear', 'other'],
-      complete: false,
-    });
-    expect(await new PiHarness().inspectMcp(input)).toEqual({
-      servers: ['linear', 'other'],
-      complete: false,
-    });
-    expect(mocks.execa).not.toHaveBeenCalled();
-  } finally {
-    await rm(root, {recursive: true, force: true});
-  }
 });
 
 it('rejects unverified major versions and native namespace collisions before task launch', async () => {

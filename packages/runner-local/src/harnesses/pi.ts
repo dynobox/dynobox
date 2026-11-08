@@ -15,7 +15,6 @@ import type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
-  McpInventory,
   PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
@@ -73,11 +72,6 @@ export class PiHarness implements Harness {
 
   version(): Promise<string | null> {
     return this.probeVersion();
-  }
-
-  async inspectMcp(input: Pick<HarnessInput, 'env'>): Promise<McpInventory> {
-    const {inspectPiMcp} = await import('./piMcp.js');
-    return inspectPiMcp(input);
   }
 
   async prepareMcp(

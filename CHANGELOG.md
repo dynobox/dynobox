@@ -42,8 +42,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Require an npm installation of Pi 1.5.0 or a later 1.x release with its native
   MCP SDK for MCP mock runs. Replace declared HTTP targets, including extension
   registrations, while preserving normal authentication, extensions, skills,
-  project trust, and unrelated MCPs after shared consent. Reject same-named
-  stdio targets without launching them. Preserve logical tool names, server
+  project trust, and unrelated MCPs. Reject same-named stdio targets without
+  launching them. Preserve logical tool names, server
   instructions, structured results, mock errors, and tool-only runs. Require
   all declared mock tools to be active before starting the task. Ordinary Pi
   runs continue to support 0.86.0 and newer.
