@@ -136,7 +136,6 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
             (entry): entry is [string, string] => typeof entry[1] === 'string',
           ),
         ),
-        allowUnmockedMcp: true,
         timeoutMs: 20000,
         onProgress: (event) => {
           if (event.type === 'harness.tool')

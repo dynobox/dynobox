@@ -25,11 +25,11 @@
     "execa": "^9.6.1",
     "jsonc-parser": "3.3.1",
     "mockttp": "^4.4.1",
-    "signal-exit": "^4.1.0",
-    "smol-toml": "1.7.0"
+    "signal-exit": "^4.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",
+    "smol-toml": "1.7.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"

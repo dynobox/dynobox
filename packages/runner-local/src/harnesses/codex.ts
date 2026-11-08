@@ -17,7 +17,6 @@ import type {
   HarnessInput,
   HarnessResult,
   HarnessRunOutput,
-  McpInventory,
   PreparedMcpHarness,
   ToolEvent,
 } from './types.js';
@@ -53,11 +52,6 @@ export class CodexHarness implements Harness {
 
   version(): Promise<string | null> {
     return this.probeVersion();
-  }
-
-  async inspectMcp(input: Pick<HarnessInput, 'env'>): Promise<McpInventory> {
-    const {inspectCodexMcp} = await import('./codexMcp.js');
-    return inspectCodexMcp(input);
   }
 
   /** Resolve the Codex executable before CLI mocks change PATH. */

@@ -6,11 +6,7 @@ import {parse} from 'smol-toml';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {CodexHarness} from './codex.js';
-import {
-  type CodexMcpOptions,
-  inspectCodexMcp,
-  runCodexWithMcp,
-} from './codexMcp.js';
+import {type CodexMcpOptions, runCodexWithMcp} from './codexMcp.js';
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -172,37 +168,6 @@ describe('Codex selective HTTP MCP adapter', () => {
     expect(results[0]!.output.metadata?.codexMcpAliases).not.toEqual(
       results[1]!.output.metadata?.codexMcpAliases,
     );
-  });
-
-  it('reads stable TOML profile names without executing the CLI', async () => {
-    const f = await fixture();
-    await writeFile(
-      join(f.root, 'config.toml'),
-      '[mcp_servers."quoted-name"]\nurl="https://private.example"\n[mcp_servers.inline]\nenabled=false\n',
-    );
-    expect(await inspectCodexMcp({env: f.options.input.env})).toEqual({
-      servers: ['quoted-name', 'inline'],
-      complete: false,
-    });
-    await expect(f.invocations()).rejects.toThrow();
-  });
-
-  it('reports missing and invalid passive inventory without exposing file contents', async () => {
-    const f = await fixture();
-    expect(await inspectCodexMcp({env: f.options.input.env})).toEqual({
-      servers: [],
-      complete: false,
-    });
-    await writeFile(
-      join(f.root, 'config.toml'),
-      'PRIVATE_CREDENTIAL is not TOML',
-    );
-    await expect(
-      inspectCodexMcp({env: f.options.input.env}),
-    ).rejects.toMatchObject({
-      category: 'configuration_failed',
-      message: 'Codex user configuration must contain valid TOML.',
-    });
   });
 
   it.each([

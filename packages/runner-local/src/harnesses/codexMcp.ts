@@ -1,9 +1,4 @@
 import {randomBytes} from 'node:crypto';
-import {readFile} from 'node:fs/promises';
-import {homedir} from 'node:os';
-import {isAbsolute, join} from 'node:path';
-
-import {parse} from 'smol-toml';
 
 import {
   mcpDeadline,
@@ -22,7 +17,6 @@ import {lineSplitter} from './runStreamingHarness.js';
 import type {
   HarnessInput,
   McpHarnessRun,
-  McpInventory,
   McpServerConnections,
   ToolEvent,
 } from './types.js';
@@ -50,37 +44,6 @@ export type CodexMcpOptions = {
   servers: McpServerConnections;
   extraArgs?: readonly string[];
 };
-
-/** Passive user-profile names only; projects, plugins and managed sources can add more. */
-export async function inspectCodexMcp(
-  input: Pick<HarnessInput, 'env'>,
-): Promise<McpInventory> {
-  const env = {...process.env, ...input.env};
-  const home = env.CODEX_HOME || join(env.HOME || homedir(), '.codex');
-  if (!isAbsolute(home)) return {servers: [], complete: false};
-  let text: string;
-  try {
-    text = await readFile(join(home, 'config.toml'), 'utf8');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
-      return {servers: [], complete: false};
-    throw new McpHarnessError(
-      'configuration_failed',
-      'Cannot read Codex user configuration for MCP inventory.',
-    );
-  }
-  try {
-    return {
-      servers: Object.keys(asRecord(parse(text).mcp_servers)),
-      complete: false,
-    };
-  } catch {
-    throw new McpHarnessError(
-      'configuration_failed',
-      'Codex user configuration must contain valid TOML.',
-    );
-  }
-}
 
 /** Replace HTTP targets using fresh native identities; retain the normal profile and login. */
 export async function runCodexWithMcp(

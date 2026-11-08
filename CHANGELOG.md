@@ -10,8 +10,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
-- Replace declared Codex HTTP MCP targets after shared confirmation while
-  retaining other servers, normal model authentication, plugins, and skills.
+- Replace declared Codex HTTP MCP targets while retaining other servers,
+  normal model authentication, plugins, and skills.
   Use private native connections to exclude inherited target credentials;
   preserve logical fixture names in assertions, callbacks, and reports.
   Reject same-named stdio targets and unreplaceable configuration explicitly.
