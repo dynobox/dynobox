@@ -14,7 +14,7 @@ import type {
   HarnessRunOutput,
   McpServerConnections,
 } from './harnesses/types.js';
-import {assertMcpExecutionSupported, runJob} from './index.js';
+import {runJob} from './index.js';
 import * as controllerModule from './mcpMocks/controller.js';
 import {McpHarnessError} from './mcpMocks/errors.js';
 
@@ -94,12 +94,6 @@ async function fixture(
 }
 
 describe('MCP runner lifecycle', () => {
-  it('supports Cursor MCP scenarios through the shared eligibility gate', () => {
-    expect(() =>
-      assertMcpExecutionSupported(scenario(), 'cursor'),
-    ).not.toThrow();
-  });
-
   it('reports the adapter category and reason for preparation failures', async () => {
     const {job, options, harness} = await fixture('negative', {
       assertions: [scenario().assertions[1]!],

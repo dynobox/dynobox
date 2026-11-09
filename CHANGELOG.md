@@ -35,7 +35,6 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   attempts may be rejected by the harness if another attempt reaches the mock.
 - Stop harness, setup, and verification child processes on timeout, cancellation,
   or exit. Preserve standard exit codes for interrupt and termination signals.
-- Continue valid scenario and harness pairs when another pair cannot be scheduled.
 - Preserve MCP failure details in local debug logs. Keep MCP mock runs local-only
   and limit mock request sizes.
 - Include required third-party license notices in the CLI package.

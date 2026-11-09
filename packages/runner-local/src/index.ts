@@ -85,10 +85,7 @@ export {
 } from './harnesses/index.js';
 export {ensureDynoboxCA} from './http/ca.js';
 export {buildHttpRoutes, matchHttpEndpointId} from './http/events.js';
-export {
-  assertMcpExecutionSupported,
-  scenarioUsesMcp,
-} from './mcpMocks/eligibility.js';
+export {scenarioUsesMcp} from './mcpMocks/eligibility.js';
 export type {
   CliMockCall,
   LocalArtifact,
@@ -142,7 +139,7 @@ export async function runJob(
   options: RunJobOptions = {},
 ): Promise<LocalRunnerResult> {
   // --- 1. MCP support (fail before creating a workspace) ------------------
-  assertMcpExecutionSupported(job.scenario, job.harness);
+  assertMcpExecutionSupported(job.scenario);
   const usesMcp = job.scenario.mcpMocks !== undefined;
   // Only tools declared by this job receive permission to run.
   const mocks = job.scenario.mcpMocks;
