@@ -199,32 +199,20 @@ export async function runCommandAction(
   // Jobs stay grouped by source dyno so the run upload can report each
   // dyno (and its target) separately; execution flattens them in order.
   const runOptions = buildRunJobOptions(options);
-  let schedulingErrorCount = 0;
   const dynoGroups = compiled.map((entry) => ({
     entry,
-    jobs: buildLocalRunnerJobs(entry.ir, {
-      ...buildJobOptions(
+    jobs: buildLocalRunnerJobs(
+      entry.ir,
+      buildJobOptions(
         overrideHarnesses,
         overrideModels,
         permissionMode,
         scenarioPatterns,
         iterations,
       ),
-      onSchedulingError(error, scenario, harness) {
-        schedulingErrorCount++;
-        const message = `${scenario.name} (${harness.id}): ${error.message}`;
-        errors.push({filePath: entry.filePath, message});
-        writeStderr(renderRunConfigErrorMessage(entry.filePath, message));
-      },
-    }),
+    ),
   }));
   const jobs = dynoGroups.flatMap((group) => group.jobs);
-  if (jobs.length === 0 && schedulingErrorCount > 0)
-    throw new CommanderError(
-      configErrorExitCode,
-      'dynobox.mcp',
-      'no dynos could be scheduled',
-    );
   if (jobs.length === 0 && scenarioPatterns !== undefined) {
     writeStderr(
       renderRunConfigErrorMessage(

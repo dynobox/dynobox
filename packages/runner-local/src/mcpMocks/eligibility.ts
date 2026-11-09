@@ -17,34 +17,12 @@ export function scenarioUsesMcp(scenario: LocalRunnerJob['scenario']): boolean {
   );
 }
 
-/** Reject unsupported MCP runs before scheduling or creating a workspace. */
+/** Reject MCP assertions without mocks before creating a workspace. */
 export function assertMcpExecutionSupported(
   scenario: LocalRunnerJob['scenario'],
-  harness?: LocalRunnerJob['harness'],
 ): void {
-  if (scenarioUsesMcp(scenario)) {
-    const harnessIds =
-      harness === undefined
-        ? scenario.harnesses.map((entry) => entry.id)
-        : [harness];
-    if (
-      harnessIds.some(
-        (id) =>
-          id !== 'claude-code' &&
-          id !== 'codex' &&
-          id !== 'opencode' &&
-          id !== 'pi' &&
-          id !== 'cursor' &&
-          id !== 'antigravity',
-      )
-    ) {
-      throw new DynoboxConfigError(
-        'MCP mocking is unsupported for this harness. Use claude-code, codex, opencode, pi, cursor, or antigravity.',
-      );
-    }
-    if (scenario.mcpMocks === undefined)
-      throw new DynoboxConfigError(
-        'MCP assertions require mcpMocks on the scenario.',
-      );
-  }
+  if (scenarioUsesMcp(scenario) && scenario.mcpMocks === undefined)
+    throw new DynoboxConfigError(
+      'MCP assertions require mcpMocks on the scenario.',
+    );
 }
