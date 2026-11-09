@@ -1,7 +1,16 @@
-import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {dirname, join} from 'node:path';
 
 import type {McpToolResult} from '@dynobox/sdk';
 import {execa} from 'execa';
@@ -893,6 +902,36 @@ describe.skipIf(!executable)(
       ).rejects.toMatchObject({
         category: 'configuration_failed',
         message: 'Pi cannot run a blank prompt.',
+      });
+      expect(f.requests).toHaveLength(0);
+    }, 30000);
+
+    it('names a missing native MCP config loader before model execution', async () => {
+      const f = await fixture('negative');
+      // Pi reads its version from this directory, which lacks the MCP loader.
+      // Like Pi, find the nearest package.json above the executable.
+      let root = await realpath(executable!);
+      do root = dirname(root);
+      while (!existsSync(join(root, 'package.json')) && root !== dirname(root));
+      const packageDir = join(f.root, 'relocated-pi-package');
+      await mkdir(packageDir);
+      await copyFile(
+        join(root, 'package.json'),
+        join(packageDir, 'package.json'),
+      );
+      await expect(
+        runPiWithMcp({
+          ...f.options,
+          input: {
+            ...f.options.input,
+            env: {...f.options.input.env, PI_PACKAGE_DIR: packageDir},
+          },
+        }),
+      ).rejects.toMatchObject({
+        category: 'configuration_failed',
+        message: expect.stringContaining(
+          'does not include the MCP configuration loader',
+        ),
       });
       expect(f.requests).toHaveLength(0);
     }, 30000);

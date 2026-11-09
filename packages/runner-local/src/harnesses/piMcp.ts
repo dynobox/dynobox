@@ -283,7 +283,7 @@ export function piToolNames(servers: McpServerConnections): string[] {
 function piBridgeSource(servers: McpServerConnections): string {
   return `
 import * as nativeSdk from '@earendil-works/pi-coding-agent';
-import {realpathSync,writeSync} from 'node:fs';
+import {existsSync,realpathSync,writeSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 const mocks = ${JSON.stringify(servers)};
@@ -295,10 +295,16 @@ const fail = (ctx, message, config = false) => {
 export default async function(pi) {
  let source;
  let configurationError;
+ let unsupported='Pi MCP mocks require an npm installation of Pi 1.5.0 or newer with its native MCP SDK.';
  try {
   source = realpathSync(fileURLToPath(import.meta.url));
   const {createMcpExtension,getAgentDir,getPackageDir} = nativeSdk;
-  const {loadMcpConfig} = await import(pathToFileURL(join(getPackageDir(),'dist','extensions','mcp','config.js')).href);
+  // Pi does not export loadMcpConfig, so a later 1.x release can move it.
+  // Standalone Bun builds never ship it; an npm installation missing it is a newer layout.
+  const loader = join(getPackageDir(),'dist','extensions','mcp','config.js');
+  if(!process.versions.bun&&!existsSync(loader))
+   unsupported='This Pi release does not include the MCP configuration loader Dynobox uses ('+loader+').';
+  const {loadMcpConfig} = await import(pathToFileURL(loader).href);
   const identity = (name) => name.replace(/-/g, '_');
   const checkStdio = (entries) => {
    const targets = new Set(Object.keys(mocks).map(identity));
@@ -357,10 +363,13 @@ export default async function(pi) {
   });
  } catch(error) {
   writeSync(2,String(error)+'\\n');
-  configurationError='Pi MCP mocks require an npm installation of Pi 1.5.0 or newer with its native MCP SDK.';
+  configurationError=unsupported;
  }
   pi.on('before_agent_start', (event,ctx) => {
    if(configurationError)return fail(ctx,configurationError,true);
+   // Mocks use direct exposure, which skips codemode's describeNamespace()
+   // where Pi exposes server instructions, so add them here. Other servers
+   // keep Pi's native exposure and instructions.
    const all = pi.getAllTools();
    const guidance=[];
    for(const server of Object.keys(mocks)) {
