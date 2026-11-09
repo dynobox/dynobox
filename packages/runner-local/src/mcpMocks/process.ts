@@ -72,6 +72,7 @@ export async function collectMcpProcess(
   child.stdout?.setEncoding('utf8');
   child.stdout?.on('data', (chunk: string) => lines.write(chunk));
   const result = await child;
-  lines.flush();
+  // A timed-out process leaves a truncated line; report the timeout, not a parse error.
+  if (!result.timedOut) lines.flush();
   return {result, failure};
 }

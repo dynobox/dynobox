@@ -72,6 +72,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   coordinated.
 - Report timed-out Antigravity MCP probes and runs as timeouts, and preserve
   failure output in local debug logs.
+- Report Claude Code, Codex, and Cursor MCP runs that time out mid-output as
+  timeouts rather than unparseable output.
 - Enable local MCP mock runs without an experimental environment flag. Each
   scenario grants its declared mock tools automatically, and MCP runs remain
   ineligible for upload.

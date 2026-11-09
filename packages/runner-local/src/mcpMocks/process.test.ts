@@ -4,12 +4,12 @@ import {startOwnedProcess} from '../processGroup.js';
 import {McpHarnessError} from './errors.js';
 import {collectMcpProcess} from './process.js';
 
-function launch(source: string) {
+function launch(source: string, timeout = 5000) {
   return startOwnedProcess(process.execPath, ['-e', source], {
     cwd: process.cwd(),
     env: process.env,
     reject: false,
-    timeout: 5000,
+    timeout,
   });
 }
 
@@ -49,6 +49,26 @@ describe('MCP process collection', () => {
     expect(failure).toBe(error);
     expect(result.failed).toBe(true);
     expect(result.stdout).toContain('PRIVATE_PAYLOAD');
+  });
+
+  it('leaves a line truncated by a timeout unparsed', async () => {
+    const lines: string[] = [];
+    const {result, failure} = await collectMcpProcess(
+      launch(
+        `process.stdout.write('{}\\n{"partial'); setInterval(() => {}, 1000);`,
+        500,
+      ),
+      {
+        label: 'Fixture',
+        onLine(line) {
+          lines.push(line);
+          JSON.parse(line);
+        },
+      },
+    );
+    expect(result.timedOut).toBe(true);
+    expect(lines).toEqual(['{}']);
+    expect(failure).toBeUndefined();
   });
 
   it.each([
