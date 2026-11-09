@@ -1,5 +1,3 @@
-import {randomBytes} from 'node:crypto';
-
 import {
   mcpDeadline,
   McpHarnessError,
@@ -8,7 +6,7 @@ import {
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
 import {startOwnedProcess} from '../processGroup.js';
 import {
-  buildCodexArgs,
+  codexExecOptions,
   createCodexToolEventDeduper,
   parseCodexJsonLine,
 } from './codex.js';
@@ -98,7 +96,10 @@ export async function runCodexWithMcp(
   const aliases: Record<string, string> = {};
   const mcp: RecordValue = {};
   for (const [name, connection] of Object.entries(servers)) {
-    const alias = `dxb_${randomBytes(16).toString('hex')}`;
+    // Keep the logical name visible to the model. If a configured server
+    // already uses this name, the checks below reject credentials or
+    // transports it merges in.
+    const alias = `${name}_dynobox`;
     aliases[alias] = name;
     // A disabled entry still needs a valid transport when no original exists.
     // Existing HTTP credentials remain confined to this disabled entry.
@@ -116,13 +117,11 @@ export async function runCodexWithMcp(
     };
   }
   const overlay = ['-c', `mcp_servers=${toml(mcp)}`];
-  const ordinary = buildCodexArgs(
-    '',
-    [],
+  const ordinary = codexExecOptions(
     input.model,
     input.permissionMode,
     input.cliMocksEnabled ? input.env : undefined,
-  ).slice(1, -1);
+  );
   const configArgs: string[] = [];
   for (let i = 0; i < ordinary.length; i++)
     if (ordinary[i] === '-c') configArgs.push('-c', ordinary[++i]!);
@@ -130,22 +129,19 @@ export async function runCodexWithMcp(
     configArgs.push('-c', 'sandbox_mode="danger-full-access"');
   if (input.model !== undefined)
     configArgs.push('-c', `model=${toml(input.model)}`);
-  for (const [alias, name] of Object.entries(aliases)) {
-    const args = [...configArgs, ...overlay];
-    const original = await readDefinition(
-      executable,
-      args,
-      name,
-      processOptions,
-      remaining,
-    );
-    const mock = await readDefinition(
-      executable,
-      args,
-      alias,
-      processOptions,
-      remaining,
-    );
+  const args = [...configArgs, ...overlay];
+  const read = (id: string) =>
+    readDefinition(executable, args, id, processOptions, remaining);
+  // Run every check at once, then report failures in declaration order.
+  const checks = await Promise.allSettled(
+    Object.entries(aliases).map(([alias, name]) =>
+      Promise.all([read(name), read(alias)]),
+    ),
+  );
+  for (const [index, name] of Object.values(aliases).entries()) {
+    const check = checks[index]!;
+    if (check.status === 'rejected') throw check.reason;
+    const [original, mock] = check.value;
     const transport = asRecord(mock.transport);
     if (
       original.enabled !== false ||

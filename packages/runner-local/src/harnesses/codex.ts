@@ -117,6 +117,19 @@ export function buildCodexArgs(
 ): string[] {
   return [
     'exec',
+    ...codexExecOptions(model, permissionMode, cliMockEnv, extraArgs),
+    prompt,
+  ];
+}
+
+/** `codex exec` options without the subcommand or prompt. */
+export function codexExecOptions(
+  model?: string,
+  permissionMode?: PermissionMode,
+  cliMockEnv?: Readonly<Record<string, string>>,
+  extraArgs: readonly string[] = [],
+): string[] {
+  return [
     '--json',
     '--color',
     'never',
@@ -125,7 +138,6 @@ export function buildCodexArgs(
     ...(model === undefined ? [] : ['--model', model]),
     ...extraArgs,
     ...(cliMockEnv === undefined ? [] : codexCliMockArgs(cliMockEnv)),
-    prompt,
   ];
 }
 

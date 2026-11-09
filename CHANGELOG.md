@@ -12,8 +12,9 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 - Replace declared Codex HTTP MCP targets while retaining other servers,
   normal model authentication, plugins, and skills.
-  Use private native connections to exclude inherited target credentials;
-  preserve logical fixture names in assertions, callbacks, and reports.
+  Use separate `<name>_dynobox` native connections to exclude inherited target
+  credentials; preserve logical fixture names in assertions, callbacks, and
+  reports.
   Reject same-named stdio targets and unreplaceable configuration explicitly.
   Remove plugin-exclusion scans and the app-server configuration protocol.
 - Replace declared Claude Code MCP targets for each run while retaining other

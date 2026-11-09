@@ -64,9 +64,9 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
         status: 'failure',
       });
       expect(event.message).toContain('service/lookup');
-      expect(event.message).not.toContain('dxb_');
+      expect(event.message).not.toContain('service_dynobox');
     }
-    expect(run.output.stdout).toContain('dxb_');
+    expect(run.output.stdout).toContain('service_dynobox');
     expect(
       (
         await f.controller.finalize({

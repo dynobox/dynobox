@@ -158,16 +158,12 @@ describe('Codex selective HTTP MCP adapter', () => {
     );
   });
 
-  it('uses independent native identities for concurrent runs', async () => {
-    const a = await fixture();
-    const b = await fixture();
-    const results = await Promise.all([
-      runCodexWithMcp(a.options),
-      runCodexWithMcp(b.options),
-    ]);
-    expect(results[0]!.output.metadata?.codexMcpAliases).not.toEqual(
-      results[1]!.output.metadata?.codexMcpAliases,
-    );
+  it('keeps the logical server name in the native identity', async () => {
+    const f = await fixture();
+    const run = await runCodexWithMcp(f.options);
+    expect(run.output.metadata?.codexMcpAliases).toEqual({
+      service_dynobox: 'service',
+    });
   });
 
   it.each([
@@ -357,7 +353,7 @@ describe('Codex selective HTTP MCP adapter', () => {
     f.options.input.env.DXB_UPSTREAM_ERROR = 'Mock $mock unavailable';
     await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
       message: 'Codex reported turn.failed: Mock service unavailable',
-      output: {stdout: expect.stringContaining('dxb_')},
+      output: {stdout: expect.stringContaining('service_dynobox')},
     });
   });
 

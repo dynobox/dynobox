@@ -94,9 +94,10 @@ The fixture schema and call assertions are the same across supported harnesses.
 
 Codex replaces HTTP targets; a same-named stdio target fails explicitly. It
 retains normal configuration, model login, plugins, and skills. The agent sees
-private native server names; assertions, callbacks, and reports keep the logical
-names declared in `mcpMocks`. Skills that refer to exact native tool namespaces
-must account for this difference.
+each mock under a separate native name with a `_dynobox` suffix, for example
+`mcp__linear_dynobox__get_issue`; assertions, callbacks, and reports keep the
+logical names declared in `mcpMocks`. Skills that refer to exact native tool
+namespaces must account for this suffix.
 
 OpenCode retains normal profiles, plugins, model authentication, and skills.
 Managed targets that cannot be replaced, overlapping tool namespaces, and
