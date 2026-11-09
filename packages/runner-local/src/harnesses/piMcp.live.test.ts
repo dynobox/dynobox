@@ -636,6 +636,26 @@ describe.skipIf(!executable)(
       30000,
     );
 
+    it('replaces a disabled stdio target without starting its process', async () => {
+      const f = await fixture('call');
+      const marker = join(f.root, 'original-stdio-started');
+      await configFor(f, {
+        linear: {
+          command: process.execPath,
+          args: [
+            '-e',
+            `require('node:fs').writeFileSync(${JSON.stringify(marker)},'started')`,
+          ],
+          enabled: false,
+        },
+      });
+      const result = await runPiWithMcp(f.options);
+      expect(result.toolEvents).toMatchObject([
+        {rawName: 'mcp__linear__get_issue', status: 'success'},
+      ]);
+      await expect(readFile(marker)).rejects.toMatchObject({code: 'ENOENT'});
+    }, 30000);
+
     it.each(['active tools', 'selected tools'] as const)(
       'rejects a mock hidden by inherited before_agent_start %s changes',
       async (source) => {
@@ -906,13 +926,19 @@ describe.skipIf(!executable)(
       expect(f.requests).toHaveLength(0);
     }, 30000);
 
-    it('names a missing native MCP config loader before model execution', async () => {
-      const f = await fixture('negative');
+    it('names a missing native MCP config loader before model execution', async ({
+      skip,
+    }) => {
       // Pi reads its version from this directory, which lacks the MCP loader.
       // Like Pi, find the nearest package.json above the executable.
       let root = await realpath(executable!);
       do root = dirname(root);
       while (!existsSync(join(root, 'package.json')) && root !== dirname(root));
+      if (!existsSync(join(root, 'package.json')))
+        skip(
+          'No package.json above the Pi executable; standalone builds have no MCP loader to relocate.',
+        );
+      const f = await fixture('negative');
       const packageDir = join(f.root, 'relocated-pi-package');
       await mkdir(packageDir);
       await copyFile(

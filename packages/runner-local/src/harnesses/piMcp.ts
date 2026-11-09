@@ -82,7 +82,12 @@ export async function runPiWithMcp(options: {
       `Pi extra argument ${flag} is unsupported or missing a value for MCP mocking.`,
     );
   }
-  const expectedTools = new Set(piToolNames(servers));
+  // Portable names Dynobox reports; the bridge maps Pi's native names to these.
+  const expectedTools = new Set(
+    Object.entries(servers).flatMap(([server, {tools}]) =>
+      tools.map((tool) => `mcp__${server}__${tool}`),
+    ),
+  );
   const identities = Object.keys(servers).map((name) =>
     name.replace(/-/g, '_'),
   );
@@ -270,13 +275,6 @@ export async function runPiWithMcp(options: {
   }
 }
 
-/** Pi registers each mock under the `mcp__<server>__<tool>` name. */
-export function piToolNames(servers: McpServerConnections): string[] {
-  return Object.entries(servers).flatMap(([server, {tools}]) =>
-    tools.map((tool) => `mcp__${server}__${tool}`),
-  );
-}
-
 // The installed Pi SDK supplies transport, credentials, tool registration and
 // protocol semantics. This extension only changes configuration and readiness.
 
@@ -308,7 +306,7 @@ export default async function(pi) {
   const identity = (name) => name.replace(/-/g, '_');
   const checkStdio = (entries) => {
    const targets = new Set(Object.keys(mocks).map(identity));
-   for (const entry of entries) if(targets.has(identity(entry.name)) && 'command' in entry.config)
+   for (const entry of entries) if(targets.has(identity(entry.name)) && 'command' in entry.config && entry.config.enabled !== false)
     configurationError='Pi MCP target "'+entry.name+'" uses stdio; selective mocking supports HTTP targets.';
   };
   // Registry changes may come from any inherited lifecycle hook.

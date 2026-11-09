@@ -4,7 +4,7 @@ import {PassThrough} from 'node:stream';
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
-import {piToolNames, runPiWithMcp} from './piMcp.js';
+import {runPiWithMcp} from './piMcp.js';
 
 const mocks = vi.hoisted(() => ({execa: vi.fn()}));
 vi.mock('execa', () => ({
@@ -57,9 +57,6 @@ const options = () => ({
 
 beforeEach(() => {
   bridge = undefined;
-  vi.spyOn(process, 'exit').mockImplementation(() => {
-    throw new Error('Bridge requested process exit');
-  });
   mocks.execa.mockReset().mockImplementation(async (_executable, args) => {
     if (args[0] === '--version') return {stdout: '1.5.0', failed: false};
     bridge = args[args.indexOf('-e') + 1];
@@ -426,14 +423,6 @@ describe('Pi MCP launch contract', () => {
       exitCode: 0,
     });
     expect((await runPiWithMcp(options())).harnessReady).toBe(true);
-  });
-
-  it('keeps the portable mcp__server__tool names', () => {
-    expect(
-      piToolNames({
-        linear: {url: 'http://127.0.0.1:1/linear', tools: ['get_issue']},
-      }),
-    ).toEqual(['mcp__linear__get_issue']);
   });
 
   it.each([0, 1])(
