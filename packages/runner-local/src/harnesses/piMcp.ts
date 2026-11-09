@@ -7,6 +7,7 @@ import {
   McpHarnessError,
   requireMcpVersion,
 } from '../mcpMocks/errors.js';
+import {mcpProcessOutput, probeMcpVersion} from '../mcpMocks/process.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
 import {startOwnedProcess} from '../processGroup.js';
 import {isRecord} from './parsing.js';
@@ -109,30 +110,20 @@ export async function runPiWithMcp(options: {
     reject: false as const,
     ...(input.signal === undefined ? {} : {cancelSignal: input.signal}),
   };
-  const probe = await startOwnedProcess(executable, ['--version'], {
-    ...processOptions,
-    stdin: 'ignore',
-    timeout: Math.min(5000, remaining()),
-  });
-  let version: string;
-  try {
-    remaining();
-    version = requireMcpVersion('Pi', MIN_MCP_VERSION, probe);
-    if (!version.startsWith('1.'))
-      throw new McpHarnessError(
-        'unsupported_version',
-        'Pi MCP mocks require Pi 1.5.0 or a later 1.x release.',
-      );
-  } catch (error) {
-    if (error instanceof McpHarnessError)
-      throw new McpHarnessError(error.category, error.message, {
-        exitCode: probe.exitCode ?? 1,
-        stdout: probe.stdout,
-        stderr: probe.stderr,
-        durationMs: probe.durationMs,
-      });
-    throw error;
-  }
+  const version = await probeMcpVersion(
+    executable,
+    processOptions,
+    remaining,
+    (probe) => {
+      const version = requireMcpVersion('Pi', MIN_MCP_VERSION, probe);
+      if (!version.startsWith('1.'))
+        throw new McpHarnessError(
+          'unsupported_version',
+          'Pi MCP mocks require Pi 1.5.0 or a later 1.x release.',
+        );
+      return version;
+    },
+  );
 
   const directory = await mkdtemp(join(tmpdir(), 'dynobox-pi-mcp-'));
   let output: HarnessRunOutput | undefined;
@@ -210,10 +201,7 @@ export async function runPiWithMcp(options: {
     readiness.flush();
     stream.flush();
     output = {
-      exitCode: result.exitCode ?? 1,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      durationMs: Date.now() - started,
+      ...mcpProcessOutput(result, Date.now() - started),
       metadata: {piMcpTools: mcpTools},
     };
     if (callbackFailure !== undefined) throw callbackFailure;

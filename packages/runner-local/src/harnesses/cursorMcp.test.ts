@@ -324,6 +324,9 @@ describe('Cursor MCP launch contract', () => {
         }),
       ).rejects.toMatchObject({
         category: mode === 'hang' ? 'timed_out' : 'execution_failed',
+        ...(mode === 'invalid'
+          ? {message: 'Cursor emitted unparseable JSON output.'}
+          : {}),
       });
       await expect(
         readFile(join(f.work, '.cursor', 'cli.json')),

@@ -15,13 +15,17 @@ import {
 import {homedir, tmpdir} from 'node:os';
 import {dirname, join, resolve} from 'node:path';
 
-import {parse, type ParseError} from 'jsonc-parser';
-
+import {readMcpJsonConfig} from '../mcpMocks/config.js';
 import {
   mcpDeadline,
   McpHarnessError,
   requireMcpVersion,
 } from '../mcpMocks/errors.js';
+import {
+  collectMcpProcess,
+  mcpProcessOutput,
+  probeMcpVersion,
+} from '../mcpMocks/process.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
 import {startOwnedProcess} from '../processGroup.js';
 import {
@@ -29,8 +33,7 @@ import {
   createCursorToolEventDeduper,
   parseCursorJsonLine,
 } from './cursor.js';
-import {asRecord, isRecord, type JsonObject} from './parsing.js';
-import {lineSplitter} from './runStreamingHarness.js';
+import {asRecord, type JsonObject} from './parsing.js';
 import type {
   HarnessInput,
   HarnessRunOutput,
@@ -118,26 +121,11 @@ async function inheritMcpState(
   }
 }
 
-async function readConfig(path: string): Promise<JsonObject> {
-  let source: string;
-  try {
-    source = await readFile(path, 'utf8');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
-    throw new McpHarnessError(
-      'configuration_failed',
-      'Cannot read Cursor MCP configuration.',
-    );
-  }
-  const errors: ParseError[] = [];
-  const config: unknown = parse(source, errors, {allowTrailingComma: true});
-  if (errors.length || !isRecord(config))
-    throw new McpHarnessError(
-      'configuration_failed',
-      'Cursor configuration must contain a valid JSON object.',
-    );
-  return config;
-}
+const readConfig = (path: string) =>
+  readMcpJsonConfig(path, {
+    read: 'Cannot read Cursor MCP configuration.',
+    parse: 'Cursor configuration must contain a valid JSON object.',
+  });
 
 /** Native per-run disable/approval state leaves model login and profiles in place. */
 export async function runCursorWithMcp(options: {
@@ -181,38 +169,26 @@ export async function runCursorWithMcp(options: {
     stdin: 'ignore' as const,
     ...(input.signal ? {cancelSignal: input.signal} : {}),
   };
-  const probe = await startOwnedProcess(executable, ['--version'], {
-    ...processOptions,
-    timeout: Math.min(5000, remaining()),
-  });
+  const version = await probeMcpVersion(
+    executable,
+    processOptions,
+    remaining,
+    (probe) => {
+      requireMcpVersion(
+        'Cursor',
+        MIN_VERSION,
+        probe,
+        (stdout) => stdout.match(/^\d{4}\.\d{2}\.\d{2}(?=-|\s|$)/)?.[0] ?? null,
+      );
+      return probe.stdout.trim();
+    },
+  );
   let output: HarnessRunOutput | undefined;
   const snapshot = (result: {
     exitCode?: number;
     stdout: string;
     stderr: string;
-  }): HarnessRunOutput => ({
-    exitCode: result.exitCode ?? 1,
-    stdout: result.stdout,
-    stderr: result.stderr,
-    durationMs: Date.now() - started,
-  });
-  output = snapshot(probe);
-  try {
-    remaining();
-    requireMcpVersion(
-      'Cursor',
-      MIN_VERSION,
-      probe,
-      (stdout) => stdout.match(/^\d{4}\.\d{2}\.\d{2}(?=-|\s|$)/)?.[0] ?? null,
-    );
-  } catch (error) {
-    throw new McpHarnessError(
-      error instanceof McpHarnessError ? error.category : 'execution_failed',
-      error instanceof Error ? error.message : String(error),
-      output,
-    );
-  }
-  const version = probe.stdout.trim();
+  }) => mcpProcessOutput(result, Date.now() - started);
   const directory = join(workDir, '.cursor');
   const cliPath = join(directory, 'cli.json');
   const [folder, file] = await Promise.all(
@@ -393,10 +369,9 @@ export async function runCursorWithMcp(options: {
     const inputs = new Map<string, unknown>();
     const shouldEmit = createCursorToolEventDeduper();
     let completed = false;
-    let failure: McpHarnessError | undefined;
-    const lines = lineSplitter((line) => {
-      if (!line.trim() || failure) return;
-      try {
+    const {result, failure} = await collectMcpProcess(child, {
+      label: 'Cursor',
+      onLine(line) {
         const parsed = parseCursorJsonLine(line, 1, inputs, aliases);
         if (parsed.completed) completed = true;
         if (parsed.terminalFailure)
@@ -409,24 +384,9 @@ export async function runCursorWithMcp(options: {
           toolEvents.push(event);
           input.onToolEvent?.(event);
         }
-      } catch (error) {
-        failure =
-          error instanceof McpHarnessError
-            ? error
-            : new McpHarnessError(
-                'execution_failed',
-                error instanceof SyntaxError
-                  ? 'Cursor emitted unparseable JSON output.'
-                  : `Cursor event processing failed: ${error instanceof Error ? error.message : String(error)}`,
-              );
-        child.stop();
-      }
+      },
     });
-    child.stdout?.setEncoding('utf8');
-    child.stdout?.on('data', (chunk: string) => lines.write(chunk));
-    const result = await child;
     output = {...snapshot(result), metadata: {cursorMcpAliases: aliases}};
-    lines.flush();
     if (failure) throw failure;
     remaining();
     if (result.timedOut)

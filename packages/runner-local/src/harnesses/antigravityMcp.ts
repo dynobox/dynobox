@@ -2,7 +2,6 @@ import {
   mkdir,
   mkdtemp,
   readdir,
-  readFile,
   realpath,
   rm,
   symlink,
@@ -15,13 +14,14 @@ import {StringDecoder} from 'node:string_decoder';
 import {setTimeout as delay} from 'node:timers/promises';
 
 import * as acp from '@agentclientprotocol/sdk';
-import {parse, type ParseError} from 'jsonc-parser';
 
+import {readMcpJsonConfig} from '../mcpMocks/config.js';
 import {
   mcpDeadline,
   McpHarnessError,
   requireMcpVersion,
 } from '../mcpMocks/errors.js';
+import {mcpProcessOutput, probeMcpVersion} from '../mcpMocks/process.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
 import {startOwnedProcess} from '../processGroup.js';
 import {
@@ -137,27 +137,14 @@ function configPath(home: string): string {
   return join(home, '.gemini', 'config', 'mcp_config.json');
 }
 async function readConfig(path: string): Promise<JsonObject> {
-  let source: string;
-  try {
-    source = await readFile(path, 'utf8');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
-    throw new McpHarnessError(
-      'configuration_failed',
-      'Cannot read Antigravity MCP configuration.',
-    );
-  }
-  const errors: ParseError[] = [];
-  const value: unknown = parse(source, errors, {allowTrailingComma: true});
-  if (
-    errors.length ||
-    !isRecord(value) ||
-    (value.mcpServers !== undefined && !isRecord(value.mcpServers))
-  )
-    throw new McpHarnessError(
-      'configuration_failed',
-      'Antigravity MCP configuration must contain a valid mcpServers object.',
-    );
+  const message =
+    'Antigravity MCP configuration must contain a valid mcpServers object.';
+  const value = await readMcpJsonConfig(path, {
+    read: 'Cannot read Antigravity MCP configuration.',
+    parse: message,
+  });
+  if (value.mcpServers !== undefined && !isRecord(value.mcpServers))
+    throw new McpHarnessError('configuration_failed', message);
   return value;
 }
 
@@ -244,25 +231,12 @@ export async function runAntigravityWithMcp(options: {
       reject: false as const,
       ...(input.signal ? {cancelSignal: input.signal} : {}),
     };
-    const probe = await startOwnedProcess(executable, ['--version'], {
-      ...processOptions,
-      stdin: 'ignore',
-      timeout: Math.min(5000, remaining()),
-    });
-    let version: string;
-    try {
-      remaining();
-      version = requireMcpVersion('Antigravity', MIN_VERSION, probe);
-    } catch (error) {
-      if (error instanceof McpHarnessError)
-        throw new McpHarnessError(error.category, error.message, {
-          exitCode: probe.exitCode ?? 1,
-          stdout: probe.stdout,
-          stderr: probe.stderr,
-          durationMs: probe.durationMs,
-        });
-      throw error;
-    }
+    const version = await probeMcpVersion(
+      executable,
+      processOptions,
+      remaining,
+      (probe) => requireMcpVersion('Antigravity', MIN_VERSION, probe),
+    );
     const view = await createConfigView(home, servers);
     try {
       return await runSession({
@@ -471,10 +445,8 @@ async function runSession(options: {
       version: options.version,
       toolEvents,
       output: {
+        ...mcpProcessOutput(native, Date.now() - options.started),
         exitCode: 0,
-        stdout: native.stdout,
-        stderr: native.stderr,
-        durationMs: Date.now() - options.started,
       },
     };
   } catch (error) {
@@ -494,12 +466,7 @@ async function runSession(options: {
           ? 'execution_failed'
           : 'configuration_failed',
       cause instanceof Error ? cause.message : String(cause),
-      {
-        exitCode: native.exitCode ?? 1,
-        stdout: native.stdout,
-        stderr: native.stderr,
-        durationMs: Date.now() - options.started,
-      },
+      mcpProcessOutput(native, Date.now() - options.started),
     );
   } finally {
     connection.close();
