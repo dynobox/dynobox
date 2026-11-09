@@ -25,20 +25,24 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   negative assertion pass, for example a same-named stdio server, a permission
   rule that denies a mock tool, or a mock the harness never discovers.
 - MCP mock runs are local-only and cannot be combined with `--save-run`.
+- `--reporter json` emits `dynobox.report.v3` for runs with MCP mocks, adding
+  job `mcp` records and MCP assertion evidence. Other runs still emit
+  `dynobox.report.v2`.
 - Ordinary Cursor runs now report MCP tool calls as `mcp__<server>__<tool>`
   instead of `mcp`.
 - Pi rejects blank prompts before starting.
 - Stop a run on the first SIGINT or SIGTERM: harness processes are cancelled,
   no new jobs start, and the CLI exits with code 130 or 143. A second signal
-  exits immediately. Harness, setup, and verification processes are also
-  stopped on timeout.
+  exits immediately. Harness, setup, and verification processes, including
+  their child processes, are also stopped when a run is cancelled or Dynobox
+  exits.
 - Include required third-party license notices in the CLI package.
 
 ### `@dynobox/sdk`
 
-- Add scenario `mcpMocks` and the `mcp.called` and `mcp.notCalled` assertion
-  types, with validation that each assertion references a declared mock server
-  and tool.
+- Add scenario `mcpMocks` and the `mcp.called()` and `mcp.notCalled()`
+  assertion helpers, with validation that each assertion references a declared
+  mock server and tool.
 
 ---
 
