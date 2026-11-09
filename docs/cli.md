@@ -310,8 +310,9 @@ output after jobs complete.
 
 ## JSON Reporter
 
-Every JSON reporter object includes `"schema": "dynobox.report.v2"` and a
-`type` field.
+Every JSON reporter object includes a `schema` field and a `type` field. The
+schema is `"dynobox.report.v2"`, or `"dynobox.report.v3"` when the run uses MCP
+mocks.
 
 Job records include:
 
@@ -329,8 +330,12 @@ Job records include:
 - `harnessOutput.exitCode` and `harnessOutput.durationMs` when the harness ran
 - `observations.toolEventCount`, `observations.httpEventCount`,
   `observations.cliMockCallCount`, and `observations.harnessCliMockCallCount`
+- `mcp` for jobs that ran MCP mocks, with `ready`, `finalized`, `failures`,
+  `callCount`, and `calls` (`sequence`, `server`, `tool`, and `category` per
+  call)
 - `assertions`, with `assertionId`, optional `label`, `type`, `passed`, and
-  `message`
+  `message`. In v3 reports, MCP assertions add `mcp` evidence and `anyOf`
+  assertions add `mcpBranches`.
 
 `observations.cliMockCallCount` includes every completed mock call in the job,
 including post-harness verification calls.
