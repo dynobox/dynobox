@@ -1,19 +1,31 @@
-import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {dirname, join} from 'node:path';
 
 import type {McpToolResult} from '@dynobox/sdk';
 import {execa} from 'execa';
-import {afterEach, describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 
+import {runJob} from '../index.js';
 import {startMcpMockController} from '../mcpMocks/controller.js';
+import type {LocalRunnerJob} from '../runTypes.js';
 import {PiHarness} from './pi.js';
 import {runPiWithMcp} from './piMcp.js';
 
 const executable = process.env.DYNOBOX_PI_MCP_EXECUTABLE;
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
+  vi.unstubAllEnvs();
   for (const close of cleanup.splice(0).reverse()) await close();
 });
 
@@ -28,11 +40,18 @@ async function fixture(
     | 'tool-error'
     | 'request-error'
     | 'listing-failed'
+    | 'startup-hang'
     | 'provider-retry'
     | 'invalid-retry'
     | 'tool-only' = 'call',
   response?: McpToolResult,
 ) {
+  for (const key of Object.keys(process.env))
+    if (
+      /^(PI_|OPENAI_|ANTHROPIC_)/.test(key) &&
+      key !== 'DYNOBOX_PI_MCP_EXECUTABLE'
+    )
+      vi.stubEnv(key, undefined);
   const root = await mkdtemp(join(tmpdir(), 'dynobox-pi-native-'));
   cleanup.push(() => rm(root, {recursive: true, force: true}));
   const controller = await startMcpMockController({
@@ -58,8 +77,20 @@ async function fixture(
   );
   const requests: Record<string, unknown>[] = [];
   let realContacts = 0;
+  let originalContacts = 0;
   let rejectedRequest = false;
+  let selectedTool: string | undefined = 'mcp__linear__get_issue';
+  const modelHeaders: string[] = [];
+  const proxyHeaders: {
+    authorization: string | undefined;
+    original: string | string[] | undefined;
+  }[] = [];
   const provider = createServer(async (request, response) => {
+    if (request.url === '/original-linear-mcp') {
+      originalContacts++;
+      response.writeHead(503).end();
+      return;
+    }
     if (request.url === '/proxy-mcp' && request.method !== 'POST') {
       response.writeHead(405).end();
       return;
@@ -77,6 +108,11 @@ async function fixture(
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const body = JSON.parse(Buffer.concat(chunks).toString());
     if (request.url === '/proxy-mcp') {
+      proxyHeaders.push({
+        authorization: request.headers.authorization,
+        original: request.headers['x-original'],
+      });
+      if (mode === 'startup-hang') return;
       if (
         (mode === 'listing-failed' && body.method === 'tools/list') ||
         (mode === 'request-error' &&
@@ -103,16 +139,19 @@ async function fixture(
       return;
     }
     requests.push(body);
+    modelHeaders.push(request.headers.authorization ?? '');
     if (mode === 'provider-retry' && requests.length === 1) {
       response.writeHead(503).end('Temporary provider failure');
       return;
     }
     if (mode === 'hang') return;
     const tool = body.tools?.find((entry: {function?: {name?: string}}) =>
-      entry.function?.name?.startsWith('mcp__'),
+      selectedTool
+        ? entry.function?.name === selectedTool
+        : entry.function?.name?.startsWith('mcp__'),
     );
-    const hasReceipt = JSON.stringify(body.messages).includes(
-      'fixture-receipt-42',
+    const hasReceipt = /fixture-receipt-42|structured-receipt-42/.test(
+      JSON.stringify(body.messages),
     );
     const call =
       !!tool &&
@@ -265,7 +304,9 @@ Say fixture.
             ? `${base}/denied`
             : mode === 'failed'
               ? `http://127.0.0.1:1/${'a'.repeat(48)}`
-              : mode === 'request-error' || mode === 'listing-failed'
+              : mode === 'request-error' ||
+                  mode === 'listing-failed' ||
+                  mode === 'startup-hang'
                 ? `${base}/proxy-mcp`
                 : controller.urls.linear!,
         tools: ['get_issue'],
@@ -280,14 +321,397 @@ Say fixture.
     configPath,
     source,
     contacts: () => realContacts,
+    originalUrl: base + '/original-linear-mcp',
+    originalContacts: () => originalContacts,
+    profile,
+    root,
+    proxyUrl: base + '/proxy-mcp',
+    proxyHeaders,
+    modelHeaders,
+    selectTool: (name: string | undefined) => {
+      selectedTool = name;
+    },
   };
+}
+
+async function configFor(
+  f: Awaited<ReturnType<typeof fixture>>,
+  mcpServers: Record<string, unknown>,
+) {
+  const path = join(f.profile, 'mcp.json');
+  await writeFile(path, JSON.stringify({mcpServers}));
+  return path;
 }
 
 describe.skipIf(!executable)(
   'native Pi MCP runtime (local model, no credits)',
   () => {
+    it.each(['call', 'negative', 'unrelated'] as const)(
+      'runs %s through the public runner with logical assertions',
+      async (mode) => {
+        const f = await fixture(mode === 'negative' ? 'negative' : 'call');
+        const servers: Record<string, unknown> = {linear: {url: f.originalUrl}};
+        if (mode === 'unrelated') {
+          const other = await startMcpMockController({
+            other: {
+              tools: {
+                get_issue: {
+                  inputSchema: {type: 'object'},
+                  response: {
+                    content: [{type: 'text', text: 'fixture-receipt-42'}],
+                  },
+                },
+              },
+            },
+          });
+          cleanup.push(() =>
+            other.finalize({harnessReady: false, harnessSucceeded: false}),
+          );
+          servers.other = {url: other.urls.other, exposure: 'direct'};
+          f.selectTool('mcp__other__get_issue');
+        }
+        await configFor(f, servers);
+        const job: LocalRunnerJob = {
+          id: 'native-pi',
+          harness: 'pi',
+          model: f.options.input.model,
+          permissionMode: 'default',
+          iteration: 0,
+          scenario: {
+            id: 'receipt',
+            name: 'Read a receipt',
+            prompt: f.options.input.prompt,
+            harnesses: [{id: 'pi'}],
+            setup: [],
+            fixtures: [],
+            cliMocks: {},
+            endpoints: [],
+            mcpMocks: {
+              linear: {
+                tools: {
+                  get_issue: {
+                    inputSchema: {type: 'object'},
+                    response: {
+                      content: [{type: 'text', text: 'fixture-receipt-42'}],
+                    },
+                  },
+                },
+              },
+            },
+            assertions: [
+              {
+                id: 'receipt',
+                type: mode === 'call' ? 'mcp.called' : 'mcp.notCalled',
+                server: 'linear',
+                tool: 'get_issue',
+              },
+            ],
+          },
+        };
+        const result = await runJob(job, {
+          harnesses: [new PiHarness({executable: executable!})],
+          scratchRoot: f.root,
+          env: f.options.input.env,
+          timeoutMs: 20000,
+        });
+        expect(result.status, result.diagnostics.join('\n')).toBe('passed');
+        expect(result.mcp).toMatchObject({ready: true, failures: []});
+        expect(result.mcp?.calls).toHaveLength(mode === 'call' ? 1 : 0);
+        expect(f.originalContacts()).toBe(0);
+      },
+      30000,
+    );
+
+    it.each(['default', 'dangerous'] as const)(
+      'replaces target definitions with %s project trust and no original contacts',
+      async (permissionMode) => {
+        const f = await fixture('call');
+        const marker = join(f.root, 'original-auth-executed');
+        const helper = join(f.root, 'original-auth.mjs');
+        await writeFile(
+          helper,
+          `#!${process.execPath}\nimport {writeFileSync} from 'node:fs';\nwriteFileSync(${JSON.stringify(marker)}, 'ran');\nconsole.log('synthetic-old-key');\n`,
+          {mode: 0o700},
+        );
+        const quotedHelper = "'" + helper.replaceAll("'", "'\\''") + "'";
+        const other = await startMcpMockController({
+          other: {
+            tools: {
+              ping: {inputSchema: {type: 'object'}, response: {content: []}},
+            },
+          },
+        });
+        cleanup.push(() =>
+          other.finalize({harnessReady: false, harnessSucceeded: false}),
+        );
+        const global = await configFor(f, {
+          linear: {
+            url: f.originalUrl,
+            headers: {
+              Authorization: '!' + quotedHelper,
+              'X-Original': 'synthetic',
+            },
+            exposure: 'hidden',
+            toolExposure: {'*': 'hidden'},
+          },
+          other: {url: other.urls.other},
+        });
+        const project = join(f.root, '.pi', 'mcp.json');
+        await writeFile(
+          project,
+          JSON.stringify({
+            mcpServers: {
+              linear: {
+                url: f.originalUrl,
+                headers: {'X-Original': 'project-synthetic'},
+              },
+            },
+          }),
+        );
+        const originals = await Promise.all(
+          [global, project].map((path) => readFile(path, 'utf8')),
+        );
+        const result = await runPiWithMcp({
+          ...f.options,
+          input: {...f.options.input, permissionMode},
+          servers: {linear: {...f.options.servers.linear, url: f.proxyUrl}},
+        });
+        expect(result.toolEvents).toMatchObject([
+          {rawName: 'mcp__linear__get_issue', status: 'success'},
+        ]);
+        expect(f.originalContacts()).toBe(0);
+        expect(other.isDiscovered('other')).toBe(true);
+        expect(f.proxyHeaders.length).toBeGreaterThan(0);
+        expect(
+          f.proxyHeaders.every(
+            (headers) =>
+              headers.authorization === undefined &&
+              headers.original === undefined,
+          ),
+        ).toBe(true);
+        await expect(readFile(marker)).rejects.toMatchObject({code: 'ENOENT'});
+        expect(
+          await Promise.all(
+            [global, project].map((path) => readFile(path, 'utf8')),
+          ),
+        ).toEqual(originals);
+      },
+      30000,
+    );
+
+    it('overrides extension-registered HTTP targets while preserving a user MCP command', async () => {
+      const f = await fixture('call');
+      const registered = join(f.root, 'registered.json');
+      await writeFile(
+        join(f.profile, 'extensions', 'registered.js'),
+        `import {writeFileSync} from 'node:fs';export default function(pi) {pi.registerCommand('mcp',{description:'User command',handler:async()=>{}});pi.registerMcpServer('linear',{url:${JSON.stringify(f.originalUrl)}});pi.on('session_start',()=>writeFileSync(${JSON.stringify(registered)},JSON.stringify(pi.getMcpServers())));}`,
+      );
+      const result = await runPiWithMcp(f.options);
+      expect(JSON.parse(await readFile(registered, 'utf8'))).toMatchObject([
+        {name: 'linear', config: {url: f.originalUrl}},
+      ]);
+      expect(result.toolEvents).toMatchObject([
+        {rawName: 'mcp__linear__get_issue', status: 'success'},
+      ]);
+      expect(f.originalContacts()).toBe(0);
+    }, 30000);
+
+    it.each(['file', 'env'] as const)(
+      'preserves %s model authentication at the original profile path',
+      async (source) => {
+        const f = await fixture('call');
+        const path = join(f.profile, 'models.json');
+        const models = JSON.parse(await readFile(path, 'utf8'));
+        const key = 'synthetic-' + source + '-key';
+        if (source === 'file') {
+          delete models.providers.fixture.apiKey;
+          await writeFile(
+            join(f.profile, 'auth.json'),
+            JSON.stringify({fixture: {type: 'api_key', key}}),
+          );
+        } else models.providers.fixture.apiKey = '${DYNOBOX_PI_SYNTHETIC_KEY}';
+        await writeFile(path, JSON.stringify(models));
+        const original = await readFile(path, 'utf8');
+        await runPiWithMcp({
+          ...f.options,
+          input: {
+            ...f.options.input,
+            env: {...f.options.input.env, DYNOBOX_PI_SYNTHETIC_KEY: key},
+          },
+        });
+        expect(f.modelHeaders.length).toBeGreaterThan(0);
+        expect(
+          f.modelHeaders.every((header) => header === 'Bearer ' + key),
+        ).toBe(true);
+        expect(await readFile(path, 'utf8')).toBe(original);
+      },
+      30000,
+    );
+
+    it('keeps colliding native tool spellings logical in evidence and callbacks', async () => {
+      const f = await fixture('call');
+      f.selectTool(undefined);
+      const controller = await startMcpMockController({
+        linear: {
+          tools: Object.fromEntries(
+            ['get-issue', 'get_issue'].map((name) => [
+              name,
+              {
+                inputSchema: {type: 'object'},
+                response: {
+                  content: [{type: 'text', text: 'fixture-receipt-42'}],
+                },
+              },
+            ]),
+          ),
+        },
+      });
+      cleanup.push(() =>
+        controller.finalize({harnessReady: false, harnessSucceeded: false}),
+      );
+      const live: string[] = [];
+      const result = await runPiWithMcp({
+        ...f.options,
+        input: {
+          ...f.options.input,
+          onToolEvent: (event) => live.push(event.rawName),
+        },
+        servers: {
+          linear: {
+            url: controller.urls.linear!,
+            tools: ['get-issue', 'get_issue'],
+          },
+        },
+      });
+      const observation = await controller.finalize({
+        harnessReady: result.harnessReady,
+        harnessSucceeded: true,
+      });
+      expect(observation.calls).toHaveLength(1);
+      const logical = 'mcp__linear__' + observation.calls[0]!.tool;
+      expect(live).toEqual([logical]);
+      expect(result.toolEvents?.[0]?.rawName).toBe(logical);
+      expect(new PiHarness().extractResult(result.output).toolEvents).toEqual(
+        result.toolEvents,
+      );
+    }, 30000);
+
+    it.each([
+      'global',
+      'extension',
+      'session_start extension',
+      'agent_start extension',
+    ] as const)(
+      'rejects %s stdio targets without starting their process',
+      async (source) => {
+        const f = await fixture('negative');
+        const marker = join(f.root, 'original-stdio-started');
+        const registered = join(f.root, 'registered.json');
+        const config = {
+          command: process.execPath,
+          args: [
+            '-e',
+            `require('node:fs').writeFileSync(${JSON.stringify(marker)},'started')`,
+          ],
+        };
+        if (source === 'global') await configFor(f, {linear: config});
+        else {
+          const registration = `pi.registerMcpServer('linear',${JSON.stringify(config)})`;
+          await writeFile(
+            join(f.profile, 'extensions', 'registered.js'),
+            `import {writeFileSync} from 'node:fs';export default function(pi){${source === 'extension' ? registration : `pi.on('${source.split(' ')[0]}',()=>${registration})`};pi.on('${source === 'agent_start extension' ? 'agent_start' : 'session_start'}',()=>writeFileSync(${JSON.stringify(registered)},JSON.stringify(pi.getMcpServers())));}`,
+          );
+        }
+        await expect(runPiWithMcp(f.options)).rejects.toMatchObject({
+          category: 'configuration_failed',
+          message: expect.stringContaining('uses stdio'),
+        });
+        expect(f.requests).toHaveLength(0);
+        if (source !== 'global')
+          expect(JSON.parse(await readFile(registered, 'utf8'))).toMatchObject([
+            {name: 'linear', config},
+          ]);
+        await expect(readFile(marker)).rejects.toMatchObject({code: 'ENOENT'});
+      },
+      30000,
+    );
+
+    it('replaces a disabled stdio target without starting its process', async () => {
+      const f = await fixture('call');
+      const marker = join(f.root, 'original-stdio-started');
+      await configFor(f, {
+        linear: {
+          command: process.execPath,
+          args: [
+            '-e',
+            `require('node:fs').writeFileSync(${JSON.stringify(marker)},'started')`,
+          ],
+          enabled: false,
+        },
+      });
+      const result = await runPiWithMcp(f.options);
+      expect(result.toolEvents).toMatchObject([
+        {rawName: 'mcp__linear__get_issue', status: 'success'},
+      ]);
+      await expect(readFile(marker)).rejects.toMatchObject({code: 'ENOENT'});
+    }, 30000);
+
+    it.each(['active tools', 'selected tools'] as const)(
+      'rejects a mock hidden by inherited before_agent_start %s changes',
+      async (source) => {
+        const f = await fixture('negative');
+        const change =
+          source === 'active tools'
+            ? "pi.setActiveTools(pi.getActiveTools().filter(name=>!name.startsWith('mcp__')))"
+            : "event.systemPromptOptions.selectedTools=['read']";
+        await writeFile(
+          join(f.profile, 'extensions', 'restrict-tools.js'),
+          `export default pi=>pi.on('before_agent_start',event=>{${change};});`,
+        );
+        await expect(runPiWithMcp(f.options)).rejects.toMatchObject({
+          category: 'not_ready',
+          message: expect.stringContaining('did not activate MCP mock tool'),
+        });
+        expect(f.requests).toHaveLength(0);
+      },
+      30000,
+    );
+
+    it('closes unrelated stdio servers when mock startup is aborted', async () => {
+      const f = await fixture('startup-hang');
+      const script = join(f.root, 'unrelated-mcp.mjs'),
+        pidFile = join(f.root, 'unrelated.pid'),
+        closed = join(f.root, 'unrelated.closed');
+      await writeFile(
+        script,
+        `import {writeFileSync} from 'node:fs';\nimport {createInterface} from 'node:readline';\nwriteFileSync(${JSON.stringify(pidFile)},String(process.pid));\nprocess.on('SIGTERM',()=>{writeFileSync(${JSON.stringify(closed)},'closed');process.exit(0)});\nsetInterval(()=>{},1000);\nsetTimeout(()=>process.exit(0),30000).unref();\ncreateInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line);if(r.id===undefined)return;const result=r.method==='initialize'?{protocolVersion:r.params.protocolVersion,capabilities:{tools:{}},serverInfo:{name:'unrelated',version:'1'}}:r.method==='tools/list'?{tools:[]}:{};console.log(JSON.stringify({jsonrpc:'2.0',id:r.id,result}));});`,
+      );
+      cleanup.push(async () => {
+        const pid = Number(await readFile(pidFile, 'utf8').catch(() => '0'));
+        if (!pid) return;
+        const info = await execa('ps', ['-p', String(pid), '-o', 'command='], {
+          reject: false,
+        });
+        if (info.stdout.includes(script)) {
+          try {
+            process.kill(pid, 'SIGKILL');
+          } catch {
+            /* Already stopped. */
+          }
+        }
+      });
+      await configFor(f, {other: {command: process.execPath, args: [script]}});
+      await expect(runPiWithMcp(f.options)).rejects.toMatchObject({
+        category: 'not_ready',
+      });
+      expect(f.requests).toHaveLength(0);
+      expect(await readFile(closed, 'utf8')).toBe('closed');
+      const pid = Number(await readFile(pidFile, 'utf8'));
+      expect(() => process.kill(pid, 0)).toThrow();
+    }, 30000);
+
     it.each(['call', 'negative'] as const)(
-      'runs %s with inherited servers excluded',
+      'runs %s while preserving inherited extensions and skills',
       async (mode) => {
         const f = await fixture(mode);
         const result = await runPiWithMcp(f.options);
@@ -306,11 +730,9 @@ describe.skipIf(!executable)(
         ).toContain(
           mode === 'call' ? 'fixture-receipt-42' : 'No calls needed.',
         );
-        expect(f.contacts()).toBe(0);
+        expect(f.contacts()).toBe(3);
         for (const marker of f.markers)
-          await expect(readFile(marker)).rejects.toMatchObject({
-            code: 'ENOENT',
-          });
+          expect(await readFile(marker, 'utf8')).toBe('started');
         expect(await readFile(f.configPath, 'utf8')).toBe(f.source);
         expect(f.requests.length).toBeGreaterThan(0);
         expect(JSON.stringify(f.requests)).toContain('Native fixture skill');
@@ -362,7 +784,7 @@ describe.skipIf(!executable)(
         const f = await fixture(mode);
         await expect(runPiWithMcp(f.options)).rejects.toMatchObject({
           category: 'not_ready',
-          message: expect.stringContaining('Could not connect'),
+          message: expect.stringContaining('did not activate MCP mock tool'),
         });
         const observation = await f.controller.finalize({
           harnessReady: false,
@@ -472,9 +894,7 @@ describe.skipIf(!executable)(
       const f = await fixture('listing-failed');
       await expect(runPiWithMcp(f.options)).rejects.toMatchObject({
         category: 'not_ready',
-        message: expect.stringContaining(
-          'Could not initialize MCP mock server',
-        ),
+        message: expect.stringContaining('did not activate MCP mock tool'),
       });
       expect(f.requests).toHaveLength(0);
     }, 30000);
@@ -506,10 +926,46 @@ describe.skipIf(!executable)(
       expect(f.requests).toHaveLength(0);
     }, 30000);
 
+    it('names a missing native MCP config loader before model execution', async ({
+      skip,
+    }) => {
+      // Pi reads its version from this directory, which lacks the MCP loader.
+      // Like Pi, find the nearest package.json above the executable.
+      let root = await realpath(executable!);
+      do root = dirname(root);
+      while (!existsSync(join(root, 'package.json')) && root !== dirname(root));
+      if (!existsSync(join(root, 'package.json')))
+        skip(
+          'No package.json above the Pi executable; standalone builds have no MCP loader to relocate.',
+        );
+      const f = await fixture('negative');
+      const packageDir = join(f.root, 'relocated-pi-package');
+      await mkdir(packageDir);
+      await copyFile(
+        join(root, 'package.json'),
+        join(packageDir, 'package.json'),
+      );
+      await expect(
+        runPiWithMcp({
+          ...f.options,
+          input: {
+            ...f.options.input,
+            env: {...f.options.input.env, PI_PACKAGE_DIR: packageDir},
+          },
+        }),
+      ).rejects.toMatchObject({
+        category: 'configuration_failed',
+        message: expect.stringContaining(
+          'does not include the MCP configuration loader',
+        ),
+      });
+      expect(f.requests).toHaveLength(0);
+    }, 30000);
+
     it('rejects tool restrictions that hide mocks before model execution', async () => {
       const f = await fixture('negative');
       await expect(
-        runPiWithMcp({...f.options, extraArgs: ['--tools', 'read']}),
+        runPiWithMcp({...f.options, extraArgs: ['--exclude-tools', 'mcp__*']}),
       ).rejects.toMatchObject({category: 'not_ready'});
       expect(f.requests).toHaveLength(0);
     }, 30000);

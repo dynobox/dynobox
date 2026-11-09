@@ -9,14 +9,15 @@ import {
 } from '../mcpMocks/errors.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
 import {startOwnedProcess} from '../processGroup.js';
+import {isRecord} from './parsing.js';
 import {
   buildPiArgs,
   parsePiJson,
   parsePiJsonLine,
   PI_BLANK_PROMPT,
-  PI_MIN_VERSION,
+  type PiMcpTools,
 } from './pi.js';
-import {ToolEventLineStream} from './runStreamingHarness.js';
+import {lineSplitter, ToolEventLineStream} from './runStreamingHarness.js';
 import type {
   HarnessInput,
   HarnessRunOutput,
@@ -24,9 +25,7 @@ import type {
   McpServerConnections,
 } from './types.js';
 
-// Extra arguments are allowlisted: extensions can register their own MCP
-// servers beside the mocks, and `--` or positionals can swallow the isolation
-// flags.
+// Keep prompt, session, and adapter configuration under the runner's control.
 const VALUE_FLAGS = new Set([
   '--thinking',
   '--tools',
@@ -56,7 +55,9 @@ const SWITCH_FLAGS = new Set([
   '--no-extensions',
   '-ne',
 ]);
-const READY_MARKER = 'DYNOBOX_MCP_READY';
+const MIN_MCP_VERSION = '1.5.0';
+const READY_MARKER = 'DYNOBOX_MCP_READY ';
+const CONFIG_ERROR_MARKER = 'DYNOBOX_MCP_CONFIG_ERROR:';
 const NOT_READY_MARKER = 'DYNOBOX_MCP_NOT_READY:';
 
 export async function runPiWithMcp(options: {
@@ -81,7 +82,20 @@ export async function runPiWithMcp(options: {
       `Pi extra argument ${flag} is unsupported or missing a value for MCP mocking.`,
     );
   }
-  const tools = piToolNames(servers);
+  // Portable names Dynobox reports; the bridge maps Pi's native names to these.
+  const expectedTools = new Set(
+    Object.entries(servers).flatMap(([server, {tools}]) =>
+      tools.map((tool) => `mcp__${server}__${tool}`),
+    ),
+  );
+  const identities = Object.keys(servers).map((name) =>
+    name.replace(/-/g, '_'),
+  );
+  if (new Set(identities).size !== identities.length)
+    throw new McpHarnessError(
+      'configuration_failed',
+      'Pi MCP server names must remain distinct after hyphen normalization.',
+    );
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...input.env,
@@ -103,7 +117,12 @@ export async function runPiWithMcp(options: {
   let version: string;
   try {
     remaining();
-    version = requireMcpVersion('Pi', PI_MIN_VERSION, probe);
+    version = requireMcpVersion('Pi', MIN_MCP_VERSION, probe);
+    if (!version.startsWith('1.'))
+      throw new McpHarnessError(
+        'unsupported_version',
+        'Pi MCP mocks require Pi 1.5.0 or a later 1.x release.',
+      );
   } catch (error) {
     if (error instanceof McpHarnessError)
       throw new McpHarnessError(error.category, error.message, {
@@ -119,12 +138,15 @@ export async function runPiWithMcp(options: {
   let output: HarnessRunOutput | undefined;
   try {
     const bridge = join(directory, 'bridge.mjs');
-    await writeFile(bridge, piBridgeSource(servers, tools));
+    await writeFile(bridge, piBridgeSource(servers));
+    let mcpTools: PiMcpTools = {};
+    let ready = false;
+    const buffered: string[] = [];
     const toolInputs = new Map<string, unknown>();
     const child = startOwnedProcess(
       executable,
       buildPiArgs(
-        ['--no-extensions', '-e', bridge, ...extraArgs],
+        ['--no-mcp', '-e', bridge, ...extraArgs],
         input.model,
         input.permissionMode,
       ),
@@ -133,7 +155,7 @@ export async function runPiWithMcp(options: {
     let callbackFailure: McpHarnessError | undefined;
     const stream = new ToolEventLineStream({
       parseLine: (line, lineNumber) =>
-        parsePiJsonLine(line, lineNumber, toolInputs),
+        parsePiJsonLine(line, lineNumber, toolInputs, mcpTools),
       onToolEvent: (event) => {
         if (callbackFailure !== undefined) return;
         try {
@@ -147,20 +169,65 @@ export async function runPiWithMcp(options: {
         }
       },
     });
+    const readiness = lineSplitter((line) => {
+      if (!line.startsWith(READY_MARKER) || callbackFailure) return;
+      try {
+        const value: unknown = JSON.parse(line.slice(READY_MARKER.length));
+        if (!isRecord(value))
+          throw new Error('Invalid Pi MCP readiness metadata.');
+        const tools: Record<string, string> = {};
+        for (const [name, logical] of Object.entries(value)) {
+          if (
+            !name.startsWith('mcp__') ||
+            typeof logical !== 'string' ||
+            !expectedTools.has(logical)
+          )
+            throw new Error('Invalid Pi MCP tool identity.');
+          tools[name] = logical;
+        }
+        const available = new Set(Object.values(tools));
+        if ([...expectedTools].some((name) => !available.has(name)))
+          throw new Error('Pi did not activate every declared MCP mock tool.');
+        mcpTools = tools;
+        ready = true;
+        for (const chunk of buffered.splice(0)) stream.write(chunk);
+      } catch (error) {
+        callbackFailure = new McpHarnessError(
+          'not_ready',
+          error instanceof Error ? error.message : String(error),
+        );
+        child.stop();
+      }
+    });
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', (chunk: string) => readiness.write(chunk));
     child.stdout?.setEncoding('utf8');
-    child.stdout?.on('data', (chunk: string) => stream.write(chunk));
+    child.stdout?.on('data', (chunk: string) => {
+      if (ready) stream.write(chunk);
+      else buffered.push(chunk);
+    });
     const result = await child;
+    readiness.flush();
+    stream.flush();
     output = {
       exitCode: result.exitCode ?? 1,
       stdout: result.stdout,
       stderr: result.stderr,
       durationMs: Date.now() - started,
+      metadata: {piMcpTools: mcpTools},
     };
-    stream.flush();
     if (callbackFailure !== undefined) throw callbackFailure;
     remaining();
     if (result.timedOut)
       throw new McpHarnessError('timed_out', 'MCP run exceeded its timeout.');
+    const configError = result.stderr
+      .split('\n')
+      .find((line) => line.startsWith(CONFIG_ERROR_MARKER));
+    if (configError)
+      throw new McpHarnessError(
+        'configuration_failed',
+        configError.slice(CONFIG_ERROR_MARKER.length).trim(),
+      );
     const notReady = result.stderr
       .split('\n')
       .find((line) => line.startsWith(NOT_READY_MARKER));
@@ -171,17 +238,17 @@ export async function runPiWithMcp(options: {
       );
     // Startup failures such as a bridge that fails to load end here. Pi's
     // stderr stays in the debug output rather than the diagnostic.
-    if (!result.stderr.split(/\r?\n/).includes(READY_MARKER))
+    if (!ready)
       throw new McpHarnessError(
         'not_ready',
-        'Pi exited before the MCP bridge was ready.',
+        'Pi exited before the native MCP mocks were ready.',
       );
     if (result.failed || output.exitCode !== 0)
       throw new McpHarnessError(
         'execution_failed',
         `Pi exited with code ${result.exitCode ?? 'unknown'}.`,
       );
-    const parsed = parsePiJson(result.stdout);
+    const parsed = parsePiJson(result.stdout, mcpTools);
     // JSON mode always prints a session header, so empty stdout means Pi
     // never ran the session.
     if (parsed.terminalFailure || result.stdout.trim() === '')
@@ -208,87 +275,107 @@ export async function runPiWithMcp(options: {
   }
 }
 
-/** Pi registers each mock under the `mcp__<server>__<tool>` name. */
-export function piToolNames(servers: McpServerConnections): string[] {
-  return Object.entries(servers).flatMap(([server, {tools}]) =>
-    tools.map((tool) => `mcp__${server}__${tool}`),
-  );
-}
+// The installed Pi SDK supplies transport, credentials, tool registration and
+// protocol semantics. This extension only changes configuration and readiness.
 
-// Loaded only by Pi. Transport dependencies resolve from runner-local,
-// including when the runner is bundled into dist/index.js.
-function piBridgeSource(
-  servers: McpServerConnections,
-  tools: readonly string[],
-): string {
+function piBridgeSource(servers: McpServerConnections): string {
   return `
-import {writeSync} from 'node:fs';
-import {Client} from ${JSON.stringify(import.meta.resolve('@modelcontextprotocol/sdk/client/index.js'))};
-import {StreamableHTTPClientTransport} from ${JSON.stringify(import.meta.resolve('@modelcontextprotocol/sdk/client/streamableHttp.js'))};
-const servers = ${JSON.stringify(servers)};
-const tools = ${JSON.stringify(tools)};
-const notReady = (reason) => {
-  writeSync(2, ${JSON.stringify(NOT_READY_MARKER)} + ' ' + reason + '\\n');
-  process.exit(1);
+import * as nativeSdk from '@earendil-works/pi-coding-agent';
+import {existsSync,realpathSync,writeSync} from 'node:fs';
+import {join} from 'node:path';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+const mocks = ${JSON.stringify(servers)};
+const tools = {};
+const fail = (ctx, message, config = false) => {
+ writeSync(2, (config ? ${JSON.stringify(CONFIG_ERROR_MARKER)} : ${JSON.stringify(NOT_READY_MARKER)}) + ' ' + message + '\\n');
+ ctx.abort();
 };
-const initFailed = (server, error) => notReady('Could not initialize MCP mock server "' + server + '": ' + (error instanceof Error ? error.message : String(error)));
 export default async function(pi) {
-  const clients = [];
-  // Servers start in parallel; tools register in server order below.
-  const listings = await Promise.all(Object.entries(servers).map(async ([server, connection]) => {
-    const client = new Client({name: 'dynobox-pi', version: '1.0.0'});
-    clients.push(client);
-    try {
-      await client.connect(new StreamableHTTPClientTransport(new URL(connection.url)));
-    } catch (error) {
-      notReady('Could not connect to MCP mock server "' + server + '": ' + (error instanceof Error ? error.message : String(error)));
-    }
-    try {
-      return {server, client, guidance: client.getInstructions(), listing: await client.listTools()};
-    } catch (error) {
-      initFailed(server, error);
-    }
-  }));
-  const instructions = [];
-  for (const {server, client, guidance, listing} of listings) {
-    if (guidance) instructions.push('MCP server ' + server + ':\\n' + guidance);
-    try {
-      for (const tool of listing.tools) {
-        const name = 'mcp__' + server + '__' + tool.name;
-        if (!tools.includes(name)) continue;
-        pi.registerTool({name, label: server + '/' + tool.name,
-          description: tool.description || server + '/' + tool.name,
-          parameters: tool.inputSchema,
-          async execute(id, args, signal) {
-            const result = await client.callTool({name: tool.name, arguments: args}, undefined, {signal});
-            const content = [...result.content];
-            // Pi sends content to the model; details are metadata only.
-            if (result.structuredContent !== undefined)
-              content.push({type: 'text', text: JSON.stringify(result.structuredContent)});
-            if (result.isError) throw new Error(content
-              .filter((block) => block.type === 'text')
-              .map((block) => block.text).join('\\n') || 'MCP tool failed.');
-            return {content, details: result.structuredContent || {}};
-          }
-        });
+ let source;
+ let configurationError;
+ let unsupported='Pi MCP mocks require an npm installation of Pi 1.5.0 or newer with its native MCP SDK.';
+ try {
+  source = realpathSync(fileURLToPath(import.meta.url));
+  const {createMcpExtension,getAgentDir,getPackageDir} = nativeSdk;
+  // Pi does not export loadMcpConfig, so a later 1.x release can move it.
+  // Standalone Bun builds never ship it; an npm installation missing it is a newer layout.
+  const loader = join(getPackageDir(),'dist','extensions','mcp','config.js');
+  if(!process.versions.bun&&!existsSync(loader))
+   unsupported='This Pi release does not include the MCP configuration loader Dynobox uses ('+loader+').';
+  const {loadMcpConfig} = await import(pathToFileURL(loader).href);
+  const identity = (name) => name.replace(/-/g, '_');
+  const checkStdio = (entries) => {
+   const targets = new Set(Object.keys(mocks).map(identity));
+   for (const entry of entries) if(targets.has(identity(entry.name)) && 'command' in entry.config && entry.config.enabled !== false)
+    configurationError='Pi MCP target "'+entry.name+'" uses stdio; selective mocking supports HTTP targets.';
+  };
+  // Registry changes may come from any inherited lifecycle hook.
+  pi.on('mcp_servers_change',(_event,ctx)=>{
+   checkStdio(pi.getMcpServers());
+   if(configurationError)fail(ctx,configurationError,true);
+  });
+  createMcpExtension({startupWaitMs:5000,loadConfig(ctx) {
+   const loaded = loadMcpConfig({agentDir:getAgentDir(),cwd:ctx.cwd,projectTrusted:ctx.isProjectTrusted()});
+   const targets = new Set(Object.keys(mocks).map(identity));
+   checkStdio([...loaded.servers,...pi.getMcpServers()]);
+   return {...loaded,servers:[...loaded.servers.filter(entry=>!targets.has(identity(entry.name))),
+    ...Object.entries(mocks).map(([server,connection])=>({name:server,config:{url:connection.url,exposure:'direct'},scope:'extension',source:'dynobox MCP mocks'}))]};
+  }})({...pi,
+   // Preserve user commands; only the native MCP tools are needed in headless runs.
+   registerCommand(name,command) {if(name!=='mcp')pi.registerCommand(name,command);},
+   registerTool(definition) {
+    for(const [server,connection] of Object.entries(mocks)) {
+     const prefix=server+'/';
+     if(definition.label?.startsWith(prefix)) {
+      const tool=definition.label.slice(prefix.length);
+      if(connection.tools.includes(tool)) {
+       tools[definition.name]='mcp__'+server+'__'+tool;
+       const execute=definition.execute;
+       definition={...definition,async execute(...args) {
+        const result=await execute(...args);
+        const full=result.structuredContent;
+        if(full?.structuredContent===undefined)return result;
+        // Keep JSON visible beside text, matching existing Dynobox mock responses.
+        return {...result,content:[...(full.content?.length?result.content:[]),{type:'text',text:JSON.stringify(full.structuredContent)}]};
+       }};
       }
-    } catch (error) {
-      initFailed(server, error);
+     }
     }
-  }
-  // Appending keeps Pi's per-turn prompt rendering; a returned systemPrompt
-  // would force fixed text for the whole run.
-  if (instructions.length) pi.on('before_agent_start', (event) => {
-    const options = event.systemPromptOptions;
-    options.appendSystemPrompt = [options.appendSystemPrompt, ...instructions].filter(Boolean).join('\\n\\n');
+    pi.registerTool(definition);
+   }
   });
-  pi.on('session_start', () => {
-    const active = pi.getActiveTools();
-    const missing = tools.find((name) => !active.includes(name));
-    if (missing) notReady('Pi did not activate MCP mock tool "' + missing + '".');
-    writeSync(2, ${JSON.stringify(READY_MARKER)} + '\\n');
+  // Inherited session_start handlers may register targets after loadConfig.
+  pi.on('agent_start',(_event,ctx)=>{
+   checkStdio(pi.getMcpServers());
+   if(configurationError)return fail(ctx,configurationError,true);
+   const active = new Set(pi.getActiveTools());
+   const all = pi.getAllTools();
+   for(const [server,connection] of Object.entries(mocks))for(const tool of connection.tools) {
+    const name=Object.keys(tools).find(name=>tools[name]==='mcp__'+server+'__'+tool);
+    const registered=all.find(item=>item.name===name);
+    let owned=false;
+    try {owned=realpathSync(registered?.sourceInfo.path)===source;}catch{}
+    if(!name||!active.has(name)||!owned)return fail(ctx,'Pi did not activate MCP mock tool "'+server+'/'+tool+'" under an unambiguous native identity.');
+   }
+   writeSync(2,${JSON.stringify(READY_MARKER)}+JSON.stringify(tools)+'\\n');
   });
-  pi.on('session_shutdown', () => Promise.all(clients.map((client) => client.close())));
+ } catch(error) {
+  writeSync(2,String(error)+'\\n');
+  configurationError=unsupported;
+ }
+  pi.on('before_agent_start', (event,ctx) => {
+   if(configurationError)return fail(ctx,configurationError,true);
+   // Mocks use direct exposure, which skips codemode's describeNamespace()
+   // where Pi exposes server instructions, so add them here. Other servers
+   // keep Pi's native exposure and instructions.
+   const all = pi.getAllTools();
+   const guidance=[];
+   for(const server of Object.keys(mocks)) {
+    const namespace=all.find(tool=>tool.namespace?.aliases?.includes(server))?.namespace;
+    if(namespace?.instructions)guidance.push('MCP server '+server+':\\n'+namespace.instructions);
+   }
+   if(guidance.length)event.systemPromptOptions.appendSystemPrompt=[event.systemPromptOptions.appendSystemPrompt,...guidance].filter(Boolean).join('\\n\\n');
+  });
 }
 `;
 }

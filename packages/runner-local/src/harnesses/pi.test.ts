@@ -369,3 +369,96 @@ describe('parsePiJson', () => {
     );
   });
 });
+
+describe('Pi native MCP identities', () => {
+  const native = 'mcp__dxb_private__get_issue_a1b2c3';
+  const tools = {[native]: 'mcp__linear__get-issue'};
+  const start = {
+    type: 'tool_execution_start',
+    toolCallId: 'call',
+    toolName: native,
+    args: {id: 'dxb_private'},
+  };
+  const end = (isError: boolean, details?: unknown) => ({
+    type: 'tool_execution_end',
+    toolCallId: 'call',
+    toolName: native,
+    isError,
+    result: {
+      content: [{type: 'text', text: 'dxb_private service response'}],
+      ...(details ? {details} : {}),
+    },
+  });
+
+  it('normalizes hashed native identities in parser and harness extraction', () => {
+    const stdout = jsonl(
+      start,
+      end(false, {server: 'dxb_private', tool: 'get-issue'}),
+    );
+    const parsed = parsePiJson(stdout, tools);
+    expect(parsed.toolEvents).toMatchObject([
+      {
+        rawName: 'mcp__linear__get-issue',
+        kind: 'mcp',
+        input: {id: 'dxb_private'},
+        status: 'success',
+        message: 'dxb_private service response',
+      },
+    ]);
+    expect(
+      new PiHarness().extractResult({
+        exitCode: 0,
+        stdout,
+        stderr: '',
+        durationMs: 1,
+        metadata: {piMcpTools: tools},
+      }).toolEvents,
+    ).toEqual(parsed.toolEvents);
+  });
+
+  it('preserves received MCP error payloads and arguments', () => {
+    expect(
+      parsePiJson(
+        jsonl(start, end(true, {server: 'dxb_private', tool: 'get-issue'})),
+        tools,
+      ).toolEvents,
+    ).toMatchObject([
+      {
+        rawName: 'mcp__linear__get-issue',
+        status: 'failure',
+        input: {id: 'dxb_private'},
+        message: 'dxb_private service response',
+      },
+    ]);
+  });
+
+  it('keeps failed attempt identities logical and preserves diagnostic text', () => {
+    expect(
+      parsePiJson(jsonl(start, end(true)), tools).toolEvents,
+    ).toMatchObject([
+      {
+        rawName: 'mcp__linear__get-issue',
+        status: 'failure',
+        message: 'dxb_private service response',
+      },
+    ]);
+  });
+
+  it('ignores malformed invocation metadata', () => {
+    const result = new PiHarness().extractResult({
+      exitCode: 0,
+      stdout: jsonl(start, end(false)),
+      stderr: '',
+      durationMs: 1,
+      metadata: {piMcpTools: {[native]: 42}},
+    });
+    expect(result.toolEvents[0]?.rawName).toBe(native);
+  });
+
+  it('keeps unmapped and prototype-like native tool names unchanged', () => {
+    const event = {...end(false), toolName: 'constructor'};
+    expect(parsePiJson(jsonl(event), tools).toolEvents[0]?.rawName).toBe(
+      'constructor',
+    );
+  });
+});

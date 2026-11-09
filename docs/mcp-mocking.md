@@ -86,7 +86,7 @@ unsupported versions and configuration conflicts fail explicitly.
 | Claude Code | 2.1.263 | Remain available. Declared targets are replaced for this run. |
 | Codex | 0.153.4 | Remain available. Declared HTTP targets are replaced for this run. |
 | OpenCode | 2.2.5 (2.x) | Remain available. Declared targets are replaced for this run. |
-| Pi | 0.86.0 | Excluded by the current adapter. |
+| Pi | 1.5.0 (1.x, npm installation) | Remain available. Declared HTTP targets are replaced for this run. |
 | Antigravity | 1.5.2 | Remain available. Declared HTTP targets are replaced for this run. |
 | Cursor | — | MCP mocking unavailable. |
 
@@ -102,6 +102,15 @@ namespaces must account for this suffix.
 OpenCode retains normal profiles, plugins, model authentication, and skills.
 Managed targets that cannot be replaced, overlapping tool namespaces, and
 declared mocks that fail discovery stop the job before its task starts.
+
+Pi uses its installed native MCP SDK. An npm installation with the SDK and
+configuration loader is required; standalone binaries are unsupported for MCP
+mock runs. Normal model authentication, extensions, skills, and project trust
+remain in effect. Declared HTTP targets are replaced as whole entries, including
+extension registrations, without using their original credentials or endpoints.
+Same-named stdio targets fail explicitly. Native normalized or hashed tool names
+are mapped to the logical names in assertions, callbacks, and reports. All
+declared tools must be active before the task starts.
 
 Antigravity uses its native ACP session API and a temporary MCP configuration
 view. Normal model login, settings, skills, plugins, and unrelated MCPs remain
