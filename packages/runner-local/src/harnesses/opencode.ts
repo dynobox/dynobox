@@ -35,6 +35,8 @@ export type OpenCodeParsedOutput = {
 
 export type OpenCodeParsedLine = {
   toolEvents: ToolEvent[];
+  messageId?: string;
+  sessionId?: string;
   toolPartId?: string;
   textPart?: {
     id?: string;
@@ -117,7 +119,12 @@ export class OpenCodeHarness implements Harness {
   }
 
   extractResult(raw: HarnessRunOutput): HarnessResult {
-    const parsed = parseOpenCodeJson(raw.stdout, mcpPrefixesFromOutput(raw));
+    const primary = raw.metadata?.opencodeSessionId;
+    const parsed = parseOpenCodeJson(
+      raw.stdout,
+      mcpPrefixesFromOutput(raw),
+      typeof primary === 'string' ? primary : undefined,
+    );
     return {
       exitCode: raw.exitCode,
       durationMs: raw.durationMs,
@@ -152,6 +159,7 @@ export function buildOpenCodeArgs(
 export function parseOpenCodeJson(
   stdout: string,
   mcpPrefixes: readonly string[] = [],
+  primarySessionId?: string,
 ): OpenCodeParsedOutput {
   const toolEvents: ToolEvent[] = [];
   const seenToolPartIds = new Set<string>();
@@ -162,6 +170,10 @@ export function parseOpenCodeJson(
 
   for (const {line, lineNumber} of jsonLines(stdout)) {
     const parsed = parseOpenCodeJsonLine(line, lineNumber, mcpPrefixes);
+    const primary =
+      primarySessionId === undefined || parsed.sessionId === primarySessionId;
+    if (primary && parsed.messageId !== undefined)
+      lastMessageId = parsed.messageId;
     if (
       parsed.toolPartId === undefined ||
       !seenToolPartIds.has(parsed.toolPartId)
@@ -175,6 +187,7 @@ export function parseOpenCodeJson(
     const textPart = parsed.textPart;
     if (
       textPart !== undefined &&
+      primary &&
       textPart.text.trim().length > 0 &&
       (textPart.id === undefined || !seenTextPartIds.has(textPart.id))
     ) {
@@ -208,14 +221,16 @@ export function parseOpenCodeJsonLine(
   const toolEvent = parseToolEvent(event, mcpPrefixes);
   const part = isRecord(event.part) ? event.part : undefined;
   const toolPartId =
-    toolEvent === undefined || typeof part?.id !== 'string'
-      ? undefined
-      : part.id;
+    toolEvent === undefined || !part ? undefined : toolPartIdentity(part);
   const textPart = parseTextPart(event);
   const errorMessage = parseErrorMessage(event);
 
   return {
     toolEvents: toolEvent === undefined ? [] : [toolEvent],
+    ...(typeof part?.messageID === 'string' ? {messageId: part.messageID} : {}),
+    ...(typeof event.sessionID === 'string'
+      ? {sessionId: event.sessionID}
+      : {}),
     ...(toolPartId === undefined ? {} : {toolPartId}),
     ...(textPart === undefined ? {} : {textPart}),
     ...(errorMessage === undefined ? {} : {errorMessage}),
@@ -247,7 +262,13 @@ function parseToolEvent(
 }
 
 function parseToolStatus(state: JsonObject): ToolEvent['status'] | undefined {
-  const metadata = isRecord(state.metadata) ? state.metadata : undefined;
+  const outer = isRecord(state.metadata) ? state.metadata : undefined;
+  const metadata =
+    outer !== undefined && 'exit' in outer
+      ? outer
+      : isRecord(outer?.metadata)
+        ? outer.metadata
+        : undefined;
   const exitCode = metadata?.exit;
   if (typeof exitCode === 'number') {
     return exitCode === 0 ? 'success' : 'failure';
@@ -326,10 +347,18 @@ function extractPartId(line: string): string | undefined {
   try {
     const event: unknown = JSON.parse(line);
     if (!isRecord(event) || !isRecord(event.part)) return undefined;
-    return typeof event.part.id === 'string' ? event.part.id : undefined;
+    return toolPartIdentity(event.part);
   } catch {
     return undefined;
   }
+}
+
+function toolPartIdentity(part: JsonObject): string | undefined {
+  if (typeof part.partID === 'string') return part.partID;
+  if (typeof part.id !== 'string') return undefined;
+  return typeof part.messageID === 'string'
+    ? `${part.messageID}:${part.id}`
+    : part.id;
 }
 
 async function resolveOpenCodeMcpPrefixes(

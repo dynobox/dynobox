@@ -76,6 +76,22 @@ afterEach(async () => {
 });
 
 describe('MCP controller', () => {
+  it('exposes genuine endpoint discovery while the controller is active', async () => {
+    const controller = await start();
+    expect(controller.isDiscovered('linear')).toBe(false);
+    await rpc(controller.urls.linear!, 'initialize', {
+      protocolVersion: '2025-03-26',
+      capabilities: {},
+      clientInfo: {name: 'test', version: '1'},
+    });
+    expect(controller.isDiscovered('linear')).toBe(false);
+    await rpc(controller.urls.linear!, 'tools/list');
+    expect(controller.isDiscovered('linear')).toBe(true);
+    expect(controller.isDiscovered('unknown')).toBe(false);
+    await controller.finalize(success);
+    expect(controller.isDiscovered('linear')).toBe(false);
+  });
+
   it('works through the official MCP client and records schema-violating arguments unchanged', async () => {
     const controller = await start();
     const client = new Client({name: 'test-client', version: '1'});

@@ -7,8 +7,10 @@ import {setTimeout as delay} from 'node:timers/promises';
 
 import {afterEach, describe, expect, it} from 'vitest';
 
+import {runJob} from '../index.js';
 import {startMcpMockController} from '../mcpMocks/controller.js';
 import {startOwnedProcess} from '../processGroup.js';
+import type {LocalRunnerJob} from '../runTypes.js';
 import {OpenCodeHarness} from './opencode.js';
 import {runOpenCodeWithMcp} from './opencodeMcp.js';
 
@@ -31,8 +33,10 @@ async function fixture(
     | 'ask'
     | 'ask-continue'
     | 'question'
+    | 'failed-shell'
     | 'ask-bash'
     | 'ask-subagent' = 'call',
+  responseText = 'fixture-receipt-42',
 ) {
   const root = await mkdtemp(join(tmpdir(), 'dynobox-opencode-native-'));
   cleanup.push(() => rm(root, {recursive: true, force: true}));
@@ -47,7 +51,7 @@ async function fixture(
             additionalProperties: false,
           },
           response: {
-            content: [{type: 'text', text: 'fixture-receipt-42'}],
+            content: [{type: 'text', text: responseText}],
             ...(mode === 'mock-error' ? {isError: true} : {}),
           },
         },
@@ -57,6 +61,14 @@ async function fixture(
   cleanup.push(() =>
     controller.finalize({harnessReady: false, harnessSucceeded: false}),
   );
+  const extra = await startMcpMockController({
+    remote: {
+      tools: {ping: {inputSchema: {type: 'object'}, response: {content: []}}},
+    },
+  });
+  cleanup.push(() =>
+    extra.finalize({harnessReady: false, harnessSucceeded: false}),
+  );
   const requests: Record<string, unknown>[] = [];
   let modelStarted!: () => void;
   const started = new Promise<void>((resolve) => {
@@ -65,11 +77,16 @@ async function fixture(
   let invalidSent = false;
   let realContacts = 0;
   let globalContacts = 0;
+  let originalContacts = 0;
+  let inheritedHeader = false;
   let bashCalled = false;
   let taskCalled = false;
   const provider = createServer(async (request, response) => {
     if (request.url === '/real-mcp') {
       realContacts++;
+    }
+    if (request.url === '/original-mcp') {
+      originalContacts++;
       response.writeHead(503).end();
       return;
     }
@@ -80,12 +97,39 @@ async function fixture(
     }
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    if (request.url === '/real-mcp' || request.url === '/mock-mcp') {
+      if (request.url === '/mock-mcp' && request.headers['x-original'])
+        inheritedHeader = true;
+      try {
+        const forwarded = await fetch(
+          request.url === '/real-mcp'
+            ? extra.urls.remote!
+            : controller.urls.linear!,
+          {
+            method: request.method ?? 'GET',
+            headers: {
+              'content-type': 'application/json',
+              accept: 'application/json, text/event-stream',
+            },
+            ...(request.method === 'POST' ? {body: Buffer.concat(chunks)} : {}),
+          },
+        );
+        response.writeHead(forwarded.status, {
+          'content-type':
+            forwarded.headers.get('content-type') ?? 'application/json',
+        });
+        response.end(await forwarded.text());
+      } catch {
+        response.writeHead(503).end();
+      }
+      return;
+    }
     const body = JSON.parse(Buffer.concat(chunks).toString());
     requests.push(body);
     modelStarted();
     if (mode === 'hang') return;
     const tool = body.tools?.find((entry: {function?: {name?: string}}) =>
-      mode === 'question' || mode === 'ask-bash'
+      mode === 'question' || mode === 'ask-bash' || mode === 'failed-shell'
         ? entry.function?.name === (mode === 'question' ? 'question' : 'shell')
         : entry.function?.name?.endsWith('_get_issue'),
     );
@@ -145,12 +189,13 @@ async function fixture(
         mode === 'ask' ||
         mode === 'ask-continue' ||
         mode === 'question' ||
-        (mode === 'ask-bash' && !bashCalled)) &&
+        ((mode === 'ask-bash' || mode === 'failed-shell') && !bashCalled)) &&
         !hasReceipt &&
         !!tool &&
         requests.length < 10);
     if (call && mode === 'invalid-arguments') invalidSent = true;
-    if (call && mode === 'ask-bash') bashCalled = true;
+    if (call && (mode === 'ask-bash' || mode === 'failed-shell'))
+      bashCalled = true;
     const delta = call
       ? {
           tool_calls: [
@@ -163,9 +208,12 @@ async function fixture(
                 arguments:
                   mode === 'question'
                     ? '{"questions":[{"question":"Which issue?","header":"Issue","options":[{"label":"DYNO-1","description":"First"}]}]}'
-                    : mode === 'ask-bash'
+                    : mode === 'ask-bash' || mode === 'failed-shell'
                       ? JSON.stringify({
-                          command: 'touch bash-ran',
+                          command:
+                            mode === 'failed-shell'
+                              ? 'printf failed; exit 7'
+                              : 'touch bash-ran',
                           description: 'Mark the run',
                         })
                       : mode === 'invalid-arguments'
@@ -219,6 +267,12 @@ async function fixture(
     },
     mcp: {
       servers: {
+        linear: {
+          type: 'remote',
+          url: `${base}/original-mcp`,
+          oauth: false,
+          headers: {'x-original': 'synthetic-credential'},
+        },
         real_linear: {
           type: 'local',
           command: [
@@ -227,7 +281,12 @@ async function fixture(
             `require('fs').writeFileSync(${JSON.stringify(marker)}, 'started')`,
           ],
         },
-        remote: {type: 'remote', url: `${base}/real-mcp`, oauth: false},
+        remote: {
+          type: 'remote',
+          url: `${base}/real-mcp`,
+          oauth: false,
+          codemode: false,
+        },
       },
     },
     ...(mode === 'denied'
@@ -260,6 +319,12 @@ async function fixture(
     $schema: 'https://opencode.ai/config.json',
     mcp: {
       servers: {
+        linear: {
+          type: 'remote',
+          url: `${base}/original-mcp`,
+          oauth: false,
+          headers: {'x-original': 'synthetic-credential'},
+        },
         global: {type: 'remote', url: `${base}/global-mcp`, oauth: false},
       },
     },
@@ -315,8 +380,9 @@ async function fixture(
         url:
           mode === 'failed'
             ? `http://127.0.0.1:1/${'a'.repeat(48)}`
-            : controller.urls.linear!,
+            : `${base}/mock-mcp`,
         tools: ['get_issue'],
+        isDiscovered: () => controller.isDiscovered('linear'),
       },
     },
   };
@@ -324,6 +390,7 @@ async function fixture(
     options,
     started,
     controller,
+    extra,
     requests,
     marker,
     configPath,
@@ -333,12 +400,76 @@ async function fixture(
     pluginMarkers,
     contacts: () => realContacts,
     globalContacts: () => globalContacts,
+    originalContacts: () => originalContacts,
+    inheritedHeader: () => inheritedHeader,
   };
 }
 
 describe.skipIf(!executable)(
   'native OpenCode MCP runtime (local model, no credits)',
   () => {
+    it.each(['call', 'negative'] as const)(
+      'runs %s through the public runner and genuine discovery observer',
+      async (mode) => {
+        const f = await fixture(mode);
+        const job: LocalRunnerJob = {
+          id: 'native-opencode',
+          harness: 'opencode',
+          model: 'fixture/fixture',
+          permissionMode: 'default',
+          iteration: 0,
+          scenario: {
+            id: 'issue',
+            name: 'Read issue',
+            prompt: f.options.input.prompt,
+            harnesses: [{id: 'opencode'}],
+            setup: [],
+            fixtures: [],
+            cliMocks: {},
+            endpoints: [],
+            mcpMocks: {
+              linear: {
+                tools: {
+                  get_issue: {
+                    inputSchema: {
+                      type: 'object',
+                      properties: {id: {type: 'string'}},
+                    },
+                    response: {
+                      content: [{type: 'text', text: 'fixture-receipt-42'}],
+                    },
+                  },
+                },
+              },
+            },
+            assertions: [
+              {
+                id: 'received',
+                type: mode === 'call' ? 'mcp.called' : 'mcp.notCalled',
+                server: 'linear',
+                tool: 'get_issue',
+              },
+            ],
+          },
+        };
+        const result = await runJob(job, {
+          harnesses: [new OpenCodeHarness({executable: executable!})],
+          scratchRoot: f.options.input.workDir,
+          env: f.options.input.env,
+          timeoutMs: 20000,
+        });
+        expect(result.status, result.diagnostics.join('\n')).toBe('passed');
+        expect(result.mcp).toMatchObject({
+          ready: true,
+          finalized: true,
+          failures: [],
+        });
+        expect(result.mcp?.calls).toHaveLength(mode === 'call' ? 1 : 0);
+        expect(f.originalContacts()).toBe(0);
+      },
+      30000,
+    );
+
     it('loads the planted v2 plugins without the adapter block', async () => {
       const f = await fixture('negative');
       const child = startOwnedProcess(
@@ -392,7 +523,7 @@ describe.skipIf(!executable)(
     }, 15000);
 
     it.each(['call', 'negative'] as const)(
-      'runs %s with inherited servers excluded',
+      'runs %s with targets replaced and unrelated servers available',
       async (mode) => {
         const f = await fixture(mode);
         const result = await runOpenCodeWithMcp(f.options);
@@ -411,15 +542,17 @@ describe.skipIf(!executable)(
         ).toContain(
           mode === 'call' ? 'fixture-receipt-42' : 'No calls needed.',
         );
-        expect(f.contacts()).toBe(0);
-        expect(f.globalContacts()).toBe(0);
-        await expect(readFile(f.marker)).rejects.toMatchObject({
-          code: 'ENOENT',
-        });
+        expect(f.originalContacts()).toBe(0);
+        expect(f.inheritedHeader()).toBe(false);
+        expect(f.contacts()).toBeGreaterThan(0);
+        expect(f.globalContacts()).toBeGreaterThan(0);
+        expect(await readFile(f.marker, 'utf8')).toBe('started');
         for (const marker of f.pluginMarkers)
-          await expect(readFile(marker)).rejects.toMatchObject({
-            code: 'ENOENT',
-          });
+          expect(await readFile(marker, 'utf8')).toBe('loaded');
+        expect(
+          await f.extra.finalize({harnessReady: true, harnessSucceeded: true}),
+        ).toMatchObject({ready: true});
+        expect(JSON.stringify(f.requests)).toContain('remote_ping');
         expect(await readFile(f.configPath, 'utf8')).toBe(f.source);
         expect(await readFile(f.globalConfigPath, 'utf8')).toBe(f.globalSource);
         expect(f.requests.length).toBeGreaterThan(0);
@@ -437,7 +570,7 @@ describe.skipIf(!executable)(
     );
 
     it.each(['integration.use', 'plugin.use', 'mcp.use', '*', 'integration.*'])(
-      'rejects global %s allow policy before inherited integrations load',
+      'preserves global %s allow policies while replacing the target',
       async (action) => {
         const f = await fixture('call');
         await writeFile(
@@ -446,15 +579,19 @@ describe.skipIf(!executable)(
             policies: [{action, resource: '*', effect: 'allow'}],
           }),
         );
-        await expect(runOpenCodeWithMcp(f.options)).rejects.toMatchObject({
-          category: 'configuration_failed',
-          message: expect.stringContaining('can override MCP mock isolation'),
-        });
-        expect(f.requests).toHaveLength(0);
-        expect(f.contacts()).toBe(0);
-        expect(f.globalContacts()).toBe(0);
+        expect((await runOpenCodeWithMcp(f.options)).harnessReady).toBe(true);
+        expect(
+          (
+            await f.controller.finalize({
+              harnessReady: true,
+              harnessSucceeded: true,
+            })
+          ).calls,
+        ).toHaveLength(1);
+        expect(f.originalContacts()).toBe(0);
+        expect(f.inheritedHeader()).toBe(false);
         for (const marker of f.pluginMarkers)
-          expect(existsSync(marker)).toBe(false);
+          expect(existsSync(marker)).toBe(true);
       },
       30000,
     );
@@ -504,20 +641,19 @@ describe.skipIf(!executable)(
     }, 30000);
 
     it.each(['ask', 'ask-continue'] as const)(
-      'fails a %s run whose mock call is rejected instead of waiting',
+      'reports a failed attempt and no receipt after %s permission rejection',
       async (mode) => {
         const f = await fixture(mode);
-        await expect(
-          runOpenCodeWithMcp({
-            ...f.options,
-            input: {...f.options.input, permissionMode: 'default'},
-          }),
-        ).rejects.toMatchObject({
-          category: 'execution_failed',
-          message: expect.stringContaining(
-            'rejected permission for a mock tool',
-          ),
+        const result = await runOpenCodeWithMcp({
+          ...f.options,
+          input: {...f.options.input, permissionMode: 'default'},
         });
+        expect(result.toolEvents).toContainEqual(
+          expect.objectContaining({
+            rawName: 'mcp__linear__get_issue',
+            status: 'failure',
+          }),
+        );
         const observation = await f.controller.finalize({
           harnessReady: true,
           harnessSucceeded: true,
@@ -595,8 +731,8 @@ describe.skipIf(!executable)(
       });
       expect(observation).toMatchObject({ready: true, failures: []});
       expect(observation.calls).toHaveLength(1);
-      expect(f.contacts()).toBe(0);
-      expect(f.globalContacts()).toBe(0);
+      expect(f.originalContacts()).toBe(0);
+      expect(f.inheritedHeader()).toBe(false);
     }, 30000);
 
     it('keeps simultaneous sessions and controller logs independent', async () => {
@@ -680,20 +816,40 @@ describe.skipIf(!executable)(
       );
     }, 30000);
 
-    it('retains a received mock error as call evidence', async () => {
-      const f = await fixture('mock-error');
+    it.each([
+      'fixture-receipt-42',
+      'fixture-receipt-42: Permission denied: missing issue access',
+    ])(
+      'retains received service error "%s" as call evidence',
+      async (message) => {
+        const f = await fixture('mock-error', message);
+        const result = await runOpenCodeWithMcp(f.options);
+        const observation = await f.controller.finalize({
+          harnessReady: true,
+          harnessSucceeded: true,
+        });
+        expect(observation.calls).toHaveLength(1);
+        expect(observation.calls[0]?.category).toBe('tool_error');
+        expect(result.toolEvents).toContainEqual(
+          expect.objectContaining({
+            rawName: 'mcp__linear__get_issue',
+            status: 'failure',
+            message: expect.stringContaining(message),
+          }),
+        );
+      },
+      30000,
+    );
+
+    it('classifies a nonzero native shell exit as a failed tool', async () => {
+      const f = await fixture('failed-shell');
       const result = await runOpenCodeWithMcp(f.options);
-      const observation = await f.controller.finalize({
-        harnessReady: true,
-        harnessSucceeded: true,
-      });
-      expect(observation.calls).toHaveLength(1);
-      expect(observation.calls[0]?.category).toBe('tool_error');
       expect(result.toolEvents).toContainEqual(
         expect.objectContaining({
-          rawName: 'mcp__linear__get_issue',
+          kind: 'shell',
+          rawName: 'shell',
           status: 'failure',
-          message: expect.stringContaining('fixture-receipt-42'),
+          message: expect.stringContaining('failed'),
         }),
       );
     }, 30000);

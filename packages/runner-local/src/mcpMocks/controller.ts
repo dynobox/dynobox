@@ -38,6 +38,8 @@ type ToolResult = Extract<ToolDefinition, {response: unknown}>['response'];
 
 export type McpMockController = {
   readonly urls: Readonly<Record<string, string>>;
+  /** Actual initialize + tools/list traffic, not permission or registry readiness. */
+  isDiscovered(server: string): boolean;
   /** Seal the call log. Adapter confirmation must describe the actual child invocation. */
   finalize(outcome: {
     harnessReady: boolean;
@@ -324,6 +326,8 @@ export async function startMcpMockController(
   }
 
   return {
+    isDiscovered: (name) =>
+      !sealed && initialized.has(name) && discovered.has(name),
     urls: Object.fromEntries(
       [...routes].map(([path, name]) => [name, `http://${host}${path}`]),
     ),

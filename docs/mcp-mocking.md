@@ -85,12 +85,16 @@ unsupported versions and configuration conflicts fail explicitly.
 | --- | --- | --- |
 | Claude Code | 2.1.263 | Remain available. Declared targets are replaced for this run. |
 | Codex | 0.153.4 | Excluded by the current adapter. |
-| OpenCode | 2.2.5 (2.x) | Excluded by the current adapter. |
+| OpenCode | 2.2.5 (2.x) | Remain available. Declared targets are replaced for this run. |
 | Pi | 0.86.0 | Excluded by the current adapter. |
 | Antigravity | 1.2.11 | Excluded by the current adapter. |
 | Cursor | — | MCP mocking unavailable. |
 
 The fixture schema and call assertions are the same across supported harnesses.
+
+OpenCode retains normal profiles, plugins, model authentication, and skills.
+Managed targets that cannot be replaced, overlapping tool namespaces, and
+declared mocks that fail discovery stop the job before its task starts.
 
 Mock arguments, response payloads, and temporary connection URLs are omitted
 from normal reports. `--debug` keeps harness output in local debug files.
