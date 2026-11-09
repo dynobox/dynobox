@@ -49,10 +49,14 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   local debug logs and handle streamed Unicode input. Pass prompts through
   stdin (subject to Pi's whitespace trimming) and reject blank prompts before
   starting Pi.
-- Support MCP mock runs with Antigravity 1.2.11 and newer, reporting mock calls
-  under `mcp__<server>__<tool>` names. Antigravity MCP jobs that share a HOME
-  take turns within one run, and waiting does not count against their timeout.
-  Separate `dynobox` processes sharing a HOME are not coordinated.
+- Require Antigravity 1.5.2 or newer for selective HTTP MCP mocking. Replace
+  declared targets without contacting their original endpoints while retaining
+  normal model login, skills, plugins, and unrelated MCPs.
+  Use native ACP sessions with scoped mock grants and logical assertion names;
+  remove inherited-source rejection and handwritten project records. Reject
+  same-named global stdio targets and incompatible print-only extra arguments.
+  Jobs sharing a HOME still take turns; separate Dynobox processes are not
+  coordinated.
 - Report timed-out Antigravity MCP probes and runs as timeouts, and preserve
   failure output in local debug logs.
 - Enable local MCP mock runs without an experimental environment flag. Each

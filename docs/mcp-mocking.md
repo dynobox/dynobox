@@ -87,7 +87,7 @@ unsupported versions and configuration conflicts fail explicitly.
 | Codex | 0.153.4 | Remain available. Declared HTTP targets are replaced for this run. |
 | OpenCode | 2.2.5 (2.x) | Remain available. Declared targets are replaced for this run. |
 | Pi | 0.86.0 | Excluded by the current adapter. |
-| Antigravity | 1.2.11 | Excluded by the current adapter. |
+| Antigravity | 1.5.2 | Remain available. Declared HTTP targets are replaced for this run. |
 | Cursor | — | MCP mocking unavailable. |
 
 The fixture schema and call assertions are the same across supported harnesses.
@@ -102,6 +102,15 @@ namespaces must account for this suffix.
 OpenCode retains normal profiles, plugins, model authentication, and skills.
 Managed targets that cannot be replaced, overlapping tool namespaces, and
 declared mocks that fail discovery stop the job before its task starts.
+
+Antigravity uses its native ACP session API and a temporary MCP configuration
+view. Normal model login, settings, skills, plugins, and unrelated MCPs remain
+available. Declared HTTP targets are replaced without connecting to their
+original endpoints. A same-named global stdio target fails explicitly. Use the
+scenario's `model` setting for model selection; print-only `extraArgs`, including
+`--settings`, `--model`, and `--effort`, are unavailable during MCP mock runs.
+Dynobox jobs sharing an Antigravity profile take turns because its native MCP
+tool cache is shared. Separate Dynobox processes are not coordinated.
 
 Mock arguments, response payloads, and temporary connection URLs are omitted
 from normal reports. `--debug` keeps harness output in local debug files.

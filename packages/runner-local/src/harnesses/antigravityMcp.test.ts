@@ -3,8 +3,8 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  realpath,
   rm,
-  symlink,
   writeFile,
 } from 'node:fs/promises';
 import {createServer} from 'node:http';
@@ -13,8 +13,9 @@ import {join} from 'node:path';
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
+import {runJob} from '../index.js';
 import {startMcpMockController} from '../mcpMocks/controller.js';
-import * as processGroup from '../processGroup.js';
+import type {LocalRunnerJob} from '../runTypes.js';
 import {AntigravityHarness} from './antigravity.js';
 import {logicalMcpToolEvents, runAntigravityWithMcp} from './antigravityMcp.js';
 import {createToolEvent} from './parsing.js';
@@ -24,10 +25,14 @@ const executable = process.env.DYNOBOX_ANTIGRAVITY_MCP_EXECUTABLE;
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   for (const close of cleanup.splice(0).reverse()) await close();
 });
 
 async function fixture(mode: 'call' | 'negative' | 'hang') {
+  for (const key of Object.keys(process.env))
+    if (/^(GEMINI_|GOOGLE_|GCLOUD_|GCP_|AGY_|ANTIGRAVITY_)/.test(key))
+      vi.stubEnv(key, undefined);
   const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-native-'));
   cleanup.push(() => rm(root, {recursive: true, force: true}));
   const work = join(root, 'work');
@@ -56,6 +61,7 @@ async function fixture(mode: 'call' | 'negative' | 'hang') {
   );
   const requests: string[] = [];
   let deniedContacts = 0;
+  let targetServer = 'linear';
   const model = createServer(async (request, response) => {
     if (request.url === '/denied') {
       deniedContacts++;
@@ -81,13 +87,14 @@ async function fixture(mode: 'call' | 'negative' | 'hang') {
       )
       .find((entry: {name: string}) => entry.name === 'call_mcp_tool');
     const hasReceipt = body.includes('agy-receipt-42');
+    const hasToolResult = body.includes('functionResponse');
     const part =
-      mode === 'call' && tool && !hasReceipt
+      mode === 'call' && tool && !hasToolResult
         ? {
             functionCall: {
               name: 'call_mcp_tool',
               args: {
-                ServerName: 'linear',
+                ServerName: targetServer,
                 ToolName: 'get_issue',
                 Arguments: {id: 'DYNO-1'},
               },
@@ -139,7 +146,13 @@ async function fixture(mode: 'call' | 'negative' | 'hang') {
   const options = {
     executable: executable!,
     input,
-    servers: {linear: {url: controller.urls.linear!, tools: ['get_issue']}},
+    servers: {
+      linear: {
+        url: controller.urls.linear!,
+        tools: ['get_issue'],
+        isDiscovered: () => controller.isDiscovered('linear'),
+      },
+    },
   };
   return {
     root,
@@ -150,18 +163,162 @@ async function fixture(mode: 'call' | 'negative' | 'hang') {
     requests,
     deniedUrl: base + '/denied',
     deniedContacts: () => deniedContacts,
+    callServer: (name: string) => {
+      targetServer = name;
+    },
   };
 }
 
+async function ownedViews(home: string) {
+  return (await readdir(home)).filter((name) =>
+    name.startsWith('.dynobox-agy-mcp-'),
+  );
+}
+async function globalConfig(home: string, value: unknown) {
+  const path = join(home, '.gemini', 'config', 'mcp_config.json');
+  await mkdir(join(home, '.gemini', 'config'), {recursive: true});
+  await writeFile(path, JSON.stringify(value));
+  return path;
+}
+
+// All native model/MCP traffic uses loopback and synthetic API keys.
 describe.skipIf(!executable)(
-  'native Antigravity MCP runtime',
+  'native Antigravity selective MCP runtime',
   {timeout: 30_000},
   () => {
+    it.each(['call', 'negative'] as const)(
+      'runs %s through the public runner with automatic mock grants',
+      async (mode) => {
+        const f = await fixture(mode);
+        const job: LocalRunnerJob = {
+          id: 'native-antigravity',
+          harness: 'antigravity',
+          permissionMode: 'default',
+          iteration: 0,
+          model: f.options.input.model,
+          scenario: {
+            id: 'receipt',
+            name: 'Read a receipt',
+            prompt: f.options.input.prompt,
+            harnesses: [{id: 'antigravity'}],
+            setup: [],
+            fixtures: [],
+            cliMocks: {},
+            endpoints: [],
+            mcpMocks: {
+              linear: {
+                tools: {
+                  get_issue: {
+                    inputSchema: {type: 'object'},
+                    response: {
+                      content: [{type: 'text', text: 'agy-receipt-42'}],
+                    },
+                  },
+                },
+              },
+            },
+            assertions: [
+              {
+                id: 'receipt',
+                type: mode === 'call' ? 'mcp.called' : 'mcp.notCalled',
+                server: 'linear',
+                tool: 'get_issue',
+              },
+            ],
+          },
+        };
+        const result = await runJob(job, {
+          harnesses: [new AntigravityHarness({executable: executable!})],
+          scratchRoot: f.root,
+          env: f.options.input.env,
+          timeoutMs: 20000,
+        });
+        expect(result.status, result.diagnostics.join('\n')).toBe('passed');
+        expect(result.mcp).toMatchObject({ready: true, failures: []});
+        expect(result.mcp?.calls).toHaveLength(mode === 'call' ? 1 : 0);
+      },
+    );
+
+    it('allows an unrelated HTTP tool while the declared mock remains unused', async () => {
+      const f = await fixture('call');
+      f.callServer('other');
+      const extra = await startMcpMockController({
+        other: {
+          tools: {
+            get_issue: {
+              inputSchema: {type: 'object'},
+              response: {content: [{type: 'text', text: 'agy-receipt-42'}]},
+            },
+          },
+        },
+      });
+      cleanup.push(() =>
+        extra.finalize({harnessReady: false, harnessSucceeded: false}),
+      );
+      await globalConfig(f.home, {
+        mcpServers: {other: {serverUrl: extra.urls.other}},
+      });
+      const result = await runAntigravityWithMcp(f.options);
+      const mock = await f.controller.finalize({
+        harnessReady: result.harnessReady,
+        harnessSucceeded: true,
+      });
+      const real = await extra.finalize({
+        harnessReady: true,
+        harnessSucceeded: true,
+      });
+      expect(mock).toMatchObject({ready: true, calls: [], failures: []});
+      expect(real.calls).toMatchObject([{server: 'other', tool: 'get_issue'}]);
+    });
+
+    it('preserves a plugin MCP alongside the declared mock', async () => {
+      const f = await fixture('call');
+      f.callServer('addon_extra');
+      const extra = await startMcpMockController({
+        other: {
+          tools: {
+            get_issue: {
+              inputSchema: {type: 'object'},
+              response: {content: [{type: 'text', text: 'agy-receipt-42'}]},
+            },
+          },
+        },
+      });
+      cleanup.push(() =>
+        extra.finalize({harnessReady: false, harnessSucceeded: false}),
+      );
+      const plugin = join(f.home, '.gemini', 'config', 'plugins', 'addon');
+      await mkdir(plugin, {recursive: true});
+      await writeFile(
+        join(plugin, 'plugin.json'),
+        JSON.stringify({
+          name: 'addon',
+          version: '1.0.0',
+          description: 'Synthetic plugin',
+        }),
+      );
+      await writeFile(
+        join(plugin, 'mcp_config.json'),
+        JSON.stringify({mcpServers: {extra: {serverUrl: extra.urls.other}}}),
+      );
+      await runAntigravityWithMcp(f.options);
+      expect(extra.isDiscovered('other')).toBe(true);
+      const real = await extra.finalize({
+        harnessReady: true,
+        harnessSucceeded: true,
+      });
+      expect(real.calls).toHaveLength(1);
+    });
+
     it.each(['call', 'negative'] as const)(
       'runs %s with a synthetic model',
       async (mode) => {
         const f = await fixture(mode);
-        const result = await runAntigravityWithMcp(f.options);
+        const live: ToolEvent[] = [];
+        const result = await runAntigravityWithMcp({
+          ...f.options,
+          input: {...f.options.input, onToolEvent: (event) => live.push(event)},
+        });
         const observation = await f.controller.finalize({
           harnessReady: result.harnessReady,
           harnessSucceeded: true,
@@ -172,707 +329,433 @@ describe.skipIf(!executable)(
           failures: [],
         });
         expect(observation.calls).toHaveLength(mode === 'call' ? 1 : 0);
-        expect(
-          result.toolEvents?.filter(
-            (event) => event.rawName === 'mcp__linear__get_issue',
-          ),
-        ).toMatchObject(
-          mode === 'call' ? [{input: {id: 'DYNO-1'}, status: 'success'}] : [],
+        expect(result.toolEvents).toEqual(live);
+        expect(result.toolEvents).toMatchObject(
+          mode === 'call'
+            ? [
+                {
+                  rawName: 'mcp__linear__get_issue',
+                  input: {id: 'DYNO-1'},
+                  status: 'success',
+                },
+              ]
+            : [],
         );
         expect(
           new AntigravityHarness().extractResult(result.output).finalMessage,
         ).toContain(mode === 'call' ? 'agy-receipt-42' : 'READY');
-        expect(f.requests.length).toBeGreaterThan(0);
-        // The run created .agents, so it removes the whole directory.
+        expect(await ownedViews(f.home)).toEqual([]);
         await expect(readdir(join(f.work, '.agents'))).rejects.toMatchObject({
           code: 'ENOENT',
         });
-        await expect(
-          readdir(join(f.home, '.gemini', 'antigravity-cli', 'mcp', 'linear')),
-        ).rejects.toMatchObject({code: 'ENOENT'});
       },
     );
 
-    it('runs a mock call with a scoped normal-permission grant', async () => {
-      const f = await fixture('call');
-      const result = await runAntigravityWithMcp({
-        ...f.options,
-        input: {
-          ...f.options.input,
-          permissionMode: 'default',
-          allowedMcpTools: [{server: 'linear', tool: 'get_issue'}],
-        },
-      });
-      const observation = await f.controller.finalize({
-        harnessReady: result.harnessReady,
-        harnessSucceeded: true,
-      });
-      expect(observation).toMatchObject({ready: true, failures: []});
-      expect(observation.calls).toHaveLength(1);
-      expect(
-        new AntigravityHarness().extractResult(result.output).finalMessage,
-      ).toContain('agy-receipt-42');
-      expect(
-        JSON.parse(
-          await readFile(
-            join(f.home, '.gemini', 'antigravity-cli', 'settings.json'),
-            'utf8',
-          ),
-        ),
-      ).toEqual({modelProvider: 'gemini'});
-      expect(
-        await readdir(join(f.home, '.gemini', 'config', 'projects')),
-      ).toEqual([]);
-    });
-
-    it('fails closed when headless normal mode denies the mock tool', async () => {
-      const f = await fixture('call');
-      await expect(
-        runAntigravityWithMcp({
+    it.each(['Gemini 3.8 Flash (Low)', 'gemini-3.8-flash'])(
+      'accepts model %s with scoped normal-permission mock grants',
+      async (model) => {
+        const f = await fixture('call');
+        const result = await runAntigravityWithMcp({
           ...f.options,
-          input: {...f.options.input, permissionMode: 'default'},
-        }),
-      ).rejects.toMatchObject({category: 'execution_failed'});
-      const observation = await f.controller.finalize({
-        harnessReady: false,
-        harnessSucceeded: false,
-      });
-      expect(observation.calls).toHaveLength(0);
-    });
-
-    it('rejects an inherited global server before model execution', async () => {
-      const f = await fixture('negative');
-      await mkdir(join(f.home, '.gemini', 'config'), {recursive: true});
-      await writeFile(
-        join(f.home, '.gemini', 'config', 'mcp_config.json'),
-        JSON.stringify({
-          mcpServers: {inherited: {serverUrl: 'http://127.0.0.1:1/mcp'}},
-        }),
-      );
-      await expect(runAntigravityWithMcp(f.options)).rejects.toMatchObject({
-        category: 'configuration_failed',
-      });
-      expect(f.requests).toHaveLength(0);
-      await expect(
-        readFile(join(f.work, '.agents', 'mcp_config.json')),
-      ).rejects.toMatchObject({code: 'ENOENT'});
-    });
-
-    it('rejects workspace plugins that can supply MCP servers', async () => {
-      const f = await fixture('negative');
-      await mkdir(join(f.work, '.agents', 'plugins', 'inherited'), {
-        recursive: true,
-      });
-      await expect(runAntigravityWithMcp(f.options)).rejects.toMatchObject({
-        category: 'configuration_failed',
-      });
-      expect(f.requests).toHaveLength(0);
-    });
-
-    it('rejects custom agents that can supply MCP servers', async () => {
-      const f = await fixture('negative');
-      await mkdir(join(f.work, '.agents', 'agents', 'inherited'), {
-        recursive: true,
-      });
-      await expect(runAntigravityWithMcp(f.options)).rejects.toMatchObject({
-        category: 'configuration_failed',
-      });
-      expect(f.requests).toHaveLength(0);
-    });
-
-    it('rejects MCP config in a workspace ancestor', async () => {
-      const f = await fixture('negative');
-      await mkdir(join(f.root, '.agents'), {recursive: true});
-      await writeFile(
-        join(f.root, '.agents', 'mcp_config.json'),
-        JSON.stringify({
-          mcpServers: {inherited: {serverUrl: 'http://127.0.0.1:1/mcp'}},
-        }),
-      );
-      await expect(runAntigravityWithMcp(f.options)).rejects.toMatchObject({
-        category: 'configuration_failed',
-      });
-      expect(f.requests).toHaveLength(0);
-    });
-
-    it('cannot pass a negative assertion when the mock is unreachable', async () => {
-      const f = await fixture('negative');
-      const result = await runAntigravityWithMcp({
-        ...f.options,
-        servers: {
-          linear: {
-            url: 'http://127.0.0.1:1/unreachable',
-            tools: ['get_issue'],
-          },
-        },
-      });
-      const observation = await f.controller.finalize({
-        harnessReady: result.harnessReady,
-        harnessSucceeded: true,
-      });
-      expect(observation.ready).toBe(false);
-      expect(observation.failures).toContain('not_ready');
-      expect(observation.calls).toHaveLength(0);
-    });
-
-    it('cannot pass a negative assertion when MCP startup is denied', async () => {
-      const f = await fixture('negative');
-      let harnessReady = false;
-      try {
-        const run = await runAntigravityWithMcp({
-          ...f.options,
-          input: {...f.options.input, timeoutMs: 3500},
-          servers: {
-            linear: {url: f.deniedUrl, tools: ['get_issue']},
+          input: {
+            ...f.options.input,
+            model,
+            permissionMode: 'default',
+            allowedMcpTools: [{server: 'linear', tool: 'get_issue'}],
           },
         });
-        harnessReady = run.harnessReady;
-      } catch {
-        // A rejected harness also prevents a passing negative assertion.
-      }
-      const observation = await f.controller.finalize({
-        harnessReady,
-        harnessSucceeded: harnessReady,
-      });
-      expect(f.deniedContacts()).toBeGreaterThan(0);
-      expect(observation.ready).toBe(false);
-      expect(observation.failures).toContain('not_ready');
-    }, 10000);
-
-    it('keeps concurrent mock calls in separate controller logs', async () => {
-      const first = await fixture('call');
-      const second = await fixture('call');
-      second.options.input.env.HOME = first.home;
-      const [firstRun, secondRun] = await Promise.all([
-        runAntigravityWithMcp(first.options),
-        runAntigravityWithMcp(second.options),
-      ]);
-      const [firstLog, secondLog] = await Promise.all([
-        first.controller.finalize({
-          harnessReady: firstRun.harnessReady,
+        expect(result.toolEvents).toMatchObject([
+          {rawName: 'mcp__linear__get_issue', status: 'success'},
+        ]);
+        const observation = await f.controller.finalize({
+          harnessReady: result.harnessReady,
           harnessSucceeded: true,
-        }),
-        second.controller.finalize({
-          harnessReady: secondRun.harnessReady,
-          harnessSucceeded: true,
-        }),
-      ]);
-      for (const log of [firstLog, secondLog]) {
-        expect(log.ready).toBe(true);
-        expect(log.failures).toEqual([]);
-        expect(log.calls).toHaveLength(1);
-      }
-      expect(
-        await readdir(join(first.home, '.gemini', 'config', 'projects')),
-      ).toEqual([]);
-    });
+        });
+        expect(observation.calls).toHaveLength(1);
+        expect(
+          JSON.parse(
+            await readFile(
+              join(f.home, '.gemini', 'antigravity-cli', 'settings.json'),
+              'utf8',
+            ),
+          ),
+        ).toEqual({modelProvider: 'gemini'});
+      },
+    );
 
-    it('cancels an active model request and removes the mock config', async () => {
-      const f = await fixture('hang');
-      const abort = new AbortController();
-      const run = runAntigravityWithMcp({
+    it('retains evidence of a denied mock attempt for receipt reconciliation', async () => {
+      const f = await fixture('call');
+      const result = await runAntigravityWithMcp({
         ...f.options,
-        input: {...f.options.input, signal: abort.signal},
+        input: {...f.options.input, permissionMode: 'default'},
       });
-      const deadline = Date.now() + 10000;
-      while (f.requests.length === 0 && Date.now() < deadline)
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(f.requests.length).toBeGreaterThan(0);
-      abort.abort();
-      await expect(run).rejects.toMatchObject({category: 'execution_failed'});
-      await expect(
-        readFile(join(f.work, '.agents', 'mcp_config.json')),
-      ).rejects.toMatchObject({code: 'ENOENT'});
-      expect(
-        await readdir(join(f.home, '.gemini', 'config', 'projects')),
-      ).toEqual([]);
+      expect(result.toolEvents).toMatchObject([
+        {rawName: 'mcp__linear__get_issue', status: 'failure'},
+      ]);
+      const observation = await f.controller.finalize({
+        harnessReady: result.harnessReady,
+        harnessSucceeded: true,
+      });
+      expect(observation.calls).toHaveLength(0);
     });
 
-    it('bounds a stalled model request and removes the mock config', async () => {
-      const f = await fixture('hang');
+    it('replaces a global HTTP target completely and preserves unrelated MCPs and skills', async () => {
+      const f = await fixture('call');
+      const extra = await startMcpMockController({
+        extra: {
+          tools: {
+            ping: {inputSchema: {type: 'object'}, response: {content: []}},
+          },
+        },
+      });
+      cleanup.push(() =>
+        extra.finalize({harnessReady: false, harnessSucceeded: false}),
+      );
+      const path = await globalConfig(f.home, {
+        mcpServers: {
+          linear: {
+            serverUrl: f.deniedUrl,
+            headers: {Authorization: 'old-synthetic-credential'},
+            oauth: {clientId: 'old-client'},
+          },
+          extra: {serverUrl: extra.urls.extra},
+        },
+      });
+      const original = await readFile(path, 'utf8');
+      await mkdir(join(f.home, '.gemini', 'config', 'skills', 'keep-skill'), {
+        recursive: true,
+      });
+      await writeFile(
+        join(f.home, '.gemini', 'config', 'skills', 'keep-skill', 'SKILL.md'),
+        '---\nname: keep-skill\ndescription: GLOBAL_SKILL_MARKER_2819\n---\nRead assets/example.txt.',
+      );
+      const shared = join(f.home, 'shared-skills', 'external-skill');
+      await mkdir(shared, {recursive: true});
+      await writeFile(
+        join(shared, 'SKILL.md'),
+        '---\nname: external-skill\ndescription: RELATIVE_SKILL_MARKER_9051\n---\nRead assets/example.txt.',
+      );
+      await writeFile(
+        join(f.home, '.gemini', 'config', 'skills.json'),
+        JSON.stringify({entries: [{path: '../../shared-skills'}]}),
+      );
+      const result = await runAntigravityWithMcp(f.options);
+      expect(f.deniedContacts()).toBe(0);
+      expect(extra.isDiscovered('extra')).toBe(true);
+      expect(
+        f.requests.some((body) => body.includes('GLOBAL_SKILL_MARKER_2819')),
+      ).toBe(true);
+      expect(
+        f.requests.some((body) => body.includes('RELATIVE_SKILL_MARKER_9051')),
+      ).toBe(true);
+      expect(await readFile(path, 'utf8')).toBe(original);
+      expect(
+        new AntigravityHarness().extractResult(result.output).finalMessage,
+      ).toBe('agy-receipt-42');
+      expect(await ownedViews(f.home)).toEqual([]);
+    });
+
+    it('shadows the same HTTP target in workspace configuration without editing it', async () => {
+      const f = await fixture('call');
+      await mkdir(join(f.work, '.agents'));
+      const path = join(f.work, '.agents', 'mcp_config.json');
+      await writeFile(
+        path,
+        JSON.stringify({mcpServers: {linear: {serverUrl: f.deniedUrl}}}),
+      );
+      const original = await readFile(path, 'utf8');
+      const result = await runAntigravityWithMcp(f.options);
+      expect(f.deniedContacts()).toBe(0);
+      expect(result.toolEvents).toMatchObject([
+        {rawName: 'mcp__linear__get_issue', status: 'success'},
+      ]);
+      expect(await readFile(path, 'utf8')).toBe(original);
+    });
+
+    it('rejects a disconnected mock before sending the task', async () => {
+      const f = await fixture('negative');
       await expect(
         runAntigravityWithMcp({
           ...f.options,
-          input: {...f.options.input, timeoutMs: 800},
+          servers: {
+            linear: {
+              ...f.options.servers.linear,
+              url: 'http://127.0.0.1:1/mcp',
+            },
+          },
         }),
-      ).rejects.toMatchObject({category: 'timed_out'});
-      await expect(
-        readFile(join(f.work, '.agents', 'mcp_config.json')),
-      ).rejects.toMatchObject({code: 'ENOENT'});
+      ).rejects.toMatchObject({category: 'not_ready'});
       expect(
-        await readdir(join(f.home, '.gemini', 'config', 'projects')),
-      ).toEqual([]);
+        f.requests.filter(
+          (body) => !body.includes('You are a conversation title'),
+        ),
+      ).toHaveLength(0);
+      expect(await ownedViews(f.home)).toEqual([]);
     });
-  },
-);
 
-it('runs sharing a HOME take turns, even after one fails or is cancelled', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-fake-'));
-  cleanup.push(() => rm(root, {recursive: true, force: true}));
-  const home = join(root, 'home');
-  const alias = join(root, 'home-alias');
-  await mkdir(home);
-  await symlink(home, alias);
-  const toolDir = join(home, '.gemini', 'antigravity-cli', 'mcp', 'linear');
-  const fake = join(root, 'fake-agy');
-  // Each run reports whether another was active or had removed its tool
-  // definitions while it ran.
-  await writeFile(
-    fake,
-    `#!/bin/sh
-case "$1" in
-  --version) echo 1.2.11; exit 0 ;;
-  plugin) echo 'No imported plugins.'; exit 0 ;;
-esac
-reply=kept
-touch '${root}'/active-$$
-mkdir -p '${toolDir}'
-case "$*" in *fail*) rm -f '${root}'/active-$$; exit 1 ;; esac
-sleep 0.8
-for other in '${root}'/active-*; do [ "$other" = '${root}'/active-$$ ] || reply=overlap; done
-[ -d '${toolDir}' ] || reply=removed
-rm -f '${root}'/active-$$
-printf '{"event":"result","result":{"status":"SUCCESS","response":"%s"}}\\n' "$reply"
-`,
-    {mode: 0o755},
-  );
-  const abort = new AbortController();
-  const run = async (prompt: string) => {
-    const work = join(root, prompt);
-    await mkdir(work);
-    const {output} = await runAntigravityWithMcp({
-      executable: fake,
-      input: {
-        workDir: work,
-        env: {HOME: prompt === 'last' ? alias : home},
-        prompt,
-        // The last run finishes about 2.4s in, so this budget only holds if
-        // waiting uses none of it, while leaving each run ample headroom.
-        timeoutMs: 2000,
-        ...(prompt === 'cancelled' ? {signal: abort.signal} : {}),
-      },
-      servers: {
-        linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']},
-      },
-    });
-    // Duration also starts with the run's turn.
-    expect(output.durationMs).toBeLessThan(2000);
-    return new AntigravityHarness().extractResult(output).finalMessage;
-  };
-  // Start the others once the first holds the turn, so the cancelled run is
-  // still waiting when it is cancelled.
-  const firstRun = run('first');
-  await vi.waitFor(async () =>
-    expect(
-      (await readdir(root)).some((name) => name.startsWith('active-')),
-    ).toBe(true),
-  );
-  let firstDone = Infinity;
-  void firstRun.finally(() => (firstDone = Date.now()));
-  let cancelledAt = Infinity;
-  const cancelledRun = run('cancelled');
-  void cancelledRun.catch(() => (cancelledAt = Date.now()));
-  const others = [run('fail'), cancelledRun, run('second'), run('last')];
-  // By now every run is queued behind the first, which is still running.
-  await new Promise((resolve) => setTimeout(resolve, 200));
-  abort.abort();
-  const [first, failed, cancelled, second, last] = await Promise.allSettled([
-    firstRun,
-    ...others,
-  ]);
-  expect(failed).toMatchObject({status: 'rejected'});
-  expect(cancelled).toMatchObject({
-    status: 'rejected',
-    reason: {category: 'execution_failed'},
-  });
-  // Cancelling a waiting run settles it at once, not when its turn comes.
-  expect(cancelledAt).toBeLessThan(firstDone);
-  expect(await readdir(join(root, 'cancelled'))).toEqual([]);
-  expect([first, second, last]).toEqual([
-    {status: 'fulfilled', value: 'kept'},
-    {status: 'fulfilled', value: 'kept'},
-    {status: 'fulfilled', value: 'kept'},
-  ]);
-  await expect(readdir(toolDir)).rejects.toMatchObject({code: 'ENOENT'});
-});
-
-it.each([
-  ['version', 'failure', 'unsupported_version'],
-  ['plugins', 'failure', 'configuration_failed'],
-  ['run', 'failure', 'execution_failed'],
-  ['run', 'bad-json', 'execution_failed'],
-  ['run', 'no-final', 'execution_failed'],
-  ['version', 'timeout', 'timed_out'],
-  ['plugins', 'timeout', 'timed_out'],
-  ['run', 'timeout', 'timed_out'],
-])('retains %s output and reports %s as %s', async (stage, mode, category) => {
-  const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-failure-'));
-  cleanup.push(() => rm(root, {recursive: true, force: true}));
-  const work = join(root, 'work');
-  const home = join(root, 'home');
-  const fake = join(root, 'fake-agy');
-  await mkdir(work);
-  await writeFile(
-    fake,
-    `#!${process.execPath}
-const args = process.argv.slice(2);
-const stage = args[0] === '--version' ? 'version' : args[0] === 'plugin' ? 'plugins' : 'run';
-const mode = stage === process.env.FAILURE_STAGE ? process.env.FAILURE_MODE : 'success';
-console.error('PRIVATE_STDERR_SENTINEL');
-console.log(stage === 'version' ? mode === 'failure' ? '1.0.0' : '1.2.11'
-  : stage === 'plugins' ? mode === 'failure' ? 'Imported plugin' : 'No imported plugins.'
-  : mode === 'bad-json' ? 'PRIVATE_STDOUT_SENTINEL'
-  : mode === 'no-final' ? '{}' : JSON.stringify({event:'result', result:{status:'SUCCESS',response:'PRIVATE_STDOUT_SENTINEL'}}));
-if (mode === 'timeout') setInterval(() => {}, 1000);
-else if (mode === 'failure' && stage === 'run') process.exitCode = 2;
-`,
-    {mode: 0o755},
-  );
-  if (mode === 'timeout') {
-    vi.spyOn(Date, 'now').mockReturnValue(Date.now());
-    vi.spyOn(processGroup, 'startOwnedProcess').mockImplementation(
-      (_executable, args) => {
-        const current =
-          args[0] === '--version'
-            ? 'version'
-            : args[0] === 'plugin'
-              ? 'plugins'
-              : 'run';
-        return Object.assign(
-          Promise.resolve({
-            failed: current === stage,
-            timedOut: current === stage,
-            exitCode: current === stage ? undefined : 0,
-            stdout:
-              current === 'version'
-                ? '1.2.11'
-                : current === 'plugins'
-                  ? 'No imported plugins.'
-                  : 'PRIVATE_STDOUT_SENTINEL',
-            stderr: 'PRIVATE_STDERR_SENTINEL',
-            durationMs: 10,
-          }),
-          {stop: vi.fn()},
-        ) as unknown as ReturnType<typeof processGroup.startOwnedProcess>;
-      },
-    );
-  }
-  await expect(
-    runAntigravityWithMcp({
-      executable: fake,
-      input: {
-        workDir: work,
-        env: {HOME: home, FAILURE_STAGE: stage, FAILURE_MODE: mode},
-        prompt: 'Reply.',
-        timeoutMs: mode === 'timeout' ? 500 : 5000,
-      },
-      servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
-    }),
-  ).rejects.toMatchObject({
-    category,
-    output: {
-      stdout:
-        stage === 'version'
-          ? expect.stringContaining(mode === 'failure' ? '1.0.0' : '1.2.11')
-          : stage === 'plugins'
-            ? expect.stringContaining(
-                mode === 'failure' ? 'Imported plugin' : 'No imported plugins.',
-              )
-            : expect.stringContaining(
-                mode === 'no-final' ? '{}' : 'PRIVATE_STDOUT_SENTINEL',
-              ),
-      stderr: expect.stringContaining('PRIVATE_STDERR_SENTINEL'),
-      exitCode: expect.any(Number),
-    },
-  });
-  await expect(
-    readFile(join(work, '.agents', 'mcp_config.json')),
-  ).rejects.toMatchObject({code: 'ENOENT'});
-  expect(
-    await readdir(join(home, '.gemini', 'config', 'projects')).catch(() => []),
-  ).toEqual([]);
-});
-
-it.each(['version', 'plugins', 'run'])(
-  'stops descendants holding stdout open when the %s phase times out',
-  async (stage) => {
-    const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-descendants-'));
-    cleanup.push(() => rm(root, {recursive: true, force: true}));
-    const home = join(root, 'home');
-    const work = join(root, 'work');
-    const executable = join(root, 'fake-agy');
-    const pidPath = join(root, 'child.pid');
-    await mkdir(work);
-    await writeFile(
-      executable,
-      `#!${process.execPath}
-const args = process.argv.slice(2);
-const stage = args[0] === '--version' ? 'version' : args[0] === 'plugin' ? 'plugins' : 'run';
-if (stage !== process.env.CHILD_STAGE) {
-  console.log(stage === 'version' ? '1.2.11' : 'No imported plugins.');
-} else {
-  require('node:child_process').spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(process.env.CHILD_PID, String(process.pid)); setInterval(() => {}, 1000);'], {stdio: 'inherit'});
-  setInterval(() => {}, 1000);
-}
-`,
-      {mode: 0o755},
-    );
-    const pending = runAntigravityWithMcp({
-      executable,
-      input: {
-        workDir: work,
-        env: {HOME: home, CHILD_STAGE: stage, CHILD_PID: pidPath},
-        prompt: 'Reply.',
-        timeoutMs: 1000,
-      },
-      servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
-    }).catch((error: unknown) => error);
-    let childPid: number | undefined;
-    try {
-      await vi.waitFor(async () => {
-        childPid = Number(await readFile(pidPath, 'utf8'));
-      });
-      expect(await pending).toMatchObject({category: 'timed_out'});
-      await vi.waitFor(() =>
-        expect(() => process.kill(childPid!, 0)).toThrow(),
-      );
-    } finally {
-      if (childPid !== undefined) {
-        try {
-          process.kill(childPid, 'SIGKILL');
-        } catch {
-          /* Already stopped. */
-        }
+    it('keeps concurrent jobs sharing a profile in separate receipt logs', async () => {
+      const first = await fixture('call'),
+        second = await fixture('call');
+      const results = await Promise.all([
+        runAntigravityWithMcp(first.options),
+        runAntigravityWithMcp({
+          ...second.options,
+          input: {
+            ...second.options.input,
+            env: {...second.options.input.env, HOME: first.home},
+          },
+        }),
+      ]);
+      for (const [index, f] of [first, second].entries()) {
+        const observation = await f.controller.finalize({
+          harnessReady: results[index]!.harnessReady,
+          harnessSucceeded: true,
+        });
+        expect(observation.calls).toHaveLength(1);
+        expect(observation.failures).toEqual([]);
       }
-      await pending;
-    }
-  },
-);
-
-it.each([['--add-dir', '/elsewhere'], ['--project=other'], ['-c']])(
-  'rejects workspace-changing extra arguments %j before any process starts',
-  async (...extraArgs) => {
-    const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-args-'));
-    cleanup.push(() => rm(root, {recursive: true, force: true}));
-    await expect(
-      runAntigravityWithMcp({
-        executable: join(root, 'missing-agy'),
-        input: {workDir: root, env: {HOME: root}, prompt: 'Reply.'},
-        servers: {
-          linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']},
-        },
-        extraArgs,
-      }),
-    ).rejects.toMatchObject({category: 'configuration_failed'});
-  },
-);
-
-it.each([
-  ['.agent/mcp_config.json', '{"mcpServers":{}}'],
-  ['_agents/mcp_config.json', '{"mcpServers":{}}'],
-  ['_agent/mcp_config.json', '{"mcpServers":{}}'],
-  ['.agents/plugins.json', '{"entries":[{"path":"./plugin"}]}'],
-])(
-  'rejects workspace MCP source %s before any process starts',
-  async (file, source) => {
-    const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-sources-'));
-    cleanup.push(() => rm(root, {recursive: true, force: true}));
-    await mkdir(join(root, file, '..'), {recursive: true});
-    await writeFile(join(root, file), source);
-    await expect(
-      runAntigravityWithMcp({
-        executable: join(root, 'missing-agy'),
-        input: {workDir: root, env: {HOME: root}, prompt: 'Reply.'},
-        servers: {
-          linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']},
-        },
-      }),
-    ).rejects.toMatchObject({
-      category: 'configuration_failed',
-      message: expect.stringContaining(join(root, file)),
+      expect(await ownedViews(first.home)).toEqual([]);
     });
+
+    it.each(['cancel', 'timeout'] as const)(
+      'cleans its config view after %s',
+      async (mode) => {
+        const f = await fixture('hang');
+        const abort = new AbortController();
+        const timer =
+          mode === 'cancel' ? setTimeout(() => abort.abort(), 1000) : undefined;
+        try {
+          await expect(
+            runAntigravityWithMcp({
+              ...f.options,
+              input: {
+                ...f.options.input,
+                signal: abort.signal,
+                timeoutMs: mode === 'timeout' ? 1000 : 20000,
+              },
+            }),
+          ).rejects.toMatchObject({
+            category: mode === 'timeout' ? 'timed_out' : 'execution_failed',
+          });
+          expect(await ownedViews(f.home)).toEqual([]);
+        } finally {
+          clearTimeout(timer);
+        }
+      },
+    );
   },
 );
 
-it('allows an empty workspace plugin list', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-sources-'));
+async function fakeFixture(mode = 'success') {
+  const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-acp-unit-'));
   cleanup.push(() => rm(root, {recursive: true, force: true}));
-  await mkdir(join(root, '.agents'));
-  await writeFile(join(root, '.agents', 'plugins.json'), '{"entries":[]}');
-  // Passing the source check reaches the version probe of a missing binary.
-  await expect(
-    runAntigravityWithMcp({
-      executable: join(root, 'missing-agy'),
-      input: {workDir: root, env: {HOME: root}, prompt: 'Reply.'},
-      servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
-    }),
-  ).rejects.toMatchObject({category: 'unsupported_version'});
-});
-
-it('reports mock calls under logical names', () => {
-  const servers = {
-    linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']},
-  };
-  const call = (input: unknown) =>
-    createToolEvent('call_mcp_tool', input, 'failure', 'mock error');
-  const unmapped = [
-    call({ServerName: 'linear', ToolName: 'save_issue', Arguments: {}}),
-    call({ServerName: 'github', ToolName: 'get_issue', Arguments: {}}),
-    call({ServerName: 'toString', ToolName: 'get_issue'}),
-    call('not an object'),
-    createToolEvent('read_file', {}),
-  ];
-  expect(
-    logicalMcpToolEvents(
-      [
-        call({ServerName: 'linear', ToolName: 'get_issue', Arguments: {id: 1}}),
-        ...unmapped,
-      ],
-      servers,
-    ),
-  ).toEqual([
-    expect.objectContaining({
-      rawName: 'mcp__linear__get_issue',
-      input: {id: 1},
-      status: 'failure',
-      message: 'mock error',
-    }),
-    ...unmapped,
-  ]);
-});
-
-it('accepts the empty plugin list wording of newer releases', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-plugins-'));
-  cleanup.push(() => rm(root, {recursive: true, force: true}));
-  const work = join(root, 'work');
-  const fake = join(root, 'fake-agy');
+  const home = join(root, 'home'),
+    work = join(root, 'work'),
+    executable = join(root, 'agy');
   await mkdir(work);
-  const step = {
-    event: 'step_update',
-    step_update: {
-      state: 'DONE',
-      step_type: 'tool',
-      tool_info: {
-        name: 'call_mcp_tool',
-        parameters: {
-          ServerName: 'linear',
-          ToolName: 'get_issue',
-          Arguments: {id: 'DYNO-1'},
-        },
-        output: '{}',
-      },
-    },
-  };
-  const result = {
-    event: 'result',
-    result: {status: 'SUCCESS', response: 'Done.'},
-  };
+  await mkdir(join(home, '.gemini', 'antigravity-cli'), {recursive: true});
   await writeFile(
-    fake,
-    `#!/bin/sh
-case "$1" in
-  --version) echo 1.4.9; exit 0 ;;
-  plugin) echo 'No plugins installed.'; exit 0 ;;
-esac
-printf '%s\\n' '${JSON.stringify(step)}' '${JSON.stringify(result)}'
+    join(home, '.gemini', 'antigravity-cli', 'settings.json'),
+    '{"modelProvider":"synthetic"}',
+  );
+  const capture = join(root, 'capture.json');
+  await writeFile(
+    executable,
+    `#!/usr/bin/env node
+const fs = require('node:fs'), path = require('node:path'), readline = require('node:readline');
+if (process.argv.includes('--version')) { console.log(process.env.FAKE_VERSION || '1.5.2'); process.exit(0); }
+const view = process.argv[process.argv.indexOf('--gemini-dir') + 1];
+const config = JSON.parse(fs.readFileSync(path.join(view, 'config', 'mcp_config.json'), 'utf8'));
+fs.writeFileSync(process.env.CAPTURE, JSON.stringify({config, args: process.argv.slice(2), home: process.env.HOME, data: fs.realpathSync(path.join(view, 'antigravity-cli')), view}));
+const send = (value) => console.log(JSON.stringify({jsonrpc:'2.0', ...value}));
+const update = (value) => send({method: 'session/update', params: {sessionId:'session', update:value}});
+readline.createInterface({input:process.stdin}).on('line', line => {
+ const req=JSON.parse(line), result=(value)=>send({id:req.id,result:value});
+ if(req.method==='initialize') return result({agentCapabilities:{mcpCapabilities:{http:true}}});
+ if(req.method==='session/new') return result({sessionId:'session',models:{availableModels:[{modelId:'native-model',name:'Pretty Model'}]}});
+ if(req.method==='session/set_model') return result({});
+ if(req.method==='session/prompt') {
+  if(process.env.FAKE_MODE==='hang') return;
+  if(process.env.FAKE_MODE==='exit') {console.error('native debug error');process.exit(9);}
+  if(process.env.FAKE_MODE==='malformed') {console.log('{bad json');return;}
+  if(process.env.FAKE_MODE==='tool') {
+   update({sessionUpdate:'tool_call',toolCallId:'call',name:'call_mcp_tool',rawInput:{ServerName:'linear',ToolName:'get_issue',Arguments:{id:'1'}},status:'in_progress'});
+   update({sessionUpdate:'tool_call_update',toolCallId:'call',status:'completed',rawOutput:'received'});
+  }
+  if(process.env.FAKE_MODE!=='empty') update({sessionUpdate:'agent_message_chunk',content:{type:'text',text:'DONE'}});
+  result({stopReason:process.env.FAKE_MODE==='cancelled'?'cancelled':'end_turn'});
+ }
+});
 `,
     {mode: 0o755},
   );
-  const run = await runAntigravityWithMcp({
-    executable: fake,
-    input: {workDir: work, env: {HOME: join(root, 'home')}, prompt: 'Reply.'},
-    servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
-  });
-  expect(run.toolEvents).toMatchObject([
-    {rawName: 'mcp__linear__get_issue', input: {id: 'DYNO-1'}},
-  ]);
-});
-
-async function fakeRun(script: string) {
-  const root = await mkdtemp(join(tmpdir(), 'dynobox-agy-result-'));
-  cleanup.push(() => rm(root, {recursive: true, force: true}));
-  const work = join(root, 'work');
-  const fake = join(root, 'fake-agy');
-  await mkdir(work);
-  await writeFile(
-    fake,
-    `#!/bin/sh
-case "$1" in
-  --version) echo 1.2.11; exit 0 ;;
-  plugin) echo 'No imported plugins.'; exit 0 ;;
-esac
-${script}
-`,
-    {mode: 0o755},
-  );
-  const events: ToolEvent[] = [];
-  const run = runAntigravityWithMcp({
-    executable: fake,
+  const options = {
+    executable,
     input: {
       workDir: work,
-      env: {HOME: join(root, 'home')},
-      prompt: 'Reply.',
-      onToolEvent: (event) => events.push(event),
+      env: {HOME: home, CAPTURE: capture, FAKE_MODE: mode},
+      prompt: 'literal $(text)\nDo not quote this.',
+      timeoutMs: 5000,
     },
-    servers: {linear: {url: 'http://127.0.0.1:1/mcp', tools: ['get_issue']}},
-  });
-  return {run, events, work};
+    servers: {
+      linear: {url: 'http://127.0.0.1:12345/mcp', tools: ['get_issue']},
+    },
+  };
+  return {root, home, work, capture, options};
 }
 
-const callStep = JSON.stringify({
-  event: 'step_update',
-  step_update: {
-    state: 'DONE',
-    step_type: 'tool',
-    tool_info: {
-      name: 'call_mcp_tool',
-      parameters: {ServerName: 'linear', ToolName: 'get_issue', Arguments: {}},
+it('replaces whole target definitions while retaining profile/login directory identity', async () => {
+  const f = await fakeFixture();
+  const path = await globalConfig(f.home, {
+    mcpServers: {
+      linear: {
+        serverUrl: 'https://old.invalid',
+        headers: {Authorization: 'synthetic'},
+        disabled: true,
+        disabledTools: ['get_issue'],
+      },
+      other: {command: 'never-run', args: ['test']},
     },
-  },
+  });
+  const before = await readFile(path, 'utf8');
+  const result = await runAntigravityWithMcp({
+    ...f.options,
+    input: {...f.options.input, model: 'Pretty Model'},
+  });
+  const captured = JSON.parse(await readFile(f.capture, 'utf8'));
+  expect(captured.config.mcpServers).toEqual({
+    linear: {serverUrl: f.options.servers.linear.url},
+    other: {command: 'never-run', args: ['test']},
+  });
+  expect(captured.home).toBe(await realpath(f.home));
+  expect(captured.data).toBe(
+    await realpath(join(f.home, '.gemini', 'antigravity-cli')),
+  );
+  expect(await readFile(path, 'utf8')).toBe(before);
+  expect(
+    new AntigravityHarness().extractResult(result.output).finalMessage,
+  ).toBe('DONE');
+  expect(await ownedViews(f.home)).toEqual([]);
 });
-const result = (response: string) =>
-  JSON.stringify({event: 'result', result: {status: 'SUCCESS', response}});
 
-it('accepts a successful run that ends with tool calls and no text', async () => {
-  const {run} = await fakeRun(`echo '${callStep}'; echo '${result('')}'`);
-  expect((await run).toolEvents).toMatchObject([
-    {rawName: 'mcp__linear__get_issue'},
+it('emits logical live events that match the returned evidence', async () => {
+  const f = await fakeFixture('tool'),
+    live: ToolEvent[] = [];
+  const result = await runAntigravityWithMcp({
+    ...f.options,
+    input: {...f.options.input, onToolEvent: (event) => live.push(event)},
+  });
+  expect(result.toolEvents).toEqual(live);
+  expect(live).toMatchObject([
+    {
+      kind: 'mcp',
+      rawName: 'mcp__linear__get_issue',
+      input: {id: '1'},
+      status: 'success',
+    },
   ]);
 });
 
-it('still rejects a successful run with neither text nor tool calls', async () => {
-  const {run} = await fakeRun(`echo '${result('')}'`);
-  await expect(run).rejects.toMatchObject({category: 'execution_failed'});
+it.each(['empty', 'malformed', 'cancelled', 'exit'])(
+  'rejects %s native output and cleans the view',
+  async (mode) => {
+    const f = await fakeFixture(mode);
+    await expect(runAntigravityWithMcp(f.options)).rejects.toMatchObject({
+      category: 'execution_failed',
+    });
+    expect(await ownedViews(f.home)).toEqual([]);
+  },
+);
+
+it('retains raw diagnostics on native failure', async () => {
+  const f = await fakeFixture('exit');
+  await expect(runAntigravityWithMcp(f.options)).rejects.toMatchObject({
+    output: {stderr: 'native debug error'},
+  });
 });
 
-it('reports attempted mock calls when the run fails', async () => {
-  const {run, events} = await fakeRun(`echo '${callStep}'; exit 2`);
-  await expect(run).rejects.toMatchObject({category: 'execution_failed'});
-  expect(events).toMatchObject([{rawName: 'mcp__linear__get_issue'}]);
+it('bounds a stalled native task', async () => {
+  const f = await fakeFixture('hang');
+  await expect(
+    runAntigravityWithMcp({
+      ...f.options,
+      input: {...f.options.input, timeoutMs: 500},
+    }),
+  ).rejects.toMatchObject({category: 'timed_out'});
+  expect(await ownedViews(f.home)).toEqual([]);
 });
 
-it('keeps the run result when cleanup fails', async () => {
-  // The agent replaces the mock config with a directory rm cannot remove.
-  const {run} = await fakeRun(
-    `rm .agents/mcp_config.json; mkdir -p .agents/mcp_config.json/x; echo '${result('done')}'`,
-  );
+it('rejects same-named stdio targets before ACP starts', async () => {
+  const f = await fakeFixture();
+  await globalConfig(f.home, {mcpServers: {linear: {command: 'never-run'}}});
+  await expect(runAntigravityWithMcp(f.options)).rejects.toMatchObject({
+    category: 'configuration_failed',
+  });
+  await expect(readFile(f.capture)).rejects.toMatchObject({code: 'ENOENT'});
+});
+
+it.each(['{bad json', '{"mcpServers":[]}'])(
+  'rejects malformed profile configuration %s',
+  async (source) => {
+    const f = await fakeFixture();
+    const path = await globalConfig(f.home, {});
+    await writeFile(path, source);
+    await expect(runAntigravityWithMcp(f.options)).rejects.toMatchObject({
+      category: 'configuration_failed',
+    });
+    await expect(readFile(f.capture)).rejects.toMatchObject({code: 'ENOENT'});
+  },
+);
+
+it.each([
+  '--gemini-dir=elsewhere',
+  '--settings={}',
+  '--agent=other',
+  '--continue',
+  '--model=other',
+])('rejects conflicting %s before launch', async (arg) => {
+  const f = await fakeFixture();
+  await expect(
+    runAntigravityWithMcp({...f.options, extraArgs: [arg]}),
+  ).rejects.toMatchObject({category: 'configuration_failed'});
+  await expect(readFile(f.capture)).rejects.toMatchObject({code: 'ENOENT'});
+});
+
+it('rejects unverified older native versions', async () => {
+  const f = await fakeFixture();
+  await expect(
+    runAntigravityWithMcp({
+      ...f.options,
+      input: {
+        ...f.options.input,
+        env: {...f.options.input.env, FAKE_VERSION: '1.2.11'},
+      },
+    }),
+  ).rejects.toMatchObject({
+    category: 'unsupported_version',
+    output: {stdout: '1.2.11'},
+  });
+});
+
+it('normalizes only declared dispatcher calls', () => {
+  const events = [
+    createToolEvent(
+      'call_mcp_tool',
+      {ServerName: 'linear', ToolName: 'get_issue', Arguments: {id: '1'}},
+      'success',
+    ),
+    createToolEvent(
+      'call_mcp_tool',
+      {ServerName: 'other', ToolName: 'ping'},
+      'failure',
+    ),
+  ];
   expect(
-    new AntigravityHarness().extractResult((await run).output).finalMessage,
-  ).toBe('done');
-});
-
-it('rejects a run whose mock tool call was denied', async () => {
-  const denied = JSON.stringify({
-    event: 'result',
-    result: {
-      status: 'SUCCESS',
-      response: '',
-      denied_actions: [{action: 'mcp', display_name: 'CallMcpTool'}],
-    },
-  });
-  const {run} = await fakeRun(`echo '${callStep}'; echo '${denied}'`);
-  await expect(run).rejects.toMatchObject({
-    category: 'execution_failed',
-    message: expect.stringContaining('denied'),
-  });
+    logicalMcpToolEvents(events, {
+      linear: {url: 'unused', tools: ['get_issue']},
+    }),
+  ).toEqual([
+    createToolEvent('mcp__linear__get_issue', {id: '1'}, 'success'),
+    events[1],
+  ]);
 });
