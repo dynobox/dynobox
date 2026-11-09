@@ -94,10 +94,10 @@ async function fixture(
 }
 
 describe('MCP runner lifecycle', () => {
-  it('rejects Cursor MCP mocking with an actionable isolation error', () => {
-    expect(() => assertMcpExecutionSupported(scenario(), 'cursor')).toThrow(
-      'plugin-provided MCP servers cannot be isolated',
-    );
+  it('supports Cursor MCP scenarios through the shared eligibility gate', () => {
+    expect(() =>
+      assertMcpExecutionSupported(scenario(), 'cursor'),
+    ).not.toThrow();
   });
 
   it('reports the adapter category and reason for preparation failures', async () => {

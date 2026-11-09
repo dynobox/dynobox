@@ -5,9 +5,9 @@ Dynobox starts HTTP MCP endpoints and supplies their configuration to the
 harness. You do not need real service URLs, accounts, or MCP credentials for
 the mocked tools. Your harness still needs its normal model authentication.
 
-Mocks replace only the servers you declare. Depending on the harness, other
-MCP servers, plugins, and connectors from your profile can stay real during the
-run. See [Other MCP servers](#other-mcp-servers).
+Mocks replace only the servers you declare. Other MCP servers, plugins, and
+connectors from your profile stay real during the run. See
+[Other MCP servers](#other-mcp-servers).
 
 ```yaml
 name: Issue lookup
@@ -65,8 +65,8 @@ assertion pass. Assertions refer to logical server/tool names on every harness.
 ## Other MCP servers
 
 Dynobox runs your harness with your normal profile and does not edit its
-configuration. A harness that keeps your other MCP servers loads them as it
-normally would, and the agent can call them with real side effects.
+configuration. The harness loads your other MCP servers as it normally would,
+and the agent can call them with real side effects.
 
 `mcp.called` and `mcp.notCalled` check only calls received by mocks. Calls to
 real servers are not checked, and other servers can influence the agent, so
@@ -88,7 +88,7 @@ unsupported versions and configuration conflicts fail explicitly.
 | OpenCode | 2.2.5 (2.x) | Remain available. Declared targets are replaced for this run. |
 | Pi | 1.5.0 (1.x, npm installation) | Remain available. Declared HTTP targets are replaced for this run. |
 | Antigravity | 1.5.2 | Remain available. Declared HTTP targets are replaced for this run. |
-| Cursor | — | MCP mocking unavailable. |
+| Cursor | 2026.10.22 | Remain available. Declared targets are disabled and replaced for this run. |
 
 The fixture schema and call assertions are the same across supported harnesses.
 
@@ -111,6 +111,26 @@ extension registrations, without using their original credentials or endpoints.
 Same-named stdio targets fail explicitly. Native normalized or hashed tool names
 are mapped to the logical names in assertions, callbacks, and reports. All
 declared tools must be active before the task starts.
+
+Cursor uses its ordinary CLI with a temporary native plugin for mock
+connections and an owned copy of the workspace's native MCP state. It disables
+original target identifiers before discovery and grants only declared mock
+tools. Existing MCP configuration stays in place. Unrelated disabled servers,
+approvals, and selections are preserved; existing MCP auth files remain at
+their normal paths. Normal model login, skills, plugins, and other servers
+remain available. For plugin targets, use the full native server identifier
+shown by Cursor. Same-named global or project stdio targets fail explicitly,
+and workspace permission configuration symlinks are unsupported.
+
+As with Codex, the agent sees each mock under a separate native name with a
+`_dynobox` suffix, for example `plugin-dynobox-linear_dynobox`; assertions,
+callbacks, and reports keep the logical names declared in `mcpMocks`. Skills
+that refer to exact native server names must account for this suffix.
+Inherited permission rules remain in effect; a deny rule that matches a mock
+tool under its logical or `_dynobox` name fails the job before discovery.
+Native retries remain bounded by the job's timeout when one is configured. A
+job fails when Cursor's task never discovers a declared mock, so a negative
+assertion cannot pass without it.
 
 Antigravity uses its native ACP session API and a temporary MCP configuration
 view. Normal model login, settings, skills, plugins, and unrelated MCPs remain

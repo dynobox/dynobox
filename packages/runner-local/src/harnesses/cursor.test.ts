@@ -223,6 +223,66 @@ JSONL
 });
 
 describe('parseCursorJson', () => {
+  it.each([
+    ['without call details', {}],
+    [
+      'with identity but no arguments',
+      {args: {serverIdentifier: 'linear_dynobox', toolName: 'get_issue'}},
+    ],
+  ])(
+    'uses the executed MCP identity and retains it through partial completion %s',
+    (_, completion) => {
+      const input = {literal: 'linear_dynobox stays opaque'};
+      const result = parseCursorJson(
+        jsonl(
+          {
+            type: 'tool_call',
+            subtype: 'started',
+            call_id: 'mcp-1',
+            tool_call: {
+              mcpToolCall: {
+                args: {
+                  serverIdentifier: 'linear_dynobox',
+                  providerIdentifier: 'Display name',
+                  toolName: 'get_issue',
+                  args: input,
+                },
+              },
+            },
+          },
+          {
+            type: 'tool_call',
+            subtype: 'completed',
+            call_id: 'mcp-1',
+            tool_call: {
+              mcpToolCall: {
+                ...completion,
+                result: {
+                  success: {
+                    isError: true,
+                    content: [
+                      {text: {text: 'linear_dynobox opaque service response'}},
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        ),
+        {linear_dynobox: 'linear'},
+      );
+      expect(result.toolEvents).toMatchObject([
+        {
+          rawName: 'mcp__linear__get_issue',
+          input,
+          kind: 'mcp',
+          status: 'failure',
+          message: 'linear_dynobox opaque service response',
+        },
+      ]);
+    },
+  );
+
   it('maps failed tools, function calls, and supports incremental parsing', () => {
     const toolInputs = new Map<string, unknown>();
     expect(

@@ -51,6 +51,17 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   local debug logs and handle streamed Unicode input. Pass prompts through
   stdin (subject to Pi's whitespace trimming) and reject blank prompts before
   starting Pi.
+- Support selective HTTP MCP mocking with Cursor CLI 2026.10.22 or newer.
+  Disable declared original identifiers before discovery, register separate
+  `<name>_dynobox` mock connections through a native plugin, and grant only
+  declared tools. Preserve normal model authentication, inherited permissions,
+  skills, plugins, and unrelated MCPs, including unrelated disabled servers and
+  MCP auth state. Reject inherited deny rules that block a mock under its
+  logical or native name. Restore temporary workspace permission configuration
+  and remove per-run native MCP state. Keep logical names in callbacks,
+  assertions, and reports; reject incomplete turns and undiscovered mocks.
+  Ordinary Cursor runs now report MCP tool calls as `mcp__<server>__<tool>`
+  instead of `mcp`.
 - Require Antigravity 1.5.2 or newer for selective HTTP MCP mocking. Replace
   declared targets without contacting their original endpoints while retaining
   normal model login, skills, plugins, and unrelated MCPs.
