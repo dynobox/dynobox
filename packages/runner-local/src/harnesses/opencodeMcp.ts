@@ -10,7 +10,7 @@ import {
   McpHarnessError,
   requireMcpVersion,
 } from '../mcpMocks/errors.js';
-import {mcpProcessOutput} from '../mcpMocks/process.js';
+import {mcpProcessOutput, probeMcpVersion} from '../mcpMocks/process.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
 import {startOwnedProcess} from '../processGroup.js';
 import {parseOpenCodeJson} from './opencode.js';
@@ -161,34 +161,27 @@ export async function prepareOpenCodeMcpConfiguration(options: {
   Object.assign(env, mcpProxyEnv(env));
   const inline = inlineConfig(env.OPENCODE_CONFIG_CONTENT);
   await checkManaged(env, servers);
-  const probe = await startOwnedProcess(executable, ['--version'], {
-    cwd,
-    env,
-    extendEnv: false,
-    stdin: 'ignore',
-    reject: false,
-    timeout: Math.min(5000, remaining()),
-    forceKillAfterDelay: 1000,
-    ...(input.signal ? {cancelSignal: input.signal} : {}),
-  });
-  let version: string;
-  try {
-    remaining();
-    version = requireMcpVersion('OpenCode', MIN_VERSION, probe);
-    if (!version.startsWith('2.'))
-      throw new McpHarnessError(
-        'unsupported_version',
-        'OpenCode MCP mocking requires a supported v2 release.',
-      );
-  } catch (error) {
-    throw new McpHarnessError(
-      error instanceof McpHarnessError
-        ? error.category
-        : 'configuration_failed',
-      error instanceof Error ? error.message : String(error),
-      mcpProcessOutput(probe, probe.durationMs),
-    );
-  }
+  const version = await probeMcpVersion(
+    executable,
+    {
+      cwd,
+      env,
+      extendEnv: false,
+      reject: false,
+      forceKillAfterDelay: 1000,
+      ...(input.signal ? {cancelSignal: input.signal} : {}),
+    },
+    remaining,
+    (probe) => {
+      const version = requireMcpVersion('OpenCode', MIN_VERSION, probe);
+      if (!version.startsWith('2.'))
+        throw new McpHarnessError(
+          'unsupported_version',
+          'OpenCode MCP mocking requires a supported v2 release.',
+        );
+      return version;
+    },
+  );
   const mockTools = new Map<string, string>();
   for (const [server, {tools}] of Object.entries(servers))
     for (const tool of tools) {

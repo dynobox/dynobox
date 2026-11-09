@@ -48,6 +48,7 @@ describe('MCP process collection', () => {
     expect(lines).toEqual(['first']);
     expect(failure).toBe(error);
     expect(result.failed).toBe(true);
+    expect(result.timedOut).toBe(false);
     expect(result.stdout).toContain('PRIVATE_PAYLOAD');
   });
 
@@ -56,7 +57,7 @@ describe('MCP process collection', () => {
     const {result, failure} = await collectMcpProcess(
       launch(
         `process.stdout.write('{}\\n{"partial'); setInterval(() => {}, 1000);`,
-        500,
+        2000,
       ),
       {
         label: 'Fixture',
@@ -74,6 +75,12 @@ describe('MCP process collection', () => {
   it.each([
     [
       new SyntaxError('private syntax details'),
+      'Fixture emitted unparseable JSON output.',
+    ],
+    [
+      new Error('Failed to parse line: "PRIVATE_TO"', {
+        cause: new SyntaxError('private syntax details'),
+      }),
       'Fixture emitted unparseable JSON output.',
     ],
     [

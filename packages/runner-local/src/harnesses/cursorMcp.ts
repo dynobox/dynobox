@@ -21,7 +21,11 @@ import {
   McpHarnessError,
   requireMcpVersion,
 } from '../mcpMocks/errors.js';
-import {collectMcpProcess, mcpProcessOutput} from '../mcpMocks/process.js';
+import {
+  collectMcpProcess,
+  mcpProcessOutput,
+  probeMcpVersion,
+} from '../mcpMocks/process.js';
 import {mcpProxyEnv} from '../mcpMocks/proxyEnv.js';
 import {startOwnedProcess} from '../processGroup.js';
 import {
@@ -165,33 +169,26 @@ export async function runCursorWithMcp(options: {
     stdin: 'ignore' as const,
     ...(input.signal ? {cancelSignal: input.signal} : {}),
   };
-  const probe = await startOwnedProcess(executable, ['--version'], {
-    ...processOptions,
-    timeout: Math.min(5000, remaining()),
-  });
+  const version = await probeMcpVersion(
+    executable,
+    processOptions,
+    remaining,
+    (probe) => {
+      requireMcpVersion(
+        'Cursor',
+        MIN_VERSION,
+        probe,
+        (stdout) => stdout.match(/^\d{4}\.\d{2}\.\d{2}(?=-|\s|$)/)?.[0] ?? null,
+      );
+      return probe.stdout.trim();
+    },
+  );
   let output: HarnessRunOutput | undefined;
   const snapshot = (result: {
     exitCode?: number;
     stdout: string;
     stderr: string;
   }) => mcpProcessOutput(result, Date.now() - started);
-  output = snapshot(probe);
-  try {
-    remaining();
-    requireMcpVersion(
-      'Cursor',
-      MIN_VERSION,
-      probe,
-      (stdout) => stdout.match(/^\d{4}\.\d{2}\.\d{2}(?=-|\s|$)/)?.[0] ?? null,
-    );
-  } catch (error) {
-    throw new McpHarnessError(
-      error instanceof McpHarnessError ? error.category : 'execution_failed',
-      error instanceof Error ? error.message : String(error),
-      output,
-    );
-  }
-  const version = probe.stdout.trim();
   const directory = join(workDir, '.cursor');
   const cliPath = join(directory, 'cli.json');
   const [folder, file] = await Promise.all(

@@ -62,7 +62,9 @@ export async function collectMcpProcess(
           : new McpHarnessError(
               'execution_failed',
               options.describeError?.(error) ??
-                (error instanceof SyntaxError
+                // Parser messages can quote output, so keep them out of reports.
+                (error instanceof SyntaxError ||
+                (error instanceof Error && error.cause instanceof SyntaxError)
                   ? `${options.label} emitted unparseable JSON output.`
                   : `${options.label} event processing failed: ${error instanceof Error ? error.message : String(error)}`),
             );
