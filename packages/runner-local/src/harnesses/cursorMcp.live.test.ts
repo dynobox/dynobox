@@ -122,8 +122,7 @@ async function fixture(
   );
   let originals = 0;
   let healthyOriginal = false;
-  let failAfterProbe = false;
-  let listings = 0;
+  let failDiscovery = false;
   let stream: ServerResponse | undefined;
   let call: Buffer;
   let requests = 0;
@@ -217,7 +216,7 @@ async function fixture(
         return;
       }
       const rpc = JSON.parse(body.toString());
-      if (rpc.method === 'tools/list' && ++listings > 1 && failAfterProbe) {
+      if (rpc.method === 'tools/list' && failDiscovery) {
         response.writeHead(200, {'content-type': 'application/json'}).end(
           JSON.stringify({
             jsonrpc: '2.0',
@@ -257,13 +256,10 @@ async function fixture(
         if (mode === 'negative') finish();
         else {
           const native =
-            selectedServer ??
-            context?.toString().match(/dxb_[a-f0-9]{20}/)?.[0];
+            selectedServer ?? context?.toString().match(/linear_dynobox/)?.[0];
           const identifier =
             selectedServer ??
-            context
-              ?.toString()
-              .match(/plugin-dxb_plugin_[a-f0-9]{12}-dxb_[a-f0-9]{20}/)?.[0];
+            context?.toString().match(/plugin-dynobox-linear_dynobox/)?.[0];
           if (!native || !identifier)
             throw new Error('Native context did not expose the mock server.');
           call = Buffer.concat([
@@ -422,7 +418,6 @@ async function fixture(
         url: endpoint + '/mock-proxy',
         tools: ['get_issue'],
         isDiscovered: () => controller.isDiscovered('linear'),
-        discoveryCount: () => controller.discoveryCount('linear'),
       },
     },
   };
@@ -445,8 +440,8 @@ async function fixture(
     useHealthyOriginal: () => {
       healthyOriginal = true;
     },
-    failTaskDiscovery: () => {
-      failAfterProbe = true;
+    failDiscovery: () => {
+      failDiscovery = true;
     },
     originals: () => originals,
     requests: () => requests,
@@ -588,24 +583,6 @@ describe.skipIf(!executable)(
       ).toMatchObject({ready: true, calls: [], failures: []});
       expect(f.originals()).toBe(0);
       expect(f.requests()).toBe(1);
-    }, 30000);
-
-    it('rejects a missing declared tool before starting the task', async () => {
-      const f = await fixture('negative');
-      await expect(
-        runCursorWithMcp({
-          ...f.options,
-          servers: {
-            linear: {
-              ...f.options.servers.linear,
-              tools: ['get_issue', 'missing_tool'],
-            },
-          },
-        }),
-      ).rejects.toMatchObject({category: 'not_ready'});
-      expect(f.controller.isDiscovered('linear')).toBe(true);
-      expect(f.requests()).toBe(0);
-      expect(f.originals()).toBe(0);
     }, 30000);
 
     it.each(['call', 'negative'] as const)(
@@ -795,15 +772,15 @@ describe.skipIf(!executable)(
       expect(await readFile(disabled, 'utf8')).toBe(original);
     }, 30000);
 
-    it('rejects a negative result when only preflight discovery succeeded', async () => {
+    it('rejects a negative result when Cursor never discovers the mock', async () => {
       const f = await fixture('negative');
-      f.failTaskDiscovery();
+      f.failDiscovery();
       await expect(runCursorWithMcp(f.options)).rejects.toMatchObject({
         category: 'not_ready',
-        message: expect.stringContaining('task process did not discover'),
+        message: expect.stringContaining('did not discover'),
       });
       expect(f.requests()).toBe(1);
-      expect(f.controller.discoveryCount('linear')).toBe(1);
+      expect(f.controller.isDiscovered('linear')).toBe(false);
       expect(f.originals()).toBe(0);
     }, 30000);
 

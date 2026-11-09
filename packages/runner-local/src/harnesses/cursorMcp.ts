@@ -1,4 +1,3 @@
-import {randomBytes} from 'node:crypto';
 import {
   copyFile,
   lstat,
@@ -15,10 +14,6 @@ import {
 import {homedir, tmpdir} from 'node:os';
 import {dirname, join, resolve} from 'node:path';
 
-import {Client} from '@modelcontextprotocol/sdk/client/index.js';
-import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type {Transport} from '@modelcontextprotocol/sdk/shared/transport.js';
-import {ErrorCode, McpError} from '@modelcontextprotocol/sdk/types.js';
 import {parse, type ParseError} from 'jsonc-parser';
 
 import {
@@ -218,29 +213,10 @@ export async function runCursorWithMcp(options: {
     );
   }
   const version = probe.stdout.trim();
-  const git = await startOwnedProcess('git', ['rev-parse', '--show-toplevel'], {
-    ...processOptions,
-    timeout: Math.min(5000, remaining()),
-  });
-  remaining();
-  if (git.timedOut)
-    throw new McpHarnessError(
-      'timed_out',
-      'Cursor Git root check exceeded its timeout.',
-    );
-  const gitRoot =
-    git.failed || git.stdout.trim() === ''
-      ? workDir
-      : await realpath(resolve(workDir, git.stdout.trim()));
-  if (gitRoot !== projectRoot)
-    throw new McpHarnessError(
-      'configuration_failed',
-      'Cursor MCP commands and Git disagree on the project root. Check the workspace Git configuration and any Git mocks.',
-    );
   const directory = join(workDir, '.cursor');
-  const paths = [join(directory, 'cli.json')];
+  const cliPath = join(directory, 'cli.json');
   // Never follow a fixture symlink into the user's real configuration.
-  for (const path of [directory, ...paths]) {
+  for (const path of [directory, cliPath]) {
     const info = await lstat(path).catch((error: NodeJS.ErrnoException) => {
       if (error.code === 'ENOENT') return undefined;
       throw error;
@@ -269,7 +245,7 @@ export async function runCursorWithMcp(options: {
           `Cursor MCP target "${name}" uses stdio; selective mocking supports HTTP targets.`,
         );
   }
-  const permissions = await readConfig(paths[0]!);
+  const permissions = await readConfig(cliPath);
   const existing = asRecord(permissions.permissions);
   const profile = env.CURSOR_CONFIG_DIR?.trim()
     ? env.CURSOR_CONFIG_DIR
@@ -313,30 +289,34 @@ export async function runCursorWithMcp(options: {
           );
         effective[key] = entries[key];
       }
-  const originals = await Promise.all(
-    paths.map(async (path) => {
-      try {
-        return {content: await readFile(path), mode: (await lstat(path)).mode};
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT')
-          return undefined;
-        throw error;
-      }
-    }),
-  );
+  let original: {content: Buffer; mode: number} | undefined;
+  try {
+    original = {
+      content: await readFile(cliPath),
+      mode: (await lstat(cliPath)).mode,
+    };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
   const aliases: Record<string, string> = {};
   const definitions: Record<string, {url: string}> = {};
-  const pluginName = 'dxb_plugin_' + randomBytes(6).toString('hex');
+  // The plugin lives in this run's own data directory.
+  const pluginName = 'dynobox';
   // Cursor replaces permission arrays when a project supplies them. Preserve
   // each inherited array unless this workspace already overrides it.
   const allow = [...((effective.allow ?? []) as string[])];
   const deny = (effective.deny ?? []) as string[];
   for (const [logical, connection] of Object.entries(servers)) {
-    const native = 'dxb_' + randomBytes(10).toString('hex');
+    // Keep the logical name visible to the model; the original stays disabled.
+    const native = `${logical}_dynobox`;
     aliases[native] = logical;
     aliases[`plugin-${pluginName}-${native}`] = logical;
     for (const tool of connection.tools) {
-      const blocked = deny.find((rule) => deniesMock(rule, native, tool));
+      // Rules written for the original server would not match the alias.
+      const blocked = deny.find(
+        (rule) =>
+          deniesMock(rule, logical, tool) || deniesMock(rule, native, tool),
+      );
       if (blocked)
         throw new McpHarnessError(
           'configuration_failed',
@@ -366,7 +346,7 @@ export async function runCursorWithMcp(options: {
     );
     await mkdir(directory, {recursive: true});
     await writeFile(
-      paths[0]!,
+      cliPath,
       JSON.stringify({
         ...permissions,
         permissions: {...existing, allow, deny},
@@ -397,49 +377,6 @@ export async function runCursorWithMcp(options: {
     await inheritMcpState(data, originalData);
     for (const logical of targets)
       await command(['mcp', 'disable', logical], 'MCP target disable');
-    for (const [logical, connection] of Object.entries(servers)) {
-      const client = new Client({
-        name: 'dynobox-cursor-preflight',
-        version: '1',
-      });
-      try {
-        const request = () => ({
-          timeout: Math.min(30000, remaining()),
-          ...(input.signal ? {signal: input.signal} : {}),
-        });
-        await client.connect(
-          new StreamableHTTPClientTransport(
-            new URL(connection.url),
-          ) as Transport,
-          request(),
-        );
-        const listed = await client.listTools({}, request());
-        const tools = new Set(listed.tools.map((tool) => tool.name));
-        if (connection.tools.some((tool) => !tools.has(tool)))
-          throw new Error('Missing declared tool.');
-      } catch (error) {
-        remaining();
-        throw new McpHarnessError(
-          error instanceof McpError && error.code === ErrorCode.RequestTimeout
-            ? 'timed_out'
-            : 'not_ready',
-          `Cursor could not discover every declared MCP mock tool for "${logical}".`,
-        );
-      } finally {
-        await client.close();
-      }
-      if (connection.isDiscovered?.() === false)
-        throw new McpHarnessError(
-          'not_ready',
-          `Cursor did not discover MCP mock server "${logical}".`,
-        );
-    }
-    const discoveries = new Map(
-      Object.entries(servers).map(([name, connection]) => [
-        name,
-        connection.discoveryCount?.(),
-      ]),
-    );
     const child = startOwnedProcess(
       executable,
       buildCursorArgs(
@@ -504,17 +441,12 @@ export async function runCursorWithMcp(options: {
         'execution_failed',
         'Cursor exited without completing its turn.',
       );
-    for (const [name, connection] of Object.entries(servers)) {
-      const before = discoveries.get(name);
-      if (
-        connection.isDiscovered?.() === false ||
-        (before !== undefined && connection.discoveryCount!() <= before)
-      )
+    for (const [name, connection] of Object.entries(servers))
+      if (connection.isDiscovered?.() === false)
         throw new McpHarnessError(
           'not_ready',
-          `Cursor's task process did not discover MCP mock server "${name}".`,
+          `Cursor did not discover MCP mock server "${name}".`,
         );
-    }
     return {harnessReady: true, version, toolEvents, output};
   } catch (error) {
     throw new McpHarnessError(
@@ -523,12 +455,9 @@ export async function runCursorWithMcp(options: {
       output,
     );
   } finally {
-    for (let index = 0; index < paths.length; index++) {
-      const original = originals[index];
-      if (original)
-        await writeFile(paths[index]!, original.content, {mode: original.mode});
-      else await rm(paths[index]!, {force: true});
-    }
+    if (original)
+      await writeFile(cliPath, original.content, {mode: original.mode});
+    else await rm(cliPath, {force: true});
     await rm(data, {recursive: true, force: true});
   }
 }

@@ -112,21 +112,25 @@ Same-named stdio targets fail explicitly. Native normalized or hashed tool names
 are mapped to the logical names in assertions, callbacks, and reports. All
 declared tools must be active before the task starts.
 
-Cursor uses its ordinary CLI with a temporary native plugin for mock connections
-and an owned copy of the workspace's native MCP state. It disables original target
-identifiers before discovery and grants only declared mock tools. Existing MCP
-configuration stays in place. Unrelated disabled servers, approvals, and selections
-are preserved; existing MCP auth files remain at their normal paths. Normal model
-login, skills, plugins, and other servers remain available. For plugin targets, use
-the full native server identifier shown by Cursor. Same-named global or project
-stdio targets fail explicitly. Workspace permission configuration symlinks are
-unsupported, as are inconsistent Git roots between Cursor's MCP commands and Git.
-Assertions, callbacks, and reports retain logical names; skills referencing exact
-native namespaces must account for private connection names, as with Codex.
-Inherited permission rules remain in effect; conflicting MCP deny rules fail
-before discovery. Native retries remain bounded by the job's timeout when one is configured.
-Before accepting a result, Dynobox also requires discovery by the actual task
-process; successful preflight discovery alone cannot pass a negative assertion.
+Cursor uses its ordinary CLI with a temporary native plugin for mock
+connections and an owned copy of the workspace's native MCP state. It disables
+original target identifiers before discovery and grants only declared mock
+tools. Existing MCP configuration stays in place. Unrelated disabled servers,
+approvals, and selections are preserved; existing MCP auth files remain at
+their normal paths. Normal model login, skills, plugins, and other servers
+remain available. For plugin targets, use the full native server identifier
+shown by Cursor. Same-named global or project stdio targets fail explicitly,
+and workspace permission configuration symlinks are unsupported.
+
+As with Codex, the agent sees each mock under a separate native name with a
+`_dynobox` suffix, for example `plugin-dynobox-linear_dynobox`; assertions,
+callbacks, and reports keep the logical names declared in `mcpMocks`. Skills
+that refer to exact native server names must account for this suffix.
+Inherited permission rules remain in effect; a deny rule that matches a mock
+tool under its logical or `_dynobox` name fails the job before discovery.
+Native retries remain bounded by the job's timeout when one is configured. A
+job fails when Cursor's task never discovers a declared mock, so a negative
+assertion cannot pass without it.
 
 Antigravity uses its native ACP session API and a temporary MCP configuration
 view. Normal model login, settings, skills, plugins, and unrelated MCPs remain

@@ -63,16 +63,15 @@ if(args[0]==='--version'){console.error('SYNTHETIC_VERSION_STDERR');console.log(
 if(args[0]==='mcp'){
  mkdirSync(state,{recursive:true});
  if(args[1]==='disable'){const names=existsSync(disabled)?JSON.parse(readFileSync(disabled)):[];if(!names.includes(args[2]))names.push(args[2]);writeFileSync(disabled,JSON.stringify(names))}
- if(args[1]==='list-tools')console.log('Tools for '+args[2]+' (1):\\n- '+(mode==='missing-tool'?'wrong':'get_issue')+' (id)');
  process.exit(mode==='disable-failed'&&args[1]==='disable'?1:0);
 }
 if(mode==='hang'){setInterval(()=>{},1000)}else if(mode==='invalid'){console.log('{invalid');setInterval(()=>{},1000)}else{
  const plugin=args[args.lastIndexOf('--plugin-dir')+1];
  const config=JSON.parse(readFileSync(join(plugin,'mcp.json')));
- const native=Object.keys(config.mcpServers).find(key=>key.startsWith('dxb_'));
+ const native=Object.keys(config.mcpServers).find(key=>key.endsWith('_dynobox'));
  const toolArgs={providerIdentifier:native,serverIdentifier:'plugin-'+basename(plugin)+'-'+native,toolName:'get_issue',args:{literal:native+' payload',unicode:'雪é'}};
  const started={type:'tool_call',subtype:'started',call_id:'call-1',tool_call:{mcpToolCall:{args:toolArgs}}};
- const completed={...started,subtype:'completed',tool_call:{mcpToolCall:{args:toolArgs,result:{success:{content:[{text:{text:'dxb_opaque response'}}]}}}}};
+ const completed={...started,subtype:'completed',tool_call:{mcpToolCall:{args:toolArgs,result:{success:{content:[{text:{text:'linear_dynobox opaque response'}}]}}}}};
  const lines=[started,...(mode==='pending'?[]:[completed,completed]),...(mode==='incomplete'?[]:[{type:'result',subtype:'success',result:'done'}])].map(value=>JSON.stringify(value)).join('\\n');
  const bytes=Buffer.from(lines),split=bytes.indexOf(Buffer.from('雪'))+1;
  process.stdout.write(bytes.subarray(0,split));setTimeout(()=>process.stdout.write(bytes.subarray(split)),5);
@@ -98,7 +97,7 @@ if(mode==='hang'){setInterval(()=>{},1000)}else if(mode==='invalid'){console.log
     servers: {
       linear: {
         url: controller.urls.linear!,
-        tools: [mode === 'missing-tool' ? 'missing_tool' : 'get_issue'],
+        tools: ['get_issue'],
       },
     },
   };
@@ -117,13 +116,14 @@ describe('Cursor MCP launch contract', () => {
       },
     });
     expect(live).toEqual(['mcp__linear__get_issue']);
-    const native = Object.keys(
-      result.output.metadata!.cursorMcpAliases as object,
-    )[0]!;
+    expect(result.output.metadata!.cursorMcpAliases).toEqual({
+      linear_dynobox: 'linear',
+      'plugin-dynobox-linear_dynobox': 'linear',
+    });
     expect(result.toolEvents).toMatchObject([
       {
         rawName: 'mcp__linear__get_issue',
-        input: {literal: native + ' payload', unicode: '雪é'},
+        input: {literal: 'linear_dynobox payload', unicode: '雪é'},
         status: 'success',
       },
     ]);
@@ -196,27 +196,22 @@ describe('Cursor MCP launch contract', () => {
     },
   );
 
-  it.each(['missing-tool', 'disable-failed'])(
-    'does not start the task after %s preparation',
-    async (mode) => {
-      const f = await fixture(mode);
-      await expect(runCursorWithMcp(f.options)).rejects.toMatchObject({
-        category: 'not_ready',
-      });
-      const commands = (await readFile(f.log, 'utf8'))
-        .trim()
-        .split('\n')
-        .map((line) => JSON.parse(line));
-      expect(
-        commands.every(
-          ({args}) => args[0] === '--version' || args[0] === 'mcp',
-        ),
-      ).toBe(true);
-      await expect(
-        readFile(join(f.work, '.cursor', 'mcp.json')),
-      ).rejects.toMatchObject({code: 'ENOENT'});
-    },
-  );
+  it('does not start the task after a failed MCP disable', async () => {
+    const f = await fixture('disable-failed');
+    await expect(runCursorWithMcp(f.options)).rejects.toMatchObject({
+      category: 'not_ready',
+    });
+    const commands = (await readFile(f.log, 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(
+      commands.every(({args}) => args[0] === '--version' || args[0] === 'mcp'),
+    ).toBe(true);
+    await expect(
+      readFile(join(f.work, '.cursor', 'mcp.json')),
+    ).rejects.toMatchObject({code: 'ENOENT'});
+  });
 
   it('requires genuine discovery when a controller observer is available', async () => {
     const f = await fixture();
@@ -230,38 +225,23 @@ describe('Cursor MCP launch contract', () => {
     ).rejects.toMatchObject({category: 'not_ready'});
   });
 
-  it('requires a discovery after the task process starts', async () => {
+  it.each([
+    'Mcp(*:*)',
+    'Mcp(linear:get_issue)',
+    'Mcp(linear_*:get_*)',
+    'Mcp(*:GET_ISSUE)',
+  ])('rejects the deny rule %s before MCP initialization', async (rule) => {
     const f = await fixture();
-    await expect(
-      runCursorWithMcp({
-        ...f.options,
-        servers: {
-          linear: {...f.options.servers.linear, discoveryCount: () => 1},
-        },
-      }),
-    ).rejects.toMatchObject({
-      category: 'not_ready',
-      message: expect.stringContaining('task process did not discover'),
+    await writeFile(
+      join(f.home, '.cursor', 'cli-config.json'),
+      JSON.stringify({permissions: {allow: [], deny: [rule]}}),
+    );
+    await expect(runCursorWithMcp(f.options)).rejects.toMatchObject({
+      category: 'configuration_failed',
+      message: expect.stringContaining('linear.get_issue'),
     });
+    expect((await readFile(f.log, 'utf8')).trim().split('\n')).toHaveLength(1);
   });
-
-  it.each(['Mcp(*:*)', 'Mcp(dxb_*:get_*)', 'Mcp(*:GET_ISSUE)'])(
-    'rejects the native deny rule %s before MCP initialization',
-    async (rule) => {
-      const f = await fixture();
-      await writeFile(
-        join(f.home, '.cursor', 'cli-config.json'),
-        JSON.stringify({permissions: {allow: [], deny: [rule]}}),
-      );
-      await expect(runCursorWithMcp(f.options)).rejects.toMatchObject({
-        category: 'configuration_failed',
-        message: expect.stringContaining('linear.get_issue'),
-      });
-      expect((await readFile(f.log, 'utf8')).trim().split('\n')).toHaveLength(
-        1,
-      );
-    },
-  );
 
   it.each(['Mcp(*:[g]et_issue)', 'Mcp(*:get_issu?)'])(
     'treats non-star pattern syntax literally (%s)',

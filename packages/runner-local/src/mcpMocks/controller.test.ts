@@ -79,20 +79,14 @@ describe('MCP controller', () => {
   it('exposes genuine endpoint discovery while the controller is active', async () => {
     const controller = await start();
     expect(controller.isDiscovered('linear')).toBe(false);
-    expect(controller.discoveryCount('linear')).toBe(0);
     await rpc(controller.urls.linear!, 'initialize', {
       protocolVersion: '2025-03-26',
       capabilities: {},
       clientInfo: {name: 'test', version: '1'},
     });
     expect(controller.isDiscovered('linear')).toBe(false);
-    expect(controller.discoveryCount('linear')).toBe(0);
     await rpc(controller.urls.linear!, 'tools/list');
     expect(controller.isDiscovered('linear')).toBe(true);
-    expect(controller.discoveryCount('linear')).toBe(1);
-    await rpc(controller.urls.linear!, 'tools/list');
-    expect(controller.discoveryCount('linear')).toBe(2);
-    expect(controller.discoveryCount('unknown')).toBe(0);
     expect(controller.isDiscovered('unknown')).toBe(false);
     await controller.finalize(success);
     expect(controller.isDiscovered('linear')).toBe(false);

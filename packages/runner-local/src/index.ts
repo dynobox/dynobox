@@ -543,7 +543,6 @@ export async function runJob(
               url,
               tools: Object.keys(job.scenario.mcpMocks![name]!.tools),
               isDiscovered: () => mcpController!.isDiscovered(name),
-              discoveryCount: () => mcpController!.discoveryCount(name),
             },
           ]),
         );
