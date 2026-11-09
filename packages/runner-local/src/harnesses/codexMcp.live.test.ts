@@ -13,8 +13,13 @@ import {join} from 'node:path';
 import {execa} from 'execa';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
+import {runJob} from '../index.js';
 import {startMcpMockController} from '../mcpMocks/controller.js';
+import * as processGroup from '../processGroup.js';
+import type {LocalRunnerJob} from '../runTypes.js';
+import {CodexHarness} from './codex.js';
 import {runCodexWithMcp} from './codexMcp.js';
+import type {ToolEvent} from './types.js';
 
 // Real CLI, synthetic profiles and local Responses fixture. No copied auth or
 // paid model requests. Run with an absolute DYNOBOX_CODEX_MCP_EXECUTABLE path.
@@ -37,11 +42,209 @@ const execArgs = [
   'Reply OK.',
 ];
 afterEach(async () => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
 describe.skipIf(!executable)('native Codex MCP gates', () => {
-  it('excludes active user/project/plugin servers and preserves skills and permissions', async () => {
+  it('keeps transport errors logical in callbacks and extraction, with raw native debug output', async () => {
+    const f = await nativeFixture('call');
+    f.mode = 'transport-error';
+    const events: ToolEvent[] = [];
+    const run = await f.mockRun(undefined, (event) => events.push(event));
+    expect(events.length).toBeGreaterThan(0);
+    expect(run.toolEvents).toEqual(events);
+    expect(new CodexHarness().extractResult(run.output).toolEvents).toEqual(
+      events,
+    );
+    for (const event of events) {
+      expect(event).toMatchObject({
+        rawName: 'mcp__service__lookup',
+        status: 'failure',
+      });
+      expect(event.message).toContain('service/lookup');
+      expect(event.message).not.toContain('service_dynobox');
+    }
+    expect(run.output.stdout).toContain('service_dynobox');
+    expect(
+      (
+        await f.controller.finalize({
+          harnessReady: true,
+          harnessSucceeded: true,
+        })
+      ).calls,
+    ).toEqual([]);
+  }, 30000);
+
+  it.each(['call', 'negative'] as const)(
+    'runs %s through the public runner with logical MCP assertion names',
+    async (mode) => {
+      const f = await nativeFixture(mode);
+      const job: LocalRunnerJob = {
+        id: 'native-codex',
+        harness: 'codex',
+        permissionMode: 'default',
+        iteration: 0,
+        scenario: {
+          id: 'receipt',
+          name: 'Read a receipt',
+          prompt: 'Use service lookup once, then reply OK.',
+          harnesses: [{id: 'codex'}],
+          setup: [],
+          fixtures: [],
+          cliMocks: {},
+          endpoints: [],
+          mcpMocks: {
+            service: {
+              tools: {
+                lookup: {
+                  inputSchema: {
+                    type: 'object',
+                    properties: {key: {type: 'string'}},
+                  },
+                  response: {
+                    content: [{type: 'text', text: 'MCP_FIXTURE_RECEIPT'}],
+                  },
+                },
+              },
+            },
+          },
+          assertions: [
+            {
+              id: 'receipt',
+              type: mode === 'call' ? 'mcp.called' : 'mcp.notCalled',
+              server: 'service',
+              tool: 'lookup',
+            },
+          ],
+        },
+      };
+      const tools: string[] = [];
+      for (const [key, value] of Object.entries(f.env))
+        if (value === undefined) vi.stubEnv(key, undefined);
+      const result = await runJob(job, {
+        harnesses: [
+          new CodexHarness({
+            executable: executable!,
+            extraArgs: ['--ephemeral'],
+          }),
+        ],
+        scratchRoot: f.root,
+        env: Object.fromEntries(
+          Object.entries(f.env).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string',
+          ),
+        ),
+        timeoutMs: 20000,
+        onProgress: (event) => {
+          if (event.type === 'harness.tool')
+            tools.push(event.toolEvent.rawName);
+        },
+      });
+      expect(result.status, result.diagnostics.join('\n')).toBe('passed');
+      expect(result.mcp).toMatchObject({
+        ready: true,
+        finalized: true,
+        failures: [],
+      });
+      expect(result.mcp?.calls).toHaveLength(mode === 'call' ? 1 : 0);
+      expect(tools).toEqual(mode === 'call' ? ['mcp__service__lookup'] : []);
+    },
+    30000,
+  );
+
+  it('replaces an inherited HTTP target without credentials or preflight discovery', async () => {
+    const f = await nativeFixture('call');
+    const original = `${await readFile(f.configFile, 'utf8')}\n[mcp_servers.service]\nurl=${JSON.stringify(f.sentinelUrl + '/original-target')}\n[mcp_servers.service.http_headers]\nx-original="synthetic-service-credential"\n`;
+    await writeFile(f.configFile, original);
+    const start = processGroup.startOwnedProcess;
+    vi.spyOn(processGroup, 'startOwnedProcess').mockImplementation(
+      (command, args, options) => {
+        f.phase = args[0] === 'exec' ? 'task' : 'metadata';
+        return start(command, args, options);
+      },
+    );
+    const run = await f.mockRun();
+    expect(run.toolEvents).toContainEqual(
+      expect.objectContaining({
+        rawName: 'mcp__service__lookup',
+        status: 'success',
+      }),
+    );
+    expect(f.mockContacts.length).toBeGreaterThan(0);
+    expect(
+      f.mockContacts.every(
+        (contact) => contact.phase === 'task' && !contact.inherited,
+      ),
+    ).toBe(true);
+    expect(f.httpSources()).not.toContain('/original-target');
+    expect(await readFile(f.configFile, 'utf8')).toBe(original);
+  }, 30000);
+
+  it('rejects a same-named stdio target before task startup', async () => {
+    const f = await nativeFixture('negative');
+    await writeFile(
+      f.configFile,
+      `${await readFile(f.configFile, 'utf8')}\n[mcp_servers.service]\ncommand=${JSON.stringify(process.execPath)}\n`,
+    );
+    await expect(f.mockRun()).rejects.toMatchObject({
+      category: 'configuration_failed',
+      message: expect.stringContaining('HTTP MCP mock configuration'),
+    });
+    expect(f.requests).toEqual([]);
+    expect(f.mockContacts).toEqual([]);
+  }, 30000);
+
+  it.each(['environment', 'file'] as const)(
+    'uses a private native name with %s model authentication and disables the original target',
+    async (auth) => {
+      const f = await nativeFixture('call');
+      const source = await readFile(f.configFile, 'utf8');
+      const base =
+        auth === 'file'
+          ? source.replace(
+              'env_key = "DYNOBOX_SYNTHETIC_KEY"',
+              'requires_openai_auth = true',
+            )
+          : source;
+      const original = `${base}\n[mcp_servers.service]\nurl=${JSON.stringify(f.sentinelUrl + '/original-target')}\n[mcp_servers.service.http_headers]\nx-original="synthetic-service-credential"\n`;
+      await writeFile(f.configFile, original);
+      if (auth === 'file')
+        await writeFile(
+          join(f.env.CODEX_HOME!, 'auth.json'),
+          JSON.stringify({OPENAI_API_KEY: 'synthetic-api-key'}),
+          {mode: 0o600},
+        );
+      const {output, toolEvents} = await f.mockRun();
+      expect(toolEvents).toContainEqual(
+        expect.objectContaining({rawName: 'mcp__service__lookup'}),
+      );
+      expect(f.mockContacts.every((contact) => !contact.inherited)).toBe(true);
+      expect(output.exitCode, output.stderr).toBe(0);
+      expect(
+        await f.controller.finalize({
+          harnessReady: true,
+          harnessSucceeded: true,
+        }),
+      ).toMatchObject({
+        ready: true,
+        calls: [{server: 'service', tool: 'lookup'}],
+      });
+      expect(f.httpSources()).not.toContain('/original-target');
+      expect(f.httpSources()).toEqual(
+        expect.arrayContaining(['/user', '/plugin']),
+      );
+      expect(await readFile(f.marker, 'utf8')).toContain('project');
+      expect(JSON.stringify(f.requests)).toContain('USER_SKILL_SENTINEL');
+      expect(JSON.stringify(f.requests)).toContain('PROJECT_SKILL_SENTINEL');
+      expect(JSON.stringify(f.requests)).toContain('PLUGIN_SKILL_SENTINEL');
+      expect(await readFile(f.configFile, 'utf8')).toBe(original);
+    },
+    40_000,
+  );
+
+  it('keeps unrelated user/project/plugin servers, skills and permissions', async () => {
     const fixture = await nativeFixture('call');
     const {output: result} = await fixture.mockRun();
     expect(result.exitCode, result.stderr).toBe(0);
@@ -67,7 +270,7 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
     expect(requests).toContain('USER_SKILL_SENTINEL');
     expect(requests).toContain('MCP_FIXTURE_RECEIPT');
     expect(requests).toContain('read-only');
-    await fixture.assertNoSentinels();
+    await fixture.assertUnrelatedAvailable();
     await fixture.assertOriginals();
 
     // Positive control: every planted source must actually start/contact.
@@ -82,26 +285,27 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
     );
   }, 40_000);
 
-  it('fails a run whose mock call is refused for approval', async () => {
+  it('reports a failed logical attempt without a receipt after approval refusal', async () => {
     const fixture = await nativeFixture('call');
-    await expect(
-      runCodexWithMcp({
-        executable: executable!,
-        input: {
-          prompt: 'Use service lookup once, then reply OK.',
-          workDir: fixture.project,
-          env: fixture.env as Record<string, string>,
-          timeoutMs: 20_000,
-        },
-        servers: {
-          service: {url: fixture.controller.urls.service!, tools: ['lookup']},
-        },
-        extraArgs: ['--ephemeral'],
-      }),
-    ).rejects.toMatchObject({
-      category: 'execution_failed',
-      message: expect.stringContaining('mcp__service__lookup'),
+    const result = await runCodexWithMcp({
+      executable: executable!,
+      input: {
+        prompt: 'Use service lookup once, then reply OK.',
+        workDir: fixture.project,
+        env: fixture.env as Record<string, string>,
+        timeoutMs: 20_000,
+      },
+      servers: {
+        service: {url: fixture.controller.urls.service!, tools: ['lookup']},
+      },
+      extraArgs: ['--ephemeral'],
     });
+    expect(result.toolEvents).toContainEqual(
+      expect.objectContaining({
+        rawName: 'mcp__service__lookup',
+        status: 'failure',
+      }),
+    );
     const observation = await fixture.controller.finalize({
       harnessReady: true,
       harnessSucceeded: false,
@@ -119,7 +323,7 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
         harnessSucceeded: true,
       }),
     ).toMatchObject({ready: true, failures: [], calls: []});
-    await fixture.assertNoSentinels();
+    await fixture.assertUnrelatedAvailable();
   }, 30_000);
 
   it('fails a negative-only turn before model execution when required startup fails', async () => {
@@ -132,7 +336,6 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
       category: 'execution_failed',
     });
     expect(fixture.requests).toEqual([]);
-    await fixture.assertNoSentinels();
   }, 30_000);
   it('keeps concurrent controllers independent and revokes their routes', async () => {
     const first = await nativeFixture('call');
@@ -146,7 +349,7 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
       });
       expect(observation.ready).toBe(true);
       expect(observation.calls).toHaveLength(index === 0 ? 1 : 0);
-      await fixture.assertNoSentinels();
+      await fixture.assertUnrelatedAvailable();
       await expect(fetch(fixture.controller.urls.service!)).rejects.toThrow();
     }
   }, 30_000);
@@ -172,10 +375,10 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
         })
       ).ready,
     ).toBe(false);
-    await fixture.assertNoSentinels();
+    await fixture.assertUnrelatedAvailable();
   }, 30_000);
 
-  it('isolates installed flat-map cached servers after marketplace metadata changes', async () => {
+  it('preserves installed flat-map cached servers after marketplace metadata changes', async () => {
     const fixture = await nativeFixture('negative', true);
     await writeFile(fixture.pluginMcp, JSON.stringify({mcpServers: {}}));
     const control = await fixture.run(execArgs);
@@ -194,11 +397,11 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
         })
       ).ready,
     ).toBe(true);
-    await fixture.assertNoSentinels();
+    await fixture.assertUnrelatedAvailable();
     expect(JSON.stringify(fixture.requests)).toContain('PLUGIN_SKILL_SENTINEL');
   }, 30_000);
 
-  it('isolates orphaned cached plugin servers while preserving their skills', async () => {
+  it('preserves orphaned cached plugin servers and their skills', async () => {
     const fixture = await nativeFixture('negative');
     const control = await fixture.run(execArgs);
     expect(control.exitCode).toBe(0);
@@ -220,8 +423,8 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
     expect(JSON.stringify(fixture.requests)).toContain('PLUGIN_SKILL_SENTINEL');
     await fixture.resetSentinels();
     fixture.requests.splice(0);
-    const isolated = await fixture.mockRun();
-    expect(isolated.harnessReady).toBe(true);
+    const selective = await fixture.mockRun();
+    expect(selective.harnessReady).toBe(true);
     expect(
       (
         await fixture.controller.finalize({
@@ -231,7 +434,7 @@ describe.skipIf(!executable)('native Codex MCP gates', () => {
       ).ready,
     ).toBe(true);
     expect(JSON.stringify(fixture.requests)).toContain('PLUGIN_SKILL_SENTINEL');
-    await fixture.assertNoSentinels();
+    await fixture.assertUnrelatedAvailable();
   }, 30_000);
 });
 
@@ -318,7 +521,47 @@ async function nativeFixture(
     controller.finalize({harnessReady: false, harnessSucceeded: false}),
   );
   const requests: unknown[] = [];
-  const state = {mode: initialMode as 'call' | 'negative' | 'hang'};
+  const state = {
+    mode: initialMode as 'call' | 'negative' | 'hang' | 'transport-error',
+    phase: 'unknown',
+  };
+  const mockContacts: {phase: string; inherited: boolean}[] = [];
+  const mockUrl = await listen(
+    createServer(async (request, response) => {
+      mockContacts.push({
+        phase: state.phase,
+        inherited: !!request.headers['x-original'],
+      });
+      try {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) chunks.push(Buffer.from(chunk));
+        if (
+          state.mode === 'transport-error' &&
+          request.method === 'POST' &&
+          JSON.parse(Buffer.concat(chunks).toString('utf8')).method ===
+            'tools/call'
+        ) {
+          response.writeHead(503).end();
+          return;
+        }
+        const forwarded = await fetch(controller.urls.service!, {
+          method: request.method ?? 'GET',
+          headers: {
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+          },
+          ...(request.method === 'POST' ? {body: Buffer.concat(chunks)} : {}),
+        });
+        response.writeHead(forwarded.status, {
+          'content-type':
+            forwarded.headers.get('content-type') ?? 'application/json',
+        });
+        response.end(await forwarded.text());
+      } catch {
+        response.writeHead(503).end();
+      }
+    }),
+  );
   const modelUrl = await listen(
     createServer(
       /** Return a local model response for the selected test mode. */
@@ -337,10 +580,24 @@ async function nativeFixture(
             'MCP_FIXTURE_RECEIPT',
           );
           const call =
-            state.mode === 'call' && !hasResult && requests.length < 4;
+            (state.mode === 'call' || state.mode === 'transport-error') &&
+            !hasResult &&
+            requests.length < 4;
+          const offered = [
+            ...(body.tools ?? []),
+            ...(body.input ?? []).flatMap(
+              (entry: {type?: string; tools?: unknown[]}) =>
+                entry.type === 'tool_search_output' ? (entry.tools ?? []) : [],
+            ),
+          ].find(
+            (tool: {type?: string; tools?: {name?: string}[]}) =>
+              tool.type === 'namespace' &&
+              tool.tools?.some((entry) => entry.name === 'lookup'),
+          );
           response.writeHead(200, {'content-type': 'text/event-stream'});
           const output = call
-            ? !JSON.stringify(body.input).includes('tool_search_output')
+            ? !offered &&
+              !JSON.stringify(body.input).includes('tool_search_output')
               ? [
                   {
                     id: 'ts_fixture',
@@ -357,7 +614,7 @@ async function nativeFixture(
                     type: 'function_call',
                     call_id: 'call_fixture',
                     name: 'lookup',
-                    namespace: 'mcp__service',
+                    namespace: offered?.name ?? 'mcp__service',
                     arguments: '{"key":"receipt"}',
                     status: 'completed',
                   },
@@ -441,8 +698,13 @@ async function nativeFixture(
       plugins: [{name: 'fixture', source: {source: 'local', path: './plugin'}}],
     }),
   );
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
+    ...Object.fromEntries(
+      Object.keys(process.env)
+        .filter((key) => key.startsWith('CODEX_') || key.startsWith('OPENAI_'))
+        .map((key) => [key, undefined]),
+    ),
     HOME: home,
     CODEX_HOME: configDir,
     DYNOBOX_SYNTHETIC_KEY: 'synthetic-api-key',
@@ -451,15 +713,26 @@ async function nativeFixture(
   };
   // Keep remote marketplace synchronization out of synthetic controls too.
   const run = (args: string[], signal?: AbortSignal) =>
-    execa(executable!, [...guards, ...args], {
-      cwd: project,
-      env,
-      extendEnv: false,
-      stdin: 'ignore',
-      reject: false,
-      timeout: 20_000,
-      ...(signal ? {cancelSignal: signal} : {}),
-    });
+    execa(
+      executable!,
+      [
+        ...guards,
+        '-c',
+        `openai_base_url=${JSON.stringify(modelUrl)}`,
+        '-c',
+        `chatgpt_base_url=${JSON.stringify(modelUrl)}`,
+        ...args,
+      ],
+      {
+        cwd: project,
+        env,
+        extendEnv: false,
+        stdin: 'ignore',
+        reject: false,
+        timeout: 20_000,
+        ...(signal ? {cancelSignal: signal} : {}),
+      },
+    );
   const added = await run([
     'plugin',
     'marketplace',
@@ -491,6 +764,12 @@ async function nativeFixture(
     run,
     env,
     configFile,
+    sentinelUrl,
+    modelUrl,
+    mockContacts,
+    set phase(value: string) {
+      state.phase = value;
+    },
     pluginMcp: join(plugin, '.mcp.json'),
     get mode() {
       return state.mode;
@@ -505,16 +784,18 @@ async function nativeFixture(
       httpSources.clear();
       await rm(marker, {force: true});
     },
-    assertNoSentinels: async () => {
-      expect(contacts).toBe(0);
-      await expect(readFile(marker)).rejects.toThrow();
+    assertUnrelatedAvailable: async () => {
+      expect(httpSources).toEqual(new Set(['/user', '/plugin']));
+      expect((await readFile(marker, 'utf8')).trim().split('\n')).toEqual(
+        expect.arrayContaining(['user', 'project', 'plugin']),
+      );
     },
     assertOriginals: async () => {
       for (const [path, text] of originals)
         expect(await readFile(path, 'utf8')).toBe(text);
     },
     /** Run Codex with the fixture mock server and its tool grant. */
-    mockRun: (signal?: AbortSignal) =>
+    mockRun: (signal?: AbortSignal, onToolEvent?: (event: ToolEvent) => void) =>
       runCodexWithMcp({
         executable: executable!,
         input: {
@@ -524,8 +805,15 @@ async function nativeFixture(
           timeoutMs: 20_000,
           allowedMcpTools: [{server: 'service', tool: 'lookup'}],
           ...(signal ? {signal} : {}),
+          ...(onToolEvent ? {onToolEvent} : {}),
         },
-        servers: {service: {url: controller.urls.service!, tools: ['lookup']}},
+        servers: {
+          service: {
+            url: mockUrl,
+            tools: ['lookup'],
+            isDiscovered: () => controller.isDiscovered('service'),
+          },
+        },
         extraArgs: ['--ephemeral'],
       }),
   };

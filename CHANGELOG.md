@@ -10,6 +10,13 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- Replace declared Codex HTTP MCP targets while retaining other servers,
+  normal model authentication, plugins, and skills.
+  Use separate `<name>_dynobox` native connections to exclude inherited target
+  credentials; preserve logical fixture names in assertions, callbacks, and
+  reports.
+  Reject same-named stdio targets and unreplaceable configuration explicitly.
+  Remove plugin-exclusion scans and the app-server configuration protocol.
 - Replace declared Claude Code MCP targets for each run while retaining other
   configured servers. Preserve normal model login, skills, and permissions
   without editing user MCP configuration. Reject reserved native namespaces and
@@ -59,7 +66,7 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `@dynobox/runner-local`
 
-- Replace declared MCP targets on Claude Code and OpenCode; other adapters
+- Replace declared MCP targets on Claude Code, Codex, and OpenCode; other adapters
   currently isolate inherited servers. Report refused mock calls as failures,
   so negative call assertions cannot pass on a refusal.
 

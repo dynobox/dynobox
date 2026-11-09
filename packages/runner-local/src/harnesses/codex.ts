@@ -86,7 +86,18 @@ export class CodexHarness implements Harness {
   }
 
   extractResult(raw: HarnessRunOutput): HarnessResult {
-    const parsed = parseCodexJson(raw.stdout);
+    const aliases = raw.metadata?.codexMcpAliases;
+    const parsed = parseCodexJson(
+      raw.stdout,
+      isRecord(aliases)
+        ? Object.fromEntries(
+            Object.entries(aliases).filter(
+              (entry): entry is [string, string] =>
+                typeof entry[1] === 'string',
+            ),
+          )
+        : {},
+    );
     return {
       exitCode: raw.exitCode,
       durationMs: raw.durationMs,
@@ -106,6 +117,19 @@ export function buildCodexArgs(
 ): string[] {
   return [
     'exec',
+    ...codexExecOptions(model, permissionMode, cliMockEnv, extraArgs),
+    prompt,
+  ];
+}
+
+/** `codex exec` options without the subcommand or prompt. */
+export function codexExecOptions(
+  model?: string,
+  permissionMode?: PermissionMode,
+  cliMockEnv?: Readonly<Record<string, string>>,
+  extraArgs: readonly string[] = [],
+): string[] {
+  return [
     '--json',
     '--color',
     'never',
@@ -114,7 +138,6 @@ export function buildCodexArgs(
     ...(model === undefined ? [] : ['--model', model]),
     ...extraArgs,
     ...(cliMockEnv === undefined ? [] : codexCliMockArgs(cliMockEnv)),
-    prompt,
   ];
 }
 
@@ -159,12 +182,15 @@ function codexPermissionArgs(
   return ['--sandbox', 'danger-full-access', '-c', 'approval_policy="never"'];
 }
 
-export function parseCodexJson(stdout: string): CodexParsedOutput {
+export function parseCodexJson(
+  stdout: string,
+  mcpAliases: Readonly<Record<string, string>> = {},
+): CodexParsedOutput {
   let finalMessage: string | undefined;
   const toolEvents: ToolEvent[] = [];
 
   for (const {line, lineNumber} of jsonLines(stdout)) {
-    const parsed = parseCodexJsonLine(line, lineNumber);
+    const parsed = parseCodexJsonLine(line, lineNumber, mcpAliases);
     toolEvents.push(...parsed.toolEvents);
 
     if (parsed.finalMessage !== undefined) {
@@ -178,8 +204,30 @@ export function parseCodexJson(stdout: string): CodexParsedOutput {
 export function parseCodexJsonLine(
   line: string,
   lineNumber = 1,
+  mcpAliases: Readonly<Record<string, string>> = {},
 ): CodexParsedLine {
   const event = parseJsonObjectLine(line, lineNumber, 'Codex JSON line');
+  const item = isRecord(event.item) ? event.item : undefined;
+  if (
+    item?.type === 'mcp_tool_call' &&
+    typeof item.server === 'string' &&
+    Object.hasOwn(mcpAliases, item.server)
+  ) {
+    const logical = mcpAliases[item.server]!;
+    const error = isRecord(item.error) ? item.error : undefined;
+    event.item = {
+      ...item,
+      server: logical,
+      ...(typeof error?.message === 'string'
+        ? {
+            error: {
+              ...error,
+              message: error.message.split(item.server).join(logical),
+            },
+          }
+        : {}),
+    };
+  }
   const toolEvents = parseToolEvents(event);
   const finalMessage = parseFinalMessage(event);
 

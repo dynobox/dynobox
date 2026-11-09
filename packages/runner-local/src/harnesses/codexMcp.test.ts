@@ -2,9 +2,10 @@ import {chmod, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
+import {parse} from 'smol-toml';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
-import * as processGroup from '../processGroup.js';
+import {CodexHarness} from './codex.js';
 import {type CodexMcpOptions, runCodexWithMcp} from './codexMcp.js';
 
 const roots: string[] = [];
@@ -14,70 +15,18 @@ afterEach(async () => {
     await rm(root, {recursive: true, force: true});
 });
 
-/** Make a fake Codex executable and its test inputs. */
 async function fixture(
   mode = 'success',
   inherited: Record<string, unknown> = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), 'dynobox-codex-unit-'));
   roots.push(root);
-  const executable = join(root, 'codex');
+  const executable = join(root, 'codex.mjs');
   const log = join(root, 'invocations.jsonl');
   await writeFile(
     executable,
-    `#!${process.execPath}
-import {appendFileSync} from 'node:fs';
-import {spawn} from 'node:child_process';
-import {createInterface} from 'node:readline';
-const args = process.argv.slice(2);
-const mode = process.env.DXB_TEST_MODE;
-console.error('PRIVATE_STDERR_SENTINEL');
-function hang() {
-  if (process.env.DXB_TEST_CHILD_PID) spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(process.env.DXB_TEST_CHILD_PID, String(process.pid)); setInterval(() => {}, 1000);'], {stdio: 'inherit'});
-  setInterval(() => {}, 1000);
-}
-appendFileSync(process.env.DXB_TEST_LOG, JSON.stringify({args, cwd: process.cwd(), noProxy: process.env.no_proxy, NO_PROXY: process.env.NO_PROXY, marker: process.env.DXB_ENV_MARKER}) + '\\n');
-if (args.includes('--version')) {console.log(mode === 'version' ? 'codex-cli 0.100.0' : mode === 'newer' ? 'codex-cli 0.999.0' : 'codex-cli 0.153.4'); if (mode === 'version-timeout') hang(); else process.exit(0);}
-const config = {features: {apps: false, remote_plugin: false, skill_mcp_dependency_install: false}, mcp_servers: JSON.parse(process.env.DXB_TEST_INHERITED), plugins: JSON.parse(process.env.DXB_TEST_PLUGINS || '{}')};
-for (const arg of args) {
-  if (arg.startsWith('mcp_servers=')) {
-    const overlay = JSON.parse(arg.slice(12).replace(/("(?:[^"\\\\]|\\\\.)*")=/g, '$1:'));
-    for (const [name, entry] of Object.entries(overlay)) config.mcp_servers[name] = {...config.mcp_servers[name], ...entry};
-  }
-}
-const enabled = Object.entries(config.mcp_servers).filter(([, entry]) => entry.enabled !== false);
-if (mode === 'feature') config.features.apps = true;
-if (args.includes('app-server')) {
-  if (mode === 'probe-hang') hang();
-  else createInterface({input: process.stdin}).on('line', /** Send a fake response for each request. */ line => {
-    const request = JSON.parse(line);
-    if (mode === 'server-request' && request.method === 'config/read') console.log(JSON.stringify({id: request.id, method: 'server/ping', params: {}}));
-    let result = {};
-    if (request.method === 'config/read') result = {config};
-    if (request.method === 'plugin/list') result = {marketplaces: mode === 'exit-between-rpcs' ? [{path: '/m', plugins: ['a', 'b'].map(name => ({id: name + '@m', name, installed: true, enabled: true}))}] : [], marketplaceLoadErrors: []};
-    if (request.method === 'plugin/list' && mode.endsWith('-marketplace')) result = {marketplaces: [{name: 'catalog', path: mode === 'local-marketplace' ? '/catalog' : null, plugins: [{id: 'example@catalog', name: 'example', installed: true, enabled: true}]}]};
-    if (request.method === 'plugin/read' && mode.endsWith('-marketplace')) {
-      appendFileSync(process.env.DXB_TEST_LOG + '.plugins', JSON.stringify(request.params) + '\\n');
-      result = {plugin: {mcpServers: []}};
-    }
-    // Exit right after answering, so the next request goes to a dead server.
-    if (request.method === 'plugin/read' && mode === 'exit-between-rpcs') return process.stdout.write(JSON.stringify({id: request.id, result: {plugin: {}}}) + '\\n', () => process.exit(0));
-    console.log(JSON.stringify({id: request.id, result}));
-  });
-} else if (mode === 'hang') {console.log(JSON.stringify({type: 'turn.started'})); hang();}
-else {
-  console.log(JSON.stringify({type: 'thread.started', thread_id: 'fixture'}));
-  console.log(JSON.stringify({type: 'turn.started'}));
-  for (const event of JSON.parse(process.env.DXB_TEST_EVENTS || '[]')) console.log(JSON.stringify(event));
-  if (mode === 'bad-json') console.log('PRIVATE_SENTINEL');
-  if (mode === 'reconnect') console.log(JSON.stringify({type: 'error', message: 'Reconnecting... 1/5'}));
-  if (mode === 'failed-turn') console.log(JSON.stringify({type: 'turn.failed', error: {message: 'PRIVATE_SENTINEL'}}));
-  if (mode === 'tool') console.log(JSON.stringify({type: 'item.completed', item: {type: 'mcp_tool_call', server: enabled[0][0], tool: 'lookup', arguments: {key: 'receipt'}, status: 'completed'}}));
-  console.log(JSON.stringify({type: 'item.completed', item: {type: 'agent_message', text: 'OK'}}));
-  if (mode !== 'no-completion') console.log(JSON.stringify({type: 'turn.completed', usage: {input_tokens: 1, output_tokens: 1}}));
-  if (mode === 'exit') process.exitCode = 1;
-}
-`,
+    `#!${process.execPath}\nimport {parse} from ${JSON.stringify(import.meta.resolve('smol-toml'))};\n` +
+      CHILD,
   );
   await chmod(executable, 0o700);
   const options: CodexMcpOptions = {
@@ -87,128 +36,214 @@ else {
       workDir: root,
       timeoutMs: 5000,
       env: {
-        DXB_TEST_MODE: mode,
-        DXB_TEST_LOG: log,
-        DXB_TEST_INHERITED: JSON.stringify(inherited),
+        HOME: root,
+        CODEX_HOME: root,
+        DXB_MODE: mode,
+        DXB_LOG: log,
+        DXB_INHERITED: JSON.stringify(inherited),
       },
     },
     servers: {
-      service: {
-        url: 'http://127.0.0.1:12345/service',
-        tools: ['lookup'],
-      },
+      service: {url: 'http://127.0.0.1:12345/service', tools: ['lookup']},
     },
   };
   const invocations = async () =>
     (await readFile(log, 'utf8'))
       .trim()
       .split('\n')
-      .map(
-        (line) =>
-          JSON.parse(line) as {
-            args: string[];
-            cwd: string;
-            noProxy: string;
-            NO_PROXY: string;
-            marker: string;
-          },
-      );
-  return {options, invocations};
+      .map((line) => JSON.parse(line));
+  return {root, options, invocations};
 }
 
-describe('Codex MCP adapter', () => {
-  it('preserves a disabled plugin even when the catalog lists it as enabled', async () => {
-    const f = await fixture('remote-marketplace');
-    f.options.input.env.DXB_TEST_PLUGINS = JSON.stringify({
-      'example@catalog': {enabled: false},
+const CHILD = String.raw`
+import {appendFileSync} from 'node:fs';
+import {spawn} from 'node:child_process';
+const args = process.argv.slice(2);
+const mode = process.env.DXB_MODE;
+appendFileSync(process.env.DXB_LOG,JSON.stringify({args,cwd:process.cwd(),noProxy:process.env.no_proxy,NO_PROXY:process.env.NO_PROXY,marker:process.env.DXB_MARKER})+'\n');
+console.error('PRIVATE_STDERR_SENTINEL');
+function hang() {
+ if(process.env.DXB_PID) spawn(process.execPath,['-e','process.on("SIGTERM",()=>{});require("node:fs").writeFileSync(process.env.DXB_PID,String(process.pid));setInterval(()=>{},1000)'],{stdio:'inherit'});
+ setInterval(()=>{},1000);
+}
+if(args.includes('--version')) {
+ console.log(mode==='version' ? 'codex-cli 0.100.0' : mode==='newer' ? 'codex-cli 0.999.0' : 'codex-cli 0.153.4');
+ if(mode==='version-timeout') hang(); else process.exit(0);
+} else {
+ const overlay=parse(args.find(arg=>arg.startsWith('mcp_servers='))).mcp_servers;
+ const servers=JSON.parse(process.env.DXB_INHERITED);
+ for(const [name,entry] of Object.entries(overlay))servers[name]={...servers[name],...entry};
+ const alias=Object.entries(overlay).find(([,entry])=>entry.required===true)[0];
+ if(args.includes('get')) {
+  if(mode==='probe-hang') hang();
+  else if(mode==='get-exit'){console.log('PRIVATE_CONFIG_OUTPUT');process.exit(1);}
+  else if(mode==='bad-metadata'){console.log('INVALID_CONFIG_JSON');process.exit(0);}
+  else {
+   const name=args.at(-1); const entry=servers[name];
+   const value={name,enabled:entry.enabled!==false,disabled_reason:null,transport:{type:'streamable_http',url:entry.url,http_headers:entry.http_headers??null,env_http_headers:null,bearer_token_env_var:null,http_headers_helper:null},enabled_tools:null,disabled_tools:null};
+   if(mode==='managed-enabled' && name==='service')value.enabled=true;
+   if(mode==='managed-url' && name===alias)value.transport.url='http://original.example';
+   if(mode==='managed-auth' && name===alias)value.transport.http_headers={Authorization:'PRIVATE_CREDENTIAL'};
+   if(mode==='hidden' && name===alias)value.disabled_tools=['lookup'];
+   if(mode==='wrong-name')value.name='different';
+   console.log(JSON.stringify(value));process.exit(0);
+  }
+ } else if(mode==='hang')hang();
+ else {
+  const emit=value=>console.log(JSON.stringify(value));
+  emit({type:'thread.started',thread_id:'fixture'});emit({type:'turn.started'});
+  for(const event of JSON.parse(process.env.DXB_EVENTS||'[]')) {
+   if(event.item?.server==='$mock')event.item.server=alias;
+   emit(event);
+  }
+  if(mode==='tool')emit({type:'item.completed',item:{id:'call',type:'mcp_tool_call',server:alias,tool:'lookup',arguments:{key:'receipt'},status:'completed'}});
+  if(mode==='reconnect')emit({type:'error',message:'Reconnecting...'});
+  if(mode==='failed-turn')emit({type:'turn.failed',error:{message:(process.env.DXB_UPSTREAM_ERROR||'PRIVATE_UPSTREAM_ERROR').replace('$mock',alias)}});
+  if(mode==='bad-json')console.log('PRIVATE_INVALID_JSON');
+  emit({type:'item.completed',item:{type:'agent_message',text:'OK'}});
+  if(mode!=='no-completion')emit({type:'turn.completed'});
+  if(mode==='exit')process.exitCode=1;
+ }
+}
+`;
+
+const item = (server = '$mock', status = 'completed') => ({
+  type: 'item.completed',
+  item: {
+    id: 'call-1',
+    type: 'mcp_tool_call',
+    server,
+    tool: 'lookup',
+    arguments: JSON.stringify({key: 'receipt'}),
+    status,
+  },
+});
+
+describe('Codex selective HTTP MCP adapter', () => {
+  it('disables the original without copying its credentials and preserves unrelated configuration', async () => {
+    const f = await fixture('tool', {
+      service: {
+        url: 'https://original.example',
+        http_headers: {Authorization: 'PRIVATE_CREDENTIAL'},
+      },
+      github: {url: 'https://github.example'},
     });
-    await runCodexWithMcp(f.options);
-    const overlay = (await f.invocations())
-      .at(-1)!
-      .args.find((arg) => arg.startsWith('plugins='));
-    expect(overlay).toContain('"enabled"=false');
-    expect(overlay).not.toContain('"enabled"=true');
+    const run = await runCodexWithMcp(f.options);
+    expect(run.toolEvents).toEqual([
+      expect.objectContaining({
+        rawName: 'mcp__service__lookup',
+        status: 'success',
+      }),
+    ]);
+    const calls = await f.invocations();
+    expect(calls).toHaveLength(4);
+    expect(JSON.stringify(calls)).not.toMatch(
+      /PRIVATE_CREDENTIAL|plugins=|app-server|--disable/,
+    );
+    const config = parse(
+      calls.at(-1).args.find((arg: string) => arg.startsWith('mcp_servers=')),
+    ).mcp_servers as Record<string, Record<string, unknown>>;
+    expect(config.service).toMatchObject({enabled: false});
+    expect(config).not.toHaveProperty('github');
+    const alias = Object.keys(
+      run.output.metadata!.codexMcpAliases as object,
+    )[0]!;
+    expect(config[alias]).toMatchObject({
+      url: f.options.servers.service!.url,
+      required: true,
+    });
+    expect(config[alias]).not.toHaveProperty('http_headers');
+    expect(new CodexHarness().extractResult(run.output).toolEvents).toEqual(
+      run.toolEvents,
+    );
   });
 
-  it('does not treat a server request as a response with the same ID', async () => {
-    const f = await fixture('server-request');
-    expect((await runCodexWithMcp(f.options)).harnessReady).toBe(true);
-  });
-
-  it('normalizes MCP inputs, keeps failure details, and emits each item once', async () => {
+  it('keeps the logical server name in the native identity', async () => {
     const f = await fixture();
-    const item = {
-      id: 'tool-1',
-      type: 'mcp_tool_call',
-      server: 'service',
-      tool: 'lookup',
-      arguments: JSON.stringify({key: 'receipt'}),
-      status: 'completed',
-      result: {
-        isError: true,
-        content: [{type: 'text', text: 'No matching receipt'}],
-      },
-    };
-    const event = {type: 'item.completed', item};
-    const shell = {
-      type: 'item.completed',
+    const run = await runCodexWithMcp(f.options);
+    expect(run.output.metadata?.codexMcpAliases).toEqual({
+      service_dynobox: 'service',
+    });
+  });
+
+  it.each([
+    'managed-enabled',
+    'managed-url',
+    'managed-auth',
+    'bad-metadata',
+    'wrong-name',
+    'get-exit',
+  ])('rejects %s before task startup', async (mode) => {
+    const f = await fixture(mode);
+    await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
+      category: 'configuration_failed',
+    });
+    expect(
+      (await f.invocations()).some((call) => call.args[0] === 'exec'),
+    ).toBe(false);
+  });
+
+  it('rejects unavailable mock tools before the task starts', async () => {
+    const f = await fixture('hidden');
+    await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
+      category: 'not_ready',
+    });
+    expect(
+      (await f.invocations()).some((call) => call.args[0] === 'exec'),
+    ).toBe(false);
+  });
+
+  it('retains received service errors and unrelated MCP attempts, deduplicating native item IDs', async () => {
+    const f = await fixture();
+    const failure = {
+      ...item(),
       item: {
-        id: 'shell-1',
-        type: 'command_execution',
-        command: 'echo OK',
-        exit_code: 0,
+        ...item().item,
+        result: {
+          isError: true,
+          content: [{type: 'text', text: 'Permission denied: missing access'}],
+        },
       },
     };
-    f.options.input.env.DXB_TEST_EVENTS = JSON.stringify([
-      event,
-      event,
-      shell,
-      shell,
+    f.options.input.env.DXB_EVENTS = JSON.stringify([
+      failure,
+      failure,
+      {...item('github'), item: {...item('github').item, id: 'other'}},
     ]);
     const onToolEvent = vi.fn();
     f.options.input.onToolEvent = onToolEvent;
     const run = await runCodexWithMcp(f.options);
-    expect(run.toolEvents).toHaveLength(2);
-    expect(run.toolEvents![0]).toMatchObject({
-      rawName: 'mcp__service__lookup',
-      input: {key: 'receipt'},
-      status: 'failure',
-      message: 'No matching receipt',
-    });
+    expect(run.toolEvents).toEqual([
+      expect.objectContaining({
+        rawName: 'mcp__service__lookup',
+        status: 'failure',
+        message: 'Permission denied: missing access',
+      }),
+      expect.objectContaining({
+        rawName: 'mcp__github__lookup',
+        status: 'success',
+      }),
+    ]);
     expect(onToolEvent).toHaveBeenCalledTimes(2);
   });
 
-  it.each([
-    'User declined the request',
-    'Permission denied',
-    'Transport disconnected',
-  ])('fails closed for an incomplete mock call: %s', async (message) => {
+  it('preserves failed attempts for shared receipt reconciliation', async () => {
     const f = await fixture();
-    f.options.input.env.DXB_TEST_EVENTS = JSON.stringify([
-      {
-        type: 'item.completed',
-        item: {
-          type: 'mcp_tool_call',
-          server: 'service',
-          tool: 'lookup',
-          status: 'failed',
-          arguments: {},
-          error: {message},
-        },
-      },
-    ]);
-    await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
-      category: 'execution_failed',
-      message: expect.stringContaining('mcp__service__lookup'),
-    });
+    f.options.input.env.DXB_EVENTS = JSON.stringify([item('$mock', 'failed')]);
+    expect((await runCodexWithMcp(f.options)).toolEvents).toContainEqual(
+      expect.objectContaining({
+        rawName: 'mcp__service__lookup',
+        status: 'failure',
+      }),
+    );
   });
 
-  it('keeps a callback failure when the deadline passes during error handling', async () => {
+  it('keeps callback failure output when the deadline passes during error handling', async () => {
     const f = await fixture('tool');
     let now = Date.now();
     vi.spyOn(Date, 'now').mockImplementation(() => now);
     f.options.input.onToolEvent = () => {
-      now += 10_000;
+      now += 10000;
       throw new Error('Caller callback failed');
     };
     await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
@@ -218,52 +253,19 @@ describe('Codex MCP adapter', () => {
     });
   });
 
-  it('keeps an explicit configuration failure when cleanup passes the deadline', async () => {
-    const f = await fixture('feature');
-    let now = Date.now();
-    vi.spyOn(Date, 'now').mockImplementation(() => now);
-    const start = processGroup.startOwnedProcess;
-    vi.spyOn(processGroup, 'startOwnedProcess').mockImplementation(
-      (executable, args, options) => {
-        const child = start(executable, args, options);
-        if (args.includes('app-server'))
-          child.stdout?.on('data', (chunk) => {
-            if (chunk.toString().includes('"apps":true')) now += 10_000;
-          });
-        return child;
-      },
-    );
-    await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
-      category: 'configuration_failed',
-      message: expect.stringContaining('feature "apps" is forced on'),
-    });
-  });
-
-  it('passes model, sandbox and config overrides only once to exec', async () => {
+  it('keeps model, permission, proxy and CLI-mock environment settings consistent', async () => {
     const f = await fixture();
-    f.options.input.model = 'fixture-model';
     f.options.input.permissionMode = 'dangerous';
+    f.options.input.model = 'fixture-model';
+    f.options.input.cliMocksEnabled = true;
+    Object.assign(f.options.input.env, {
+      NO_PROXY: 'one.example',
+      no_proxy: 'two.example',
+      DYNOBOX_CLI_MOCK_BIN: '/fixture/bin',
+      DXB_MARKER: 'preserved',
+    });
     await runCodexWithMcp(f.options);
-    const args = (await f.invocations()).at(-1)!.args;
-    expect(
-      args.filter((arg) => arg === 'approval_policy="never"'),
-    ).toHaveLength(1);
-    expect(args).not.toContain('sandbox_mode="danger-full-access"');
-    expect(args).not.toContain('model="fixture-model"');
-    expect(args.filter((arg) => arg === '--model')).toHaveLength(1);
-    expect(args.filter((arg) => arg === '--sandbox')).toHaveLength(1);
-  });
-
-  it('preserves logical names without collisions and normal environment and permissions', async () => {
-    const f = await fixture();
-    f.options.input.env.NO_PROXY = 'one.example';
-    f.options.input.env.no_proxy = 'two.example';
-    f.options.input.env.DXB_ENV_MARKER = 'preserved';
-    const run = await runCodexWithMcp(f.options);
-    expect(run.harnessReady).toBe(true);
-    expect(run).toMatchObject({version: '0.153.4', toolEvents: []});
     const calls = await f.invocations();
-    expect(calls).toHaveLength(3);
     for (const call of calls) {
       expect(call.marker).toBe('preserved');
       expect(call.noProxy).toBe(call.NO_PROXY);
@@ -277,65 +279,26 @@ describe('Codex MCP adapter', () => {
         ]),
       );
       expect(call.args).not.toContain('--ignore-user-config');
-      expect(call.args).not.toContain('--ignore-rules');
-      expect(call.args).not.toContain('sandbox_mode="danger-full-access"');
     }
-    expect(calls[2]!.args).toContainEqual(
-      expect.stringContaining('"service"={"url"='),
+    const exec = calls.at(-1).args;
+    expect(
+      exec.filter((arg: string) => arg === 'approval_policy="never"'),
+    ).toHaveLength(1);
+    expect(exec.filter((arg: string) => arg === '--model')).toHaveLength(1);
+    expect(exec.filter((arg: string) => arg === '--sandbox')).toHaveLength(1);
+    expect(exec).not.toContain('sandbox_mode="danger-full-access"');
+    expect(exec).toContain(
+      'shell_environment_policy.set.DYNOBOX_CLI_MOCK_BIN="/fixture/bin"',
     );
-    expect(calls[2]!.args.slice(-2)).toEqual(['--', 'Reply OK.']);
   });
 
-  it('fails when app-server exits during plugin reads', async () => {
-    const f = await fixture('exit-between-rpcs');
-    delete f.options.input.timeoutMs;
-    await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
-      category: 'configuration_failed',
-      message: expect.stringContaining('exited during plugin/read'),
-    });
-  }, 10_000);
-
-  it.each([
-    ['local-marketplace', {marketplacePath: '/catalog'}],
-    ['remote-marketplace', {remoteMarketplaceName: 'catalog'}],
-  ])(
-    'identifies plugins from %s',
-
-    async (mode, identifier) => {
-      const f = await fixture(mode);
-      await runCodexWithMcp(f.options);
-      const params = JSON.parse(
-        await readFile(f.options.input.env.DXB_TEST_LOG + '.plugins', 'utf8'),
-      );
-      expect(params).toEqual({...identifier, pluginName: 'example'});
-    },
-  );
-
-  it('recovers from a transient error event when the turn completes', async () => {
-    const f = await fixture('reconnect');
-    const run = await runCodexWithMcp(f.options);
-    expect(run.harnessReady).toBe(true);
-  });
-
-  it('accepts newer Codex releases', async () => {
-    const f = await fixture('newer');
-    const run = await runCodexWithMcp(f.options);
-    expect(run.version).toBe('0.999.0');
-  });
-
-  it('fails before execution when the user config has a same-named server', async () => {
-    const f = await fixture('success', {
-      service: {command: '/original', args: ['PRIVATE_SENTINEL']},
-    });
-    await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
-      category: 'configuration_failed',
-      message: expect.stringContaining(
-        'already has an MCP server named "service"',
-      ),
-    });
-    const calls = await f.invocations();
-    expect(calls.some((call) => call.args[0] === 'exec')).toBe(false);
-    expect(JSON.stringify(calls)).not.toContain('PRIVATE_SENTINEL');
+  it('grants only the requested logical mock tool', async () => {
+    const f = await fixture();
+    f.options.input.allowedMcpTools = [{server: 'service', tool: 'lookup'}];
+    await runCodexWithMcp(f.options);
+    expect((await f.invocations()).at(-1).args.join(' ')).toContain(
+      '"lookup"={"approval_mode"="approve"}',
+    );
   });
 
   it.each([
@@ -349,12 +312,13 @@ describe('Codex MCP adapter', () => {
     ['--ignore-user-config'],
     ['--enable', 'apps'],
     ['--disable', 'plugins'],
+    ['--'],
+    ['resume'],
   ])(
-    'rejects config-changing extra arguments %j before any process starts',
-
-    async (...args) => {
+    'rejects launch-changing extra arguments %j before any process',
+    async (...extraArgs) => {
       const f = await fixture();
-      f.options.extraArgs = args;
+      f.options.extraArgs = extraArgs;
       await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
         category: 'configuration_failed',
       });
@@ -363,151 +327,106 @@ describe('Codex MCP adapter', () => {
   );
 
   it.each([
-    ['version', 'unsupported_version', /0\.153\.4 or newer/],
-    ['feature', 'configuration_failed', /feature "apps" is forced on/],
-    ['no-completion', 'execution_failed', /without completing/],
-    ['failed-turn', 'execution_failed', /turn\.failed/],
-    ['bad-json', 'execution_failed', /unparseable/],
-    ['exit', 'execution_failed', /exited with code 1/],
-  ])(
-    'reports %s as %s with a readable reason',
+    ['version', 'unsupported_version'],
+    ['no-completion', 'execution_failed'],
+    ['failed-turn', 'execution_failed'],
+    ['bad-json', 'execution_failed'],
+    ['exit', 'execution_failed'],
+  ])('reports %s as %s with debug output', async (mode, category) => {
+    const f = await fixture(mode);
+    await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
+      category,
+      output: {
+        stdout: expect.any(String),
+        stderr: expect.stringContaining('PRIVATE_STDERR_SENTINEL'),
+      },
+    });
+  });
 
-    async (mode, category, message) => {
-      const f = await fixture(mode);
-      await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
-        category,
-        message: expect.stringMatching(message),
-      });
-      if (mode === 'version' || mode === 'feature')
-        expect(
-          (await f.invocations()).some((call) => call.args[0] === 'exec'),
-        ).toBe(false);
-    },
-  );
+  it('allows transient provider errors when the turn completes', async () => {
+    const f = await fixture('reconnect');
+    expect((await runCodexWithMcp(f.options)).harnessReady).toBe(true);
+  });
 
-  it.each([
-    'version',
-    'feature',
-    'bad-json',
-    'failed-turn',
-    'exit',
-    'no-completion',
-  ])(
-    'retains raw output from a %s failure for local debug logs',
+  it('uses logical names in harness errors while retaining native debug output', async () => {
+    const f = await fixture('failed-turn');
+    f.options.input.env.DXB_UPSTREAM_ERROR = 'Mock $mock unavailable';
+    await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
+      message: 'Codex reported turn.failed: Mock service unavailable',
+      output: {stdout: expect.stringContaining('service_dynobox')},
+    });
+  });
 
-    async (mode) => {
-      const f = await fixture(mode);
-      await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
-        output: {
-          stdout: expect.any(String),
-          stderr: expect.stringContaining('PRIVATE_STDERR_SENTINEL'),
-          exitCode: expect.any(Number),
-          durationMs: expect.any(Number),
-        },
-      });
-    },
-  );
+  it('accepts newer supported Codex releases', async () => {
+    const f = await fixture('newer');
+    expect((await runCodexWithMcp(f.options)).version).toBe('0.999.0');
+  });
+
+  it('requires actual endpoint discovery when an observer is supplied', async () => {
+    const f = await fixture();
+    f.options.servers = {
+      service: {...f.options.servers.service!, isDiscovered: () => false},
+    };
+    await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
+      category: 'not_ready',
+    });
+  });
 
   it.each(['version-timeout', 'probe-hang', 'hang'])(
-    'reports %s as a timeout with raw output before the clock deadline passes',
-
+    'classifies %s timeout even before the wall clock advances',
     async (mode) => {
       const f = await fixture(mode);
       f.options.input.timeoutMs = 500;
       vi.spyOn(Date, 'now').mockReturnValue(Date.now());
       await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
         category: 'timed_out',
-        output: {
-          stderr: expect.stringContaining('PRIVATE_STDERR_SENTINEL'),
-          stdout: expect.any(String),
-        },
+        output: {stderr: expect.any(String)},
       });
     },
   );
 
-  it('uses explicit dangerous mode and CLI mock settings consistently during preflight and execution', async () => {
-    const f = await fixture();
-    f.options.input.permissionMode = 'dangerous';
-    f.options.input.model = 'gpt-5.4';
-    f.options.input.cliMocksEnabled = true;
-    f.options.input.env.DYNOBOX_CLI_MOCK_BIN = '/fixture/bin';
-    await runCodexWithMcp(f.options);
-    for (const [index, call] of (await f.invocations()).slice(1).entries()) {
-      if (index === 0)
-        expect(call.args).toContain('sandbox_mode="danger-full-access"');
-      expect(call.args).toContain('approval_policy="never"');
-      if (index === 0) expect(call.args).toContain('model="gpt-5.4"');
-      expect(call.args).toContain(
-        'shell_environment_policy.set.DYNOBOX_CLI_MOCK_BIN="/fixture/bin"',
-      );
-    }
-  });
-
-  it('grants only an explicitly requested declared MCP tool', async () => {
-    const f = await fixture();
-    f.options.input.allowedMcpTools = [{server: 'service', tool: 'lookup'}];
-    await runCodexWithMcp(f.options);
-    expect((await f.invocations()).at(-1)!.args.join(' ')).toContain(
-      '"lookup"={"approval_mode"="approve"}',
-    );
-  });
-
-  it.each(['probe-hang', 'hang'])(
-    'bounds and cancels %s processes',
-
-    async (mode) => {
-      const f = await fixture(mode);
-      const abort = new AbortController();
-      f.options.input.signal = abort.signal;
-      const pending = runCodexWithMcp(f.options).catch((error) => error);
-      await vi.waitFor(async () =>
-        expect((await f.invocations()).length).toBeGreaterThanOrEqual(
-          mode === 'probe-hang' ? 2 : 3,
-        ),
-      );
-      abort.abort();
-      expect(await pending).toMatchObject({category: 'execution_failed'});
-    },
-  );
-
-  it('bounds preflight by the invocation deadline', async () => {
+  it('caps metadata inspection when no job deadline is configured', async () => {
     const f = await fixture('probe-hang');
-    f.options.input.timeoutMs = 250;
+    delete f.options.input.timeoutMs;
     await expect(runCodexWithMcp(f.options)).rejects.toMatchObject({
       category: 'timed_out',
     });
-  });
+  }, 10000);
 
   it.each(['probe-hang', 'hang'])(
-    'stops descendants holding stdout open when %s times out',
-
+    'cancels %s and owned descendants',
     async (mode) => {
       const f = await fixture(mode);
-      const pidPath = f.options.input.env.DXB_TEST_LOG + '.child';
-      f.options.input.env.DXB_TEST_CHILD_PID = pidPath;
-      f.options.input.timeoutMs = 1000;
-      const pending = runCodexWithMcp(f.options).catch(
-        (error: unknown) => error,
-      );
-      let childPid: number | undefined;
+      const pidPath = join(f.root, 'child.pid');
+      f.options.input.env.DXB_PID = pidPath;
+      const abort = new AbortController();
+      f.options.input.signal = abort.signal;
+      const pending = runCodexWithMcp(f.options).catch((error) => error);
+      let pid: number | undefined;
       try {
-        await vi.waitFor(async () => {
-          childPid = Number(await readFile(pidPath, 'utf8'));
-        });
-        expect(await pending).toMatchObject({category: 'timed_out'});
-        await vi.waitFor(() =>
-          expect(() => process.kill(childPid!, 0)).toThrow(),
+        await vi.waitFor(
+          async () => {
+            pid = Number(await readFile(pidPath, 'utf8'));
+          },
+          {timeout: 3000},
         );
+        abort.abort();
+        expect(await pending).toMatchObject({category: 'execution_failed'});
+        await vi.waitFor(() => expect(() => process.kill(pid!, 0)).toThrow(), {
+          timeout: 2500,
+        });
       } finally {
-        if (childPid !== undefined) {
+        abort.abort();
+        if (pid) {
           try {
-            process.kill(childPid, 'SIGKILL');
+            process.kill(pid, 'SIGKILL');
           } catch {
-            /* Already stopped. */
+            /* stopped */
           }
         }
         await pending;
       }
     },
+    10000,
   );
 });

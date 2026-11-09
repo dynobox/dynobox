@@ -84,13 +84,20 @@ unsupported versions and configuration conflicts fail explicitly.
 | Harness | Minimum CLI | Other MCP servers |
 | --- | --- | --- |
 | Claude Code | 2.1.263 | Remain available. Declared targets are replaced for this run. |
-| Codex | 0.153.4 | Excluded by the current adapter. |
+| Codex | 0.153.4 | Remain available. Declared HTTP targets are replaced for this run. |
 | OpenCode | 2.2.5 (2.x) | Remain available. Declared targets are replaced for this run. |
 | Pi | 0.86.0 | Excluded by the current adapter. |
 | Antigravity | 1.2.11 | Excluded by the current adapter. |
 | Cursor | — | MCP mocking unavailable. |
 
 The fixture schema and call assertions are the same across supported harnesses.
+
+Codex replaces HTTP targets; a same-named stdio target fails explicitly. It
+retains normal configuration, model login, plugins, and skills. The agent sees
+each mock under a separate native name with a `_dynobox` suffix, for example
+`mcp__linear_dynobox__get_issue`; assertions, callbacks, and reports keep the
+logical names declared in `mcpMocks`. Skills that refer to exact native tool
+namespaces must account for this suffix.
 
 OpenCode retains normal profiles, plugins, model authentication, and skills.
 Managed targets that cannot be replaced, overlapping tool namespaces, and
