@@ -272,7 +272,7 @@ function parseToolCallPayload(
   if (mcp && args && typeof server === 'string' && typeof tool === 'string')
     return {
       rawName: `mcp__${Object.hasOwn(aliases, server) ? aliases[server] : server}__${tool}`,
-      args: args.args ?? {},
+      args: args.args,
       status: parseToolStatus(mcp),
       message: parseToolMessage(mcp),
     };

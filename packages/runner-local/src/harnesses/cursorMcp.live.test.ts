@@ -786,7 +786,7 @@ describe.skipIf(!executable)(
 
     it('cancels an active task and restores workspace configuration', async () => {
       const f = await fixture('hang');
-      const original = await readFile(f.paths[0]!, 'utf8');
+      const original = await readFile(f.paths[1]!, 'utf8');
       const abort = new AbortController();
       const pending = runCursorWithMcp({
         ...f.options,
@@ -799,7 +799,7 @@ describe.skipIf(!executable)(
       await vi.waitFor(() => expect(f.requests()).toBe(1), {timeout: 10000});
       abort.abort();
       await stopped;
-      expect(await readFile(f.paths[0]!, 'utf8')).toBe(original);
+      expect(await readFile(f.paths[1]!, 'utf8')).toBe(original);
       expect(f.originals()).toBe(0);
     }, 30000);
 
@@ -865,7 +865,7 @@ describe.skipIf(!executable)(
 
     it('restores configuration on callback failure', async () => {
       const f = await fixture();
-      const original = await readFile(f.paths[0]!, 'utf8');
+      const original = await readFile(f.paths[1]!, 'utf8');
       await expect(
         runCursorWithMcp({
           ...f.options,
@@ -880,7 +880,7 @@ describe.skipIf(!executable)(
         category: 'execution_failed',
         message: expect.stringContaining('fixture callback failure'),
       });
-      expect(await readFile(f.paths[0]!, 'utf8')).toBe(original);
+      expect(await readFile(f.paths[1]!, 'utf8')).toBe(original);
       expect(f.originals()).toBe(0);
     }, 30000);
 

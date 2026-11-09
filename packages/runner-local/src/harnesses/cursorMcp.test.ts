@@ -52,7 +52,7 @@ async function fixture(mode = 'success', version = '2026.10.22-fixture') {
   await writeFile(
     executable,
     `#!${process.execPath}
-import {appendFileSync,existsSync,mkdirSync,readFileSync,writeFileSync,lstatSync} from 'node:fs';
+import {appendFileSync,existsSync,mkdirSync,readFileSync,rmSync,writeFileSync,lstatSync} from 'node:fs';
 import {basename,join} from 'node:path';
 const args=process.argv.slice(2),mode=process.env.FIXTURE_MODE;
 const configPath=join(process.cwd(),'.cursor','cli.json');
@@ -66,6 +66,7 @@ if(args[0]==='mcp'){
  process.exit(mode==='disable-failed'&&args[1]==='disable'?1:0);
 }
 if(mode==='hang'){setInterval(()=>{},1000)}else if(mode==='invalid'){console.log('{invalid');setInterval(()=>{},1000)}else{
+ if(mode==='remove-workspace')rmSync(join(process.cwd(),'.cursor'),{recursive:true});
  const plugin=args[args.lastIndexOf('--plugin-dir')+1];
  const config=JSON.parse(readFileSync(join(plugin,'mcp.json')));
  const native=Object.keys(config.mcpServers).find(key=>key.endsWith('_dynobox'));
@@ -140,11 +141,35 @@ describe('Cursor MCP launch contract', () => {
     ]);
     expect(new Set(commands.slice(1).map(({cwd}) => cwd)).size).toBe(1);
     expect(new Set(commands.slice(1).map(({data}) => data)).size).toBe(1);
-    await expect(
-      readFile(join(f.work, '.cursor', 'mcp.json')),
-    ).rejects.toMatchObject({code: 'ENOENT'});
+    await expect(lstat(join(f.work, '.cursor'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
     await expect(lstat(commands[1].data)).rejects.toMatchObject({
       code: 'ENOENT',
+    });
+  });
+
+  it('restores workspace permissions after the agent removes their folder', async () => {
+    const f = await fixture('remove-workspace');
+    const path = join(f.work, '.cursor', 'cli.json');
+    const original = '{"permissions":{"allow":["Read(src/**)"]}}\n';
+    await mkdir(join(f.work, '.cursor'));
+    await writeFile(path, original);
+    await runCursorWithMcp(f.options);
+    expect(await readFile(path, 'utf8')).toBe(original);
+    const [command] = (await readFile(f.log, 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+      .filter(({args}) => args[0] === 'mcp');
+    await expect(lstat(command.data)).rejects.toMatchObject({code: 'ENOENT'});
+  });
+
+  it('ignores a malformed MCP configuration file as Cursor does', async () => {
+    const f = await fixture();
+    await writeFile(join(f.home, '.cursor', 'mcp.json'), '{"mcpServers": [');
+    await expect(runCursorWithMcp(f.options)).resolves.toMatchObject({
+      harnessReady: true,
     });
   });
 
@@ -208,9 +233,9 @@ describe('Cursor MCP launch contract', () => {
     expect(
       commands.every(({args}) => args[0] === '--version' || args[0] === 'mcp'),
     ).toBe(true);
-    await expect(
-      readFile(join(f.work, '.cursor', 'mcp.json')),
-    ).rejects.toMatchObject({code: 'ENOENT'});
+    await expect(lstat(join(f.work, '.cursor'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
   });
 
   it('requires genuine discovery when a controller observer is available', async () => {

@@ -60,6 +60,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   logical or native name. Restore temporary workspace permission configuration
   and remove per-run native MCP state. Keep logical names in callbacks,
   assertions, and reports; reject incomplete turns and undiscovered mocks.
+  Ordinary Cursor runs now report MCP tool calls as `mcp__<server>__<tool>`
+  instead of `mcp`.
 - Require Antigravity 1.5.2 or newer for selective HTTP MCP mocking. Replace
   declared targets without contacting their original endpoints while retaining
   normal model login, skills, plugins, and unrelated MCPs.

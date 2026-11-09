@@ -7,6 +7,7 @@ import {
   readFile,
   realpath,
   rm,
+  rmdir,
   stat,
   symlink,
   writeFile,
@@ -26,7 +27,6 @@ import {startOwnedProcess} from '../processGroup.js';
 import {
   buildCursorArgs,
   createCursorToolEventDeduper,
-  parseCursorJson,
   parseCursorJsonLine,
 } from './cursor.js';
 import {asRecord, isRecord, type JsonObject} from './parsing.js';
@@ -215,36 +215,37 @@ export async function runCursorWithMcp(options: {
   const version = probe.stdout.trim();
   const directory = join(workDir, '.cursor');
   const cliPath = join(directory, 'cli.json');
+  const [folder, file] = await Promise.all(
+    [directory, cliPath].map((path) =>
+      lstat(path).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return undefined;
+        throw error;
+      }),
+    ),
+  );
   // Never follow a fixture symlink into the user's real configuration.
-  for (const path of [directory, cliPath]) {
-    const info = await lstat(path).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === 'ENOENT') return undefined;
-      throw error;
-    });
-    if (info?.isSymbolicLink())
-      throw new McpHarnessError(
-        'configuration_failed',
-        'Cursor MCP overrides require regular workspace configuration paths, not symlinks.',
-      );
-  }
+  if (folder?.isSymbolicLink() || file?.isSymbolicLink())
+    throw new McpHarnessError(
+      'configuration_failed',
+      'Cursor MCP overrides require regular workspace configuration paths, not symlinks.',
+    );
+  const hadDirectory = folder !== undefined;
   const home = env.HOME ?? homedir();
-  const configs = await Promise.all([
-    readConfig(join(home, '.cursor', 'mcp.json')),
-    readConfig(join(projectRoot, '.cursor', 'mcp.json')),
-  ]);
-  for (const config of configs) {
-    if (config.mcpServers !== undefined && !isRecord(config.mcpServers))
-      throw new McpHarnessError(
-        'configuration_failed',
-        'Cursor MCP configuration must contain a valid mcpServers object.',
-      );
+  // Cursor reads only these two files and skips unreadable or malformed ones.
+  const configs = await Promise.all(
+    [home, projectRoot].map((directory) =>
+      readConfig(join(directory, '.cursor', 'mcp.json')).catch(
+        (): JsonObject => ({}),
+      ),
+    ),
+  );
+  for (const config of configs)
     for (const name of Object.keys(servers))
       if ('command' in asRecord(asRecord(config.mcpServers)[name]))
         throw new McpHarnessError(
           'configuration_failed',
           `Cursor MCP target "${name}" uses stdio; selective mocking supports HTTP targets.`,
         );
-  }
   const permissions = await readConfig(cliPath);
   const existing = asRecord(permissions.permissions);
   const profile = env.CURSOR_CONFIG_DIR?.trim()
@@ -434,8 +435,7 @@ export async function runCursorWithMcp(options: {
       result.failed ||
       result.exitCode !== 0 ||
       !completed ||
-      inputs.size !== 0 ||
-      parseCursorJson(result.stdout, aliases).terminalFailure
+      inputs.size !== 0
     )
       throw new McpHarnessError(
         'execution_failed',
@@ -455,9 +455,15 @@ export async function runCursorWithMcp(options: {
       output,
     );
   } finally {
-    if (original)
-      await writeFile(cliPath, original.content, {mode: original.mode});
-    else await rm(cliPath, {force: true});
     await rm(data, {recursive: true, force: true});
+    if (original) {
+      // The agent may have removed the workspace folder during the run.
+      await mkdir(directory, {recursive: true});
+      await writeFile(cliPath, original.content, {mode: original.mode});
+    } else {
+      await rm(cliPath, {force: true});
+      // Remove the folder only when this run created it and left it empty.
+      if (!hadDirectory) await rmdir(directory).catch(() => undefined);
+    }
   }
 }
