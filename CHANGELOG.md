@@ -10,83 +10,35 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
-- Replace declared Codex HTTP MCP targets while retaining other servers,
-  normal model authentication, plugins, and skills.
-  Use separate `<name>_dynobox` native connections to exclude inherited target
-  credentials; preserve logical fixture names in assertions, callbacks, and
-  reports.
-  Reject same-named stdio targets and unreplaceable configuration explicitly.
-  Remove plugin-exclusion scans and the app-server configuration protocol.
-- Replace declared Claude Code MCP targets for each run while retaining other
-  configured servers. Preserve normal model login, skills, and permissions
-  without editing user MCP configuration. Reject reserved native namespaces and
-  mock server or tool names containing `__` before launch, and ambiguous
-  identities at readiness.
-- Document MCP fixture authoring, received-call assertions, and which other MCP
-  servers stay real during mock runs.
-- Support MCP mock runs with OpenCode 2.2.5 and later 2.x releases, including
-  model variants and subagent tool evidence. Replace declared MCP targets while
-  preserving other servers, plugins, skills, and model authentication. Use the
-  native CLI for task execution and permissions,
-  with mock discovery and configuration checks before task startup.
-- Improve MCP call evidence and failure reporting across Claude Code, Codex, and
-  OpenCode. Preserve received mock errors and reject incomplete tool attempts.
-  Every MCP tool attempt not reported as failed must reach the mock; failed
-  attempts may be rejected by the harness if another attempt reaches the mock.
-- Stop harness, setup, and verification child processes on timeout, cancellation,
-  or exit. Preserve standard exit codes for interrupt and termination signals.
-- Preserve MCP failure details in local debug logs. Keep MCP mock runs local-only
-  and limit mock request sizes.
-- Include required third-party license notices in the CLI package.
-- Require an npm installation of Pi 1.5.0 or a later 1.x release with its native
-  MCP SDK for MCP mock runs. Replace declared HTTP targets, including extension
-  registrations, while preserving normal authentication, extensions, skills,
-  project trust, and unrelated MCPs. Reject same-named stdio targets without
-  launching them. Preserve logical tool names, server
-  instructions, structured results, mock errors, and tool-only runs. Require
-  all declared mock tools to be active before starting the task. Ordinary Pi
-  runs continue to support 0.86.0 and newer.
-- Preserve Pi MCP startup, runtime, timeout, and callback failure details in
-  local debug logs and handle streamed Unicode input. Pass prompts through
-  stdin (subject to Pi's whitespace trimming) and reject blank prompts before
-  starting Pi.
-- Support selective HTTP MCP mocking with Cursor CLI 2026.10.22 or newer.
-  Disable declared original identifiers before discovery, register separate
-  `<name>_dynobox` mock connections through a native plugin, and grant only
-  declared tools. Preserve normal model authentication, inherited permissions,
-  skills, plugins, and unrelated MCPs, including unrelated disabled servers and
-  MCP auth state. Reject inherited deny rules that block a mock under its
-  logical or native name. Restore temporary workspace permission configuration
-  and remove per-run native MCP state. Keep logical names in callbacks,
-  assertions, and reports; reject incomplete turns and undiscovered mocks.
-  Ordinary Cursor runs now report MCP tool calls as `mcp__<server>__<tool>`
+- Add MCP mocks: declare `mcpMocks` on a scenario to serve fixed tool
+  responses, and assert on received calls with `mcp.called` and
+  `mcp.notCalled`. Mocks replace only the declared servers; other MCP servers,
+  plugins, skills, and model login stay as configured. See
+  `docs/mcp-mocking.md`.
+- MCP mocks run on Claude Code 2.1.263+, Codex 0.153.4+, OpenCode 2.2.5+ (2.x),
+  Pi 1.5.0+ (1.x, npm installation), Cursor CLI 2026.10.22+, and Antigravity
+  1.5.2+.
+- Assertions and reports use the names declared in `mcpMocks`, even where the
+  harness shows a mock under another name (Codex and Cursor add a `_dynobox`
+  suffix).
+- A setup that a mock cannot safely replace fails the job instead of letting a
+  negative assertion pass, for example a same-named stdio server, a permission
+  rule that denies a mock tool, or a mock the harness never discovers.
+- MCP mock runs are local-only and cannot be combined with `--save-run`.
+- Ordinary Cursor runs now report MCP tool calls as `mcp__<server>__<tool>`
   instead of `mcp`.
-- Require Antigravity 1.5.2 or newer for selective HTTP MCP mocking. Replace
-  declared targets without contacting their original endpoints while retaining
-  normal model login, skills, plugins, and unrelated MCPs.
-  Use native ACP sessions with scoped mock grants and logical assertion names;
-  remove inherited-source rejection and handwritten project records. Reject
-  same-named global stdio targets and incompatible print-only extra arguments.
-  Jobs sharing a HOME still take turns; separate Dynobox processes are not
-  coordinated.
-- Report timed-out Antigravity MCP probes and runs as timeouts, and preserve
-  failure output in local debug logs.
-- Report Codex and Cursor MCP runs that time out mid-output as timeouts
-  rather than unparseable output.
-- Enable local MCP mock runs without an experimental environment flag. Each
-  scenario grants its declared mock tools automatically, and MCP runs remain
-  ineligible for upload.
-- Stop a run on the first SIGINT or SIGTERM: running harness processes are
-  cancelled, no further jobs start, mocks clean up, and the CLI exits with code
-  130 for SIGINT or 143 for SIGTERM. A second signal exits immediately. Once jobs
-  finish, restore normal signal handling so Ctrl-C can interrupt a `--save-run`
-  upload.
+- Pi rejects blank prompts before starting.
+- Stop a run on the first SIGINT or SIGTERM: harness processes are cancelled,
+  no new jobs start, and the CLI exits with code 130 or 143. A second signal
+  exits immediately. Harness, setup, and verification processes are also
+  stopped on timeout.
+- Include required third-party license notices in the CLI package.
 
-### `@dynobox/runner-local`
+### `@dynobox/sdk`
 
-- Replace declared MCP targets on Claude Code, Codex, and OpenCode; other adapters
-  currently isolate inherited servers. Report refused mock calls as failures,
-  so negative call assertions cannot pass on a refusal.
+- Add scenario `mcpMocks` and the `mcp.called` and `mcp.notCalled` assertion
+  types, with validation that each assertion references a declared mock server
+  and tool.
 
 ---
 
