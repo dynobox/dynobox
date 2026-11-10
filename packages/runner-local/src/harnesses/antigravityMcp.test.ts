@@ -707,6 +707,21 @@ it.each(['{bad json', '{"mcpServers":[]}'])(
   },
 );
 
+it.each(['', ' \n'])(
+  'treats an empty profile configuration %j as no servers',
+  async (source) => {
+    const f = await fakeFixture();
+    const path = await globalConfig(f.home, {});
+    await writeFile(path, source);
+    await runAntigravityWithMcp(f.options);
+    const captured = JSON.parse(await readFile(f.capture, 'utf8'));
+    expect(captured.config.mcpServers).toEqual({
+      linear: {serverUrl: f.options.servers.linear.url},
+    });
+    expect(await readFile(path, 'utf8')).toBe(source);
+  },
+);
+
 it.each([
   '--gemini-dir=elsewhere',
   '--settings={}',
