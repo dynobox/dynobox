@@ -53,12 +53,12 @@ available on `PATH`: Claude Code (`claude`), Codex (`codex`), OpenCode
 ## Quick start
 
 ```bash
-npx dynobox init                         # Claude Code (default)
-npx dynobox init --harness codex         # OpenAI Codex
-npx dynobox init --harness opencode      # OpenCode
-npx dynobox init --harness pi            # Pi
-npx dynobox init --harness cursor        # Cursor CLI
-npx dynobox init --harness antigravity   # Google Antigravity CLI
+npx dynobox@latest init                         # Claude Code (default)
+npx dynobox@latest init --harness codex         # OpenAI Codex
+npx dynobox@latest init --harness opencode      # OpenCode
+npx dynobox@latest init --harness pi            # Pi
+npx dynobox@latest init --harness cursor        # Cursor CLI
+npx dynobox@latest init --harness antigravity   # Google Antigravity CLI
 npx dynobox run
 ```
 
