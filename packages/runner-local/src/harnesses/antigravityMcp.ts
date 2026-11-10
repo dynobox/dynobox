@@ -142,6 +142,8 @@ async function readConfig(path: string): Promise<JsonObject> {
   const value = await readMcpJsonConfig(path, {
     read: 'Cannot read Antigravity MCP configuration.',
     parse: message,
+    // Antigravity can leave an empty mcp_config.json and treats it as no servers.
+    allowEmpty: true,
   });
   if (value.mcpServers !== undefined && !isRecord(value.mcpServers))
     throw new McpHarnessError('configuration_failed', message);
