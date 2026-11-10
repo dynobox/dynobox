@@ -25,7 +25,7 @@
     linear-gradient(90deg, transparent 49.96%, rgba(0, 0, 0, 0.035) 50%, transparent 50.04%),
     var(--paper);
   color: var(--ink);
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
 }
 
 /* Section gutter. Every section either is a .recorder-wrap or contains one. */
@@ -50,7 +50,7 @@
  */
 .recorder-display {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: clamp(44px, 6vw, 82px);
   font-weight: 600;
   letter-spacing: -0.05em;

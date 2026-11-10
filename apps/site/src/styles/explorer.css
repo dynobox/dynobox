@@ -1,36 +1,3 @@
-/* Ioskeley Mono v2.1.0, SIL OFL 1.1. See /fonts/IoskeleyMono-LICENSE.txt. */
-@font-face {
-  font-family: 'Ioskeley Mono';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/fonts/IoskeleyMono-Regular.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Ioskeley Mono';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('/fonts/IoskeleyMono-Medium.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Ioskeley Mono';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('/fonts/IoskeleyMono-SemiBold.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Ioskeley Mono';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('/fonts/IoskeleyMono-Bold.woff2') format('woff2');
-}
-
 html {
   background: #131416;
   color-scheme: dark;
@@ -48,21 +15,6 @@ body {
   background: rgba(19, 20, 22, 0.94);
 }
 
-.brand,
-.topnav a:hover,
-.topnav a:focus-visible {
-  color: #e6e7e2;
-}
-
-.topbar-context,
-.topnav a {
-  color: #a4a9ad;
-}
-
-.topbar-context {
-  font-size: 11px;
-}
-
 .explorer-page {
   --page-paper: #131416;
   --page-raised: #050505;
@@ -73,20 +25,19 @@ body {
   --page-link: #93b0dc;
   --page-pass: #9bba8b;
   --page-fail: #e0897a;
-  --font-mono:
-    'Ioskeley Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   display: flex;
   flex: 1;
   flex-direction: column;
   background: var(--page-paper);
   color: var(--page-ink);
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: var(--text-base);
   line-height: 1.65;
 }
 
 .explorer-shell {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 0;
   width: min(1320px, calc(100% - 76px));
@@ -97,7 +48,7 @@ body {
 
 .explorer-intro h1 {
   margin: 0;
-  font-size: clamp(20px, 2.4vw, 26px);
+  font-size: var(--text-xl);
   line-height: 1.25;
   letter-spacing: -0.035em;
 }
@@ -105,7 +56,88 @@ body {
 .explorer-summary {
   margin: 10px 0 0;
   color: var(--page-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
+}
+
+.explorer-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.explorer-cta > * {
+  display: inline-flex;
+  gap: 16px;
+  align-items: center;
+  padding: 7px 14px;
+  border: 1px solid var(--page-rule);
+  font: inherit;
+  font-size: var(--text-base);
+  text-decoration: none;
+}
+
+.explorer-cta-primary {
+  border-color: var(--page-ink);
+  background: var(--page-ink);
+  color: var(--page-paper);
+  font-weight: 500;
+}
+
+.explorer-cta-primary:hover {
+  background: #fff;
+}
+
+.explorer-cta-command {
+  background: var(--page-raised);
+  color: var(--page-ink);
+  cursor: pointer;
+}
+
+.explorer-cta-command:hover {
+  border-color: var(--page-muted);
+}
+
+.explorer-cta-command:active {
+  transform: translateY(1px);
+}
+
+.explorer-cta-command:focus-visible {
+  outline: 2px solid var(--page-link);
+  outline-offset: 3px;
+}
+
+.explorer-cta-prompt {
+  color: var(--page-muted);
+}
+
+.explorer-cta-icon {
+  display: grid;
+  color: var(--page-muted);
+}
+
+.explorer-cta-icon svg {
+  grid-area: 1 / 1;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease;
+}
+
+.explorer-cta-check,
+.explorer-cta-command[data-copied] .explorer-cta-copy {
+  opacity: 0;
+  transform: scale(0.6);
+}
+
+.explorer-cta-command[data-copied] .explorer-cta-check {
+  color: var(--page-ink);
+  opacity: 1;
+  transform: scale(1);
 }
 
 .explorer {
@@ -133,7 +165,7 @@ body {
   color: var(--page-muted);
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.55;
   text-align: left;
 }
@@ -150,6 +182,41 @@ body {
 
 .explorer-tabs button[aria-selected='true'] .explorer-tab-number {
   color: var(--page-accent);
+}
+
+.explorer-dots {
+  display: flex;
+  grid-column: 1 / -1;
+  margin-top: 14px;
+  padding-left: 2px;
+}
+
+.explorer-tabs .explorer-dots button {
+  display: block;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.explorer-dots button::before {
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin: auto;
+  background: var(--page-rule);
+  content: '';
+  transition: background 160ms ease;
+}
+
+.explorer-dots button:hover::before {
+  background: var(--page-muted);
+}
+
+.explorer-dots button[data-active='true']::before {
+  background: var(--page-accent);
 }
 
 .explorer-tabs button:focus-visible,
@@ -183,7 +250,7 @@ body {
   padding: 0 14px;
   border-bottom: 1px solid var(--page-rule);
   color: var(--page-muted);
-  font-size: 11px;
+  font-size: var(--text-sm);
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -199,7 +266,7 @@ body {
   overflow: auto;
   color: var(--page-ink);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-base);
   line-height: 1.65;
   tab-size: 2;
 }
@@ -210,7 +277,7 @@ body {
 
 .panel-content {
   padding: 22px 18px;
-  font-size: 12px;
+  font-size: var(--text-base);
 }
 
 .panel-content p {
@@ -286,7 +353,7 @@ body {
   color: var(--page-muted);
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--text-sm);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -347,7 +414,7 @@ body {
 .assertion-table th,
 .assertion-table td {
   padding: 11px 16px;
-  font-size: 12px;
+  font-size: var(--text-base);
   line-height: 1.75;
   text-align: left;
   vertical-align: top;
@@ -356,7 +423,7 @@ body {
 .assertion-table th {
   width: 11ch;
   color: var(--page-muted);
-  font-size: 11px;
+  font-size: var(--text-sm);
   font-weight: 600;
   letter-spacing: 0.1em;
 }
@@ -367,7 +434,7 @@ body {
 
 .assertion-note {
   padding: 4px 16px 18px;
-  font-size: 12px;
+  font-size: var(--text-base);
 }
 
 .panel-status {
@@ -438,25 +505,26 @@ body {
 .dashboard-panel .recorder-run-pair section,
 .dashboard-panel .recorder-evidence-cell :is(span, i),
 .dashboard-panel .recorder-evidence-cell code {
-  font-size: 11px;
+  font-size: var(--text-sm);
 }
 
 .dashboard-panel .recorder-run-pair section header b,
 .dashboard-panel .recorder-evidence th b,
 .dashboard-panel .recorder-evidence th span {
-  font-size: 11px;
+  font-size: var(--text-sm);
 }
 
 .explorer-resources {
   display: flex;
   flex-wrap: wrap;
   gap: 12px 28px;
-  margin-top: 40px;
+  margin-top: auto;
+  padding-top: 40px;
 }
 
 .explorer-resources a {
   color: var(--page-muted);
-  font-size: 12px;
+  font-size: var(--text-base);
   text-decoration: none;
   transition: color 120ms linear;
 }
@@ -475,7 +543,7 @@ body {
   margin-inline: auto;
   padding: 20px 0;
   color: var(--page-muted);
-  font-size: 11px;
+  font-size: var(--text-sm);
 }
 
 .explorer-footer {
@@ -555,7 +623,7 @@ body {
 
 @media (max-width: 480px) {
   .explorer-page {
-    font-size: 14px;
+    font-size: var(--text-base);
   }
 
   .explorer {
@@ -565,6 +633,10 @@ body {
   .explorer-tabs,
   .explorer-stage {
     display: contents;
+  }
+
+  .explorer-dots {
+    display: none;
   }
 
   .explorer-tabs button:nth-child(1) {
@@ -620,7 +692,7 @@ body {
   }
 
   .explorer-panel pre {
-    font-size: 11px;
+    font-size: var(--text-sm);
   }
 
   .result-block p:not(.result-title) {
@@ -639,5 +711,13 @@ body {
 @media (prefers-reduced-motion: reduce) {
   [data-explorer-panel].is-entering {
     animation: none;
+  }
+
+  .explorer-cta-icon svg {
+    transition: none;
+  }
+
+  .explorer-cta-command:active {
+    transform: none;
   }
 }

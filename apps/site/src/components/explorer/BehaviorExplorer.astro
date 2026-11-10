@@ -18,7 +18,7 @@ const tabs = [
   },
   {
     id: 'boundaries',
-    label: 'Mock CLI tools, and capture HTTPS through a local proxy.',
+    label: 'Mock MCP servers and CLI tools, and capture HTTPS through a local proxy.',
   },
   {id: 'iterations', label: 'Repeat the same scenario to measure reliability.'},
   {id: 'runs', label: 'Save runs to the dashboard to review and share them.'},
@@ -45,6 +45,11 @@ const tabs = [
         <span>{label}</span>
       </button>
     ))}
+    <div class="explorer-dots" aria-hidden="true">
+      {tabs.map((_, index) => (
+        <button type="button" tabindex="-1" data-explorer-dot data-active={index === 0} />
+      ))}
+    </div>
   </div>
 
   <div class="explorer-stage">
@@ -65,15 +70,19 @@ const tabs = [
     const panels = Array.from(
       explorer.querySelectorAll<HTMLElement>('[data-explorer-panel]'),
     );
+    const dots = Array.from(
+      explorer.querySelectorAll<HTMLButtonElement>('[data-explorer-dot]'),
+    );
 
     function selectTab(tab: HTMLButtonElement, focus = false) {
       const panelId = tab.getAttribute('aria-controls');
 
-      for (const candidate of tabs) {
+      tabs.forEach((candidate, index) => {
         const selected = candidate === tab;
         candidate.setAttribute('aria-selected', String(selected));
         candidate.tabIndex = selected ? 0 : -1;
-      }
+        dots[index]?.setAttribute('data-active', String(selected));
+      });
 
       for (const panel of panels) {
         const selected = panel.id === panelId;
@@ -83,6 +92,10 @@ const tabs = [
 
       if (focus) tab.focus();
     }
+
+    dots.forEach((dot, index) => {
+      dot.addEventListener('click', () => selectTab(tabs[index]));
+    });
 
     tabs.forEach((tab, index) => {
       tab.addEventListener('click', () => selectTab(tab));

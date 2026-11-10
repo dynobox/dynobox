@@ -9,9 +9,29 @@ import BehaviorExplorer from './explorer/BehaviorExplorer.astro';
     <header class="explorer-intro">
       <h1>Behavior tests for AI agent workflows.</h1>
       <p class="explorer-summary">
-        Run real workflows. Check the evidence. Catch bugs before they ship.
-
+        Run cross-harness scenarios. Check the evidence. Catch bugs before they ship.
       </p>
+      <div class="explorer-cta">
+        <a class="explorer-cta-primary" href="https://docs.dynobox.xyz/getting-started">Get started</a>
+        <button
+          type="button"
+          class="explorer-cta-command"
+          aria-label="Copy npx dynobox@latest init"
+          data-copy="npx dynobox@latest init"
+        >
+          <span><span class="explorer-cta-prompt" aria-hidden="true">$ </span>npx dynobox@latest init</span>
+          <span class="explorer-cta-icon" aria-hidden="true">
+            <svg class="explorer-cta-copy" viewBox="0 0 16 16">
+              <rect x="5.5" y="5.5" width="8" height="8" />
+              <path d="M10.5 5.5v-3h-8v8h3" />
+            </svg>
+            <svg class="explorer-cta-check" viewBox="0 0 16 16">
+              <path d="M3 8.5l3.25 3.25L13 5" />
+            </svg>
+          </span>
+          <span class="visually-hidden" data-copy-status aria-live="polite"></span>
+        </button>
+      </div>
     </header>
 
     <BehaviorExplorer />
@@ -32,3 +52,25 @@ import BehaviorExplorer from './explorer/BehaviorExplorer.astro';
     </div>
   </footer>
 </main>
+
+<script>
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy]')) {
+    const status = button.querySelector<HTMLElement>('[data-copy-status]');
+    let reset: number | undefined;
+
+    button.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(button.dataset.copy ?? '');
+        button.dataset.copied = '';
+        if (status) status.textContent = 'Copied';
+      } catch {
+        if (status) status.textContent = 'Copy failed';
+      }
+      clearTimeout(reset);
+      reset = window.setTimeout(() => {
+        delete button.dataset.copied;
+        if (status) status.textContent = '';
+      }, 1500);
+    });
+  }
+</script>
