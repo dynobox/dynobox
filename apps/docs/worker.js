@@ -6,15 +6,6 @@ const LINK_HEADER = [
   '</docs-index.json>; rel="service-desc"; type="application/json"',
 ].join(', ');
 
-const MARKDOWN_ROUTES = new Map([
-  ['/', '/README.md'],
-  ['/getting-started/', '/getting-started.md'],
-  ['/how-it-works/', '/how-it-works.md'],
-  ['/config-authoring/', '/config-authoring.md'],
-  ['/cli/', '/cli.md'],
-  ['/ci/', '/ci.md'],
-]);
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -53,14 +44,11 @@ function prefersMarkdown(request) {
     );
 }
 
+// Each doc page `/<slug>/` has a `/<slug>.md` asset; missing ones fall back to HTML.
 function markdownPathFor(pathname) {
-  if (MARKDOWN_ROUTES.has(pathname)) return MARKDOWN_ROUTES.get(pathname);
-
-  if (!pathname.endsWith('/') && MARKDOWN_ROUTES.has(`${pathname}/`)) {
-    return MARKDOWN_ROUTES.get(`${pathname}/`);
-  }
-
-  return undefined;
+  if (pathname === '/') return '/README.md';
+  const slug = /^\/([a-z0-9-]+)\/?$/.exec(pathname)?.[1];
+  return slug === undefined ? undefined : `/${slug}.md`;
 }
 
 async function responseWithMarkdownTokens(response) {
