@@ -8,6 +8,12 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Pi MCP mock errors no longer say an npm installation is required, since Pi's
+  installer also works. A missing MCP configuration loader is reported with the
+  path Dynobox checked.
+
 ---
 
 ## dynobox@0.14.0 — 2026-11-09

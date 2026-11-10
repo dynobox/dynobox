@@ -281,15 +281,15 @@ const fail = (ctx, message, config = false) => {
 export default async function(pi) {
  let source;
  let configurationError;
- let unsupported='Pi MCP mocks require an npm installation of Pi 1.5.0 or newer with its native MCP SDK.';
+ let unsupported='Pi MCP mocks require Pi 1.5.0 or newer with its native MCP SDK.';
  try {
   source = realpathSync(fileURLToPath(import.meta.url));
   const {createMcpExtension,getAgentDir,getPackageDir} = nativeSdk;
-  // Pi does not export loadMcpConfig, so a later 1.x release can move it.
-  // Standalone Bun builds never ship it; an npm installation missing it is a newer layout.
+  // Pi does not export loadMcpConfig, so load it from the installed package files.
+  // A later 1.x release can move it; name the path that was checked.
   const loader = join(getPackageDir(),'dist','extensions','mcp','config.js');
-  if(!process.versions.bun&&!existsSync(loader))
-   unsupported='This Pi release does not include the MCP configuration loader Dynobox uses ('+loader+').';
+  if(!existsSync(loader))
+   unsupported='This Pi installation does not include the MCP configuration loader Dynobox uses ('+loader+').';
   const {loadMcpConfig} = await import(pathToFileURL(loader).href);
   const identity = (name) => name.replace(/-/g, '_');
   const checkStdio = (entries) => {

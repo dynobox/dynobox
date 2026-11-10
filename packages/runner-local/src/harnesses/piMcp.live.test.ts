@@ -936,7 +936,7 @@ describe.skipIf(!executable)(
       while (!existsSync(join(root, 'package.json')) && root !== dirname(root));
       if (!existsSync(join(root, 'package.json')))
         skip(
-          'No package.json above the Pi executable; standalone builds have no MCP loader to relocate.',
+          'No package.json above the Pi executable, so there is no package directory to relocate.',
         );
       const f = await fixture('negative');
       const packageDir = join(f.root, 'relocated-pi-package');
