@@ -8,6 +8,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.14.0 — 2026-11-09
+
 ### `dynobox` (CLI)
 
 - Add MCP mocks: declare `mcpMocks` on a scenario to serve fixed tool
@@ -38,13 +42,13 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   exits.
 - Include required third-party license notices in the CLI package.
 
+## @dynobox/sdk@0.9.0 — 2026-11-09
+
 ### `@dynobox/sdk`
 
 - Add scenario `mcpMocks` and the `mcp.called()` and `mcp.notCalled()`
   assertion helpers, with validation that each assertion references a declared
   mock server and tool.
-
----
 
 ## dynobox@0.13.0 — 2026-08-26
 
