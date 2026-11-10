@@ -72,6 +72,19 @@ When releasing packages that depend on each other (e.g. `@dynobox/sdk` then `dyn
 5. Push once.
 6. Publish in dependency order: SDK first, then CLI.
 
+## Deploying the docs site
+
+The docs site (https://docs.dynobox.xyz) is built from `docs/` and deployed
+manually. After publishing a CLI or SDK release with documentation changes,
+deploy it from the release commit so the docs never describe unpublished
+features:
+
+```bash
+pnpm --filter @dynobox/docs deploy
+```
+
+Then open any page added or changed in the release to confirm it is live.
+
 ## Releasing @dynobox/run-schema
 
 `@dynobox/run-schema` is published to GitHub Packages, not the public npm
