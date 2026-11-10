@@ -80,7 +80,7 @@ deploy it from the release commit so the docs never describe unpublished
 features:
 
 ```bash
-pnpm --filter @dynobox/docs deploy
+pnpm --filter @dynobox/docs run deploy
 ```
 
 Then open any page added or changed in the release to confirm it is live.
