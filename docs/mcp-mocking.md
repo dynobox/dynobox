@@ -5,6 +5,9 @@ Dynobox starts HTTP MCP endpoints and supplies their configuration to the
 harness. You do not need real service URLs, accounts, or MCP credentials for
 the mocked tools. Your harness still needs its normal model authentication.
 
+> **Warning:** Dyno runs with MCP mocks cannot currently use `--save-run`. This
+> functionality is coming soon.
+
 Mocks replace only the servers you declare. Other MCP servers, plugins, and
 connectors from your profile stay real during the run. See
 [Other MCP servers](#other-mcp-servers).
@@ -76,71 +79,45 @@ For a run that cannot reach real services, mock every server the scenario
 could use, or run the harness with a dedicated profile that has no other MCP
 servers. A fresh profile also needs its own model login.
 
-## Availability and reporting
+## Availability
 
-MCP mocks run locally. Each adapter enforces its supported CLI version;
-unsupported versions and configuration conflicts fail explicitly.
+MCP mocks run locally. Each harness enforces its minimum CLI version.
 
-| Harness | Minimum CLI | Other MCP servers |
-| --- | --- | --- |
-| Claude Code | 2.1.263 | Remain available. Declared targets are replaced for this run. |
-| Codex | 0.153.4 | Remain available. Declared HTTP targets are replaced for this run. |
-| OpenCode | 2.2.5 (2.x) | Remain available. Declared targets are replaced for this run. |
-| Pi | 1.5.0 (1.x, npm installation) | Remain available. Declared HTTP targets are replaced for this run. |
-| Antigravity | 1.5.2 | Remain available. Declared HTTP targets are replaced for this run. |
-| Cursor | 2026.10.22 | Remain available. Declared targets are disabled and replaced for this run. |
+| Harness | Minimum CLI |
+| --- | --- |
+| Antigravity | 1.5.2 |
+| Claude Code | 2.1.263 |
+| Codex | 0.153.4 |
+| Cursor | 2026.10.22 |
+| OpenCode | 2.2.5 (2.x) |
+| Pi | 1.5.0 (1.x) |
 
-The fixture schema and call assertions are the same across supported harnesses.
+### Antigravity
 
-Codex replaces HTTP targets; a same-named stdio target fails explicitly. It
-retains normal configuration, model login, plugins, and skills. The agent sees
-each mock under a separate native name with a `_dynobox` suffix, for example
-`mcp__linear_dynobox__get_issue`; assertions, callbacks, and reports keep the
-logical names declared in `mcpMocks`. Skills that refer to exact native tool
-namespaces must account for this suffix.
+Set the model with the scenario's `model`, not `extraArgs`. Jobs that share an
+Antigravity profile run one at a time.
 
-OpenCode retains normal profiles, plugins, model authentication, and skills.
-Managed targets that cannot be replaced, overlapping tool namespaces, and
-declared mocks that fail discovery stop the job before its task starts.
+### Codex
 
-Pi uses its installed native MCP SDK. An npm installation with the SDK and
-configuration loader is required; standalone binaries are unsupported for MCP
-mock runs. Normal model authentication, extensions, skills, and project trust
-remain in effect. Declared HTTP targets are replaced as whole entries, including
-extension registrations, without using their original credentials or endpoints.
-Same-named stdio targets fail explicitly. Native normalized or hashed tool names
-are mapped to the logical names in assertions, callbacks, and reports. All
-declared tools must be active before the task starts.
+The agent sees each mock under a name with a `_dynobox` suffix, for example
+`mcp__linear_dynobox__get_issue`. Assertions and reports still use the names
+declared in `mcpMocks`. Skills that name exact MCP tools must allow for the
+suffix.
 
-Cursor uses its ordinary CLI with a temporary native plugin for mock
-connections and an owned copy of the workspace's native MCP state. It disables
-original target identifiers before discovery and grants only declared mock
-tools. Existing MCP configuration stays in place. Unrelated disabled servers,
-approvals, and selections are preserved; existing MCP auth files remain at
-their normal paths. Normal model login, skills, plugins, and other servers
-remain available. For plugin targets, use the full native server identifier
-shown by Cursor. Same-named global or project stdio targets fail explicitly,
-and workspace permission configuration symlinks are unsupported.
+### Cursor
 
-As with Codex, the agent sees each mock under a separate native name with a
-`_dynobox` suffix, for example `plugin-dynobox-linear_dynobox`; assertions,
-callbacks, and reports keep the logical names declared in `mcpMocks`. Skills
-that refer to exact native server names must account for this suffix.
-Inherited permission rules remain in effect; a deny rule that matches a mock
-tool under its logical or `_dynobox` name fails the job before discovery.
-Native retries remain bounded by the job's timeout when one is configured. A
-job fails when Cursor's task never discovers a declared mock, so a negative
-assertion cannot pass without it.
+As with Codex, the agent sees each mock under a name with a `_dynobox` suffix,
+for example `plugin-dynobox-linear_dynobox`. For plugin servers, use the full
+server identifier that Cursor shows.
 
-Antigravity uses its native ACP session API and a temporary MCP configuration
-view. Normal model login, settings, skills, plugins, and unrelated MCPs remain
-available. Declared HTTP targets are replaced without connecting to their
-original endpoints. A same-named global stdio target fails explicitly. Use the
-scenario's `model` setting for model selection; print-only `extraArgs`, including
-`--settings`, `--model`, and `--effort`, are unavailable during MCP mock runs.
-Dynobox jobs sharing an Antigravity profile take turns because its native MCP
-tool cache is shared. Separate Dynobox processes are not coordinated.
+## Failures and reporting
 
-Mock arguments, response payloads, and temporary connection URLs are omitted
-from normal reports. `--debug` keeps harness output in local debug files.
-MCP mock runs currently cannot use `--save-run`.
+A job fails, instead of letting `mcp.notCalled` pass by accident, when:
+
+- A real stdio server has the same name as a mock. Antigravity, Codex, Cursor,
+  and Pi replace only HTTP servers.
+- A permission rule denies a mock tool.
+- The harness never discovers a declared mock.
+
+Reports omit mock arguments, responses, and connection URLs. `--debug` keeps
+harness output in local debug files.
