@@ -8,6 +8,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.15.0 — 2026-11-10
+
 ### `dynobox` (CLI)
 
 - `--save-run` now works with MCP mocks. Saved runs include each job's mock
@@ -19,8 +23,6 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Pi MCP mock errors no longer say an npm installation is required, since Pi's
   installer also works. A missing MCP configuration loader is reported with the
   path Dynobox checked.
-
----
 
 ## @dynobox/run-schema@0.5.0 — 2026-11-10
 
