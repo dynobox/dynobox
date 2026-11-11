@@ -10,9 +10,21 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `dynobox` (CLI)
 
+- `--save-run` now works with MCP mocks. Saved runs include each job's mock
+  status and calls (server, tool, and result category) but never call inputs
+  or mock responses.
+- Saved runs count "observed events" from the agent's tool calls only. Requests
+  to mocked endpoints and CLI mock runs were also counted, so one action could
+  count twice. They still appear in observed kinds.
 - Pi MCP mock errors no longer say an npm installation is required, since Pi's
   installer also works. A missing MCP configuration loader is reported with the
   path Dynobox checked.
+
+### `@dynobox/run-schema`
+
+- Added run upload schema v5 with an optional per-job MCP mock summary and an
+  MCP `server` field on assertion definitions. Stored job responses include the
+  summary.
 
 ---
 

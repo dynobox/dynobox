@@ -13,17 +13,17 @@ import {
   type RunUploadAssertionDisplayV2,
   type RunUploadAssertionEvidenceV2,
   type RunUploadAssertionV2,
-  type RunUploadDynoV3,
+  type RunUploadDynoV5,
   type RunUploadGitV4,
-  type RunUploadJobV3,
-  type RunUploadV4 as RunUploadPayloadV4,
-  RunUploadV4,
+  type RunUploadJobMcpV5,
+  type RunUploadJobV5,
+  type RunUploadV5 as RunUploadPayloadV5,
+  RunUploadV5,
 } from '@dynobox/run-schema';
-import {
-  type LocalRunnerJob,
-  type LocalRunnerResult,
-  scenarioUsesMcp,
-  type ToolEvent,
+import type {
+  LocalRunnerJob,
+  LocalRunnerResult,
+  ToolEvent,
 } from '@dynobox/runner-local';
 import type {TextMatcher} from '@dynobox/sdk';
 import type {IrAssertion} from '@dynobox/sdk/ir';
@@ -84,7 +84,6 @@ export type UploadRunInput = {
 };
 
 export async function uploadRun(input: UploadRunInput): Promise<void> {
-  assertNoMcpUpload(input);
   const customUploadUrl = resolveCustomUploadUrl(input.env);
   const token =
     customUploadUrl === null
@@ -105,7 +104,7 @@ export async function uploadRun(input: UploadRunInput): Promise<void> {
     inputPath: input.inputPath,
     git,
   });
-  const payloadResult = RunUploadV4.safeParse(payload);
+  const payloadResult = RunUploadV5.safeParse(payload);
   if (!payloadResult.success) {
     input.writeStderr(
       `warning: could not save run; generated payload failed validation (${payloadResult.error.issues[0]?.path.join('.') || 'payload'}).\n`,
@@ -149,8 +148,7 @@ export function buildRunUploadPayload(input: {
   runFailed?: boolean;
   inputPath: string;
   git: RunUploadGitV4 | null;
-}): RunUploadPayloadV4 {
-  assertNoMcpUpload(input);
+}): RunUploadPayloadV5 {
   const allJobs = input.dynos.flatMap((dyno) => dyno.jobs);
   if (input.results.length !== allJobs.length) {
     throw new Error(
@@ -187,26 +185,10 @@ export function buildRunUploadPayload(input: {
   };
 }
 
-function assertNoMcpUpload(
-  input: Pick<UploadRunInput, 'dynos' | 'results'>,
-): void {
-  if (
-    input.results.some((result) => result.mcp !== undefined) ||
-    input.dynos.some((dyno) =>
-      dyno.jobs.some((job) => scenarioUsesMcp(job.scenario)),
-    )
-  ) {
-    // TODO: Enable MCP uploads
-    throw new Error(
-      'MCP uploads are not enabled. Run locally without --save-run.',
-    );
-  }
-}
-
 function buildRunUploadDyno(
   dyno: UploadRunDynoInput,
   results: readonly LocalRunnerResult[],
-): RunUploadDynoV3 {
+): RunUploadDynoV5 {
   const jobs = dyno.jobs.map((job, index) => {
     const result = results[index]!;
     return buildRunUploadJob(job, result);
@@ -294,7 +276,7 @@ function truncateNullable(
 function buildRunUploadJob(
   job: LocalRunnerJob,
   result: LocalRunnerResult,
-): RunUploadJobV3 {
+): RunUploadJobV5 {
   const assertionById = assertionByIdForJobs([job]);
   return {
     jobId: truncate(result.jobId, RUN_UPLOAD_LIMITS.scenarioIdLength),
@@ -343,6 +325,28 @@ function buildRunUploadJob(
       .map((warning) =>
         truncate(warning.message, RUN_UPLOAD_LIMITS.warningLength),
       ),
+    ...(result.mcp === undefined ? {} : {mcp: jobMcpSummary(result.mcp)}),
+  };
+}
+
+function jobMcpSummary(
+  mcp: NonNullable<LocalRunnerResult['mcp']>,
+): RunUploadJobMcpV5 {
+  return {
+    ready: mcp.ready,
+    finalized: mcp.finalized,
+    failures: [...new Set(mcp.failures)]
+      .slice(0, RUN_UPLOAD_LIMITS.mcpFailuresPerJob)
+      .map((failure) => truncate(failure, RUN_UPLOAD_LIMITS.mcpCodeLength)),
+    callCount: mcp.calls.length,
+    calls: mcp.calls
+      .slice(0, RUN_UPLOAD_LIMITS.mcpCallsPerJob)
+      .map(({sequence, server, tool, category}) => ({
+        sequence,
+        server: truncate(server, RUN_UPLOAD_LIMITS.mcpNameLength),
+        tool: truncate(tool, RUN_UPLOAD_LIMITS.mcpNameLength),
+        category: truncate(category, RUN_UPLOAD_LIMITS.mcpCodeLength),
+      })),
   };
 }
 
@@ -435,6 +439,9 @@ function assertionDefinition(
   }
   if (assertion.type === 'http.notCalled') {
     return {...base, endpointId: assertion.endpointId};
+  }
+  if (assertion.type === 'mcp.called' || assertion.type === 'mcp.notCalled') {
+    return {...base, server: assertion.server, tool: assertion.tool};
   }
   if (assertion.type === 'skill.referenced') {
     return {...base, skill: assertion.skill};
@@ -595,10 +602,8 @@ function assertionEvidence(
       ? anyOfMatchedBranch(evidence)
       : undefined;
   return {
-    observedCount:
-      (result.harnessResult?.toolEvents.length ?? 0) +
-      result.httpEvents.length +
-      result.harnessCliMockCallCount,
+    /** Agent tool calls only; mock and HTTP records restate those calls. */
+    observedCount: result.harnessResult?.toolEvents.length ?? 0,
     ...(matches.length === 0 ? {} : {matchedCount: matches.length}),
     ...(matchedBranchIndex === undefined ? {} : {matchedBranchIndex}),
     observedKinds: observedKinds(result),

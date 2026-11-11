@@ -453,7 +453,7 @@ DYNOBOX_UPLOAD_URL='https://uploads.example/run-hook' \
 ```
 
 The CLI sends an HTTP `POST` with `Content-Type: application/json` and a strict
-run upload schema v4 body. Any `2xx` response succeeds. A JSON response containing
+run upload schema v5 body. Any `2xx` response succeeds. A JSON response containing
 a non-empty `url` string is printed as `Saved run: <url>`; other successful
 responses print `Saved run.` The request times out after 10 seconds. All uploads
 are best-effort: a failed upload prints a warning and never changes job status,
@@ -465,7 +465,9 @@ details. Git metadata is collected from the directory where the CLI process was
 started and is `null` when that directory is not a Git worktree. For all jobs,
 assertion records include the authored definition, display-ready
 expectation/observed text, and compact matched evidence when available, including
-requested HTTP endpoint URLs, tool commands, and verification output. This is
+requested HTTP endpoint URLs, tool commands, and verification output. Jobs
+with MCP mocks also include each mock call's server, tool, and result category,
+but never call inputs or mock responses. This is
 richer than the local `--reporter json` output. Failed jobs additionally include
 diagnostics such as command and harness error output. These values are
 length-capped but are **not redacted**, so avoid `--save-run` for runs whose Git

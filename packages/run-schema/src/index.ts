@@ -2,7 +2,8 @@ import {z} from 'zod';
 
 export const RUN_UPLOAD_V2_SCHEMA_VERSION = 2 as const;
 export const RUN_UPLOAD_V3_SCHEMA_VERSION = 3 as const;
-export const RUN_UPLOAD_SCHEMA_VERSION = 4 as const;
+export const RUN_UPLOAD_V4_SCHEMA_VERSION = 4 as const;
+export const RUN_UPLOAD_SCHEMA_VERSION = 5 as const;
 
 export const RUN_UPLOAD_STATUS = ['passed', 'failed'] as const;
 export const RUN_UPLOAD_JOB_STATUS = [
@@ -41,6 +42,10 @@ export const RUN_UPLOAD_LIMITS = {
   dynos: 200,
   jobsPerDyno: 1_000,
   assertionsPerJob: 200,
+  mcpNameLength: 128,
+  mcpCodeLength: 64,
+  mcpFailuresPerJob: 20,
+  mcpCallsPerJob: 200,
 } as const;
 
 const countSchema = z.number().int().nonnegative();
@@ -118,7 +123,9 @@ const assertionCommandDetailSchema = z.union([
 const runUploadAssertionDefinitionNodeV2Schema = z
   .object({
     type: z.string().min(1).max(RUN_UPLOAD_LIMITS.assertionTypeLength),
-    tool: optionalNullableString(RUN_UPLOAD_LIMITS.assertionTypeLength),
+    tool: optionalNullableString(RUN_UPLOAD_LIMITS.mcpNameLength),
+    /** MCP server name for `mcp.called` / `mcp.notCalled` (v5+). */
+    server: optionalNullableString(RUN_UPLOAD_LIMITS.mcpNameLength),
     executable: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
     command: assertionCommandDetailSchema.optional(),
     endpointId: optionalNullableString(RUN_UPLOAD_LIMITS.assertionDetailLength),
@@ -301,14 +308,61 @@ export const runUploadGitV4Schema = z
   .strict();
 
 export const RunUploadV4 = RunUploadV3.extend({
-  schemaVersion: z.literal(RUN_UPLOAD_SCHEMA_VERSION),
+  schemaVersion: z.literal(RUN_UPLOAD_V4_SCHEMA_VERSION),
   git: runUploadGitV4Schema.nullable(),
+}).strict();
+
+const mcpNameString = z.string().min(1).max(RUN_UPLOAD_LIMITS.mcpNameLength);
+const mcpCodeString = z.string().min(1).max(RUN_UPLOAD_LIMITS.mcpCodeLength);
+
+/**
+ * MCP mock lifecycle and call metadata for one job. Call inputs are never
+ * uploaded. `callCount` is the true total; `calls` may be truncated.
+ */
+export const runUploadJobMcpV5Schema = z
+  .object({
+    ready: z.boolean(),
+    finalized: z.boolean(),
+    failures: z.array(mcpCodeString).max(RUN_UPLOAD_LIMITS.mcpFailuresPerJob),
+    callCount: countSchema,
+    calls: z
+      .array(
+        z
+          .object({
+            sequence: countSchema,
+            server: mcpNameString,
+            tool: mcpNameString,
+            category: mcpCodeString,
+          })
+          .strict(),
+      )
+      .max(RUN_UPLOAD_LIMITS.mcpCallsPerJob),
+  })
+  .strict();
+
+export const runUploadJobV5Schema = runUploadJobV3Schema
+  .extend({
+    /** Present only when the job's scenario declared MCP mocks. */
+    mcp: runUploadJobMcpV5Schema.optional(),
+  })
+  .strict();
+
+export const runUploadDynoV5Schema = runUploadDynoV2Schema
+  .extend({
+    jobs: z.array(runUploadJobV5Schema).max(RUN_UPLOAD_LIMITS.jobsPerDyno),
+  })
+  .strict();
+
+export const RunUploadV5 = RunUploadV4.extend({
+  schemaVersion: z.literal(RUN_UPLOAD_SCHEMA_VERSION),
+  dynos: z.array(runUploadDynoV5Schema).max(RUN_UPLOAD_LIMITS.dynos),
 }).strict();
 
 export const RunUpload = z.discriminatedUnion('schemaVersion', [
   RunUploadV2,
   RunUploadV3,
   RunUploadV4,
+  RunUploadV5,
 ]);
 
 export const RunSharingUpdate = z
@@ -341,12 +395,17 @@ export type RunUploadDynoV3 = z.infer<typeof runUploadDynoV3Schema>;
 export type RunUploadV3 = z.infer<typeof RunUploadV3>;
 export type RunUploadGitV4 = z.infer<typeof runUploadGitV4Schema>;
 export type RunUploadV4 = z.infer<typeof RunUploadV4>;
+export type RunUploadJobMcpV5 = z.infer<typeof runUploadJobMcpV5Schema>;
+export type RunUploadJobV5 = z.infer<typeof runUploadJobV5Schema>;
+export type RunUploadDynoV5 = z.infer<typeof runUploadDynoV5Schema>;
+export type RunUploadV5 = z.infer<typeof RunUploadV5>;
 export type RunUpload = z.infer<typeof RunUpload>;
 export type RunUploadSchemaVersion = RunUpload['schemaVersion'];
 
 export type RunUploadCreateInputV2 = z.input<typeof RunUploadV2>;
 export type RunUploadCreateInputV3 = z.input<typeof RunUploadV3>;
 export type RunUploadCreateInputV4 = z.input<typeof RunUploadV4>;
+export type RunUploadCreateInputV5 = z.input<typeof RunUploadV5>;
 
 export type RunSharingUpdate = z.infer<typeof RunSharingUpdate>;
 
@@ -416,6 +475,8 @@ export type RunJobDetail = {
   warningCount: number;
   diagnostics: string[];
   warnings: string[];
+  /** MCP mock summary; null when the job declared no mocks. */
+  mcp: RunUploadJobMcpV5 | null;
   assertions: RunAssertionDetail[];
 };
 

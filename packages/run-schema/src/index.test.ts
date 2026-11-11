@@ -5,13 +5,16 @@ import {
   RUN_UPLOAD_SCHEMA_VERSION,
   RUN_UPLOAD_V2_SCHEMA_VERSION,
   RUN_UPLOAD_V3_SCHEMA_VERSION,
+  RUN_UPLOAD_V4_SCHEMA_VERSION,
   RunUpload,
   type RunUploadCreateInputV2,
   type RunUploadCreateInputV3,
   type RunUploadCreateInputV4,
+  type RunUploadCreateInputV5,
   RunUploadV2,
   RunUploadV3,
   RunUploadV4,
+  RunUploadV5,
 } from './index.js';
 
 function validPayload(): RunUploadCreateInputV2 {
@@ -124,7 +127,7 @@ function validV3Payload(): RunUploadCreateInputV3 {
 function validV4Payload(): RunUploadCreateInputV4 {
   return {
     ...validV3Payload(),
-    schemaVersion: RUN_UPLOAD_SCHEMA_VERSION,
+    schemaVersion: RUN_UPLOAD_V4_SCHEMA_VERSION,
     git: {
       commit: 'abc123',
       branch: 'main',
@@ -132,6 +135,45 @@ function validV4Payload(): RunUploadCreateInputV4 {
       userEmail: 'user@example.com',
       dirty: true,
     },
+  };
+}
+
+function validV5Payload(): RunUploadCreateInputV5 {
+  const payload = validV4Payload();
+  return {
+    ...payload,
+    schemaVersion: RUN_UPLOAD_SCHEMA_VERSION,
+    dynos: payload.dynos.map((dyno) => ({
+      ...dyno,
+      jobs: dyno.jobs.map((job) => ({
+        ...job,
+        assertions: job.assertions.map((assertion) => ({
+          ...assertion,
+          type: 'mcp.called',
+          definition: {type: 'mcp.called', server: 'github', tool: 'get_issue'},
+        })),
+        mcp: {
+          ready: true,
+          finalized: true,
+          failures: ['exhausted'],
+          callCount: 2,
+          calls: [
+            {
+              sequence: 0,
+              server: 'github',
+              tool: 'get_issue',
+              category: 'success',
+            },
+            {
+              sequence: 1,
+              server: 'github',
+              tool: 'get_issue',
+              category: 'exhausted',
+            },
+          ],
+        },
+      })),
+    })),
   };
 }
 
@@ -470,5 +512,67 @@ describe('RunUploadV4', () => {
     expect(RunUpload.parse(validPayload()).schemaVersion).toBe(2);
     expect(RunUpload.parse(validV3Payload()).schemaVersion).toBe(3);
     expect(RunUpload.parse(validV4Payload()).schemaVersion).toBe(4);
+  });
+});
+
+describe('RunUploadV5', () => {
+  it('accepts MCP assertion definitions and job mock summaries', () => {
+    const parsed = RunUploadV5.parse(validV5Payload());
+    const job = parsed.dynos[0]!.jobs[0]!;
+
+    expect(parsed.schemaVersion).toBe(5);
+    expect(job.assertions[0]!.definition).toEqual({
+      type: 'mcp.called',
+      server: 'github',
+      tool: 'get_issue',
+    });
+    expect(job.mcp?.callCount).toBe(2);
+    expect(job.mcp?.calls[1]?.category).toBe('exhausted');
+  });
+
+  it('accepts jobs without MCP mocks', () => {
+    const payload = validV5Payload();
+    delete payload.dynos[0]!.jobs[0]!.mcp;
+
+    expect(RunUploadV5.parse(payload).dynos[0]!.jobs[0]!.mcp).toBeUndefined();
+  });
+
+  it('rejects MCP call inputs', () => {
+    const payload = validV5Payload();
+    payload.dynos[0]!.jobs[0]!.mcp!.calls[0] = {
+      ...payload.dynos[0]!.jobs[0]!.mcp!.calls[0]!,
+      input: {id: 1},
+    } as never;
+
+    expect(RunUploadV5.safeParse(payload).success).toBe(false);
+  });
+
+  it('caps uploaded MCP calls', () => {
+    const payload = validV5Payload();
+    const mcp = payload.dynos[0]!.jobs[0]!.mcp!;
+    mcp.calls = Array.from(
+      {length: RUN_UPLOAD_LIMITS.mcpCallsPerJob + 1},
+      (_, sequence) => ({
+        sequence,
+        server: 'github',
+        tool: 'get_issue',
+        category: 'success',
+      }),
+    );
+
+    expect(RunUploadV5.safeParse(payload).success).toBe(false);
+  });
+
+  it('rejects job MCP summaries on v4 uploads', () => {
+    const payload = validV5Payload();
+
+    expect(RunUploadV4.safeParse({...payload, schemaVersion: 4}).success).toBe(
+      false,
+    );
+  });
+
+  it('parses all supported upload versions', () => {
+    expect(RunUpload.parse(validV4Payload()).schemaVersion).toBe(4);
+    expect(RunUpload.parse(validV5Payload()).schemaVersion).toBe(5);
   });
 });

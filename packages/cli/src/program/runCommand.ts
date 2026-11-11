@@ -226,23 +226,7 @@ export async function runCommandAction(
       'no scenarios matched',
     );
   }
-  const usesMcp = jobs.some((job) => job.scenario.mcpMocks !== undefined);
-  if (usesMcp && commandFlags.saveRun === true) {
-    writeStderr(
-      renderRunConfigErrorMessage(
-        inputLabel,
-        'MCP runs are local-only while upload support is under development. Remove --save-run.',
-      ),
-    );
-    throw new CommanderError(
-      configErrorExitCode,
-      'dynobox.mcpUpload',
-      'MCP uploads are not enabled',
-    );
-  }
-
-  // Reject unsupported uploads before authenticating, while still checking
-  // authentication before setup or harness execution for supported uploads.
+  // Check upload authentication before setup or harness execution.
   if (
     commandFlags.saveRun === true &&
     resolveCustomUploadUrl(options.env) === null

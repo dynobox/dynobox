@@ -3,70 +3,14 @@ import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import {RunUploadV4} from '@dynobox/run-schema';
+import {RunUploadV5} from '@dynobox/run-schema';
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
-import {defineDyno} from '@dynobox/sdk';
+import {defineDyno, mcp} from '@dynobox/sdk';
 import {compile} from '@dynobox/sdk/compiler';
-import {describe, expect, it, vi} from 'vitest';
+import {describe, expect, it} from 'vitest';
 
 import {buildLocalRunnerJobs} from '../jobs.js';
-import {
-  buildRunUploadPayload,
-  collectGitMetadata,
-  uploadRun,
-} from './uploadRun.js';
-
-it('blocks MCP upload entry points before serialization or network access', async () => {
-  const ir = compile(
-    defineDyno({
-      harnesses: ['claude-code'],
-      scenarios: [
-        {
-          name: 'MCP',
-          prompt: 'Read',
-          mcpMocks: {
-            linear: {
-              tools: {
-                get_issue: {
-                  inputSchema: {type: 'object'},
-                  response: {
-                    content: [{type: 'text', text: 'PRIVATE_RESPONSE'}],
-                  },
-                },
-              },
-            },
-          },
-        },
-      ],
-    }),
-  );
-  const input = {
-    dynos: [
-      {
-        dynoPath: 'linear.dyno.mts',
-        name: null,
-        target: 'linear',
-        jobs: buildLocalRunnerJobs(ir),
-      },
-    ],
-    results: [],
-    runFailed: false,
-    inputPath: '.',
-    git: null,
-  };
-  expect(() => buildRunUploadPayload(input)).toThrow(
-    'MCP uploads are not enabled',
-  );
-  const fetchSpy = vi.spyOn(globalThis, 'fetch');
-  try {
-    await expect(uploadRun({...input, writeStderr: () => {}})).rejects.toThrow(
-      'MCP uploads are not enabled',
-    );
-    expect(fetchSpy).not.toHaveBeenCalled();
-  } finally {
-    fetchSpy.mockRestore();
-  }
-});
+import {buildRunUploadPayload, collectGitMetadata} from './uploadRun.js';
 
 describe('collectGitMetadata', () => {
   it('collects revision, branch, identity, and dirty state', async () => {
@@ -189,7 +133,7 @@ describe('buildRunUploadPayload', () => {
       },
     });
 
-    expect(RunUploadV4.safeParse(payload).success).toBe(true);
+    expect(RunUploadV5.safeParse(payload).success).toBe(true);
     expect(payload.totals.durationMs).toBe(2);
     expect(payload.gitHash).toBe('abc123');
     expect(payload.git).toEqual({
@@ -318,7 +262,7 @@ describe('buildRunUploadPayload', () => {
       ],
     } as unknown as LocalRunnerResult;
 
-    const parsed = RunUploadV4.parse(
+    const parsed = RunUploadV5.parse(
       buildRunUploadPayload({
         dynos: [
           {
@@ -445,7 +389,7 @@ describe('buildRunUploadPayload', () => {
       inputPath: '.agents/skills/commit',
       git: null,
     });
-    const parsed = RunUploadV4.parse(payload);
+    const parsed = RunUploadV5.parse(payload);
     const assertion = parsed.dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.definition?.steps).toHaveLength(3);
@@ -563,7 +507,7 @@ describe('buildRunUploadPayload', () => {
       git: null,
     });
     const assertion =
-      RunUploadV4.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV5.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.definition?.steps?.map((step) => step.type)).toEqual([
       'artifact.exists',
@@ -652,7 +596,7 @@ describe('buildRunUploadPayload', () => {
       git: null,
     });
     const assertion =
-      RunUploadV4.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV5.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.evidence).not.toHaveProperty('matchedBranchIndex');
   });
@@ -738,7 +682,7 @@ describe('buildRunUploadPayload', () => {
       git: null,
     });
     const assertion =
-      RunUploadV4.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV5.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.display?.observed).toBe(
       '1. git status 2. git add README.md',
@@ -752,7 +696,7 @@ describe('buildRunUploadPayload', () => {
     expect(assertion.evidence).not.toHaveProperty('matches');
   });
 
-  it('includes only harness-phase CLI mock calls in uploaded observation metrics', () => {
+  it('counts a mocked command once in uploaded observation metrics', () => {
     const job = {
       id: 'scenario.cli-mock.claude-code.iteration.0',
       scenario: {
@@ -791,6 +735,15 @@ describe('buildRunUploadPayload', () => {
       setupResult: {success: true, logs: []},
       httpEvents: [],
       harnessCliMockCallCount: 1,
+      harnessResult: {
+        exitCode: 0,
+        durationMs: 10,
+        transcript: '',
+        finalMessage: 'done',
+        toolEvents: [
+          {kind: 'shell', rawName: 'Bash', command: 'vitest run', input: {}},
+        ],
+      },
       cliMockCalls: [
         {
           executable: 'vitest',
@@ -848,13 +801,100 @@ describe('buildRunUploadPayload', () => {
       git: null,
     });
     const assertion =
-      RunUploadV4.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV5.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.evidence).toMatchObject({
       observedCount: 1,
-      observedKinds: ['cli-mock'],
+      observedKinds: ['shell', 'cli-mock'],
       matchedCount: 1,
       matches: ['vitest run'],
+    });
+  });
+
+  it('counts a request to a mocked endpoint once in uploaded observation metrics', () => {
+    const job = {
+      id: 'scenario.http.claude-code.iteration.0',
+      scenario: {
+        id: 'scenario.http',
+        name: 'HTTP',
+        prompt: 'create a user',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        cliMocks: {},
+        endpoints: [],
+        assertions: [
+          {id: 'assertion.http.shell', type: 'tool.called', tool: 'shell'},
+        ],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const curl = {
+      kind: 'shell' as const,
+      rawName: 'Bash',
+      command: 'curl -X POST https://api.example.test/users',
+      input: {},
+    };
+    const result = {
+      jobId: job.id,
+      scenarioId: job.scenario.id,
+      harness: 'claude-code',
+      harnessVersion: '2.1.4',
+      iteration: 0,
+      status: 'passed',
+      passed: true,
+      workDir: '/tmp/work',
+      setupResult: {success: true, logs: []},
+      harnessResult: {
+        exitCode: 0,
+        durationMs: 10,
+        transcript: '',
+        finalMessage: 'done',
+        toolEvents: [curl],
+      },
+      httpEvents: [
+        {
+          endpointId: 'createUser',
+          method: 'POST',
+          url: 'https://api.example.test/users',
+          host: 'api.example.test',
+          timestamp: '2026-11-10T00:00:00.000Z',
+          status: 201,
+        },
+      ],
+      harnessCliMockCallCount: 0,
+      cliMockCalls: [],
+      artifacts: [],
+      assertionResults: [
+        {
+          assertionId: 'assertion.http.shell',
+          type: 'tool.called',
+          passed: true,
+          message: 'Observed tool "shell".',
+          evidence: [curl],
+        },
+      ],
+      verificationFailed: false,
+      diagnostics: [],
+      warnings: [],
+      timing: {setupMs: 0, harnessMs: 10, assertionsMs: 1, totalMs: 11},
+    } satisfies LocalRunnerResult;
+
+    const payload = buildRunUploadPayload({
+      dynos: [
+        {dynoPath: 'http.dyno.ts', name: null, target: 'http', jobs: [job]},
+      ],
+      results: [result],
+      inputPath: '.',
+      git: null,
+    });
+    const assertion =
+      RunUploadV5.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+
+    expect(assertion.evidence).toMatchObject({
+      observedCount: 1,
+      observedKinds: ['shell', 'http:POST'],
     });
   });
 
@@ -935,12 +975,129 @@ describe('buildRunUploadPayload', () => {
       git: null,
     });
     const assertion =
-      RunUploadV4.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV5.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.definition).toMatchObject({
       stdout: {equals: ''},
       stderr: {equals: ''},
     });
+  });
+
+  it('uploads MCP assertion definitions and the job mock summary without inputs', () => {
+    const ir = compile(
+      defineDyno({
+        harnesses: ['claude-code'],
+        scenarios: [
+          {
+            name: 'MCP',
+            prompt: 'Read the issue',
+            mcpMocks: {
+              linear: {
+                tools: {
+                  get_issue: {
+                    inputSchema: {type: 'object'},
+                    response: {
+                      content: [{type: 'text', text: 'PRIVATE_RESPONSE'}],
+                    },
+                  },
+                },
+              },
+            },
+            assertions: [
+              mcp.called('linear', 'get_issue', {
+                input: {id: 'PRIVATE_INPUT'},
+              }),
+            ],
+          },
+        ],
+      }),
+    );
+    const [job] = buildLocalRunnerJobs(ir);
+    const assertion = job!.scenario.assertions[0]!;
+    const calls = Array.from({length: 201}, (_, sequence) => ({
+      sequence,
+      server: 'linear',
+      tool: 'get_issue',
+      category: 'success' as const,
+    }));
+    const result = {
+      jobId: job!.id,
+      scenarioId: job!.scenario.id,
+      harness: 'claude-code',
+      harnessVersion: '2.1.4',
+      iteration: 0,
+      status: 'assertion_failed',
+      passed: false,
+      workDir: '/tmp/work',
+      setupResult: {success: true, logs: []},
+      httpEvents: [],
+      harnessCliMockCallCount: 0,
+      cliMockCalls: [],
+      artifacts: [],
+      mcp: {
+        ready: true,
+        finalized: true,
+        failures: ['exhausted', 'exhausted'],
+        calls,
+      },
+      assertionResults: [
+        {
+          assertionId: assertion.id,
+          type: 'mcp.called',
+          passed: false,
+          message:
+            'linear.get_issue: 0 matching call(s); expected at least one.',
+          evidence: {
+            kind: 'mcp',
+            server: 'linear',
+            tool: 'get_issue',
+            hasInput: true,
+            callCount: 201,
+            matchCount: 0,
+          },
+        },
+      ],
+      verificationFailed: false,
+      diagnostics: [],
+      warnings: [],
+      timing: {setupMs: 0, harnessMs: 10, assertionsMs: 1, totalMs: 11},
+    } satisfies LocalRunnerResult;
+
+    const payload = buildRunUploadPayload({
+      dynos: [
+        {
+          dynoPath: 'linear.dyno.mts',
+          name: null,
+          target: 'linear',
+          jobs: [job!],
+        },
+      ],
+      results: [result],
+      inputPath: '.',
+      git: null,
+    });
+    const uploadedJob = RunUploadV5.parse(payload).dynos[0]!.jobs[0]!;
+
+    expect(payload.schemaVersion).toBe(5);
+    expect(uploadedJob.assertions[0]).toMatchObject({
+      type: 'mcp.called',
+      definition: {type: 'mcp.called', server: 'linear', tool: 'get_issue'},
+      evidence: {observedCount: 0, observedKinds: []},
+    });
+    expect(uploadedJob.mcp).toMatchObject({
+      ready: true,
+      finalized: true,
+      failures: ['exhausted'],
+      callCount: 201,
+    });
+    expect(uploadedJob.mcp!.calls).toHaveLength(200);
+    expect(uploadedJob.mcp!.calls[0]).toEqual({
+      sequence: 0,
+      server: 'linear',
+      tool: 'get_issue',
+      category: 'success',
+    });
+    expect(JSON.stringify(payload)).not.toMatch(/PRIVATE_(INPUT|RESPONSE)/);
   });
 
   it('preserves runner diagnostics, capped and truncated, for failing runs', () => {
@@ -999,7 +1156,7 @@ describe('buildRunUploadPayload', () => {
       git: null,
     });
 
-    expect(RunUploadV4.safeParse(payload).success).toBe(true);
+    expect(RunUploadV5.safeParse(payload).success).toBe(true);
     const diagnostics = payload.dynos[0]!.jobs[0]!.diagnostics;
     expect(diagnostics[0]).toBe(
       'setup command `pnpm install` exited with code 1',

@@ -6,11 +6,11 @@ import {ClaudeCodeHarness, type Harness} from '@dynobox/runner-local';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {executeCli} from './execute.js';
-import {configErrorExitCode} from './exitCodes.js';
 
 const roots: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   await Promise.all(
     roots.splice(0).map((root) => rm(root, {recursive: true, force: true})),
   );
@@ -339,26 +339,48 @@ describe('MCP CLI execution', () => {
     ).toBe(false);
   });
 
-  it.each(['custom-upload', 'upload-no-token', 'upload-with-token'] as const)(
-    'rejects %s before setup or invocation',
-    async (mode) => {
-      const {path, root, options, log} = await fixture();
-      options.env.HOME = join(root, 'missing-home');
-      options.env.DYNOBOX_TOKEN =
-        mode === 'upload-with-token' ? 'test-token' : '';
-      options.env.DYNOBOX_UPLOAD_URL = '';
-      if (mode === 'custom-upload')
-        options.env.DYNOBOX_UPLOAD_URL = 'http://127.0.0.1:9/upload';
-      const args = ['--save-run'];
-      const fetchSpy = vi.spyOn(globalThis, 'fetch');
-      const result = await executeCli(['run', path, ...args], options);
-      expect(result.exitCode).toBe(configErrorExitCode);
-      expect(result.stderr).toContain('local-only');
-      await expect(readFile(join(root, 'setup-ran'))).rejects.toThrow();
-      await expect(readFile(log)).rejects.toThrow();
-      expect(fetchSpy).not.toHaveBeenCalled();
-    },
-  );
+  it('uploads MCP runs with the job mock summary and no call data', async () => {
+    const {path, options} = await fixture();
+    options.env.DYNOBOX_UPLOAD_URL = 'https://uploads.example/run-hook';
+    const fetchMock = vi.fn(async () =>
+      Response.json({url: 'https://uploads.example/runs/1'}),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await executeCli(['run', path, '--save-run'], options);
+    const [, request] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const body = String(request.body);
+    const job = JSON.parse(body).dynos[0].jobs[0];
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toContain(
+      'Saved run: https://uploads.example/runs/1',
+    );
+    expect(JSON.parse(body).schemaVersion).toBe(5);
+    expect(job.mcp).toEqual({
+      ready: true,
+      finalized: true,
+      failures: [],
+      callCount: 1,
+      calls: [
+        {
+          sequence: expect.any(Number),
+          server: 'linear',
+          tool: 'get_issue',
+          category: 'success',
+        },
+      ],
+    });
+    expect(job.assertions[0].definition).toEqual({
+      type: 'mcp.called',
+      server: 'linear',
+      tool: 'get_issue',
+    });
+    expect(body).not.toMatch(/INPUT_SENTINEL|RESPONSE_SENTINEL/);
+  });
 });
 
 const CHILD = `#!${process.execPath}

@@ -5,9 +5,6 @@ Dynobox starts HTTP MCP endpoints and supplies their configuration to the
 harness. You do not need real service URLs, accounts, or MCP credentials for
 the mocked tools. Your harness still needs its normal model authentication.
 
-> **Warning:** Dyno runs with MCP mocks cannot currently use `--save-run`. This
-> functionality is coming soon.
-
 Mocks replace only the servers you declare. Other MCP servers, plugins, and
 connectors from your profile stay real during the run. See
 [Other MCP servers](#other-mcp-servers).

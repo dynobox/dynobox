@@ -310,7 +310,7 @@ describe('dynobox run — upload', () => {
       }),
     );
     expect(payload).toMatchObject({
-      schemaVersion: 4,
+      schemaVersion: 5,
       git: expect.objectContaining({
         commit: expect.any(String),
         dirty: expect.any(Boolean),
@@ -369,7 +369,7 @@ describe('dynobox run — upload', () => {
         method: 'POST',
       }),
     );
-    expect(payload).toMatchObject({schemaVersion: 4});
+    expect(payload).toMatchObject({schemaVersion: 5});
   });
 
   it('removes run signal handlers before uploading', async () => {
