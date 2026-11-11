@@ -20,13 +20,15 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   installer also works. A missing MCP configuration loader is reported with the
   path Dynobox checked.
 
+---
+
+## @dynobox/run-schema@0.5.0 — 2026-11-10
+
 ### `@dynobox/run-schema`
 
 - Added run upload schema v5 with an optional per-job MCP mock summary and an
   MCP `server` field on assertion definitions. Stored job responses include the
   summary.
-
----
 
 ## dynobox@0.14.0 — 2026-11-09
 
