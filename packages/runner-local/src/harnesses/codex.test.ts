@@ -439,6 +439,44 @@ describe('parseCodexJson', () => {
     );
 
     expect(parsed.finalMessage).toBe('Final result.');
+    expect(parsed.errorMessage).toBeUndefined();
+  });
+
+  it('extracts the API error of a failed turn, not item warnings', () => {
+    const apiError = JSON.stringify({
+      type: 'error',
+      status: 400,
+      error: {
+        type: 'invalid_request_error',
+        message: "The 'gpt-x' model is not supported.",
+        code: 'model_not_found',
+      },
+    });
+    const parsed = parseCodexJson(
+      jsonl(
+        {type: 'thread.started', thread_id: 't1'},
+        {
+          type: 'item.completed',
+          item: {type: 'error', message: 'Model metadata not found.'},
+        },
+        {type: 'error', message: 'Reconnecting... 1/5'},
+        {type: 'error', message: apiError},
+        {type: 'turn.failed', error: {message: apiError}},
+      ),
+    );
+
+    expect(parsed.errorMessage).toBe("The 'gpt-x' model is not supported.");
+  });
+
+  it('uses the last top-level error when no turn failed', () => {
+    const parsed = parseCodexJson(
+      jsonl(
+        {type: 'error', message: 'Reconnecting... 1/5'},
+        {type: 'error', message: 'stream disconnected'},
+      ),
+    );
+
+    expect(parsed.errorMessage).toBe('stream disconnected');
   });
 
   it('parses a single JSONL line for incremental consumers', () => {

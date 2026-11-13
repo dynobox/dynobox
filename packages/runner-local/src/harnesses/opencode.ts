@@ -99,7 +99,6 @@ export class OpenCodeHarness implements Harness {
     const output = await runStreamingHarness({
       executable: this.executable,
       args: buildOpenCodeArgs(
-        workDir,
         this.extraArgs,
         input.model,
         input.permissionMode,
@@ -138,18 +137,21 @@ export class OpenCodeHarness implements Harness {
   }
 }
 
+/**
+ * OpenCode v2 removed `run --dir`; the process cwd (the job workDir) selects
+ * the project. `--standalone` gives each job a private server, so jobs do not
+ * share the user's background service, its config, or its session list.
+ */
 export function buildOpenCodeArgs(
-  workDir: string,
   extraArgs: readonly string[] = [],
   model?: string,
   permissionMode?: PermissionMode,
 ): string[] {
   return [
     'run',
+    '--standalone',
     '--format',
     'json',
-    '--dir',
-    workDir,
     ...(permissionMode === 'dangerous' ? ['--auto'] : []),
     ...(model === undefined ? [] : ['--model', model]),
     ...extraArgs,
@@ -370,20 +372,36 @@ async function resolveOpenCodeMcpPrefixes(
   try {
     const result = await execa(executable, ['debug', 'config'], {
       cwd: workDir,
-      env: {...process.env, ...env},
+      env: {...process.env, ...env, PWD: workDir},
       reject: false,
       stdin: 'ignore',
       timeout: Math.min(timeoutMs ?? 10_000, 10_000),
     });
     if (result.exitCode !== 0) return [];
-    const config: unknown = JSON.parse(result.stdout);
-    if (!isRecord(config) || !isRecord(config.mcp)) return [];
-    return Object.entries(config.mcp)
-      .filter(([, value]) => !isRecord(value) || value.enabled !== false)
-      .map(([name]) => `${sanitizeOpenCodeToolName(name)}_`);
+    return mcpPrefixesFromConfig(JSON.parse(result.stdout));
   } catch {
     return [];
   }
+}
+
+/**
+ * OpenCode v1 prints one merged config object; v2 prints a list of config
+ * sources (`[{type, path, info}]`) in precedence order, so later sources
+ * override earlier ones for the same MCP server.
+ */
+export function mcpPrefixesFromConfig(config: unknown): string[] {
+  const sources = Array.isArray(config)
+    ? config.map((source) => (isRecord(source) ? source.info : undefined))
+    : [config];
+  const servers: Record<string, unknown> = {};
+  for (const source of sources) {
+    if (isRecord(source) && isRecord(source.mcp)) {
+      Object.assign(servers, source.mcp);
+    }
+  }
+  return Object.entries(servers)
+    .filter(([, value]) => !isRecord(value) || value.enabled !== false)
+    .map(([name]) => `${sanitizeOpenCodeToolName(name)}_`);
 }
 
 function sanitizeOpenCodeToolName(value: string): string {

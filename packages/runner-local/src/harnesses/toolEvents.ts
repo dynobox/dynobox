@@ -36,6 +36,7 @@ export function normalizeToolKind(rawName: string): ToolKind {
     case 'edit':
     case 'multi_edit':
     case 'apply_patch':
+    case 'patch':
     case 'replace_file_content':
     case 'multi_replace_file_content':
       return 'edit_file';

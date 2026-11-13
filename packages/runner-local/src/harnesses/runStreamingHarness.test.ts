@@ -1,3 +1,7 @@
+import {mkdtempSync, realpathSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+
 import {describe, expect, it, vi} from 'vitest';
 
 import {
@@ -90,6 +94,21 @@ describe('ToolEventLineStream', () => {
 });
 
 describe('runStreamingHarness', () => {
+  it('sets PWD to the job workDir, not the directory dynobox started in', async () => {
+    const workDir = realpathSync(mkdtempSync(join(tmpdir(), 'dynobox-pwd-')));
+    try {
+      const output = await runStreamingHarness({
+        executable: process.execPath,
+        args: ['-e', 'process.stdout.write(process.env.PWD ?? "")'],
+        input: {prompt: '', workDir, env: {PWD: '/not/the/job'}},
+        parseLine: () => ({toolEvents: []}),
+      });
+      expect(output.stdout).toBe(workDir);
+    } finally {
+      rmSync(workDir, {recursive: true, force: true});
+    }
+  });
+
   it.each([false, true])(
     'stops harness children on cancellation (ignore SIGTERM: %s)',
     async (ignoreTerm) => {

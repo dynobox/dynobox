@@ -46,7 +46,7 @@ capture evidence, assert on tools, commands, files, and answers.
 ## Requirements
 
 Node.js 22+ and at least one supported harness installed, authenticated, and
-available on `PATH`: Claude Code (`claude`), Codex (`codex`), OpenCode
+available on `PATH`: Claude Code (`claude`), Codex (`codex`), OpenCode 2.x
 (`opencode`), Pi (`pi`), Cursor CLI (`cursor-agent`), or Google Antigravity CLI
 1.1.14+ (`agy`).
 
