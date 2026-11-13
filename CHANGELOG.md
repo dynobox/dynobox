@@ -29,6 +29,18 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   classified as MCP events again. OpenCode 2 lists each config source
   separately in `opencode debug config`.
 
+### `@dynobox/run-schema`
+
+- `TargetRunRef` has `jobCount` and `passedJobCount`, so a run history can
+  show partly failed runs.
+- `TargetSummary` status and counts are now documented as the newest result
+  of each dyno, scenario, and harness in the recent runs.
+- `TargetSummary` has `errorJobCount`: the current jobs that stopped with a
+  harness or setup error before their checks ran.
+- `DynoRunRef` has `gitBranch`, `gitDirty`, `harnesses`, `jobCount`, and
+  `passedJobCount`, so a target run log can show the branch and scope of
+  each run.
+
 ---
 
 ## dynobox@0.15.0 — 2026-11-10
