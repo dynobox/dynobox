@@ -35,6 +35,9 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   user names, tokens, ports, and `.git` are removed. Local remotes send no
   repository. The dashboard uses it in the run title and for GitHub commit
   and branch links. The API must accept v6 before you release this.
+- `skill.referenced` now passes for OpenCode 2. Its `skill` tool sends the
+  skill as `id`, not `name`, so every OpenCode 2 job failed this check even
+  when the agent loaded the skill.
 
 ---
 
