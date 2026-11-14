@@ -3,14 +3,18 @@ import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import {RunUploadV5} from '@dynobox/run-schema';
+import {RunUploadV6} from '@dynobox/run-schema';
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 import {defineDyno, mcp} from '@dynobox/sdk';
 import {compile} from '@dynobox/sdk/compiler';
 import {describe, expect, it} from 'vitest';
 
 import {buildLocalRunnerJobs} from '../jobs.js';
-import {buildRunUploadPayload, collectGitMetadata} from './uploadRun.js';
+import {
+  buildRunUploadPayload,
+  collectGitMetadata,
+  normalizeGitRemote,
+} from './uploadRun.js';
 
 describe('collectGitMetadata', () => {
   it('collects revision, branch, identity, and dirty state', async () => {
@@ -39,7 +43,14 @@ describe('collectGitMetadata', () => {
         userName: 'Upload User',
         userEmail: 'upload@example.com',
         dirty: false,
+        repository: null,
       });
+
+      execFileSync(
+        'git',
+        ['remote', 'add', 'origin', 'https://x:secret@github.com/acme/app.git'],
+        {cwd},
+      );
 
       writeFileSync(join(cwd, 'dyno.txt'), 'changed\n');
 
@@ -49,10 +60,44 @@ describe('collectGitMetadata', () => {
         userName: 'Upload User',
         userEmail: 'upload@example.com',
         dirty: true,
+        repository: 'github.com/acme/app',
       });
     } finally {
       rmSync(cwd, {recursive: true, force: true});
     }
+  });
+});
+
+describe('normalizeGitRemote', () => {
+  it.each([
+    ['https://github.com/dynobox/examples.git', 'github.com/dynobox/examples'],
+    [
+      'https://user:token@github.com/dynobox/examples',
+      'github.com/dynobox/examples',
+    ],
+    [
+      'ssh://git@GitHub.com:22/dynobox/examples.git/',
+      'github.com/dynobox/examples',
+    ],
+    ['git@github.com:dynobox/examples.git', 'github.com/dynobox/examples'],
+    [
+      'gitlab.example.com:group/sub/app.git',
+      'gitlab.example.com/group/sub/app',
+    ],
+  ])('cleans %s', (remote, expected) => {
+    expect(normalizeGitRemote(remote)).toBe(expected);
+  });
+
+  it.each([
+    '/srv/git/app.git',
+    '../app',
+    'file:///srv/git/app.git',
+    'C:/repos/app',
+    'https://github.com/app',
+    'https://github.com/a%ZZ/app',
+    'not a url',
+  ])('gives null for %s', (remote) => {
+    expect(normalizeGitRemote(remote)).toBeNull();
   });
 });
 
@@ -133,7 +178,7 @@ describe('buildRunUploadPayload', () => {
       },
     });
 
-    expect(RunUploadV5.safeParse(payload).success).toBe(true);
+    expect(RunUploadV6.safeParse(payload).success).toBe(true);
     expect(payload.totals.durationMs).toBe(2);
     expect(payload.gitHash).toBe('abc123');
     expect(payload.git).toEqual({
@@ -262,7 +307,7 @@ describe('buildRunUploadPayload', () => {
       ],
     } as unknown as LocalRunnerResult;
 
-    const parsed = RunUploadV5.parse(
+    const parsed = RunUploadV6.parse(
       buildRunUploadPayload({
         dynos: [
           {
@@ -389,7 +434,7 @@ describe('buildRunUploadPayload', () => {
       inputPath: '.agents/skills/commit',
       git: null,
     });
-    const parsed = RunUploadV5.parse(payload);
+    const parsed = RunUploadV6.parse(payload);
     const assertion = parsed.dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.definition?.steps).toHaveLength(3);
@@ -507,7 +552,7 @@ describe('buildRunUploadPayload', () => {
       git: null,
     });
     const assertion =
-      RunUploadV5.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV6.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.definition?.steps?.map((step) => step.type)).toEqual([
       'artifact.exists',
@@ -596,7 +641,7 @@ describe('buildRunUploadPayload', () => {
       git: null,
     });
     const assertion =
-      RunUploadV5.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV6.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.evidence).not.toHaveProperty('matchedBranchIndex');
   });
@@ -682,7 +727,7 @@ describe('buildRunUploadPayload', () => {
       git: null,
     });
     const assertion =
-      RunUploadV5.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV6.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.display?.observed).toBe(
       '1. git status 2. git add README.md',
@@ -801,7 +846,7 @@ describe('buildRunUploadPayload', () => {
       git: null,
     });
     const assertion =
-      RunUploadV5.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV6.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.evidence).toMatchObject({
       observedCount: 1,
@@ -890,7 +935,7 @@ describe('buildRunUploadPayload', () => {
       git: null,
     });
     const assertion =
-      RunUploadV5.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV6.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.evidence).toMatchObject({
       observedCount: 1,
@@ -975,7 +1020,7 @@ describe('buildRunUploadPayload', () => {
       git: null,
     });
     const assertion =
-      RunUploadV5.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
+      RunUploadV6.parse(payload).dynos[0]!.jobs[0]!.assertions[0]!;
 
     expect(assertion.definition).toMatchObject({
       stdout: {equals: ''},
@@ -1076,9 +1121,9 @@ describe('buildRunUploadPayload', () => {
       inputPath: '.',
       git: null,
     });
-    const uploadedJob = RunUploadV5.parse(payload).dynos[0]!.jobs[0]!;
+    const uploadedJob = RunUploadV6.parse(payload).dynos[0]!.jobs[0]!;
 
-    expect(payload.schemaVersion).toBe(5);
+    expect(payload.schemaVersion).toBe(6);
     expect(uploadedJob.assertions[0]).toMatchObject({
       type: 'mcp.called',
       definition: {type: 'mcp.called', server: 'linear', tool: 'get_issue'},
@@ -1156,7 +1201,7 @@ describe('buildRunUploadPayload', () => {
       git: null,
     });
 
-    expect(RunUploadV5.safeParse(payload).success).toBe(true);
+    expect(RunUploadV6.safeParse(payload).success).toBe(true);
     const diagnostics = payload.dynos[0]!.jobs[0]!.diagnostics;
     expect(diagnostics[0]).toBe(
       'setup command `pnpm install` exited with code 1',
