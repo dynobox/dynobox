@@ -381,6 +381,31 @@ describe('evaluateAssertions', () => {
     });
   });
 
+  it('passes skill.referenced for OpenCode 2 skill tool input', () => {
+    const event: ToolEvent = {
+      kind: 'unknown',
+      rawName: 'skill',
+      input: {id: 'commit'},
+      status: 'success',
+    };
+
+    const result = evaluateOne(
+      {id: 'assertion.test.0', type: 'skill.referenced', skill: 'commit'},
+      [event],
+    );
+
+    expect(result).toMatchObject({passed: true, evidence: event});
+  });
+
+  it('ignores an id on tools other than skill', () => {
+    const result = evaluateOne(
+      {id: 'assertion.test.0', type: 'skill.referenced', skill: 'commit'},
+      [{kind: 'unknown', rawName: 'todo', input: {id: 'commit'}}],
+    );
+
+    expect(result.passed).toBe(false);
+  });
+
   it('fails skill.referenced when no matching skill file reference is observed', () => {
     const result = evaluateOne(
       {id: 'assertion.test.0', type: 'skill.referenced', skill: 'commit'},

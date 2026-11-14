@@ -29,6 +29,9 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   classified as MCP events again. OpenCode 2 lists each config source
   separately in `opencode debug config`, with the servers under
   `mcp.servers`. Servers with `disabled: true` are ignored.
+- `skill.referenced` now passes for OpenCode 2. Its `skill` tool sends the
+  skill as `id`, not `name`, so every OpenCode 2 job failed this check even
+  when the agent loaded the skill.
 
 ---
 
