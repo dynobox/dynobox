@@ -30,6 +30,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   separately in `opencode debug config`, with the servers under
   `mcp.servers`. Servers with `disabled: true` are ignored.
 
+---
+
+## @dynobox/run-schema@0.6.0 — 2026-11-14
+
 ### `@dynobox/run-schema`
 
 - `TargetRunRef` has `jobCount`, `passedJobCount`, and `errorJobCount`, so a
@@ -46,8 +50,6 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   now 6, and `RUN_UPLOAD_V5_SCHEMA_VERSION` is 5.
 - `RunSummary.git` is now `RunGit`, which adds `repository: string | null`.
   The value is null for runs uploaded before v6.
-
----
 
 ## dynobox@0.15.0 — 2026-11-10
 
