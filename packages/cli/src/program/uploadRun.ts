@@ -7,18 +7,19 @@ import {
 } from '@dynobox/evaluators';
 import {
   RUN_UPLOAD_LIMITS,
-  RUN_UPLOAD_V5_SCHEMA_VERSION,
+  RUN_UPLOAD_SCHEMA_VERSION,
   type RunUploadAssertionDefinitionV2,
   type RunUploadAssertionDisplayChildV2,
   type RunUploadAssertionDisplayV2,
   type RunUploadAssertionEvidenceV2,
   type RunUploadAssertionV2,
   type RunUploadDynoV5,
-  type RunUploadGitV4,
+  runUploadGitRepositorySchema,
+  type RunUploadGitV6,
   type RunUploadJobMcpV5,
   type RunUploadJobV5,
-  type RunUploadV5 as RunUploadPayloadV5,
-  RunUploadV5,
+  type RunUploadV6 as RunUploadPayloadV6,
+  RunUploadV6,
 } from '@dynobox/run-schema';
 import type {
   LocalRunnerJob,
@@ -104,7 +105,7 @@ export async function uploadRun(input: UploadRunInput): Promise<void> {
     inputPath: input.inputPath,
     git,
   });
-  const payloadResult = RunUploadV5.safeParse(payload);
+  const payloadResult = RunUploadV6.safeParse(payload);
   if (!payloadResult.success) {
     input.writeStderr(
       `warning: could not save run; generated payload failed validation (${payloadResult.error.issues[0]?.path.join('.') || 'payload'}).\n`,
@@ -147,8 +148,8 @@ export function buildRunUploadPayload(input: {
   results: readonly LocalRunnerResult[];
   runFailed?: boolean;
   inputPath: string;
-  git: RunUploadGitV4 | null;
-}): RunUploadPayloadV5 {
+  git: RunUploadGitV6 | null;
+}): RunUploadPayloadV6 {
   const allJobs = input.dynos.flatMap((dyno) => dyno.jobs);
   if (input.results.length !== allJobs.length) {
     throw new Error(
@@ -164,7 +165,7 @@ export function buildRunUploadPayload(input: {
 
   const failed = dynos.reduce((count, dyno) => count + dyno.totals.failed, 0);
   return {
-    schemaVersion: RUN_UPLOAD_V5_SCHEMA_VERSION,
+    schemaVersion: RUN_UPLOAD_SCHEMA_VERSION,
     createdAt: new Date().toISOString(),
     cliVersion: readPackageVersion(),
     gitHash: input.git?.commit ?? null,
@@ -225,20 +226,22 @@ export function resolveCustomUploadUrl(
 
 export async function collectGitMetadata(
   cwd: string = process.cwd(),
-): Promise<RunUploadGitV4 | null> {
+): Promise<RunUploadGitV6 | null> {
   if (
     (await readGitValue(['rev-parse', '--is-inside-work-tree'], cwd)) !== 'true'
   ) {
     return null;
   }
 
-  const [commit, branch, userName, userEmail, status] = await Promise.all([
-    readGitValue(['rev-parse', 'HEAD'], cwd),
-    readGitValue(['branch', '--show-current'], cwd),
-    readGitValue(['config', '--get', 'user.name'], cwd),
-    readGitValue(['config', '--get', 'user.email'], cwd),
-    readGitValue(['status', '--porcelain'], cwd, true),
-  ]);
+  const [commit, branch, userName, userEmail, status, remote] =
+    await Promise.all([
+      readGitValue(['rev-parse', 'HEAD'], cwd),
+      readGitValue(['branch', '--show-current'], cwd),
+      readGitValue(['config', '--get', 'user.name'], cwd),
+      readGitValue(['config', '--get', 'user.email'], cwd),
+      readGitValue(['status', '--porcelain'], cwd, true),
+      readGitValue(['remote', 'get-url', 'origin'], cwd),
+    ]);
 
   return {
     commit: truncateNullable(commit, RUN_UPLOAD_LIMITS.gitHashLength),
@@ -249,7 +252,47 @@ export async function collectGitMetadata(
       RUN_UPLOAD_LIMITS.gitUserEmailLength,
     ),
     dirty: status === null ? null : status.length > 0,
+    repository: remote === null ? null : normalizeGitRemote(remote),
   };
+}
+
+/**
+ * The `origin` remote as `host/owner/repo`, for example
+ * `github.com/dynobox/dynobox`. The result never has the scheme, user name,
+ * password or token, port, or `.git` suffix of the remote URL. Local paths
+ * and URLs that do not parse give null.
+ */
+export function normalizeGitRemote(remote: string): string | null {
+  const value = remote.trim();
+  let host: string;
+  let path: string;
+  if (value.includes('://')) {
+    try {
+      const url = new URL(value);
+      if (url.protocol === 'file:') return null;
+      host = url.hostname;
+      path = decodeURIComponent(url.pathname);
+    } catch {
+      return null;
+    }
+  } else {
+    // scp-like syntax: `[user@]host:owner/repo.git`. A one-letter host is a
+    // Windows drive, so a local path.
+    const match = /^(?:[^@/]+@)?([^:/]{2,}):(.+)$/.exec(value);
+    if (match === null) return null;
+    host = match[1]!;
+    path = match[2]!;
+  }
+
+  const segments = path
+    .replace(/\.git\/?$/, '')
+    .split('/')
+    .filter((segment) => segment.length > 0);
+  const repository = [host.toLowerCase(), ...segments].join('/');
+  return segments.length >= 2 &&
+    runUploadGitRepositorySchema.safeParse(repository).success
+    ? repository
+    : null;
 }
 
 async function readGitValue(

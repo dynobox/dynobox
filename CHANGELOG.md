@@ -29,6 +29,12 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   classified as MCP events again. OpenCode 2 lists each config source
   separately in `opencode debug config`, with the servers under
   `mcp.servers`. Servers with `disabled: true` are ignored.
+- `--save-run` now sends upload schema v6 with the repository of the
+  `origin` remote as `host/owner/repo`, for example
+  `github.com/dynobox/dynobox`. The CLI never sends the remote URL itself, so
+  user names, tokens, ports, and `.git` are removed. Local remotes send no
+  repository. The dashboard uses it in the run title and for GitHub commit
+  and branch links. The API must accept v6 before you release this.
 
 ---
 
