@@ -41,8 +41,10 @@ function toolEventInvokesSkill(event: ToolEvent, skillName: string): boolean {
   if (event.rawName.toLowerCase() !== 'skill') return false;
   if (typeof event.input !== 'object' || event.input === null) return false;
 
-  const input = event.input as {name?: unknown; skill?: unknown};
-  const invokedSkill = input.skill ?? input.name;
+  // Claude Code sends `skill`, OpenCode 1 sends `name`, and OpenCode 2
+  // sends `id`.
+  const input = event.input as {id?: unknown; name?: unknown; skill?: unknown};
+  const invokedSkill = input.skill ?? input.name ?? input.id;
   return (
     typeof invokedSkill === 'string' &&
     invokedSkill.toLowerCase() === skillName.toLowerCase()
