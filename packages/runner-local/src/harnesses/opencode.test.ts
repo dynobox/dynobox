@@ -12,6 +12,7 @@ import {afterEach, describe, expect, it} from 'vitest';
 
 import {
   buildOpenCodeArgs,
+  mcpPrefixesFromConfig,
   OpenCodeHarness,
   parseOpenCodeJson,
   parseOpenCodeJsonLine,
@@ -134,30 +135,67 @@ printf 'run\\n' > '${runLog}'
     expect(existsSync(runLog)).toBe(false);
   });
 
-  it('builds non-interactive JSONL arguments', () => {
-    expect(buildOpenCodeArgs('/tmp/work', [], 'openai/gpt-5.6')).toEqual([
+  it('builds non-interactive JSONL arguments on a private server', () => {
+    expect(buildOpenCodeArgs([], 'openai/gpt-5.6')).toEqual([
       'run',
+      '--standalone',
       '--format',
       'json',
-      '--dir',
-      '/tmp/work',
       '--model',
       'openai/gpt-5.6',
     ]);
   });
 
   it('adds --auto only in dangerous permission mode', () => {
-    expect(buildOpenCodeArgs('/tmp/work', [], undefined, 'dangerous')).toEqual([
+    expect(buildOpenCodeArgs([], undefined, 'dangerous')).toEqual([
       'run',
+      '--standalone',
       '--format',
       'json',
-      '--dir',
-      '/tmp/work',
       '--auto',
     ]);
+    expect(buildOpenCodeArgs([], undefined, 'default')).not.toContain('--auto');
+  });
+
+  it('reads MCP server prefixes from v1 debug config output', () => {
     expect(
-      buildOpenCodeArgs('/tmp/work', [], undefined, 'default'),
-    ).not.toContain('--auto');
+      mcpPrefixesFromConfig({
+        mcp: {linear: {}, 'my.docs': {enabled: true}, off: {enabled: false}},
+      }),
+    ).toEqual(['linear_', 'my_docs_']);
+    expect(mcpPrefixesFromConfig([])).toEqual([]);
+    expect(mcpPrefixesFromConfig(null)).toEqual([]);
+  });
+
+  it('reads MCP server prefixes from mcp.servers in v2 debug config output', () => {
+    expect(
+      mcpPrefixesFromConfig([
+        {
+          type: 'document',
+          path: '/global.json',
+          info: {mcp: {servers: {linear: {disabled: false}}}},
+        },
+        {type: 'directory', path: '/project/.opencode', info: {}},
+        {
+          type: 'document',
+          path: '/project/opencode.json',
+          info: {
+            mcp: {
+              servers: {linear: {disabled: true}, 'my.docs': {type: 'remote'}},
+            },
+          },
+        },
+      ]),
+    ).toEqual(['my_docs_']);
+  });
+
+  it('reads flat v1 servers from a v2 source without mcp.servers', () => {
+    expect(
+      mcpPrefixesFromConfig([
+        {type: 'document', path: '/a.json', info: {mcp: {servers: {a: {}}}}},
+        {type: 'document', path: '/b.json', info: {mcp: {b: {}}}},
+      ]),
+    ).toEqual(['a_', 'b_']);
   });
 
   it('extractResult returns transcript, final message, and tool events', () => {

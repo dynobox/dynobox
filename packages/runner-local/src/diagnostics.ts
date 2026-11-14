@@ -15,9 +15,14 @@ export function harnessExitDiagnostic(
   harnessResult: HarnessResult,
   harnessOutput: HarnessRunOutput,
 ): string {
+  // The structured error names the cause; stderr often holds only notices,
+  // such as Codex's "Reading additional input from stdin...". Keep both.
+  const structured = harnessResult.errorMessage?.trim() ?? '';
   const stderr = harnessOutput.stderr.trim();
-  const detail = stderr || harnessResult.errorMessage?.trim();
-  return detail === undefined || detail.length === 0
+  const detail = [
+    ...new Set([structured, stderr].filter((part) => part.length > 0)),
+  ].join('\n');
+  return detail.length === 0
     ? `Harness exited with code ${harnessResult.exitCode}.`
     : `Harness exited with code ${harnessResult.exitCode}: ${detail}`;
 }

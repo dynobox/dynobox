@@ -491,11 +491,21 @@ export type TargetRunRef = {
   createdAt: string;
   status: RunUploadStatus;
   harnesses: string[];
+  /** Jobs of this target in the run. */
+  jobCount: number;
+  passedJobCount: number;
+  /**
+   * Jobs of this target in the run that stopped with a harness or setup
+   * error before their checks ran.
+   */
+  errorJobCount: number;
 };
 
 /**
- * Aggregate health for one target — the thing being tested — built from the
- * most recent run that included the target plus a short run history.
+ * Aggregate health for one target — the thing being tested. Status and
+ * counts come from the newest result of each dyno, scenario, and harness in
+ * the recent runs, so a run of only some harnesses does not hide the others.
+ * `recentRuns` is the short run history.
  */
 export type TargetSummary = {
   target: string;
@@ -570,6 +580,14 @@ export type DynoRunRef = {
   createdAt: string;
   status: RunUploadStatus;
   gitHash: string | null;
+  gitBranch: string | null;
+  /** True when the run had uncommitted changes; null when not known. */
+  gitDirty: boolean | null;
+  /** Harnesses that ran this dyno in the run. */
+  harnesses: string[];
+  /** Jobs of this dyno in the run. */
+  jobCount: number;
+  passedJobCount: number;
 };
 
 export type RunUploadResponse = {

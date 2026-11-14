@@ -387,8 +387,9 @@ The CLI supports these real harnesses:
 - `claude-code` invokes Claude Code with stream JSON output and hook events.
 - `codex` invokes Codex with JSON output, no color, and the git-repo check
   skipped.
-- `opencode` invokes OpenCode with JSON output and an explicit scenario work
-  directory.
+- `opencode` invokes OpenCode 2.x with JSON output in the scenario work
+  directory. Each job uses a private server (`--standalone`), not the
+  OpenCode background service.
 - `pi` invokes Pi with JSONL output via `--mode json` and `--no-session`, sets
   `PI_OFFLINE=1`, and adds `--no-approve` by default.
 - `cursor` invokes Cursor CLI (`cursor-agent`) with stream-json output and an

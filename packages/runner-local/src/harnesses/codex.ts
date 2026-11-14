@@ -30,11 +30,14 @@ export type CodexHarnessOptions = {
 export type CodexParsedOutput = {
   finalMessage: string | undefined;
   toolEvents: ToolEvent[];
+  errorMessage: string | undefined;
 };
 
 export type CodexParsedLine = {
   toolEvents: ToolEvent[];
   finalMessage?: string;
+  /** From `turn.failed` (`fatal`) or a top-level `error` event. */
+  errorMessage?: {text: string; fatal: boolean};
 };
 
 export class CodexHarness implements Harness {
@@ -104,6 +107,9 @@ export class CodexHarness implements Harness {
       transcript: raw.stdout,
       finalMessage: parsed.finalMessage,
       toolEvents: parsed.toolEvents,
+      ...(parsed.errorMessage === undefined
+        ? {}
+        : {errorMessage: parsed.errorMessage}),
     };
   }
 }
@@ -187,6 +193,8 @@ export function parseCodexJson(
   mcpAliases: Readonly<Record<string, string>> = {},
 ): CodexParsedOutput {
   let finalMessage: string | undefined;
+  let fatalError: string | undefined;
+  let lastError: string | undefined;
   const toolEvents: ToolEvent[] = [];
 
   for (const {line, lineNumber} of jsonLines(stdout)) {
@@ -196,9 +204,13 @@ export function parseCodexJson(
     if (parsed.finalMessage !== undefined) {
       finalMessage = parsed.finalMessage;
     }
+    if (parsed.errorMessage !== undefined) {
+      lastError = parsed.errorMessage.text;
+      if (parsed.errorMessage.fatal) fatalError = parsed.errorMessage.text;
+    }
   }
 
-  return {finalMessage, toolEvents};
+  return {finalMessage, toolEvents, errorMessage: fatalError ?? lastError};
 }
 
 export function parseCodexJsonLine(
@@ -230,11 +242,50 @@ export function parseCodexJsonLine(
   }
   const toolEvents = parseToolEvents(event);
   const finalMessage = parseFinalMessage(event);
+  const errorMessage = parseTurnError(event);
 
   return {
     toolEvents,
     ...(finalMessage === undefined ? {} : {finalMessage}),
+    ...(errorMessage === undefined ? {} : {errorMessage}),
   };
+}
+
+/**
+ * Codex reports a failed turn as `turn.failed` (and usually a top-level
+ * `error` event first). The message is often a JSON API error; keep only its
+ * inner message. `item.completed` items of type `error` are warnings, such as
+ * missing model metadata, and are not used.
+ */
+function parseTurnError(
+  event: JsonObject,
+): CodexParsedLine['errorMessage'] | undefined {
+  const raw =
+    event.type === 'turn.failed' && isRecord(event.error)
+      ? event.error.message
+      : event.type === 'error'
+        ? event.message
+        : undefined;
+  if (typeof raw !== 'string' || raw.trim().length === 0) return undefined;
+  return {
+    text: apiErrorMessage(raw.trim()),
+    fatal: event.type === 'turn.failed',
+  };
+}
+
+function apiErrorMessage(message: string): string {
+  try {
+    const parsed: unknown = JSON.parse(message);
+    if (isRecord(parsed)) {
+      const inner = isRecord(parsed.error) ? parsed.error.message : undefined;
+      if (typeof inner === 'string' && inner.trim().length > 0) {
+        return inner.trim();
+      }
+    }
+  } catch {
+    // Not JSON; use the message as is.
+  }
+  return message;
 }
 
 export function createCodexToolEventDeduper(): (

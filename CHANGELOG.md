@@ -8,6 +8,39 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- The OpenCode harness now requires OpenCode 2.x. OpenCode 2 removed
+  `run --dir`, so every OpenCode job failed with a help-text parse error.
+  Jobs now run in the scenario work directory on a private OpenCode server
+  (`--standalone`), so they do not use the background service, its config,
+  or its session list.
+- Harness processes now get `PWD` set to the job work directory. OpenCode 2
+  takes its project from `PWD`, so without this an OpenCode job could run in
+  the directory where `dynobox run` started instead of its isolated workspace.
+- OpenCode 2 `patch` tool calls count as file edits.
+- A failed Codex job now reports Codex's reason, for example
+  "The 'gpt-5.4-mini' model is not supported when using Codex with a ChatGPT
+  account." Before, the job error showed only Codex's
+  "Reading additional input from stdin..." notice.
+- Harness error diagnostics now include the harness's own error message and
+  its stderr. Before, any stderr output hid the harness's error message.
+- OpenCode tool calls to MCP servers from the user's OpenCode config are
+  classified as MCP events again. OpenCode 2 lists each config source
+  separately in `opencode debug config`, with the servers under
+  `mcp.servers`. Servers with `disabled: true` are ignored.
+
+### `@dynobox/run-schema`
+
+- `TargetRunRef` has `jobCount`, `passedJobCount`, and `errorJobCount`, so a
+  run history can show partly failed runs and runs with harness or setup
+  errors.
+- `TargetSummary` status and counts are now documented as the newest result
+  of each dyno, scenario, and harness in the recent runs.
+- `DynoRunRef` has `gitBranch`, `gitDirty`, `harnesses`, `jobCount`, and
+  `passedJobCount`, so a target run log can show the branch and scope of
+  each run.
+
 ---
 
 ## dynobox@0.15.0 — 2026-11-10

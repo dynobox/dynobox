@@ -193,6 +193,8 @@ describe('normalizeToolKind', () => {
     expect(normalizeToolKind('write')).toBe('write_file');
     expect(normalizeToolKind('edit')).toBe('edit_file');
     expect(normalizeToolKind('apply_patch')).toBe('edit_file');
+    expect(normalizeToolKind('patch')).toBe('edit_file');
+    expect(normalizeToolKind('shell')).toBe('shell');
     expect(normalizeToolKind('glob')).toBe('search_files');
     expect(normalizeToolKind('grep')).toBe('search_files');
     expect(normalizeToolKind('list')).toBe('search_files');

@@ -20,9 +20,13 @@ export async function runStreamingHarness(
   options: RunStreamingHarnessOptions,
 ): Promise<HarnessRunOutput> {
   const input = options.input;
+  const cwd = options.cwd ?? input.workDir;
   const execaOptions = {
-    cwd: options.cwd ?? input.workDir,
-    env: {...process.env, ...input.env},
+    cwd,
+    // Some harnesses (OpenCode 2) take the project from `PWD`, not the real
+    // cwd. The inherited `PWD` is where dynobox started, usually the user's
+    // repository, so keep it equal to the job workDir.
+    env: {...process.env, ...input.env, PWD: cwd},
     reject: false,
     ...(options.stdin === undefined ? {} : {stdin: options.stdin}),
     ...(options.processInput === undefined

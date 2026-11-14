@@ -12,7 +12,7 @@ while completing the task.
 - At least one supported local harness:
   - `claude` for Claude Code.
   - `codex` for OpenAI Codex.
-  - `opencode` for OpenCode.
+  - `opencode` 2.x for OpenCode.
   - `pi` for Pi.
   - `cursor-agent` for Cursor CLI.
   - `agy` 1.1.14 or newer for Google Antigravity CLI.
