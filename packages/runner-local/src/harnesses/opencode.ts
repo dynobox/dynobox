@@ -385,9 +385,12 @@ async function resolveOpenCodeMcpPrefixes(
 }
 
 /**
- * OpenCode v1 prints one merged config object; v2 prints a list of config
- * sources (`[{type, path, info}]`) in precedence order, so later sources
- * override earlier ones for the same MCP server.
+ * OpenCode v1 prints one merged config object with the servers directly
+ * under `mcp`. OpenCode v2 prints a list of config sources
+ * (`[{type, path, info}]`) in precedence order, with the servers under
+ * `mcp.servers`, so later sources override earlier ones for the same
+ * server. OpenCode v2 also converts v1 config files to this shape and
+ * prints `enabled: true` as `disabled: false`.
  */
 export function mcpPrefixesFromConfig(config: unknown): string[] {
   const sources = Array.isArray(config)
@@ -396,11 +399,18 @@ export function mcpPrefixesFromConfig(config: unknown): string[] {
   const servers: Record<string, unknown> = {};
   for (const source of sources) {
     if (isRecord(source) && isRecord(source.mcp)) {
-      Object.assign(servers, source.mcp);
+      Object.assign(
+        servers,
+        isRecord(source.mcp.servers) ? source.mcp.servers : source.mcp,
+      );
     }
   }
   return Object.entries(servers)
-    .filter(([, value]) => !isRecord(value) || value.enabled !== false)
+    .filter(
+      ([, value]) =>
+        !isRecord(value) ||
+        (value.enabled !== false && value.disabled !== true),
+    )
     .map(([name]) => `${sanitizeOpenCodeToolName(name)}_`);
 }
 

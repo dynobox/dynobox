@@ -157,23 +157,45 @@ printf 'run\\n' > '${runLog}'
     expect(buildOpenCodeArgs([], undefined, 'default')).not.toContain('--auto');
   });
 
-  it('reads MCP server prefixes from v1 and v2 debug config output', () => {
+  it('reads MCP server prefixes from v1 debug config output', () => {
     expect(
-      mcpPrefixesFromConfig({mcp: {linear: {}, 'my.docs': {enabled: true}}}),
+      mcpPrefixesFromConfig({
+        mcp: {linear: {}, 'my.docs': {enabled: true}, off: {enabled: false}},
+      }),
     ).toEqual(['linear_', 'my_docs_']);
+    expect(mcpPrefixesFromConfig([])).toEqual([]);
+    expect(mcpPrefixesFromConfig(null)).toEqual([]);
+  });
+
+  it('reads MCP server prefixes from mcp.servers in v2 debug config output', () => {
     expect(
       mcpPrefixesFromConfig([
-        {type: 'document', path: '/global.json', info: {mcp: {linear: {}}}},
+        {
+          type: 'document',
+          path: '/global.json',
+          info: {mcp: {servers: {linear: {disabled: false}}}},
+        },
+        {type: 'directory', path: '/project/.opencode', info: {}},
         {
           type: 'document',
           path: '/project/opencode.json',
-          info: {mcp: {linear: {enabled: false}, github: {}}},
+          info: {
+            mcp: {
+              servers: {linear: {disabled: true}, 'my.docs': {type: 'remote'}},
+            },
+          },
         },
-        {type: 'document', path: '/other.json', info: {}},
       ]),
-    ).toEqual(['github_']);
-    expect(mcpPrefixesFromConfig([])).toEqual([]);
-    expect(mcpPrefixesFromConfig(null)).toEqual([]);
+    ).toEqual(['my_docs_']);
+  });
+
+  it('reads flat v1 servers from a v2 source without mcp.servers', () => {
+    expect(
+      mcpPrefixesFromConfig([
+        {type: 'document', path: '/a.json', info: {mcp: {servers: {a: {}}}}},
+        {type: 'document', path: '/b.json', info: {mcp: {b: {}}}},
+      ]),
+    ).toEqual(['a_', 'b_']);
   });
 
   it('extractResult returns transcript, final message, and tool events', () => {

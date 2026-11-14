@@ -27,7 +27,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   its stderr. Before, any stderr output hid the harness's error message.
 - OpenCode tool calls to MCP servers from the user's OpenCode config are
   classified as MCP events again. OpenCode 2 lists each config source
-  separately in `opencode debug config`.
+  separately in `opencode debug config`, with the servers under
+  `mcp.servers`. Servers with `disabled: true` are ignored.
 
 ### `@dynobox/run-schema`
 
