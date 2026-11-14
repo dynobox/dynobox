@@ -3,7 +3,8 @@ import {z} from 'zod';
 export const RUN_UPLOAD_V2_SCHEMA_VERSION = 2 as const;
 export const RUN_UPLOAD_V3_SCHEMA_VERSION = 3 as const;
 export const RUN_UPLOAD_V4_SCHEMA_VERSION = 4 as const;
-export const RUN_UPLOAD_SCHEMA_VERSION = 5 as const;
+export const RUN_UPLOAD_V5_SCHEMA_VERSION = 5 as const;
+export const RUN_UPLOAD_SCHEMA_VERSION = 6 as const;
 
 export const RUN_UPLOAD_STATUS = ['passed', 'failed'] as const;
 export const RUN_UPLOAD_JOB_STATUS = [
@@ -17,6 +18,7 @@ export const RUN_UPLOAD_LIMITS = {
   cliVersionLength: 64,
   gitHashLength: 128,
   gitBranchLength: 512,
+  gitRepositoryLength: 512,
   gitUserNameLength: 256,
   gitUserEmailLength: 320,
   inputPathLength: 256,
@@ -354,8 +356,30 @@ export const runUploadDynoV5Schema = runUploadDynoV2Schema
   .strict();
 
 export const RunUploadV5 = RunUploadV4.extend({
-  schemaVersion: z.literal(RUN_UPLOAD_SCHEMA_VERSION),
+  schemaVersion: z.literal(RUN_UPLOAD_V5_SCHEMA_VERSION),
   dynos: z.array(runUploadDynoV5Schema).max(RUN_UPLOAD_LIMITS.dynos),
+}).strict();
+
+/**
+ * The repository of the `origin` remote as `host/owner/repo`, for example
+ * `github.com/dynobox/dynobox`. It has no scheme, credentials, port, or
+ * `.git` suffix.
+ */
+export const runUploadGitRepositorySchema = z
+  .string()
+  .min(1)
+  .max(RUN_UPLOAD_LIMITS.gitRepositoryLength)
+  .regex(/^[^\s@:/]+(\/[^\s@:/]+)+$/, 'Expected host/owner/repo.');
+
+export const runUploadGitV6Schema = runUploadGitV4Schema
+  .extend({
+    repository: runUploadGitRepositorySchema.nullable().optional(),
+  })
+  .strict();
+
+export const RunUploadV6 = RunUploadV5.extend({
+  schemaVersion: z.literal(RUN_UPLOAD_SCHEMA_VERSION),
+  git: runUploadGitV6Schema.nullable(),
 }).strict();
 
 export const RunUpload = z.discriminatedUnion('schemaVersion', [
@@ -363,6 +387,7 @@ export const RunUpload = z.discriminatedUnion('schemaVersion', [
   RunUploadV3,
   RunUploadV4,
   RunUploadV5,
+  RunUploadV6,
 ]);
 
 export const RunSharingUpdate = z
@@ -399,6 +424,8 @@ export type RunUploadJobMcpV5 = z.infer<typeof runUploadJobMcpV5Schema>;
 export type RunUploadJobV5 = z.infer<typeof runUploadJobV5Schema>;
 export type RunUploadDynoV5 = z.infer<typeof runUploadDynoV5Schema>;
 export type RunUploadV5 = z.infer<typeof RunUploadV5>;
+export type RunUploadGitV6 = z.infer<typeof runUploadGitV6Schema>;
+export type RunUploadV6 = z.infer<typeof RunUploadV6>;
 export type RunUpload = z.infer<typeof RunUpload>;
 export type RunUploadSchemaVersion = RunUpload['schemaVersion'];
 
@@ -406,8 +433,14 @@ export type RunUploadCreateInputV2 = z.input<typeof RunUploadV2>;
 export type RunUploadCreateInputV3 = z.input<typeof RunUploadV3>;
 export type RunUploadCreateInputV4 = z.input<typeof RunUploadV4>;
 export type RunUploadCreateInputV5 = z.input<typeof RunUploadV5>;
+export type RunUploadCreateInputV6 = z.input<typeof RunUploadV6>;
 
 export type RunSharingUpdate = z.infer<typeof RunSharingUpdate>;
+
+/** The git state of a run. `repository` is null before upload v6. */
+export type RunGit = RunUploadGitV4 & {
+  repository: string | null;
+};
 
 export type RunSummary = {
   id: string;
@@ -416,7 +449,7 @@ export type RunSummary = {
   cliVersion: string;
   schemaVersion: RunUploadSchemaVersion;
   gitHash: string | null;
-  git: RunUploadGitV4 | null;
+  git: RunGit | null;
   /** The path the CLI was pointed at when the run was created. */
   inputPath: string | null;
   status: RunUploadStatus;
