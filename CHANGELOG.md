@@ -31,12 +31,11 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ### `@dynobox/run-schema`
 
-- `TargetRunRef` has `jobCount` and `passedJobCount`, so a run history can
-  show partly failed runs.
+- `TargetRunRef` has `jobCount`, `passedJobCount`, and `errorJobCount`, so a
+  run history can show partly failed runs and runs with harness or setup
+  errors.
 - `TargetSummary` status and counts are now documented as the newest result
   of each dyno, scenario, and harness in the recent runs.
-- `TargetSummary` has `errorJobCount`: the current jobs that stopped with a
-  harness or setup error before their checks ran.
 - `DynoRunRef` has `gitBranch`, `gitDirty`, `harnesses`, `jobCount`, and
   `passedJobCount`, so a target run log can show the branch and scope of
   each run.

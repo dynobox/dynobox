@@ -494,6 +494,11 @@ export type TargetRunRef = {
   /** Jobs of this target in the run. */
   jobCount: number;
   passedJobCount: number;
+  /**
+   * Jobs of this target in the run that stopped with a harness or setup
+   * error before their checks ran.
+   */
+  errorJobCount: number;
 };
 
 /**
@@ -512,11 +517,6 @@ export type TargetSummary = {
   passedAssertionCount: number;
   failedAssertionCount: number;
   warningCount: number;
-  /**
-   * Current jobs that stopped with a harness or setup error. They have no
-   * checks, so the check counts do not show them.
-   */
-  errorJobCount: number;
   lastRunId: string;
   lastRunAt: string;
   /** Per-run status for this target, newest first. */
