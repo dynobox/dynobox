@@ -6,15 +6,18 @@ import {
   RUN_UPLOAD_V2_SCHEMA_VERSION,
   RUN_UPLOAD_V3_SCHEMA_VERSION,
   RUN_UPLOAD_V4_SCHEMA_VERSION,
+  RUN_UPLOAD_V5_SCHEMA_VERSION,
   RunUpload,
   type RunUploadCreateInputV2,
   type RunUploadCreateInputV3,
   type RunUploadCreateInputV4,
   type RunUploadCreateInputV5,
+  type RunUploadCreateInputV6,
   RunUploadV2,
   RunUploadV3,
   RunUploadV4,
   RunUploadV5,
+  RunUploadV6,
 } from './index.js';
 
 function validPayload(): RunUploadCreateInputV2 {
@@ -142,7 +145,7 @@ function validV5Payload(): RunUploadCreateInputV5 {
   const payload = validV4Payload();
   return {
     ...payload,
-    schemaVersion: RUN_UPLOAD_SCHEMA_VERSION,
+    schemaVersion: RUN_UPLOAD_V5_SCHEMA_VERSION,
     dynos: payload.dynos.map((dyno) => ({
       ...dyno,
       jobs: dyno.jobs.map((job) => ({
@@ -574,5 +577,63 @@ describe('RunUploadV5', () => {
   it('parses all supported upload versions', () => {
     expect(RunUpload.parse(validV4Payload()).schemaVersion).toBe(4);
     expect(RunUpload.parse(validV5Payload()).schemaVersion).toBe(5);
+  });
+});
+
+function validV6Payload(): RunUploadCreateInputV6 {
+  const payload = validV5Payload();
+  return {
+    ...payload,
+    schemaVersion: RUN_UPLOAD_SCHEMA_VERSION,
+    git: {...payload.git!, repository: 'github.com/dynobox/dynobox'},
+  };
+}
+
+describe('RunUploadV6', () => {
+  it('accepts the git repository', () => {
+    const parsed = RunUploadV6.parse(validV6Payload());
+
+    expect(parsed.schemaVersion).toBe(6);
+    expect(parsed.git?.repository).toBe('github.com/dynobox/dynobox');
+  });
+
+  it('accepts a missing or null repository', () => {
+    const payload = validV6Payload();
+    expect(
+      RunUploadV6.parse({...payload, git: {...payload.git!, repository: null}})
+        .git?.repository,
+    ).toBeNull();
+
+    delete payload.git!.repository;
+    expect(RunUploadV6.parse(payload).git?.repository).toBeUndefined();
+  });
+
+  it.each([
+    'https://github.com/dynobox/dynobox',
+    'git@github.com:dynobox/dynobox',
+    'user:token@github.com/dynobox/dynobox',
+    'github.com:8443/dynobox/dynobox',
+    'github.com',
+    'github.com/dynobox/dyno box',
+  ])('rejects the repository %s', (repository) => {
+    const payload = validV6Payload();
+
+    expect(
+      RunUploadV6.safeParse({...payload, git: {...payload.git!, repository}})
+        .success,
+    ).toBe(false);
+  });
+
+  it('rejects the repository on v5 uploads', () => {
+    const payload = validV6Payload();
+
+    expect(RunUploadV5.safeParse({...payload, schemaVersion: 5}).success).toBe(
+      false,
+    );
+  });
+
+  it('parses all supported upload versions', () => {
+    expect(RunUpload.parse(validV5Payload()).schemaVersion).toBe(5);
+    expect(RunUpload.parse(validV6Payload()).schemaVersion).toBe(6);
   });
 });

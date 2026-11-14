@@ -40,6 +40,12 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - `DynoRunRef` has `gitBranch`, `gitDirty`, `harnesses`, `jobCount`, and
   `passedJobCount`, so a target run log can show the branch and scope of
   each run.
+- Upload schema v6 adds an optional `git.repository`: the `origin` remote as
+  `host/owner/repo` (for example `github.com/dynobox/dynobox`), with no
+  scheme, credentials, port, or `.git` suffix. `RUN_UPLOAD_SCHEMA_VERSION` is
+  now 6, and `RUN_UPLOAD_V5_SCHEMA_VERSION` is 5.
+- `RunSummary.git` is now `RunGit`, which adds `repository: string | null`.
+  The value is null for runs uploaded before v6.
 
 ---
 
