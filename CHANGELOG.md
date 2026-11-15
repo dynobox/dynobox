@@ -8,6 +8,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.17.0 — 2026-11-15
+
 ### `dynobox` (CLI)
 
 - Claude Code jobs start about 5s faster. The harness left stdin open, so
@@ -22,11 +26,11 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Antigravity `edit_file` calls count as `edit_file` events, and
   `call_mcp_tool` calls count as `mcp` events, not `unknown`.
 
+## @dynobox/sdk@0.10.0 — 2026-11-15
+
 ### `@dynobox/sdk`
 
 - Add the `skill` tool kind for `tool.called` and `tool.notCalled`.
-
----
 
 ## dynobox@0.16.0 — 2026-11-14
 
