@@ -8,6 +8,24 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Claude Code jobs start about 5s faster. The harness left stdin open, so
+  `claude -p` waited 3s for input on every job. The wait also let Claude Code
+  connect the user's claude.ai connectors, which then appeared in the job's
+  tools. Setup commands also get a closed stdin now.
+- Skill tool calls from Claude Code and OpenCode are reported as `skill`
+  events, not `unknown`.
+- Codex file edits are reported as tool events. Each path in a `file_change`
+  item becomes a `write_file` event for new files or an `edit_file` event
+  otherwise. Before, `tool.called('edit_file')` never matched on Codex.
+- Antigravity `edit_file` calls count as `edit_file` events, and
+  `call_mcp_tool` calls count as `mcp` events, not `unknown`.
+
+### `@dynobox/sdk`
+
+- Add the `skill` tool kind for `tool.called` and `tool.notCalled`.
+
 ---
 
 ## dynobox@0.16.0 — 2026-11-14

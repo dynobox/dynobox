@@ -6,6 +6,7 @@ export function normalizeToolKind(rawName: string): ToolKind {
     rawName.startsWith('mcp_') ||
     rawName.startsWith('mcp-') ||
     rawName === 'mcp' ||
+    rawName === 'call_mcp_tool' ||
     rawName === 'list_mcp_resources' ||
     rawName === 'list_mcp_resource_templates' ||
     rawName === 'read_mcp_resource'
@@ -34,6 +35,7 @@ export function normalizeToolKind(rawName: string): ToolKind {
     case 'Edit':
     case 'MultiEdit':
     case 'edit':
+    case 'edit_file':
     case 'multi_edit':
     case 'apply_patch':
     case 'patch':
@@ -76,6 +78,9 @@ export function normalizeToolKind(rawName: string): ToolKind {
     case 'send_message':
     case 'manage_subagents':
       return 'task';
+    case 'Skill':
+    case 'skill':
+      return 'skill';
     default:
       return 'unknown';
   }

@@ -411,7 +411,7 @@ describe('Antigravity ACP transcript', () => {
     expect(parsed.toolEvents).toEqual([
       {
         rawName: 'call_mcp_tool',
-        kind: 'unknown',
+        kind: 'mcp',
         input: {
           ServerName: 'linear',
           ToolName: 'get_issue',

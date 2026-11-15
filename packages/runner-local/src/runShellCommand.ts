@@ -23,6 +23,7 @@ export async function runShellCommand(options: {
     env: options.env,
     reject: false,
     shell: true,
+    stdin: 'ignore',
     detached: ownsProcessGroup,
     ...(signal === undefined
       ? {}
