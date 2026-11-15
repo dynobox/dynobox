@@ -424,6 +424,46 @@ JSONL
       command: 'pnpm test',
     });
   });
+
+  it('streams every path of a multi-file change once', async () => {
+    const scratchRoot = createScratchRoot();
+    const executable = join(scratchRoot, 'fake-codex');
+    const change = JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item_1',
+        type: 'file_change',
+        changes: [
+          {path: 'src/a.js', kind: 'update'},
+          {path: 'src/b.js', kind: 'add'},
+        ],
+        status: 'completed',
+      },
+    });
+    writeFileSync(
+      executable,
+      `#!/bin/sh
+cat <<'JSONL'
+${change}
+${change}
+JSONL
+`,
+      {mode: 0o755},
+    );
+    const toolEvents: ToolEvent[] = [];
+
+    await new CodexHarness({executable}).run({
+      prompt: 'Edit files.',
+      workDir: scratchRoot,
+      env: {},
+      onToolEvent: (toolEvent) => toolEvents.push(toolEvent),
+    });
+
+    expect(toolEvents.map((event) => event.input)).toEqual([
+      {path: 'src/a.js', kind: 'update'},
+      {path: 'src/b.js', kind: 'add'},
+    ]);
+  });
 });
 
 describe('parseCodexJson', () => {
@@ -530,6 +570,45 @@ describe('parseCodexJson', () => {
       'apply_patch',
       'web_search',
       'mcp__github__search',
+    ]);
+  });
+
+  it('emits one file event per path of a file_change item', () => {
+    const parsed = parseCodexJson(
+      jsonl({
+        type: 'item.completed',
+        item: {
+          id: 'item_5',
+          type: 'file_change',
+          changes: [
+            {path: '/work/src/duration.js', kind: 'update'},
+            {path: '/work/src/new.js', kind: 'add'},
+            {path: '/work/src/old.js', kind: 'delete'},
+          ],
+          status: 'completed',
+        },
+      }),
+    );
+
+    expect(parsed.toolEvents).toEqual([
+      {
+        kind: 'edit_file',
+        rawName: 'file_change',
+        input: {path: '/work/src/duration.js', kind: 'update'},
+        status: 'success',
+      },
+      {
+        kind: 'write_file',
+        rawName: 'file_change',
+        input: {path: '/work/src/new.js', kind: 'add'},
+        status: 'success',
+      },
+      {
+        kind: 'edit_file',
+        rawName: 'file_change',
+        input: {path: '/work/src/old.js', kind: 'delete'},
+        status: 'success',
+      },
     ]);
   });
 

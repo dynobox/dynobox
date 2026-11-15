@@ -20,6 +20,18 @@ it('preserves command output and exit status', async () => {
   expect(result.exitCode).toBe(3);
 });
 
+it.skipIf(process.platform === 'win32')(
+  'gives commands a closed stdin',
+  async () => {
+    const result = await runShellCommand({
+      command: 'if IFS= read -r _; then printf input; else printf eof; fi',
+      workDir: process.cwd(),
+      env: process.env,
+    });
+    expect(result.stdout).toBe('eof');
+  },
+);
+
 it('does not launch a command after cancellation', async () => {
   const abort = new AbortController();
   abort.abort();

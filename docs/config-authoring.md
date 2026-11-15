@@ -255,6 +255,7 @@ Supported tool kinds:
 - `web_search`
 - `mcp`
 - `task`
+- `skill`
 - `unknown`
 
 Shell tool assertions can include exactly one raw shell command matcher:

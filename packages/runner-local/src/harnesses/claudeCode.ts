@@ -75,6 +75,8 @@ export class ClaudeCodeHarness implements Harness {
         input.permissionMode,
       ),
       input,
+      // `claude -p` waits 3s for data on an open stdin pipe before starting.
+      stdin: 'ignore',
       parseLine: parseClaudeCodeStreamJsonLine,
     });
   }

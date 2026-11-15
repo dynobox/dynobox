@@ -161,12 +161,18 @@ fi
     ]);
   });
 
-  it('emits tool events while run streams stdout', async () => {
+  it('ignores stdin and emits tool events while run streams stdout', async () => {
     const scratchRoot = createScratchRoot();
     const executable = join(scratchRoot, 'fake-claude');
+    const stdinLog = join(scratchRoot, 'stdin.log');
     writeFileSync(
       executable,
       `#!/bin/sh
+if IFS= read -r _; then
+  printf 'input' > '${stdinLog}'
+else
+  printf 'eof' > '${stdinLog}'
+fi
 cat <<'JSONL'
 {"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"pnpm test"}}
 {"type":"result","result":"Tests passed."}
@@ -185,6 +191,7 @@ JSONL
     });
 
     expect(result.exitCode).toBe(0);
+    expect(readFileSync(stdinLog, 'utf8')).toBe('eof');
     expect(result.stdout).toContain('Tests passed.');
     expect(toolEvents).toEqual([
       {
@@ -296,6 +303,11 @@ describe('parseClaudeCodeStreamJson', () => {
         },
         {
           hook_event_name: 'PreToolUse',
+          tool_name: 'Skill',
+          tool_input: {skill: 'show-me'},
+        },
+        {
+          hook_event_name: 'PreToolUse',
           tool_name: 'UnexpectedTool',
           tool_input: {value: true},
         },
@@ -308,6 +320,7 @@ describe('parseClaudeCodeStreamJson', () => {
       'edit_file',
       'mcp',
       'web_search',
+      'skill',
       'unknown',
     ]);
     expect(parsed.toolEvents.map((event) => event.rawName)).toEqual([
@@ -316,6 +329,7 @@ describe('parseClaudeCodeStreamJson', () => {
       'MultiEdit',
       'mcp__github__search',
       'WebSearch',
+      'Skill',
       'UnexpectedTool',
     ]);
   });

@@ -292,13 +292,16 @@ export function createCodexToolEventDeduper(): (
   event: ToolEvent,
   line: string,
 ) => boolean {
-  const seenItemIds = new Set<string>();
+  // One item can carry several events (a multi-file `file_change`), so key on
+  // the event input as well as the item id.
+  const seen = new Set<string>();
 
-  return (_event, line) => {
+  return (event, line) => {
     const itemId = extractItemId(line);
     if (itemId === undefined) return true;
-    if (seenItemIds.has(itemId)) return false;
-    seenItemIds.add(itemId);
+    const key = `${itemId}\0${JSON.stringify(event.input)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   };
 }
@@ -318,8 +321,31 @@ function extractItemId(line: string): string | undefined {
 function parseToolEvents(event: JsonObject): ToolEvent[] {
   if (event.type !== 'item.completed') return [];
   const item = isRecord(event.item) ? event.item : undefined;
+  if (item?.type === 'file_change') return parseFileChangeEvents(item, event);
   const toolEvent = parseToolEvent(item ?? event, event);
   return toolEvent === undefined ? [] : [toolEvent];
+}
+
+// Codex reports patch edits as one `file_change` item listing every path, so
+// emit one file event per path: `add` writes a file, anything else edits one.
+function parseFileChangeEvents(
+  item: JsonObject,
+  event: JsonObject,
+): ToolEvent[] {
+  const changes = Array.isArray(item.changes) ? item.changes : [];
+  const status = parseStatus(item, event);
+  return changes.flatMap((change) => {
+    if (!isRecord(change) || typeof change.path !== 'string') return [];
+    return [
+      createToolEvent(
+        'file_change',
+        {path: change.path, kind: change.kind},
+        status,
+        undefined,
+        change.kind === 'add' ? 'write_file' : 'edit_file',
+      ),
+    ];
+  });
 }
 
 function parseToolEvent(

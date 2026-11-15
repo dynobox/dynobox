@@ -20,6 +20,7 @@ export const TOOL_KINDS = [
   'web_search',
   'mcp',
   'task',
+  'skill',
   'unknown',
 ] as const;
 
