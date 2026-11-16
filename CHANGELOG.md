@@ -8,6 +8,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## @dynobox/run-schema@0.7.0 — 2026-11-16
+
 ### `@dynobox/run-schema`
 
 - Add the anonymous CLI telemetry batch schema (`TelemetryBatch`, schema
