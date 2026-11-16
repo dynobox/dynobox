@@ -131,9 +131,7 @@ export const TelemetryBatch = TelemetryBatchV1;
 export type TelemetryContext = z.infer<typeof TelemetryContext>;
 export type TelemetryCommandEvent = z.infer<typeof TelemetryCommandEvent>;
 export type TelemetryRunEvent = z.infer<typeof TelemetryRunEvent>;
-export type TelemetryHarnessRunEvent = z.infer<
-  typeof TelemetryHarnessRunEvent
->;
+export type TelemetryHarnessRunEvent = z.infer<typeof TelemetryHarnessRunEvent>;
 export type TelemetryEvent = z.infer<typeof TelemetryEvent>;
 export type TelemetryBatchV1 = z.infer<typeof TelemetryBatchV1>;
 export type TelemetryBatch = z.infer<typeof TelemetryBatch>;
