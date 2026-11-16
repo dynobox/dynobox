@@ -8,6 +8,14 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `@dynobox/run-schema`
+
+- Add the anonymous CLI telemetry batch schema (`TelemetryBatch`, schema
+  version 1). The CLI sends one batch per command, with a `command` event, and
+  for runs a `run` event plus one `harness_run` event per harness. Batches
+  carry no prompts, paths, dyno or scenario names, repository names, or
+  assertion content.
+
 ---
 
 ## dynobox@0.17.0 — 2026-11-15

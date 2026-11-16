@@ -659,3 +659,5 @@ export type DynoDetailResponse = {
   /** The selected run's results, or null when the run has no data. */
   run: DynoRunDetail | null;
 };
+
+export * from './telemetry.js';
