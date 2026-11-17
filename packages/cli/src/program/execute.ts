@@ -159,6 +159,7 @@ export async function runCli(
         startTelemetrySession({
           writeStderr,
           color: options.color ?? liveOutput,
+          ...(options.env === undefined ? {} : {env: options.env}),
         })),
   });
   return result.exitCode;

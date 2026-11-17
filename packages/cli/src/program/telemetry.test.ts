@@ -5,7 +5,7 @@ import {TelemetryBatch} from '@dynobox/run-schema';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 
 import {createFixtureSet, createPassingHarness} from '../testUtils.js';
-import {executeCli} from './execute.js';
+import {executeCli, runCli} from './execute.js';
 import {
   resolveTelemetryStatus,
   setTelemetryEnabled,
@@ -246,6 +246,36 @@ describe('executeCli telemetry', () => {
       expect(batches).toHaveLength(0);
     },
   );
+});
+
+describe('runCli telemetry', () => {
+  it('honors an opt-out in the supplied environment', async () => {
+    const env = {HOME: homeDir('runcli-opt-out'), DO_NOT_TRACK: '1'};
+
+    await runCli(['validate', fixtures.validConfigPath], {
+      env,
+      writeStdout: () => {},
+      writeStderr: () => {},
+    });
+
+    expect(existsSync(telemetryFilePath({env}))).toBe(false);
+  });
+
+  it('uses the supplied HOME and settings for the session', async () => {
+    const env = {HOME: homeDir('runcli-debug'), DYNOBOX_TELEMETRY_DEBUG: '1'};
+    let stderr = '';
+
+    await runCli(['validate', fixtures.validConfigPath], {
+      env,
+      writeStdout: () => {},
+      writeStderr: (value) => {
+        stderr += value;
+      },
+    });
+
+    expect(existsSync(telemetryFilePath({env}))).toBe(true);
+    expect(stderr).toContain('[telemetry] {"schemaVersion":1');
+  });
 });
 
 describe('dynobox telemetry', () => {
