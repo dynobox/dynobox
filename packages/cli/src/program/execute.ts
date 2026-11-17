@@ -6,6 +6,7 @@
  * Tests use `executeCli`; `bin.ts` uses `runCli`.
  */
 
+import type {TelemetryEvent} from '@dynobox/run-schema';
 import type {Harness} from '@dynobox/runner-local';
 import {CommanderError} from 'commander';
 
@@ -14,6 +15,14 @@ import type {RunOutputMode} from '../terminal/index.js';
 import {buildProgram} from './builder.js';
 import {shouldUseLiveTerminalOutput} from './environment.js';
 import {runFailureExitCode} from './exitCodes.js';
+import {
+  buildTelemetryBatch,
+  type CompletedCommand,
+  isTrackedCommand,
+  startTelemetrySession,
+  telemetryErrorCategory,
+  type TelemetrySession,
+} from './telemetry.js';
 
 export type OutputWriter = (value: string) => void;
 
@@ -36,6 +45,11 @@ export type ExecuteCliOptions = {
   usePlainSymbols?: boolean;
   terminalWidth?: number;
   live?: boolean;
+  /**
+   * Starts a telemetry session for a tracked command. Only `runCli` sets
+   * this, so tests and embedded callers send nothing unless they opt in.
+   */
+  telemetry?: () => TelemetrySession | undefined;
 };
 
 /**
@@ -64,6 +78,7 @@ export async function executeCli(
   }
 
   let runFailed = false;
+  const runEvents: TelemetryEvent[] = [];
   const program = buildProgram({
     options,
     writeStdout,
@@ -71,21 +86,49 @@ export async function executeCli(
     onRunFailure: () => {
       runFailed = true;
     },
+    recordTelemetry: (events) => {
+      runEvents.push(...events);
+    },
   });
+
+  // The session starts once Commander has picked a tracked command, so help,
+  // version, and `dynobox telemetry` never show the notice or send anything.
+  const startedAt = Date.now();
+  let command: string | undefined;
+  let session: TelemetrySession | undefined;
+  program.hook('preAction', (_program, actionCommand) => {
+    if (!isTrackedCommand(actionCommand.name())) return;
+    command = actionCommand.name();
+    session = options.telemetry?.();
+  });
+  const finish = async (
+    exitCode: number,
+    errorCategory: string | null,
+  ): Promise<void> => {
+    if (session === undefined || command === undefined) return;
+    const completed: CompletedCommand = {
+      command,
+      exitCode,
+      durationMs: Date.now() - startedAt,
+      errorCategory,
+    };
+    const batch = buildTelemetryBatch(session, completed, runEvents);
+    if (batch !== undefined) await session.deliver(batch);
+  };
 
   try {
     await program.parseAsync(args, {from: 'user'});
-    return {
-      exitCode: runFailed ? runFailureExitCode : 0,
-      stdout,
-      stderr,
-    };
   } catch (error) {
     if (error instanceof CommanderError) {
+      await finish(error.exitCode, telemetryErrorCategory(error));
       return {exitCode: error.exitCode, stdout, stderr};
     }
+    await finish(1, telemetryErrorCategory(error));
     throw error;
   }
+  const exitCode = runFailed ? runFailureExitCode : 0;
+  await finish(exitCode, null);
+  return {exitCode, stdout, stderr};
 }
 
 /**
@@ -98,6 +141,9 @@ export async function runCli(
 ): Promise<number> {
   const liveOutput = shouldUseLiveTerminalOutput();
   const terminalWidth = options.terminalWidth ?? process.stdout.columns;
+  const writeStderr =
+    options.writeStderr ??
+    ((value: string) => void process.stderr.write(value));
   const result = await executeCli(args, {
     ...options,
     color: options.color ?? liveOutput,
@@ -106,8 +152,9 @@ export async function runCli(
     ...(terminalWidth === undefined ? {} : {terminalWidth}),
     writeStdout:
       options.writeStdout ?? ((value) => void process.stdout.write(value)),
-    writeStderr:
-      options.writeStderr ?? ((value) => void process.stderr.write(value)),
+    writeStderr,
+    telemetry:
+      options.telemetry ?? (() => startTelemetrySession({writeStderr})),
   });
   return result.exitCode;
 }

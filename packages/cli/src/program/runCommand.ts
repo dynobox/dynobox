@@ -17,6 +17,7 @@
 
 import {basename, dirname, relative, resolve} from 'node:path';
 
+import type {TelemetryEvent} from '@dynobox/run-schema';
 import {
   type LocalRunnerJob,
   type LocalRunnerResult,
@@ -90,6 +91,7 @@ import {
   validateScenarioFilters,
 } from './options.js';
 import {runScenarioExecutions, type ScenarioExecution} from './runJobs.js';
+import {buildRunTelemetryEvents} from './telemetry.js';
 import {resolveCustomUploadUrl, uploadRun} from './uploadRun.js';
 
 const AUTH_PREFLIGHT_ATTEMPTS = 3;
@@ -116,6 +118,7 @@ export type RunCommandActionInput = {
   options: ExecuteCliOptions;
   writeStdout: OutputWriter;
   writeStderr: OutputWriter;
+  recordTelemetry?: (events: readonly TelemetryEvent[]) => void;
 };
 
 /**
@@ -293,6 +296,18 @@ export async function runCommandAction(
     const {results} = execution;
     const anyJobFailed = results.some((result) => !result.passed);
     const runFailed = anyJobFailed || errors.length > 0;
+    input.recordTelemetry?.(
+      buildRunTelemetryEvents({
+        dynos: dynoGroups.map(({entry, jobs: dynoJobs}) => ({
+          filePath: entry.filePath,
+          jobs: dynoJobs,
+        })),
+        results,
+        iterations,
+        passed: !runFailed,
+        saveRun: commandFlags.saveRun === true,
+      }),
+    );
 
     // Upload does not use the run controller. Restore normal signal handling
     // so Ctrl-C can interrupt a stalled upload instead of aborting finished jobs.

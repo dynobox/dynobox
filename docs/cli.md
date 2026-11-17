@@ -81,6 +81,20 @@ The command deletes `~/.dynobox/config.json` when it exists. If `DYNOBOX_TOKEN`
 is still set in the environment, the CLI notes that authenticated commands will
 continue to use that environment token.
 
+### `dynobox telemetry [status|enable|disable]`
+
+Show or change anonymous usage telemetry.
+
+```bash
+dynobox telemetry          # same as `dynobox telemetry status`
+dynobox telemetry disable
+```
+
+`status` prints whether telemetry is on, what decided it, and the install ID.
+`enable` and `disable` save the choice in `~/.dynobox/telemetry.json`.
+`DO_NOT_TRACK` and `DYNOBOX_TELEMETRY` override the saved choice. See
+[Telemetry](./telemetry.md) for what is sent.
+
 ### `dynobox run [path]`
 
 Discover and run dyno files.

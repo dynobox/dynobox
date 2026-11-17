@@ -24,6 +24,8 @@ shipping a prompt, skill, or workflow change.
   exit behavior.
 - [CI Integration](./ci.md): temporary GitHub Actions pattern from the
   [`dynobox/skills`](https://github.com/dynobox/skills) repo.
+- [Telemetry](./telemetry.md): what anonymous usage data the CLI sends and how
+  to turn it off.
 
 ## Dynobox Dashboard
 

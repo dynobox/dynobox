@@ -6,8 +6,9 @@
  * stays scannable.
  */
 
+import type {TelemetryEvent} from '@dynobox/run-schema';
 import {HARNESS_IDS, PERMISSION_MODES} from '@dynobox/sdk';
-import {Command} from 'commander';
+import {Argument, Command} from 'commander';
 
 import {readPackageVersion} from '../util/version.js';
 import {
@@ -21,6 +22,7 @@ import {loginCommandAction} from './loginCommand.js';
 import {logoutCommandAction} from './logoutCommand.js';
 import {collectOption} from './options.js';
 import {runCommandAction, type RunCommandFlags} from './runCommand.js';
+import {telemetryCommandAction} from './telemetryCommand.js';
 import {
   validateCommandAction,
   type ValidateCommandFlags,
@@ -37,10 +39,13 @@ export type BuildProgramInput = {
    * Commander action.
    */
   onRunFailure: () => void;
+  /** Receives run telemetry events; the caller decides whether to send them. */
+  recordTelemetry: (events: readonly TelemetryEvent[]) => void;
 };
 
 export function buildProgram(input: BuildProgramInput): Command {
-  const {options, writeStdout, writeStderr, onRunFailure} = input;
+  const {options, writeStdout, writeStderr, onRunFailure, recordTelemetry} =
+    input;
 
   const program = new Command();
   program
@@ -99,6 +104,7 @@ export function buildProgram(input: BuildProgramInput): Command {
           options,
           writeStdout,
           writeStderr,
+          recordTelemetry,
         });
         if (failed) onRunFailure();
       },
@@ -210,6 +216,22 @@ export function buildProgram(input: BuildProgramInput): Command {
         commandFlags,
         writeStdout,
         writeStderr,
+      });
+    });
+
+  program
+    .command('telemetry')
+    .addArgument(
+      new Argument('[action]', 'what to do')
+        .choices(['status', 'enable', 'disable'])
+        .default('status'),
+    )
+    .description('show or change anonymous usage telemetry')
+    .action((action: 'status' | 'enable' | 'disable') => {
+      telemetryCommandAction({
+        action,
+        writeStdout,
+        ...(options.env === undefined ? {} : {env: options.env}),
       });
     });
 
