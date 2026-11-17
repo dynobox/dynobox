@@ -1,15 +1,29 @@
-import {existsSync, mkdirSync, readFileSync, rmSync} from 'node:fs';
-import {join} from 'node:path';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import {dirname, join} from 'node:path';
 
 import {TelemetryBatch} from '@dynobox/run-schema';
+import {FakeHarness} from '@dynobox/runner-local';
+import {CommanderError} from 'commander';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 
-import {createFixtureSet, createPassingHarness} from '../testUtils.js';
+import {
+  createFixtureSet,
+  createPassingHarness,
+  MISMATCHED_SHELL_EVENT,
+} from '../testUtils.js';
 import {executeCli, runCli} from './execute.js';
+import {cancelledExitCode, runFailureExitCode} from './exitCodes.js';
 import {
   resolveTelemetryStatus,
   setTelemetryEnabled,
   startTelemetrySession,
+  telemetryErrorCategory,
   telemetryFilePath,
   type TelemetrySession,
 } from './telemetry.js';
@@ -61,6 +75,8 @@ describe('resolveTelemetryStatus', () => {
     [{CI: 'false'}, true, 'default'],
     [{CI: 'true', DYNOBOX_TELEMETRY: '1'}, true, 'DYNOBOX_TELEMETRY'],
     [{DYNOBOX_TELEMETRY: 'off'}, false, 'DYNOBOX_TELEMETRY'],
+    [{DYNOBOX_TELEMETRY: 'no'}, false, 'DYNOBOX_TELEMETRY'],
+    [{CI: 'true', DYNOBOX_TELEMETRY: ''}, false, 'CI'],
     [{DO_NOT_TRACK: '1', DYNOBOX_TELEMETRY: '1'}, false, 'DO_NOT_TRACK'],
     [{DO_NOT_TRACK: '0'}, true, 'default'],
   ])('%j → enabled %s from %s', (env, enabled, source) => {
@@ -80,6 +96,21 @@ describe('resolveTelemetryStatus', () => {
     expect(
       resolveTelemetryStatus({env: {HOME: home, DYNOBOX_TELEMETRY: '0'}}),
     ).toMatchObject({enabled: false, source: 'DYNOBOX_TELEMETRY'});
+  });
+
+  it('keeps a saved opt-out that has no install ID', () => {
+    const env = {HOME: homeDir('opt-out-no-id')};
+    const path = telemetryFilePath({env});
+    mkdirSync(dirname(path), {recursive: true});
+    writeFileSync(path, '{"enabled": false}\n');
+
+    expect(resolveTelemetryStatus({env})).toMatchObject({
+      enabled: false,
+      source: 'config',
+      installId: null,
+    });
+    expect(startTelemetrySession({env, writeStderr: () => {}})).toBeUndefined();
+    expect(readFileSync(path, 'utf8')).toBe('{"enabled": false}\n');
   });
 });
 
@@ -117,6 +148,38 @@ describe('startTelemetrySession', () => {
       true,
     );
     expect(stderr.endsWith('\x1b[0m\n\n')).toBe(true);
+  });
+
+  it('shows the notice after `telemetry enable` and keeps the setting', () => {
+    const env = {HOME: homeDir('enable-first')};
+    setTelemetryEnabled(true, {env});
+    let stderr = '';
+
+    const session = startTelemetrySession({
+      env,
+      writeStderr: (value) => {
+        stderr += value;
+      },
+    });
+
+    expect(session?.firstRun).toBe(true);
+    expect(stderr).toContain('dynobox telemetry disable');
+    expect(resolveTelemetryStatus({env})).toMatchObject({
+      enabled: true,
+      source: 'config',
+      installId: session?.context.installId,
+    });
+  });
+
+  it.each([
+    [{CI: 'false'}, false],
+    [{CI: 'true', DYNOBOX_TELEMETRY: '1'}, true],
+  ])('reports %j as ci %s', (env, ci) => {
+    const session = startTelemetrySession({
+      env: {HOME: homeDir(`ci-${ci}`), ...env},
+      writeStderr: () => {},
+    });
+    expect(session?.context.ci).toBe(ci);
   });
 
   it('does nothing when telemetry is off', () => {
@@ -214,6 +277,55 @@ describe('executeCli telemetry', () => {
     });
   });
 
+  it('sends the run events and keeps the exit code when a run fails', async () => {
+    const {batches, start} = recordingSession();
+
+    const result = await executeCli(['run', fixtures.validConfigPath], {
+      harnesses: [
+        new FakeHarness(undefined, {toolEvents: [MISMATCHED_SHELL_EVENT]}),
+      ],
+      telemetry: start,
+    });
+
+    expect(result.exitCode).toBe(runFailureExitCode);
+    expect(batches[0]?.events).toEqual([
+      expect.objectContaining({
+        type: 'command',
+        exitCode: runFailureExitCode,
+        errorCategory: null,
+      }),
+      expect.objectContaining({type: 'run', passed: false}),
+      expect.objectContaining({
+        type: 'harness_run',
+        jobs: 1,
+        passed: 0,
+        assertionFailed: 1,
+      }),
+    ]);
+  });
+
+  it('reports a cancelled run', async () => {
+    const {batches, start} = recordingSession();
+    const harness = createPassingHarness();
+    const run = harness.run.bind(harness);
+    vi.spyOn(harness, 'run').mockImplementation((input) => {
+      process.emit('SIGINT');
+      return run(input);
+    });
+
+    const result = await executeCli(['run', fixtures.validConfigPath], {
+      harnesses: [harness],
+      telemetry: start,
+    });
+
+    expect(result.exitCode).toBe(cancelledExitCode);
+    expect(batches[0]?.events[0]).toMatchObject({
+      type: 'command',
+      exitCode: cancelledExitCode,
+      errorCategory: 'cancelled',
+    });
+  });
+
   it('reports a config error category', async () => {
     const {batches, start} = recordingSession();
 
@@ -246,6 +358,24 @@ describe('executeCli telemetry', () => {
       expect(batches).toHaveLength(0);
     },
   );
+});
+
+describe('telemetryErrorCategory', () => {
+  it.each([
+    ['dynobox.auth', 'auth'],
+    ['dynobox.login', 'auth'],
+    ['dynobox.whoami', 'auth'],
+    ['dynobox.cancelled', 'cancelled'],
+    ['dynobox.config', 'config'],
+  ])('maps %s to %s', (code, category) => {
+    expect(telemetryErrorCategory(new CommanderError(1, code, 'x'))).toBe(
+      category,
+    );
+  });
+
+  it('maps any other error to internal', () => {
+    expect(telemetryErrorCategory(new Error('boom'))).toBe('internal');
+  });
 });
 
 describe('runCli telemetry', () => {

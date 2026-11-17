@@ -42,7 +42,7 @@ export type TelemetryPaths = {
   homeDir?: string;
 };
 
-type TelemetryState = {installId: string; enabled?: boolean};
+type TelemetryState = {installId?: string; enabled?: boolean};
 
 export type TelemetryStatus = {
   enabled: boolean;
@@ -78,26 +78,29 @@ export function resolveTelemetryStatus(
   if (isTruthy(env.DO_NOT_TRACK)) {
     return {...base, enabled: false, source: 'DO_NOT_TRACK'};
   }
-  const override = parseSwitch(env.DYNOBOX_TELEMETRY);
-  if (override !== undefined) {
-    return {...base, enabled: override, source: 'DYNOBOX_TELEMETRY'};
+  // Any value other than 1/true/on turns it off, so a typo never opts in.
+  if (env.DYNOBOX_TELEMETRY !== undefined && env.DYNOBOX_TELEMETRY !== '') {
+    const enabled = parseSwitch(env.DYNOBOX_TELEMETRY) === true;
+    return {...base, enabled, source: 'DYNOBOX_TELEMETRY'};
   }
   if (state?.enabled !== undefined) {
     return {...base, enabled: state.enabled, source: 'config'};
   }
-  if (env.CI !== undefined && parseSwitch(env.CI) !== false) {
+  if (isCi(env)) {
     return {...base, enabled: false, source: 'CI'};
   }
   return {...base, enabled: true, source: 'default'};
 }
 
-/** Saves `enabled` and returns the file path. Keeps the install ID. */
+/**
+ * Saves `enabled` and returns the file path. Keeps any install ID but does
+ * not create one, so the first tracked command still shows the notice.
+ */
 export function setTelemetryEnabled(
   enabled: boolean,
   input: TelemetryPaths = {},
 ): string {
-  const state = readState(input) ?? {installId: randomUUID()};
-  return writeState({...state, enabled}, input);
+  return writeState({...readState(input), enabled}, input);
 }
 
 /**
@@ -121,7 +124,7 @@ export function startTelemetrySession(
   if (installId === null) {
     installId = randomUUID();
     try {
-      writeState({installId}, input);
+      writeState({...readState(input), installId}, input);
     } catch {
       // An unwritable home directory would show the notice on every run.
       return undefined;
@@ -139,7 +142,7 @@ export function startTelemetrySession(
       os: process.platform,
       arch: process.arch,
       nodeVersion: process.versions.node,
-      ci: env.CI !== undefined,
+      ci: isCi(env),
     },
     firstRun,
     deliver: async (batch) => {
@@ -322,8 +325,10 @@ function readState(input: TelemetryPaths): TelemetryState | null {
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown;
     if (typeof parsed !== 'object' || parsed === null) return null;
     const {installId, enabled} = parsed as Record<string, unknown>;
-    if (typeof installId !== 'string') return null;
-    return typeof enabled === 'boolean' ? {installId, enabled} : {installId};
+    return {
+      ...(typeof installId === 'string' ? {installId} : {}),
+      ...(typeof enabled === 'boolean' ? {enabled} : {}),
+    };
   } catch {
     return null;
   }
@@ -334,6 +339,10 @@ function writeState(state: TelemetryState, input: TelemetryPaths): string {
   mkdirSync(join(path, '..'), {recursive: true});
   writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`);
   return path;
+}
+
+function isCi(env: TelemetryEnvironment): boolean {
+  return env.CI !== undefined && parseSwitch(env.CI) !== false;
 }
 
 function isTruthy(value: string | undefined): boolean {
