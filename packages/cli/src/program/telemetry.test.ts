@@ -102,6 +102,23 @@ describe('startTelemetrySession', () => {
     expect(stderr).toBe('');
   });
 
+  it('dims the notice when color is on and ends it with a blank line', () => {
+    let stderr = '';
+    startTelemetrySession({
+      env: {HOME: homeDir('dim-notice')},
+      color: true,
+      writeStderr: (value) => {
+        stderr += value;
+      },
+    });
+
+    const lines = stderr.split('\n');
+    expect(lines.slice(0, 3).every((line) => line.startsWith('\x1b[2m'))).toBe(
+      true,
+    );
+    expect(stderr.endsWith('\x1b[0m\n\n')).toBe(true);
+  });
+
   it('does nothing when telemetry is off', () => {
     const env = {HOME: homeDir('opted-out'), DO_NOT_TRACK: '1'};
     const writeStderr = vi.fn();

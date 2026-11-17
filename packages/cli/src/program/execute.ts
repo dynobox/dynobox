@@ -154,7 +154,12 @@ export async function runCli(
       options.writeStdout ?? ((value) => void process.stdout.write(value)),
     writeStderr,
     telemetry:
-      options.telemetry ?? (() => startTelemetrySession({writeStderr})),
+      options.telemetry ??
+      (() =>
+        startTelemetrySession({
+          writeStderr,
+          color: options.color ?? liveOutput,
+        })),
   });
   return result.exitCode;
 }

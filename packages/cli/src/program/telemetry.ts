@@ -24,6 +24,7 @@ import {
 import type {LocalRunnerJob, LocalRunnerResult} from '@dynobox/runner-local';
 import {CommanderError} from 'commander';
 
+import {dim} from '../terminal/style.js';
 import {unique} from '../util/unique.js';
 import {readPackageVersion} from '../util/version.js';
 import {DYNOBOX_CONFIG_DIR} from './auth.js';
@@ -107,6 +108,8 @@ export function setTelemetryEnabled(
 export function startTelemetrySession(
   input: TelemetryPaths & {
     writeStderr: OutputWriter;
+    /** Dims the notice so it reads as secondary to the command output. */
+    color?: boolean;
     fetch?: typeof fetch;
   },
 ): TelemetrySession | undefined {
@@ -123,7 +126,7 @@ export function startTelemetrySession(
       // An unwritable home directory would show the notice on every run.
       return undefined;
     }
-    input.writeStderr(renderTelemetryNotice());
+    input.writeStderr(renderTelemetryNotice(input.color === true));
   }
 
   const env = input.env ?? process.env;
@@ -158,13 +161,13 @@ export function startTelemetrySession(
   };
 }
 
-export function renderTelemetryNotice(): string {
-  return [
+export function renderTelemetryNotice(color: boolean): string {
+  const lines = [
     'dynobox collects anonymous usage data: commands, harnesses, models, pass and fail counts, and timings.',
     'It never collects prompts, file paths, dyno or scenario names, or repository names.',
     `Turn it off with \`dynobox telemetry disable\` or DYNOBOX_TELEMETRY=0. Details: ${TELEMETRY_DOCS_URL}`,
-    '',
-  ].join('\n');
+  ];
+  return `${lines.map((line) => dim({color}, line)).join('\n')}\n\n`;
 }
 
 export function isTrackedCommand(name: string): boolean {
