@@ -465,11 +465,28 @@ describe('buildRunTelemetryEvents', () => {
 });
 
 describe('runCli telemetry', () => {
+  it('sends nothing unless asked to', async () => {
+    const env = {HOME: homeDir('runcli-default')};
+    let stderr = '';
+
+    await runCli(['validate', fixtures.validConfigPath], {
+      env,
+      writeStdout: () => {},
+      writeStderr: (value) => {
+        stderr += value;
+      },
+    });
+
+    expect(existsSync(telemetryFilePath({env}))).toBe(false);
+    expect(stderr).not.toContain('anonymous usage data');
+  });
+
   it('honors an opt-out in the supplied environment', async () => {
     const env = {HOME: homeDir('runcli-opt-out'), DO_NOT_TRACK: '1'};
 
     await runCli(['validate', fixtures.validConfigPath], {
       env,
+      sendTelemetry: true,
       writeStdout: () => {},
       writeStderr: () => {},
     });
@@ -483,6 +500,7 @@ describe('runCli telemetry', () => {
 
     await runCli(['validate', fixtures.validConfigPath], {
       env,
+      sendTelemetry: true,
       writeStdout: () => {},
       writeStderr: (value) => {
         stderr += value;

@@ -2,4 +2,4 @@
 
 import {runCli} from './program/index.js';
 
-process.exit(await runCli());
+process.exit(await runCli(undefined, {sendTelemetry: true}));

@@ -131,13 +131,21 @@ export async function executeCli(
   return {exitCode, stdout, stderr};
 }
 
+export type RunCliOptions = ExecuteCliOptions & {
+  /**
+   * Sends usage telemetry for tracked commands. Only `bin.ts` sets it, so
+   * tests and other callers never write telemetry state or send data.
+   */
+  sendTelemetry?: boolean;
+};
+
 /**
  * Process entry point. Wires `process.stdout`/`process.stderr` writers and
  * resolves color/live/plain-symbols defaults from the host terminal.
  */
 export async function runCli(
   args = process.argv.slice(2),
-  options: ExecuteCliOptions = {},
+  options: RunCliOptions = {},
 ): Promise<number> {
   const liveOutput = shouldUseLiveTerminalOutput();
   const terminalWidth = options.terminalWidth ?? process.stdout.columns;
@@ -153,14 +161,16 @@ export async function runCli(
     writeStdout:
       options.writeStdout ?? ((value) => void process.stdout.write(value)),
     writeStderr,
-    telemetry:
-      options.telemetry ??
-      (() =>
-        startTelemetrySession({
-          writeStderr,
-          color: options.color ?? liveOutput,
-          ...(options.env === undefined ? {} : {env: options.env}),
-        })),
+    ...(options.sendTelemetry === true && options.telemetry === undefined
+      ? {
+          telemetry: () =>
+            startTelemetrySession({
+              writeStderr,
+              color: options.color ?? liveOutput,
+              ...(options.env === undefined ? {} : {env: options.env}),
+            }),
+        }
+      : {}),
   });
   return result.exitCode;
 }
