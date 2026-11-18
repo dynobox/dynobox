@@ -14,7 +14,7 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   for runs the dyno, scenario, and job counts plus per harness and model
   outcome counts and timings. No prompts, paths, names, repositories, or
   assertion content are sent. The first send prints a notice. Telemetry is off
-  in CI and with `DO_NOT_TRACK=1`, `DYNOBOX_TELEMETRY=0`, or
+  when `CI` is `1` or `true`, and with `DO_NOT_TRACK=1`, `DYNOBOX_TELEMETRY=0`, or
   `dynobox telemetry disable`. `DYNOBOX_TELEMETRY_DEBUG=1` prints batches
   instead of sending them. See `docs/telemetry.md`.
 - Add `dynobox telemetry [status|enable|disable]`.

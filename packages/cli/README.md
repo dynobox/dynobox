@@ -132,7 +132,7 @@ when those values should not be shared.
 
 The CLI sends anonymous usage data: commands, harnesses, models, pass and fail
 counts, and timings. It never sends prompts, file paths, dyno or scenario names,
-or repository names. It is off in CI. Turn it off with
+or repository names. It is off when `CI` is `1` or `true`. Turn it off with
 `dynobox telemetry disable`, `DYNOBOX_TELEMETRY=0`, or `DO_NOT_TRACK=1`. See
 [Telemetry](https://docs.dynobox.xyz/telemetry) for the full list.
 
