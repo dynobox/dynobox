@@ -118,7 +118,7 @@ export type RunCommandActionInput = {
   options: ExecuteCliOptions;
   writeStdout: OutputWriter;
   writeStderr: OutputWriter;
-  recordTelemetry?: (events: readonly TelemetryEvent[]) => void;
+  recordTelemetry?: (buildEvents: () => readonly TelemetryEvent[]) => void;
 };
 
 /**
@@ -296,7 +296,7 @@ export async function runCommandAction(
     const {results} = execution;
     const anyJobFailed = results.some((result) => !result.passed);
     const runFailed = anyJobFailed || errors.length > 0;
-    input.recordTelemetry?.(
+    input.recordTelemetry?.(() =>
       buildRunTelemetryEvents({
         dynos: dynoGroups.map(({entry, jobs: dynoJobs}) => ({
           filePath: entry.filePath,

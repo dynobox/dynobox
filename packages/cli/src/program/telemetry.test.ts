@@ -130,8 +130,45 @@ describe('resolveTelemetryStatus', () => {
       enabled: false,
       source: 'unreadable',
     });
-    expect(startTelemetrySession({env, writeStderr: () => {}})).toBeUndefined();
+    let stderr = '';
+    const session = startTelemetrySession({
+      env,
+      writeStderr: (value) => {
+        stderr += value;
+      },
+    });
+    expect(session).toBeUndefined();
+    expect(stderr).toBe(
+      `warning: ${path} could not be read, so telemetry is off. Fix it or run \`dynobox telemetry enable|disable\` to replace it.\n`,
+    );
     expect(readFileSync(path, 'utf8')).toBe('{"enabled": false,}\n');
+  });
+
+  it('treats a non-boolean enabled as unreadable', () => {
+    const env = {HOME: homeDir('mistyped-enabled')};
+    const path = telemetryFilePath({env});
+    mkdirSync(dirname(path), {recursive: true});
+    writeFileSync(path, '{"enabled": "false"}\n');
+
+    expect(resolveTelemetryStatus({env})).toMatchObject({
+      enabled: false,
+      source: 'unreadable',
+    });
+  });
+
+  it('replaces an install ID that is not a UUID', () => {
+    const env = {HOME: homeDir('bad-install-id')};
+    const path = telemetryFilePath({env});
+    mkdirSync(dirname(path), {recursive: true});
+    writeFileSync(path, '{"installId": "my-machine"}\n');
+
+    const session = startTelemetrySession({env, writeStderr: () => {}});
+
+    expect(session?.firstRun).toBe(true);
+    expect(session?.context.installId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({
+      installId: session?.context.installId,
+    });
   });
 });
 

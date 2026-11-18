@@ -39,8 +39,8 @@ export type BuildProgramInput = {
    * Commander action.
    */
   onRunFailure: () => void;
-  /** Receives run telemetry events; the caller decides whether to send them. */
-  recordTelemetry: (events: readonly TelemetryEvent[]) => void;
+  /** Receives a builder for run telemetry events; called only when sending. */
+  recordTelemetry: (buildEvents: () => readonly TelemetryEvent[]) => void;
 };
 
 export function buildProgram(input: BuildProgramInput): Command {

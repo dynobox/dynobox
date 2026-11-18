@@ -17,7 +17,7 @@ import {
   TELEMETRY_LIMITS,
   TELEMETRY_SCHEMA_VERSION,
   TelemetryBatch,
-  type TelemetryContext,
+  TelemetryContext,
   type TelemetryEvent,
   type TelemetryHarnessRunEvent,
 } from '@dynobox/run-schema';
@@ -126,6 +126,11 @@ export function startTelemetrySession(
   },
 ): TelemetrySession | undefined {
   const status = resolveTelemetryStatus(input);
+  if (status.source === 'unreadable') {
+    input.writeStderr(
+      `warning: ${telemetryFilePath(input)} could not be read, so telemetry is off. Fix it or run \`dynobox telemetry enable|disable\` to replace it.\n`,
+    );
+  }
   if (!status.enabled) return undefined;
 
   let installId = status.installId;
@@ -331,7 +336,11 @@ function configFormat(filePath: string): string {
   return 'js';
 }
 
-/** Null when the file is missing, 'unreadable' when it can't be parsed. */
+/**
+ * Null when the file is missing, 'unreadable' when it can't be parsed or
+ * `enabled` is not a boolean. An install ID that is not a UUID is dropped, so
+ * a new one is created.
+ */
 function readState(
   input: TelemetryPaths,
 ): TelemetryState | null | 'unreadable' {
@@ -341,8 +350,12 @@ function readState(
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown;
     if (typeof parsed !== 'object' || parsed === null) return 'unreadable';
     const {installId, enabled} = parsed as Record<string, unknown>;
+    if (enabled !== undefined && typeof enabled !== 'boolean') {
+      return 'unreadable';
+    }
+    const validId = TelemetryContext.shape.installId.safeParse(installId);
     return {
-      ...(typeof installId === 'string' ? {installId} : {}),
+      ...(validId.success ? {installId: validId.data} : {}),
       ...(typeof enabled === 'boolean' ? {enabled} : {}),
     };
   } catch {

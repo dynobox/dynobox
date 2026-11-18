@@ -78,6 +78,7 @@ export async function executeCli(
   }
 
   let runFailed = false;
+  let session: TelemetrySession | undefined;
   const runEvents: TelemetryEvent[] = [];
   const program = buildProgram({
     options,
@@ -86,16 +87,20 @@ export async function executeCli(
     onRunFailure: () => {
       runFailed = true;
     },
-    recordTelemetry: (events) => {
-      runEvents.push(...events);
+    recordTelemetry: (buildEvents) => {
+      if (session === undefined) return;
+      try {
+        runEvents.push(...buildEvents());
+      } catch {
+        // Telemetry never fails a command.
+      }
     },
   });
 
   // The session starts once Commander has picked a tracked command, so help,
   // version, and `dynobox telemetry` never show the notice or send anything.
-  const startedAt = Date.now();
+  const startedAt = performance.now();
   let command: string | undefined;
-  let session: TelemetrySession | undefined;
   program.hook('preAction', (_program, actionCommand) => {
     if (!isTrackedCommand(actionCommand.name())) return;
     command = actionCommand.name();
@@ -109,7 +114,7 @@ export async function executeCli(
     const completed: CompletedCommand = {
       command,
       exitCode,
-      durationMs: Date.now() - startedAt,
+      durationMs: Math.round(performance.now() - startedAt),
       errorCategory,
     };
     const batch = buildTelemetryBatch(session, completed, runEvents);
