@@ -72,21 +72,20 @@ export function resolveTelemetryStatus(
   const state = readState(input);
   const base = {
     installId: state?.installId ?? null,
-    debug: isTruthy(env.DYNOBOX_TELEMETRY_DEBUG),
+    debug: parseEnvFlag(env.DYNOBOX_TELEMETRY_DEBUG) === true,
   };
 
-  if (isTruthy(env.DO_NOT_TRACK)) {
+  if (parseEnvFlag(env.DO_NOT_TRACK) === true) {
     return {...base, enabled: false, source: 'DO_NOT_TRACK'};
   }
-  // Any value other than 1/true/on turns it off, so a typo never opts in.
-  if (env.DYNOBOX_TELEMETRY !== undefined && env.DYNOBOX_TELEMETRY !== '') {
-    const enabled = parseSwitch(env.DYNOBOX_TELEMETRY) === true;
-    return {...base, enabled, source: 'DYNOBOX_TELEMETRY'};
+  const envTelemetry = parseEnvFlag(env.DYNOBOX_TELEMETRY);
+  if (envTelemetry !== undefined) {
+    return {...base, enabled: envTelemetry, source: 'DYNOBOX_TELEMETRY'};
   }
   if (state?.enabled !== undefined) {
     return {...base, enabled: state.enabled, source: 'config'};
   }
-  if (isCi(env)) {
+  if (parseEnvFlag(env.CI) === true) {
     return {...base, enabled: false, source: 'CI'};
   }
   return {...base, enabled: true, source: 'default'};
@@ -142,7 +141,7 @@ export function startTelemetrySession(
       os: process.platform,
       arch: process.arch,
       nodeVersion: process.versions.node,
-      ci: isCi(env),
+      ci: parseEnvFlag(env.CI) === true,
     },
     firstRun,
     deliver: async (batch) => {
@@ -258,7 +257,7 @@ export function buildRunTelemetryEvents(
 
   const harnessRuns = new Map<string, TelemetryHarnessRunEvent>();
   for (const result of input.results) {
-    const model = result.model?.slice(0, TELEMETRY_LIMITS.modelLength) ?? null;
+    const model = truncateNonEmpty(result.model, TELEMETRY_LIMITS.modelLength);
     const key = `${result.harness}\0${model ?? ''}`;
     const event = harnessRuns.get(key) ?? {
       type: 'harness_run',
@@ -278,8 +277,10 @@ export function buildRunTelemetryEvents(
       reportedMs: null,
       unknownToolEvents: 0,
     };
-    event.harnessVersion ??=
-      result.harnessVersion?.slice(0, TELEMETRY_LIMITS.versionLength) ?? null;
+    event.harnessVersion ??= truncateNonEmpty(
+      result.harnessVersion,
+      TELEMETRY_LIMITS.versionLength,
+    );
     event.jobs += 1;
     if (result.status === 'passed') event.passed += 1;
     if (result.status === 'assertion_failed') event.assertionFailed += 1;
@@ -341,22 +342,18 @@ function writeState(state: TelemetryState, input: TelemetryPaths): string {
   return path;
 }
 
-function isCi(env: TelemetryEnvironment): boolean {
-  return env.CI !== undefined && parseSwitch(env.CI) !== false;
-}
-
-function isTruthy(value: string | undefined): boolean {
-  return value !== undefined && value !== '' && parseSwitch(value) !== false;
-}
-
-/** `1/true/on` → true, `0/false/off` → false, anything else → undefined. */
-function parseSwitch(value: string | undefined): boolean | undefined {
+/** `'1' | 'true'` → true, `'0' | 'false'` → false, anything else → undefined. */
+function parseEnvFlag(value: string | undefined): boolean | undefined {
   const normalized = value?.trim().toLowerCase();
-  if (normalized === '1' || normalized === 'true' || normalized === 'on') {
-    return true;
-  }
-  if (normalized === '0' || normalized === 'false' || normalized === 'off') {
-    return false;
-  }
+  if (normalized === '1' || normalized === 'true') return true;
+  if (normalized === '0' || normalized === 'false') return false;
   return undefined;
+}
+
+function truncateNonEmpty(
+  value: string | null | undefined,
+  maxLength: number,
+): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.slice(0, maxLength) : null;
 }

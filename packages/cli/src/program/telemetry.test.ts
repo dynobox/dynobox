@@ -20,6 +20,7 @@ import {
 import {executeCli, runCli} from './execute.js';
 import {cancelledExitCode, runFailureExitCode} from './exitCodes.js';
 import {
+  buildRunTelemetryEvents,
   resolveTelemetryStatus,
   setTelemetryEnabled,
   startTelemetrySession,
@@ -72,13 +73,19 @@ describe('resolveTelemetryStatus', () => {
   it.each([
     [{}, true, 'default'],
     [{CI: 'true'}, false, 'CI'],
+    [{CI: '1'}, false, 'CI'],
     [{CI: 'false'}, true, 'default'],
+    [{CI: '0'}, true, 'default'],
+    [{CI: ''}, true, 'default'],
     [{CI: 'true', DYNOBOX_TELEMETRY: '1'}, true, 'DYNOBOX_TELEMETRY'],
-    [{DYNOBOX_TELEMETRY: 'off'}, false, 'DYNOBOX_TELEMETRY'],
-    [{DYNOBOX_TELEMETRY: 'no'}, false, 'DYNOBOX_TELEMETRY'],
+    [{DYNOBOX_TELEMETRY: '0'}, false, 'DYNOBOX_TELEMETRY'],
+    [{DYNOBOX_TELEMETRY: 'false'}, false, 'DYNOBOX_TELEMETRY'],
     [{CI: 'true', DYNOBOX_TELEMETRY: ''}, false, 'CI'],
+    [{CI: 'true', DYNOBOX_TELEMETRY: 'invalid'}, false, 'CI'],
     [{DO_NOT_TRACK: '1', DYNOBOX_TELEMETRY: '1'}, false, 'DO_NOT_TRACK'],
+    [{DO_NOT_TRACK: 'true', DYNOBOX_TELEMETRY: '1'}, false, 'DO_NOT_TRACK'],
     [{DO_NOT_TRACK: '0'}, true, 'default'],
+    [{DO_NOT_TRACK: ''}, true, 'default'],
   ])('%j → enabled %s from %s', (env, enabled, source) => {
     const status = resolveTelemetryStatus({
       env: {HOME: homeDir('no-state'), ...env},
@@ -375,6 +382,47 @@ describe('telemetryErrorCategory', () => {
 
   it('maps any other error to internal', () => {
     expect(telemetryErrorCategory(new Error('boom'))).toBe('internal');
+  });
+});
+
+describe('buildRunTelemetryEvents', () => {
+  it('normalizes empty model and harnessVersion strings to null', () => {
+    const events = buildRunTelemetryEvents({
+      dynos: [],
+      results: [
+        {
+          jobId: 'job-1',
+          scenarioId: 'scenario-1',
+          harness: 'claude-code',
+          harnessVersion: '   ',
+          model: '',
+          iteration: 0,
+          status: 'passed',
+          passed: true,
+          workDir: '/tmp/work',
+          setupResult: {success: true, logs: []},
+          httpEvents: [],
+          harnessCliMockCallCount: 0,
+          cliMockCalls: [],
+          artifacts: [],
+          assertionResults: [],
+          verificationFailed: false,
+          diagnostics: [],
+          warnings: [],
+          timing: {setupMs: 0, harnessMs: 10, assertionsMs: 0, totalMs: 10},
+        },
+      ],
+      iterations: 1,
+      passed: true,
+      saveRun: false,
+    });
+
+    expect(events[1]).toMatchObject({
+      type: 'harness_run',
+      harness: 'claude-code',
+      harnessVersion: null,
+      model: null,
+    });
   });
 });
 

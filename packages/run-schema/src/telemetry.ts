@@ -77,7 +77,7 @@ export const TelemetryCommandEvent = z.object({
   exitCode: z.number().int(),
   durationMs,
   errorCategory: identifier.nullable(),
-  /** The first time this install ran this command. */
+  /** Whether this was the first tracked command for this install. */
   firstRun: z.boolean(),
 });
 
