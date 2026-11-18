@@ -17,6 +17,7 @@
 
 import {basename, dirname, relative, resolve} from 'node:path';
 
+import type {TelemetryEvent} from '@dynobox/run-schema';
 import {
   type LocalRunnerJob,
   type LocalRunnerResult,
@@ -90,6 +91,7 @@ import {
   validateScenarioFilters,
 } from './options.js';
 import {runScenarioExecutions, type ScenarioExecution} from './runJobs.js';
+import {buildRunTelemetryEvents} from './telemetry.js';
 import {resolveCustomUploadUrl, uploadRun} from './uploadRun.js';
 
 const AUTH_PREFLIGHT_ATTEMPTS = 3;
@@ -116,6 +118,7 @@ export type RunCommandActionInput = {
   options: ExecuteCliOptions;
   writeStdout: OutputWriter;
   writeStderr: OutputWriter;
+  recordTelemetry?: (buildEvents: () => readonly TelemetryEvent[]) => void;
 };
 
 /**
@@ -293,6 +296,18 @@ export async function runCommandAction(
     const {results} = execution;
     const anyJobFailed = results.some((result) => !result.passed);
     const runFailed = anyJobFailed || errors.length > 0;
+    input.recordTelemetry?.(() =>
+      buildRunTelemetryEvents({
+        dynos: dynoGroups.map(({entry, jobs: dynoJobs}) => ({
+          filePath: entry.filePath,
+          jobs: dynoJobs,
+        })),
+        results,
+        iterations,
+        passed: !runFailed,
+        saveRun: commandFlags.saveRun === true,
+      }),
+    );
 
     // Upload does not use the run controller. Restore normal signal handling
     // so Ctrl-C can interrupt a stalled upload instead of aborting finished jobs.
@@ -388,6 +403,7 @@ async function validateSaveRunAuth(input: {
     input,
     `Could not verify Dynobox authentication after ${AUTH_PREFLIGHT_ATTEMPTS} attempts. Try --save-run again later.`,
     describeSaveRunVerificationFailure(lastResult),
+    lastResult?.status === 'network_failure' ? 'dynobox.network' : undefined,
   );
 }
 
@@ -402,9 +418,10 @@ function failSaveRunAuth(
   input: {inputLabel: string; writeStderr: OutputWriter},
   message: string,
   errorMessage: string,
+  code = 'dynobox.auth',
 ): never {
   input.writeStderr(renderRunConfigErrorMessage(input.inputLabel, message));
-  throw new CommanderError(configErrorExitCode, 'dynobox.auth', errorMessage);
+  throw new CommanderError(configErrorExitCode, code, errorMessage);
 }
 
 function describeSaveRunVerificationFailure(

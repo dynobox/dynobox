@@ -18,6 +18,7 @@ const docFiles = [
   'mcp-mocking.md',
   'cli.md',
   'ci.md',
+  'telemetry.md',
 ] as const;
 
 const highlighter = createHighlighter({
@@ -210,6 +211,20 @@ const docMetadata: Record<
       'cursor-agent',
       'Google Antigravity CLI',
       'agy',
+    ],
+  },
+  'telemetry.md': {
+    agentSummary:
+      'What anonymous usage data the Dynobox CLI sends, what it never sends, and how to turn it off with dynobox telemetry disable, DYNOBOX_TELEMETRY=0, or DO_NOT_TRACK.',
+    description:
+      'What the Dynobox CLI sends as anonymous usage data and how to turn it off.',
+    topics: [
+      'telemetry',
+      'privacy',
+      'dynobox telemetry',
+      'DYNOBOX_TELEMETRY',
+      'DO_NOT_TRACK',
+      'DYNOBOX_TELEMETRY_DEBUG',
     ],
   },
 };
