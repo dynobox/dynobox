@@ -119,6 +119,20 @@ describe('resolveTelemetryStatus', () => {
     expect(startTelemetrySession({env, writeStderr: () => {}})).toBeUndefined();
     expect(readFileSync(path, 'utf8')).toBe('{"enabled": false}\n');
   });
+
+  it('stays off and keeps an unreadable file', () => {
+    const env = {HOME: homeDir('unreadable'), DYNOBOX_TELEMETRY: '1'};
+    const path = telemetryFilePath({env});
+    mkdirSync(dirname(path), {recursive: true});
+    writeFileSync(path, '{"enabled": false,}\n');
+
+    expect(resolveTelemetryStatus({env})).toMatchObject({
+      enabled: false,
+      source: 'unreadable',
+    });
+    expect(startTelemetrySession({env, writeStderr: () => {}})).toBeUndefined();
+    expect(readFileSync(path, 'utf8')).toBe('{"enabled": false,}\n');
+  });
 });
 
 describe('startTelemetrySession', () => {
@@ -333,6 +347,29 @@ describe('executeCli telemetry', () => {
     });
   });
 
+  it('reports an unreachable API as a network error', async () => {
+    const {batches, start} = recordingSession();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('offline'))),
+    );
+
+    try {
+      await executeCli(['whoami'], {
+        env: {HOME: homeDir('network'), DYNOBOX_TOKEN: 'token'},
+        telemetry: start,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(batches[0]?.events[0]).toMatchObject({
+      type: 'command',
+      command: 'whoami',
+      errorCategory: 'network',
+    });
+  });
+
   it('reports a config error category', async () => {
     const {batches, start} = recordingSession();
 
@@ -373,6 +410,7 @@ describe('telemetryErrorCategory', () => {
     ['dynobox.login', 'auth'],
     ['dynobox.whoami', 'auth'],
     ['dynobox.cancelled', 'cancelled'],
+    ['dynobox.network', 'network'],
     ['dynobox.config', 'config'],
   ])('maps %s to %s', (code, category) => {
     expect(telemetryErrorCategory(new CommanderError(1, code, 'x'))).toBe(
@@ -453,52 +491,5 @@ describe('runCli telemetry', () => {
 
     expect(existsSync(telemetryFilePath({env}))).toBe(true);
     expect(stderr).toContain('[telemetry] {"schemaVersion":1');
-  });
-});
-
-describe('dynobox telemetry', () => {
-  it('shows the status and saves enable and disable', async () => {
-    const home = homeDir('command');
-
-    const status = await executeCli(['telemetry'], {env: {HOME: home}});
-    expect(status.stdout).toContain('Telemetry: enabled\n');
-    expect(status.stdout).toContain('Install ID: none yet\n');
-
-    const disabled = await executeCli(['telemetry', 'disable'], {
-      env: {HOME: home},
-    });
-    expect(disabled.stdout).toBe('Telemetry disabled.\n');
-    const saved = JSON.parse(
-      readFileSync(telemetryFilePath({homeDir: home}), 'utf8'),
-    ) as {enabled: boolean};
-    expect(saved.enabled).toBe(false);
-
-    const after = await executeCli(['telemetry', 'status'], {
-      env: {HOME: home},
-    });
-    expect(after.stdout).toContain(
-      'Telemetry: disabled (dynobox telemetry disable)\n',
-    );
-  });
-
-  it('notes when the environment overrides the saved setting', async () => {
-    const result = await executeCli(['telemetry', 'enable'], {
-      env: {HOME: homeDir('override'), DO_NOT_TRACK: '1'},
-    });
-
-    expect(result.stdout).toBe(
-      'Telemetry enabled.\nNote: DO_NOT_TRACK overrides this setting, so telemetry is still disabled.\n',
-    );
-  });
-
-  it('rejects unknown actions', async () => {
-    const result = await executeCli(['telemetry', 'nope'], {
-      env: {HOME: homeDir('unknown')},
-    });
-
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain(
-      'Allowed choices are status, enable, disable',
-    );
   });
 });

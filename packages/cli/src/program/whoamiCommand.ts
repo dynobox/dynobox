@@ -69,7 +69,7 @@ export async function whoamiCommandAction(
 
   throw new CommanderError(
     configErrorExitCode,
-    'dynobox.whoami',
+    result.status === 'network_failure' ? 'dynobox.network' : 'dynobox.whoami',
     'identity verification failed',
   );
 }

@@ -403,6 +403,7 @@ async function validateSaveRunAuth(input: {
     input,
     `Could not verify Dynobox authentication after ${AUTH_PREFLIGHT_ATTEMPTS} attempts. Try --save-run again later.`,
     describeSaveRunVerificationFailure(lastResult),
+    lastResult?.status === 'network_failure' ? 'dynobox.network' : undefined,
   );
 }
 
@@ -417,9 +418,10 @@ function failSaveRunAuth(
   input: {inputLabel: string; writeStderr: OutputWriter},
   message: string,
   errorMessage: string,
+  code = 'dynobox.auth',
 ): never {
   input.writeStderr(renderRunConfigErrorMessage(input.inputLabel, message));
-  throw new CommanderError(configErrorExitCode, 'dynobox.auth', errorMessage);
+  throw new CommanderError(configErrorExitCode, code, errorMessage);
 }
 
 function describeSaveRunVerificationFailure(

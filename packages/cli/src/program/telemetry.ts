@@ -47,7 +47,13 @@ type TelemetryState = {installId?: string; enabled?: boolean};
 export type TelemetryStatus = {
   enabled: boolean;
   /** What decided `enabled`, in precedence order. */
-  source: 'DO_NOT_TRACK' | 'DYNOBOX_TELEMETRY' | 'config' | 'CI' | 'default';
+  source:
+    | 'DO_NOT_TRACK'
+    | 'unreadable'
+    | 'DYNOBOX_TELEMETRY'
+    | 'config'
+    | 'CI'
+    | 'default';
   installId: string | null;
   debug: boolean;
 };
@@ -71,12 +77,16 @@ export function resolveTelemetryStatus(
   const env = input.env ?? process.env;
   const state = readState(input);
   const base = {
-    installId: state?.installId ?? null,
+    installId: (state !== 'unreadable' && state?.installId) || null,
     debug: parseEnvFlag(env.DYNOBOX_TELEMETRY_DEBUG) === true,
   };
 
   if (parseEnvFlag(env.DO_NOT_TRACK) === true) {
     return {...base, enabled: false, source: 'DO_NOT_TRACK'};
+  }
+  // A broken file may hold an opt-out; stay off and leave it for the user.
+  if (state === 'unreadable') {
+    return {...base, enabled: false, source: 'unreadable'};
   }
   const envTelemetry = parseEnvFlag(env.DYNOBOX_TELEMETRY);
   if (envTelemetry !== undefined) {
@@ -99,7 +109,7 @@ export function setTelemetryEnabled(
   enabled: boolean,
   input: TelemetryPaths = {},
 ): string {
-  return writeState({...readState(input), enabled}, input);
+  return writeState({...readUsableState(input), enabled}, input);
 }
 
 /**
@@ -123,7 +133,7 @@ export function startTelemetrySession(
   if (installId === null) {
     installId = randomUUID();
     try {
-      writeState({...readState(input), installId}, input);
+      writeState({...readUsableState(input), installId}, input);
     } catch {
       // An unwritable home directory would show the notice on every run.
       return undefined;
@@ -186,6 +196,8 @@ export function telemetryErrorCategory(error: unknown): string {
       return 'auth';
     case 'dynobox.cancelled':
       return 'cancelled';
+    case 'dynobox.network':
+      return 'network';
     default:
       return 'config';
   }
@@ -319,20 +331,29 @@ function configFormat(filePath: string): string {
   return 'js';
 }
 
-function readState(input: TelemetryPaths): TelemetryState | null {
+/** Null when the file is missing, 'unreadable' when it can't be parsed. */
+function readState(
+  input: TelemetryPaths,
+): TelemetryState | null | 'unreadable' {
   const path = telemetryFilePath(input);
   if (!existsSync(path)) return null;
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown;
-    if (typeof parsed !== 'object' || parsed === null) return null;
+    if (typeof parsed !== 'object' || parsed === null) return 'unreadable';
     const {installId, enabled} = parsed as Record<string, unknown>;
     return {
       ...(typeof installId === 'string' ? {installId} : {}),
       ...(typeof enabled === 'boolean' ? {enabled} : {}),
     };
   } catch {
-    return null;
+    return 'unreadable';
   }
+}
+
+/** The saved state, or nothing if the file is missing or can't be parsed. */
+function readUsableState(input: TelemetryPaths): TelemetryState {
+  const state = readState(input);
+  return state === 'unreadable' || state === null ? {} : state;
 }
 
 function writeState(state: TelemetryState, input: TelemetryPaths): string {

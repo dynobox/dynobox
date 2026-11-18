@@ -60,6 +60,8 @@ function describeStatus(status: TelemetryStatus): string {
   switch (status.source) {
     case 'DO_NOT_TRACK':
       return `${state} (DO_NOT_TRACK is set)`;
+    case 'unreadable':
+      return `${state} (~/.dynobox/telemetry.json could not be read; fix it or run \`dynobox telemetry enable|disable\`)`;
     case 'DYNOBOX_TELEMETRY':
       return `${state} (DYNOBOX_TELEMETRY is set)`;
     case 'config':

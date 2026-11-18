@@ -51,6 +51,10 @@ any case. Any other value, such as `yes`, `on`, or `off`, is ignored, so use
 Settings apply in this order: `DO_NOT_TRACK`, `DYNOBOX_TELEMETRY`,
 `dynobox telemetry enable|disable`, then the CI default.
 
+If `~/.dynobox/telemetry.json` cannot be read, telemetry stays off and the
+file is left as is. Fix it or run `dynobox telemetry enable|disable` to replace
+it.
+
 `dynobox telemetry` (or `dynobox telemetry status`) shows whether telemetry is
 on, what decided it, and your install ID.
 

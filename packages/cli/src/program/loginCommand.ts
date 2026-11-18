@@ -88,7 +88,7 @@ async function validateLoginToken(input: {
     );
     throw new CommanderError(
       configErrorExitCode,
-      'dynobox.login',
+      'dynobox.network',
       'token validation failed',
     );
   }
