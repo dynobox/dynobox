@@ -220,6 +220,8 @@ Use the assertion namespace that matches the behavior you care about:
   `git commit`, `pnpm test`, or `cat package.json`.
 - `http.*` — a declared endpoint request was, or was not, observed through
   local HTTP capture.
+- `mcp.*` — a declared [MCP mock](./mcp-mocking.md) tool received, or did not
+  receive, a call.
 - `artifact.*` — files in the scenario work directory have the expected final
   state.
 - `transcript.*` and `finalMessage.*` — the harness transcript or final response
@@ -775,6 +777,8 @@ JSON output.
 | `sequence.inOrder([command.called('git', {...}), ...])` | `{type: sequence.inOrder, steps: [{type: command.called, ...}, ...]}` |
 | `http.called('npmPrettier', {status: 200})`            | `{type: http.called, endpoint: npmPrettier, status: 200}`             |
 | `http.notCalled('leftPad')`                            | `{type: http.notCalled, endpoint: leftPad}`                           |
+| `mcp.called('linear', 'get_issue', {input: {id: 'DYNO-1'}})` | `{type: mcp.called, server: linear, tool: get_issue, input: {id: DYNO-1}}` |
+| `mcp.notCalled('linear', 'save_issue')`                | `{type: mcp.notCalled, server: linear, tool: save_issue}`             |
 
 The optional assertion `id` field follows the same format as scenario IDs:
 letters, numbers, dots, underscores, and hyphens.
