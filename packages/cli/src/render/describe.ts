@@ -7,8 +7,8 @@ import {
   describeCommandMatcher as describeCommandMatcherText,
   describeShellCommandMatcher,
 } from '@dynobox/evaluators';
-import type {ShellToolEvent, ToolEvent} from '@dynobox/runner-local';
-import type {ShellCommandMatcher} from '@dynobox/sdk';
+import type {ToolEvent} from '@dynobox/runner-local';
+import {isShellToolEvent, type ShellCommandMatcher} from '@dynobox/sdk';
 import type {IrAssertion} from '@dynobox/sdk/ir';
 
 import {truncate} from '../terminal/index.js';
@@ -201,9 +201,9 @@ export function describeToolEvent(event: ToolEvent): string {
   return event.rawName;
 }
 
-export function isShellToolEvent(event: ToolEvent): event is ShellToolEvent {
-  return event.kind === 'shell';
-}
+// A shell tool call whose input has no command keeps kind 'shell' but no
+// `command`, so the SDK guard checks both.
+export {isShellToolEvent};
 
 /** Evidence shape for a normalized observed command segment. */
 export type ObservedCommandEvidence = {executable: string; argv: string[]};

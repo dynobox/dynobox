@@ -1,7 +1,11 @@
 import type {IrAssertion} from '@dynobox/sdk/ir';
 import {expect, it} from 'vitest';
 
-import {describeAssertion, describeExpectation} from './describe.js';
+import {
+  describeAssertion,
+  describeExpectation,
+  describeToolEvent,
+} from './describe.js';
 
 it('describes MCP identities and matcher presence without exposing input values', () => {
   const assertion: IrAssertion = {
@@ -21,4 +25,10 @@ it('describes MCP identities and matcher presence without exposing input values'
   expect(
     describeExpectation({id: 'b', type: 'anyOf', steps: [branch]}),
   ).not.toContain('SECRET_INPUT');
+});
+
+it('describes a shell tool event that has no command', () => {
+  expect(describeToolEvent({kind: 'shell', rawName: 'Bash', input: {}})).toBe(
+    'Bash',
+  );
 });

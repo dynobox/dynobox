@@ -8,6 +8,12 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox`
+
+- Fix a crash in live progress output when a harness reports a shell tool call
+  without a command (`TypeError: Cannot read properties of undefined (reading
+'replace')`).
+
 ---
 
 ## dynobox@0.18.0 — 2026-11-18
