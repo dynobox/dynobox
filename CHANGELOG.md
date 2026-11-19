@@ -8,6 +8,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.18.0 — 2026-11-18
+
 ### `dynobox`
 
 - Send anonymous usage telemetry: the command, exit code, and duration, and
