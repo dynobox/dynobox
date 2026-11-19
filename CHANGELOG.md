@@ -8,6 +8,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.18.1 — 2026-11-18
+
 ### `dynobox`
 
 - Fix a crash in live progress output when a harness reports a shell tool call
