@@ -705,6 +705,44 @@ describe('dynobox run — output modes', () => {
   beforeAll(fixtures.setup);
   afterAll(fixtures.teardown);
 
+  it.each([
+    {live: false, iterations: 1},
+    {live: true, iterations: 1},
+    {live: false, iterations: 2},
+    {live: true, iterations: 2},
+  ])(
+    'retains completed conversation details for %j',
+    async ({live, iterations}) => {
+      const configPath = join(fixtures.dir, 'conversation.dyno.yaml');
+      writeFileSync(
+        configPath,
+        'scenarios:\n  - name: conversation\n    prompt: Start.\n    user:\n      replies: [Use UUID keys.]\n',
+      );
+      const agent = new FakeHarness();
+      const extract = agent.extractResult.bind(agent);
+      agent.extractResult = (raw) => ({
+        ...extract(raw),
+        sessionId: 'session-1',
+      });
+
+      const result = await executeCli(
+        ['run', configPath, '--iterations', String(iterations)],
+        {harnesses: [agent], live, color: false},
+      );
+      // Ignore the transient dashboard: both paths must retain the conversation
+      // after the final live clear, including each repeated iteration.
+      const output = stripAnsi(result.stdout.split('\u001b[J').at(-1)!);
+
+      expect(result.exitCode).toBe(0);
+      expect(output.match(/ran 2 turns/g)).toHaveLength(iterations);
+      expect(output.match(/turn 2: Use UUID keys\./g)).toHaveLength(iterations);
+      if (iterations > 1) {
+        expect(output).toContain('iter 1');
+        expect(output).toContain('iter 2');
+      }
+    },
+  );
+
   it('prints quiet output for CI-style runs', async () => {
     const result = await executeCli(
       ['run', fixtures.validConfigPath, '--quiet'],

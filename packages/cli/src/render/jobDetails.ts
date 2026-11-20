@@ -26,6 +26,7 @@ import {
   renderHarnessPhase,
   renderSetupPhase,
 } from './phases.js';
+import {renderTurnDetails} from './turns.js';
 import {renderWarningDetails} from './warnings.js';
 
 export type JobDetailsOptions = {
@@ -45,6 +46,7 @@ export function renderJobDetails(
     renderHarnessPhase(result, ctx, omitIcons),
     renderAssertionsPhase(result, ctx, omitIcons),
   ];
+  lines.push(renderTurnDetails(result, ctx));
   lines.push(
     renderCliMockDetails(result, options.configuredCliMockNames ?? [], ctx),
   );

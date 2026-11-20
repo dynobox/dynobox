@@ -97,6 +97,71 @@ describe('renderJsonRunOutput', () => {
     });
   });
 
+  it('reports conversation turns under the v4 schema', () => {
+    const job = {
+      id: 'job.turns',
+      scenario: {
+        id: 'scenario.turns',
+        name: 'turns',
+        prompt: 'Add a users table.',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        cliMocks: {},
+        user: {replies: ['UUIDs.']},
+        endpoints: [],
+        assertions: [],
+      },
+      harness: 'claude-code',
+      iteration: 0,
+    } satisfies LocalRunnerJob;
+    const result = {
+      jobId: job.id,
+      scenarioId: job.scenario.id,
+      harness: 'claude-code',
+      harnessVersion: null,
+      iteration: 0,
+      status: 'passed',
+      passed: true,
+      workDir: '/tmp/work',
+      setupResult: {success: true, logs: []},
+      httpEvents: [],
+      harnessCliMockCallCount: 0,
+      cliMockCalls: [],
+      artifacts: [],
+      assertionResults: [],
+      verificationFailed: false,
+      diagnostics: [],
+      warnings: [],
+      turns: [
+        {
+          prompt: 'Add a users table.',
+          finalMessage: 'Key type?',
+          durationMs: 5,
+        },
+        {prompt: 'UUIDs.', durationMs: 7},
+      ],
+      timing: {setupMs: 0, harnessMs: 12, assertionsMs: 0, totalMs: 12},
+    } satisfies LocalRunnerResult;
+
+    const [jobRecord] = renderJsonRunOutput({jobs: [job], results: [result]})
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(jobRecord).toMatchObject({
+      schema: 'dynobox.report.v4',
+      turns: [
+        {
+          prompt: 'Add a users table.',
+          finalMessage: 'Key type?',
+          durationMs: 5,
+        },
+        {prompt: 'UUIDs.', finalMessage: null, durationMs: 7},
+      ],
+    });
+  });
+
   it('includes only selected anyOf branch indexes in assertion output', () => {
     const job = {
       id: 'job.anyof',

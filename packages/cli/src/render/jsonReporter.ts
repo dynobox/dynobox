@@ -91,6 +91,15 @@ function jobRecord(
       cliMockCallCount: result.cliMockCalls.length,
       harnessCliMockCallCount: result.harnessCliMockCallCount,
     },
+    ...(result.turns === undefined
+      ? {}
+      : {
+          turns: result.turns.map((turn) => ({
+            prompt: turn.prompt,
+            finalMessage: turn.finalMessage ?? null,
+            durationMs: turn.durationMs,
+          })),
+        }),
     ...(result.mcp === undefined
       ? {}
       : {
@@ -210,6 +219,11 @@ function summaryRecord(input: RenderJsonRunOutputInput) {
 }
 
 function reportSchema(input: RenderJsonRunOutputInput): string {
+  if (
+    input.jobs.some((job) => job.scenario.user !== undefined) ||
+    input.results.some((result) => result.turns !== undefined)
+  )
+    return 'dynobox.report.v4';
   return input.jobs.some((job) => job.scenario.mcpMocks !== undefined) ||
     input.results.some((result) => result.mcp !== undefined)
     ? 'dynobox.report.v3'

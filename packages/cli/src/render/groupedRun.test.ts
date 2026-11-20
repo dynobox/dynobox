@@ -227,6 +227,37 @@ describe('buildGroupedRunView', () => {
 });
 
 describe('renderGroupedRun', () => {
+  it.each([1, 2])(
+    'keeps conversation details in default output for %i iteration(s)',
+    (iterations) => {
+      const jobs = Array.from({length: iterations}, (_, iteration) => {
+        const job = makeJob({iteration});
+        job.scenario.user = {replies: ['Use UUID keys.']};
+        return job;
+      });
+      const results = jobs.map((job) => ({
+        ...makeResult(job),
+        turns: [
+          {prompt: 'Start.', finalMessage: 'Key type?', durationMs: 1},
+          {prompt: 'Use UUID keys.', finalMessage: 'Done.', durationMs: 1},
+        ],
+      }));
+
+      const output = renderGroupedRun({
+        dynos: [dynoOf(jobs)],
+        results,
+        ctx: createRenderContext({color: false}),
+      });
+
+      expect(output.match(/ran 2 turns/g)).toHaveLength(iterations);
+      expect(output.match(/turn 2: Use UUID keys\./g)).toHaveLength(iterations);
+      if (iterations > 1) {
+        expect(output).toContain('iter 1');
+        expect(output).toContain('iter 2');
+      }
+    },
+  );
+
   it('omits harness labels from rows when there is one harness label', () => {
     const jobs = [makeJob({assertionCount: 3})];
     const output = renderGroupedRun({

@@ -70,4 +70,46 @@ describe('renderLiveProgressEvent', () => {
     expect(line.text).toContain('verification failed');
     expect(line.text).not.toContain('0 of 0 passed');
   });
+
+  it('shows the next user message and the turn count', () => {
+    const state: LiveJobState = {
+      setupCommandCount: 0,
+      fixturesCount: 0,
+      toolCount: 0,
+      assertionCount: 0,
+      phaseStartedAtMs: Date.now(),
+    };
+    const ctx = createRenderContext();
+    const job = {} as LocalRunnerJob;
+
+    const turn = renderLiveProgressEvent(
+      {
+        type: 'harness.turn',
+        job,
+        harnessId: 'claude-code',
+        turn: 2,
+        prompt: 'Use UUID\nkeys.',
+      },
+      state,
+      ctx,
+    );
+    expect(turn.kind).toBe('update');
+    if (turn.kind !== 'update') throw new Error('Expected live output.');
+    expect(turn.render('-', Date.now())).toContain('turn 2: Use UUID keys.');
+
+    const done = renderLiveProgressEvent(
+      {
+        type: 'harness.completed',
+        job,
+        harnessId: 'claude-code',
+        success: true,
+        toolCount: 3,
+        durationMs: 10,
+      },
+      state,
+      ctx,
+    );
+    if (done.kind !== 'commit') throw new Error('Expected committed output.');
+    expect(done.text).toContain('ran 2 turns');
+  });
 });
