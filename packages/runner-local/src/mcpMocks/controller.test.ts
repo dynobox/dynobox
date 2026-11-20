@@ -92,6 +92,19 @@ describe('MCP controller', () => {
     expect(controller.isDiscovered('linear')).toBe(false);
   });
 
+  it('requires rediscovery each turn but keeps job-wide readiness', async () => {
+    const controller = await start();
+    await discover(controller.urls.linear!);
+    expect(controller.isDiscovered('linear')).toBe(true);
+    controller.beginTurn();
+    expect(controller.isDiscovered('linear')).toBe(false);
+    await discover(controller.urls.linear!);
+    expect(controller.isDiscovered('linear')).toBe(true);
+    controller.beginTurn();
+    // A later turn that never reconnects does not undo earlier discovery.
+    expect(await controller.finalize(success)).toMatchObject({ready: true});
+  });
+
   it('works through the official MCP client and records schema-violating arguments unchanged', async () => {
     const controller = await start();
     const client = new Client({name: 'test-client', version: '1'});

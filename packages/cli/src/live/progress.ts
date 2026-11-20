@@ -100,6 +100,9 @@ export function renderLiveProgressEvent(
     };
   }
 
+  // Turn progress is rendered once the CLI shows conversations.
+  if (event.type === 'harness.turn') return {kind: 'skip'};
+
   if (event.type === 'harness.tool') {
     state.toolCount = event.toolCount;
     const {toolEvent, toolCount} = event;

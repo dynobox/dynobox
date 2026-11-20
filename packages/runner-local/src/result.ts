@@ -67,6 +67,7 @@ export function buildResult(
       result.harnessCliMockCallCount ?? result.cliMockCalls?.length ?? 0,
     cliMockCalls: result.cliMockCalls ?? [],
     ...(result.mcp === undefined ? {} : {mcp: result.mcp}),
+    ...(job.scenario.user === undefined ? {} : {turns: result.turns ?? []}),
     artifacts: result.artifacts,
     assertionResults,
     verificationFailed: result.verificationFailed ?? false,

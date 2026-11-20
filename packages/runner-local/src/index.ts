@@ -1,6 +1,4 @@
-import {mkdtemp} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
-import {basename, join} from 'node:path';
+import {basename} from 'node:path';
 
 import {
   assertionRequiresVerify,
@@ -15,17 +13,29 @@ import {execa} from 'execa';
 
 import {type CliMockController, startCliMockController} from './cliMocks.js';
 import {
+  canReply,
+  ConversationError,
+  type ConversationTurn,
+  mergeTurnOutputs,
+  mergeTurnResults,
+  nextUserMessage,
+} from './conversation.js';
+import {
   errorMessage,
   harnessExitDiagnostic,
   setupFailureDiagnostic,
 } from './diagnostics.js';
 import type {
   Harness,
+  HarnessInput,
   HarnessResult,
   HarnessRunOutput,
   ToolEvent,
 } from './harnesses/index.js';
-import type {PreparedMcpHarness} from './harnesses/types.js';
+import type {
+  McpServerConnections,
+  PreparedMcpHarness,
+} from './harnesses/types.js';
 import type {HttpCapture} from './http/proxy.js';
 import {startHttpCapture} from './http/proxy.js';
 import {
@@ -55,7 +65,9 @@ import type {
 import type {SetupResult} from './setup.js';
 import {runScenarioFixtures, runScenarioSetup} from './setup.js';
 import {runVerifyCommands} from './verify.js';
+import {createWorkDir} from './workDir.js';
 
+export type {ConversationTurn} from './conversation.js';
 export type {
   Harness,
   HarnessInput,
@@ -147,6 +159,15 @@ export async function runJob(
     ([server, definition]) =>
       Object.keys(definition.tools).map((tool) => ({server, tool})),
   );
+  const user = job.scenario.user;
+  if (
+    user !== undefined &&
+    'persona' in user &&
+    !options.harnesses?.some((candidate) => candidate.id === user.harness)
+  )
+    throw new DynoboxConfigError(
+      `No harness registered for simulated user harness "${user.harness}".`,
+    );
   if (usesMcp) {
     if (
       !options.harnesses?.find((candidate) => candidate.id === job.harness)
@@ -358,6 +379,7 @@ export async function runJob(
   let mcpObservation: McpObservation | undefined;
   let mcpReady = false;
   let mcpToolEvents: ToolEvent[] | undefined;
+  const turns: ConversationTurn[] = [];
   const mcpDiagnostics: string[] = [];
   const mcpFailures = new Set<LocalMcpSummary['failures'][number]>();
   const recordMcpError = (error: unknown): string => {
@@ -437,6 +459,7 @@ export async function runJob(
     if (usesMcp && cleanup.some((outcome) => outcome.status === 'rejected'))
       mcpFailures.add('cleanup_failed');
   }
+  if (job.scenario.user !== undefined) result.turns = turns;
   if (usesMcp) {
     result.mcp = {
       ready: mcpObservation?.ready ?? false,
@@ -499,16 +522,32 @@ export async function runJob(
     }
 
     // --- 9. Run harness (mocked PATH + HTTP proxy env) ---------------------
+    // A scenario `user` makes this a conversation: each reply resumes the
+    // agent's session as one more turn, until the user is done.
     let harnessOutput: HarnessRunOutput;
     const harnessStartedAt = Date.now();
     let liveToolCount = 0;
+    const turnOutputs: HarnessRunOutput[] = [];
+    const turnResults: HarnessResult[] = [];
+    let extractionError: unknown;
+    // Without MCP the deadline still covers every turn and user reply.
+    const remainingTime = () => {
+      if (options.timeoutMs === undefined) return undefined;
+      if (usesMcp) return remainingMcpTime();
+      const remaining = options.timeoutMs - (Date.now() - harnessStartedAt);
+      if (remaining <= 0)
+        throw new Error(
+          `Harness timed out after ${options.timeoutMs} milliseconds`,
+        );
+      return remaining;
+    };
     try {
       const harnessEnv = {
         ...(options.env ?? {}),
         ...(httpCapture?.env ?? {}),
         ...cliMockEnv,
       };
-      const harnessInput = {
+      const harnessInput: HarnessInput = {
         ...(allowedMcpTools.length === 0 ? {} : {allowedMcpTools}),
         ...(options.signal === undefined ? {} : {signal: options.signal}),
         prompt: job.scenario.prompt,
@@ -530,10 +569,11 @@ export async function runJob(
           });
         },
       };
+      let servers: McpServerConnections | undefined;
       if (preparedMcp !== undefined) {
         remainingMcpTime();
         mcpController = await startMcpMockController(job.scenario.mcpMocks!);
-        const servers = Object.fromEntries(
+        servers = Object.fromEntries(
           Object.entries(mcpController.urls).map(([name, url]) => [
             name,
             {
@@ -543,27 +583,108 @@ export async function runJob(
             },
           ]),
         );
-        const run = await preparedMcp.run(
-          // Without a job timeout the adapter keeps its own defaults.
-          options.timeoutMs === undefined
-            ? harnessInput
-            : {...harnessInput, timeoutMs: remainingMcpTime()},
-          servers,
-        );
-        harnessOutput = run.output;
-        mcpReady = run.harnessReady;
-        mcpToolEvents = run.toolEvents;
-        harnessVersion = Promise.resolve(run.version);
-      } else {
-        harnessOutput = await harness.run(
-          options.timeoutMs === undefined
-            ? harnessInput
-            : {...harnessInput, timeoutMs: options.timeoutMs},
-        );
       }
+      const runTurn = async (
+        input: HarnessInput,
+      ): Promise<{output: HarnessRunOutput; toolEvents?: ToolEvent[]}> => {
+        // Without a job timeout the adapter keeps its own defaults.
+        const timeoutMs = remainingTime();
+        const timed =
+          timeoutMs === undefined ? input : {...input, timeoutMs: timeoutMs};
+        if (preparedMcp === undefined)
+          return {output: await harness.run(timed)};
+        mcpController!.beginTurn();
+        const run = await preparedMcp.run(timed, servers!);
+        mcpReady = run.harnessReady;
+        if (run.toolEvents !== undefined)
+          mcpToolEvents = [...(mcpToolEvents ?? []), ...run.toolEvents];
+        harnessVersion = Promise.resolve(run.version);
+        return {
+          output: run.output,
+          ...(run.toolEvents === undefined ? {} : {toolEvents: run.toolEvents}),
+        };
+      };
+      let prompt = job.scenario.prompt;
+      let resumeId: string | undefined;
+      for (;;) {
+        if (user !== undefined)
+          emitProgress(options, {
+            type: 'harness.turn',
+            job,
+            harnessId: harness.id,
+            turn: turns.length + 1,
+            prompt,
+          });
+        const turn = await runTurn({
+          ...harnessInput,
+          prompt,
+          ...(user === undefined
+            ? {}
+            : {session: resumeId === undefined ? {} : {resumeId}}),
+        });
+        turnOutputs.push(turn.output);
+        let turnResult: HarnessResult;
+        try {
+          turnResult = harness.extractResult(turn.output);
+        } catch (error) {
+          extractionError = error;
+          break;
+        }
+        // MCP adapters report tool events under logical mock names.
+        if (turn.toolEvents !== undefined)
+          turnResult = {...turnResult, toolEvents: turn.toolEvents};
+        turnResults.push(turnResult);
+        if (user === undefined) break;
+        turns.push({
+          prompt,
+          ...(turnResult.finalMessage === undefined
+            ? {}
+            : {finalMessage: turnResult.finalMessage}),
+          durationMs: turnResult.durationMs,
+        });
+        // Mock lifecycle failures cannot be recovered by a later turn, even
+        // when the agent catches the command error and exits successfully.
+        if (
+          turnResult.exitCode !== 0 ||
+          (cliMockController?.failures().length ?? 0) > 0 ||
+          !canReply(user, turns)
+        )
+          break;
+        // Fail before a persona spends a model call on a reply nobody can send.
+        if (turnResult.sessionId === undefined)
+          throw new ConversationError(
+            `Harness "${harness.id}" did not report a session ID to resume.`,
+          );
+        const timeoutMs = remainingTime();
+        const reply = await nextUserMessage(user, turns, {
+          ...(options.harnesses === undefined
+            ? {}
+            : {harnesses: options.harnesses}),
+          ...(options.env === undefined ? {} : {env: options.env}),
+          ...(options.scratchRoot === undefined
+            ? {}
+            : {scratchRoot: options.scratchRoot}),
+          ...(timeoutMs === undefined ? {} : {timeoutMs}),
+          ...(options.signal === undefined ? {} : {signal: options.signal}),
+        });
+        options.signal?.throwIfAborted();
+        if (reply === undefined) break;
+        prompt = reply;
+        resumeId = turnResult.sessionId;
+      }
+      harnessOutput = mergeTurnOutputs(turnOutputs);
+      // A conversation's harness time includes the user's replies.
+      if (user !== undefined)
+        harnessOutput = {
+          ...harnessOutput,
+          durationMs: Date.now() - harnessStartedAt,
+        };
     } catch (error) {
       options.signal?.throwIfAborted();
-      const mcpMessage = usesMcp ? recordMcpError(error) : undefined;
+      const mcpMessage =
+        usesMcp && !(error instanceof ConversationError)
+          ? recordMcpError(error)
+          : undefined;
       await finalizeMcp(false);
       await cliMockController?.finalizePendingCalls();
       const cliMockFailures = cliMockController?.failures() ?? [];
@@ -581,14 +702,18 @@ export async function runJob(
         artifacts,
         harnessVersion: await harnessVersion,
         diagnostics: [
-          mcpMessage !== undefined
-            ? `MCP harness execution failed: ${mcpMessage}`
-            : `Harness "${harness.id}" failed to run: ${errorMessage(error)}`,
+          error instanceof ConversationError
+            ? error.message
+            : mcpMessage !== undefined
+              ? `MCP harness execution failed: ${mcpMessage}`
+              : `Harness "${harness.id}" failed to run: ${errorMessage(error)}`,
           ...cliMockFailures.map((failure) => failure.message),
         ],
         ...(error instanceof McpHarnessError && error.output !== undefined
-          ? {harnessOutput: error.output}
-          : {}),
+          ? {harnessOutput: mergeTurnOutputs([...turnOutputs, error.output])}
+          : turnOutputs.length > 0
+            ? {harnessOutput: mergeTurnOutputs(turnOutputs)}
+            : {}),
         httpEvents: httpCapture?.events ?? [],
         cliMockCalls: cliMockController?.calls() ?? [],
         timing: buildTiming({
@@ -643,10 +768,13 @@ export async function runJob(
 
     let harnessResult: HarnessResult;
     try {
-      harnessResult = harness.extractResult(harnessOutput);
-      // MCP adapters report tool events under logical mock names.
-      if (mcpToolEvents !== undefined)
-        harnessResult = {...harnessResult, toolEvents: mcpToolEvents};
+      if (extractionError !== undefined) throw extractionError;
+      harnessResult = mergeTurnResults(turnResults);
+      if (user !== undefined)
+        harnessResult = {
+          ...harnessResult,
+          durationMs: harnessOutput.durationMs,
+        };
     } catch (error) {
       emitProgress(options, {
         type: 'harness.completed',
@@ -847,10 +975,6 @@ export async function runJob(
       }),
     });
   }
-}
-
-async function createWorkDir(scratchRoot: string | undefined): Promise<string> {
-  return mkdtemp(join(scratchRoot ?? tmpdir(), 'dynobox-job-'));
 }
 
 async function resolvePackageScriptShell(
