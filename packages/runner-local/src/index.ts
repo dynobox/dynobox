@@ -642,7 +642,14 @@ export async function runJob(
             : {finalMessage: turnResult.finalMessage}),
           durationMs: turnResult.durationMs,
         });
-        if (turnResult.exitCode !== 0 || !canReply(user, turns)) break;
+        // Mock lifecycle failures cannot be recovered by a later turn, even
+        // when the agent catches the command error and exits successfully.
+        if (
+          turnResult.exitCode !== 0 ||
+          (cliMockController?.failures().length ?? 0) > 0 ||
+          !canReply(user, turns)
+        )
+          break;
         // Fail before a persona spends a model call on a reply nobody can send.
         if (turnResult.sessionId === undefined)
           throw new ConversationError(

@@ -2066,6 +2066,146 @@ class ConversationHarness implements Harness {
 }
 
 describe('runJob conversations', () => {
+  it.each(['fixtures', 'setup', 'harness', 'mcp preparation'])(
+    'reports zero turns when %s fails before the first turn',
+    async (phase) => {
+      const agent = new ConversationHarness('claude-code', {
+        sessionId: 'session-1',
+      });
+      const result = await runJob(
+        createJob({
+          user: {replies: ['Next.']},
+          ...(phase === 'fixtures'
+            ? {fixtures: [join(createScratchRoot(), 'missing-fixtures')]}
+            : {}),
+          ...(phase === 'setup' ? {setup: ['exit 1']} : {}),
+          ...(phase === 'mcp preparation'
+            ? {
+                mcpMocks: {
+                  service: {
+                    tools: {
+                      lookup: {
+                        inputSchema: {type: 'object' as const},
+                        response: {content: []},
+                      },
+                    },
+                  },
+                },
+              }
+            : {}),
+        }),
+        {
+          scratchRoot: createScratchRoot(),
+          harnesses:
+            phase === 'harness'
+              ? []
+              : phase === 'mcp preparation'
+                ? [
+                    {
+                      id: agent.id,
+                      run: agent.run.bind(agent),
+                      extractResult: agent.extractResult.bind(agent),
+                      prepareMcp: async () => {
+                        throw new Error('preparation failed');
+                      },
+                    },
+                  ]
+                : [agent],
+        },
+      );
+
+      expect(result.passed).toBe(false);
+      expect(result.turns).toEqual([]);
+      expect(agent.inputs).toHaveLength(0);
+    },
+  );
+
+  it.each(['handler', 'exhaustion'])(
+    'stops before asking the persona after a CLI mock %s failure',
+    async (failure) => {
+      const agent = new ConversationHarness('claude-code', {
+        sessionId: 'session-1',
+      });
+      const run = agent.run.bind(agent);
+      agent.run = async (input) => {
+        await execaCommand('git status', {
+          cwd: input.workDir,
+          env: {...process.env, ...input.env},
+          reject: false,
+        });
+        if (failure === 'exhaustion')
+          await execaCommand('git status', {
+            cwd: input.workDir,
+            env: {...process.env, ...input.env},
+            reject: false,
+          });
+        return run(input);
+      };
+      const persona = new ConversationHarness('codex');
+      const result = await runJob(
+        createJob({
+          user: {
+            persona: 'Keep asking for changes.',
+            harness: 'codex',
+            maxTurns: 3,
+          },
+          cliMocks: {
+            git:
+              failure === 'handler'
+                ? {
+                    handler: () => {
+                      throw new Error('broken fixture');
+                    },
+                  }
+                : {
+                    responses: [{exitCode: 0, stdout: '', stderr: ''}],
+                    onExhausted: 'error',
+                  },
+          },
+        }),
+        {scratchRoot: createScratchRoot(), harnesses: [agent, persona]},
+      );
+
+      expect(result.status).toBe('harness_failed');
+      expect(result.diagnostics.join('\n')).toContain(
+        failure === 'handler'
+          ? 'broken fixture'
+          : 'exhausted its configured responses',
+      );
+      expect(agent.inputs).toHaveLength(1);
+      expect(persona.inputs).toHaveLength(0);
+      expect(result.turns).toHaveLength(1);
+    },
+  );
+
+  it('continues after a configured nonzero CLI mock response', async () => {
+    const agent = new ConversationHarness('claude-code', {
+      sessionId: 'session-1',
+    });
+    const run = agent.run.bind(agent);
+    agent.run = async (input) => {
+      await execaCommand('git status', {
+        cwd: input.workDir,
+        env: {...process.env, ...input.env},
+        reject: false,
+      });
+      return run(input);
+    };
+    const result = await runJob(
+      createJob({
+        user: {replies: ['Try again.']},
+        cliMocks: {
+          git: {response: {exitCode: 1, stdout: '', stderr: 'expected'}},
+        },
+      }),
+      {scratchRoot: createScratchRoot(), harnesses: [agent]},
+    );
+
+    expect(result.status).toBe('passed');
+    expect(agent.inputs).toHaveLength(2);
+    expect(result.turns).toHaveLength(2);
+  });
+
   it('resumes the agent session with each scripted reply', async () => {
     const agent = new ConversationHarness('claude-code', {
       sessionId: 'session-1',
