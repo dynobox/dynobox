@@ -96,6 +96,48 @@ fi
     ]);
   });
 
+  it('resumes a conversation instead of creating a project', () => {
+    expect(
+      buildAntigravityArgs(
+        '/tmp/work',
+        'Next.',
+        [],
+        undefined,
+        undefined,
+        undefined,
+        {conversation: 'conversation-1'},
+      ),
+    ).toEqual([
+      '--conversation',
+      'conversation-1',
+      '-p',
+      'Next.',
+      '--output-format',
+      'stream-json',
+      '--print-timeout',
+      '30m',
+    ]);
+  });
+
+  it('reports the conversation ID as the session ID', () => {
+    const harness = new AntigravityHarness();
+    const stdout = jsonl({event: 'init', conversation_id: 'conversation-1'});
+    expect(
+      harness.extractResult({
+        exitCode: 0,
+        durationMs: 1,
+        stderr: '',
+        stdout: stdout,
+      }).sessionId,
+    ).toBe('conversation-1');
+    expect(
+      harness.extractResult({
+        ...{exitCode: 0, durationMs: 1, stderr: '', stdout: stdout},
+        metadata: {antigravitySessionId: 'acp-1'},
+      }).sessionId,
+    ).toBe('acp-1');
+  });
+
   it('skips all tool permissions only in dangerous mode', () => {
     expect(
       buildAntigravityArgs(
@@ -151,7 +193,7 @@ fi
         undefined,
         undefined,
         90_000,
-        'owned-project-id',
+        {project: 'owned-project-id'},
       ),
     ).toEqual([
       '--project',

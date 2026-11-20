@@ -97,6 +97,30 @@ fi
     ]);
   });
 
+  it('keeps a resumable session for multi-turn runs', () => {
+    expect(buildPiArgs([], undefined, undefined, {})).toEqual([
+      '--mode',
+      'json',
+      '--no-approve',
+    ]);
+    expect(
+      buildPiArgs([], undefined, undefined, {resumeId: 'session-1'}),
+    ).toEqual(['--mode', 'json', '--session', 'session-1', '--no-approve']);
+  });
+
+  it('reports the session header ID', () => {
+    const result = new PiHarness().extractResult({
+      exitCode: 0,
+      durationMs: 1,
+      stderr: '',
+      stdout: jsonl(
+        {type: 'session', version: 3, id: 'session-1'},
+        {type: 'agent_start'},
+      ),
+    });
+    expect(result.sessionId).toBe('session-1');
+  });
+
   it('approves project resources only in dangerous permission mode', () => {
     expect(buildPiArgs([], undefined, 'dangerous')).toEqual([
       '--mode',

@@ -146,6 +146,39 @@ printf 'run\\n' > '${runLog}'
     ]);
   });
 
+  it('continues a session by ID', () => {
+    expect(buildOpenCodeArgs([], undefined, undefined, 'ses_1')).toEqual([
+      'run',
+      '--standalone',
+      '--format',
+      'json',
+      '--session',
+      'ses_1',
+    ]);
+  });
+
+  it('reports the primary session ID', () => {
+    const stdout = jsonl(
+      {type: 'step_start', sessionID: 'ses_1', part: {type: 'step-start'}},
+      {type: 'step_start', sessionID: 'ses_child', part: {type: 'step-start'}},
+    );
+    const harness = new OpenCodeHarness();
+    expect(
+      harness.extractResult({
+        exitCode: 0,
+        durationMs: 1,
+        stderr: '',
+        stdout: stdout,
+      }).sessionId,
+    ).toBe('ses_1');
+    expect(
+      harness.extractResult({
+        ...{exitCode: 0, durationMs: 1, stderr: '', stdout: stdout},
+        metadata: {opencodeSessionId: 'ses_owned'},
+      }).sessionId,
+    ).toBe('ses_owned');
+  });
+
   it('adds --auto only in dangerous permission mode', () => {
     expect(buildOpenCodeArgs([], undefined, 'dangerous')).toEqual([
       'run',

@@ -226,8 +226,49 @@ fi
       '--skip-git-repo-check',
       '--model',
       'gpt-5.1-codex',
+      '--',
       'Say hello.',
     ]);
+  });
+
+  it('resumes a thread after the exec options', () => {
+    expect(
+      buildCodexArgs(
+        'Next.',
+        [],
+        undefined,
+        'dangerous',
+        undefined,
+        'thread-1',
+      ),
+    ).toEqual([
+      'exec',
+      '--json',
+      '--color',
+      'never',
+      '--skip-git-repo-check',
+      '--sandbox',
+      'danger-full-access',
+      '-c',
+      'approval_policy="never"',
+      'resume',
+      '--',
+      'thread-1',
+      'Next.',
+    ]);
+  });
+
+  it('reports the thread ID as the session ID', () => {
+    const result = new CodexHarness().extractResult({
+      exitCode: 0,
+      durationMs: 1,
+      stderr: '',
+      stdout: jsonl(
+        {type: 'thread.started', thread_id: 'thread-1'},
+        {type: 'turn.completed'},
+      ),
+    });
+    expect(result.sessionId).toBe('thread-1');
   });
 
   it('adds full-access Codex args only in dangerous permission mode', () => {
@@ -241,6 +282,7 @@ fi
       'danger-full-access',
       '-c',
       'approval_policy="never"',
+      '--',
       'Say hello.',
     ]);
   });

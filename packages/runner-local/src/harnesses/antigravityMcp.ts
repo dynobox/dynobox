@@ -384,14 +384,20 @@ async function runSession(options: {
         'unsupported_version',
         'Antigravity ACP does not support HTTP MCP sessions.',
       );
+    // `session/resume` continues an earlier turn without replaying it.
+    const resumeId = input.session?.resumeId;
     const session = await rpc(
-      'session/new',
-      {cwd: input.workDir, mcpServers: []},
+      resumeId === undefined ? 'session/new' : 'session/resume',
+      {
+        ...(resumeId === undefined ? {} : {sessionId: resumeId}),
+        cwd: input.workDir,
+        mcpServers: [],
+      },
       5000,
     );
-    if (typeof session.sessionId !== 'string')
+    const sessionId = resumeId ?? session.sessionId;
+    if (typeof sessionId !== 'string')
       throw new Error('Antigravity ACP did not create a session.');
-    const sessionId = session.sessionId;
     if (input.model) {
       const models = asRecord(session.models).availableModels;
       const model =
@@ -449,6 +455,7 @@ async function runSession(options: {
       output: {
         ...mcpProcessOutput(native, Date.now() - options.started),
         exitCode: 0,
+        metadata: {antigravitySessionId: sessionId},
       },
     };
   } catch (error) {

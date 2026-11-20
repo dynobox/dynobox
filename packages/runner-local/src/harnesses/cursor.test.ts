@@ -80,8 +80,45 @@ fi
       '--model',
       'composer-2',
       '--approve-mcps',
+      '--',
       'Say hello.',
     ]);
+  });
+
+  it('resumes a chat by ID', () => {
+    expect(
+      buildCursorArgs('/tmp/work', 'Next.', [], undefined, undefined, 'chat-1'),
+    ).toEqual([
+      '-p',
+      '--output-format',
+      'stream-json',
+      '--trust',
+      '--workspace',
+      '/tmp/work',
+      '--resume',
+      'chat-1',
+      '--',
+      'Next.',
+    ]);
+  });
+
+  it('reports the chat ID as the session ID', () => {
+    const result = new CursorHarness().extractResult({
+      exitCode: 0,
+      durationMs: 1,
+      stderr: '',
+      stdout: jsonl(
+        {type: 'system', subtype: 'init', session_id: 'chat-1'},
+        {
+          type: 'result',
+          subtype: 'success',
+          is_error: false,
+          result: 'Done.',
+          session_id: 'chat-1',
+        },
+      ),
+    });
+    expect(result.sessionId).toBe('chat-1');
   });
 
   it('disables sandbox only in dangerous mode', () => {
@@ -97,6 +134,7 @@ fi
       '--force',
       '--sandbox',
       'disabled',
+      '--',
       'Say hello.',
     ]);
   });

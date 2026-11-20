@@ -3,6 +3,7 @@ import type {PermissionMode} from '@dynobox/sdk';
 import {prepareMcpHarness} from '../mcpMocks/resolveExecutable.js';
 import {
   createToolEvent,
+  firstJsonLineString,
   isRecord,
   jsonLines,
   type JsonObject,
@@ -73,6 +74,7 @@ export class ClaudeCodeHarness implements Harness {
         this.extraArgs,
         input.model,
         input.permissionMode,
+        input.session?.resumeId,
       ),
       input,
       // `claude -p` waits 3s for data on an open stdin pipe before starting.
@@ -83,12 +85,17 @@ export class ClaudeCodeHarness implements Harness {
 
   extractResult(raw: HarnessRunOutput): HarnessResult {
     const parsed = parseClaudeCodeStreamJson(raw.stdout);
+    const sessionId = firstJsonLineString(
+      raw.stdout,
+      (event) => event.session_id,
+    );
     return {
       exitCode: raw.exitCode,
       durationMs: raw.durationMs,
       transcript: raw.stdout,
       finalMessage: parsed.finalMessage,
       toolEvents: parsed.toolEvents,
+      ...(sessionId === undefined ? {} : {sessionId}),
     };
   }
 }
@@ -98,6 +105,7 @@ export function buildClaudeCodeArgs(
   extraArgs: readonly string[] = [],
   model?: string,
   permissionMode?: PermissionMode,
+  resumeId?: string,
 ): string[] {
   return [
     '-p',
@@ -105,9 +113,12 @@ export function buildClaudeCodeArgs(
     '--output-format',
     'stream-json',
     '--include-hook-events',
+    ...(resumeId === undefined ? [] : ['--resume', resumeId]),
     ...(model === undefined ? [] : ['--model', model]),
     ...claudeCodePermissionArgs(permissionMode),
     ...extraArgs,
+    // A prompt or reply such as "- Use UUIDs" is not an option.
+    '--',
     prompt,
   ];
 }

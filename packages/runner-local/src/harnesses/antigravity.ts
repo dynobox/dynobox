@@ -8,6 +8,7 @@ import type {PermissionMode} from '@dynobox/sdk';
 import {prepareMcpHarness} from '../mcpMocks/resolveExecutable.js';
 import {
   createToolEvent,
+  firstJsonLineString,
   isRecord,
   jsonLines,
   type JsonObject,
@@ -89,6 +90,9 @@ export class AntigravityHarness implements Harness {
           input.model,
           input.permissionMode,
           input.timeoutMs,
+          input.session?.resumeId === undefined
+            ? undefined
+            : {conversation: input.session.resumeId},
         ),
         input,
         cwd: workDir,
@@ -103,6 +107,11 @@ export class AntigravityHarness implements Harness {
 
   extractResult(raw: HarnessRunOutput): HarnessResult {
     const parsed = parseAntigravityJson(raw.stdout);
+    const owned = raw.metadata?.antigravitySessionId;
+    const sessionId =
+      typeof owned === 'string'
+        ? owned
+        : firstJsonLineString(raw.stdout, (event) => event.conversation_id);
     return {
       exitCode: raw.exitCode === 0 && parsed.terminalFailure ? 1 : raw.exitCode,
       durationMs: raw.durationMs,
@@ -112,6 +121,7 @@ export class AntigravityHarness implements Harness {
       ...(parsed.errorMessage === undefined
         ? {}
         : {errorMessage: parsed.errorMessage}),
+      ...(sessionId === undefined ? {} : {sessionId}),
     };
   }
 }
@@ -178,12 +188,15 @@ export function buildAntigravityArgs(
   model?: string,
   permissionMode?: PermissionMode,
   timeoutMs?: number,
-  projectId?: string,
+  target?: {project: string} | {conversation: string},
 ): string[] {
   return [
-    ...(projectId === undefined
+    ...(target === undefined
       ? ['--new-project', '--add-dir', workDir]
-      : ['--project', projectId]),
+      : 'project' in target
+        ? ['--project', target.project]
+        : // A conversation keeps its workspace after its project record is gone.
+          ['--conversation', target.conversation]),
     '-p',
     prompt,
     '--output-format',

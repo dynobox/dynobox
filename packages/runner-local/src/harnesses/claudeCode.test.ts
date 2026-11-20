@@ -104,6 +104,7 @@ fi
       'sonnet',
       '--permission-mode',
       'plan',
+      '--',
       'Say hello.',
     ]);
   });
@@ -119,8 +120,41 @@ fi
       '--include-hook-events',
       '--permission-mode',
       'bypassPermissions',
+      '--',
       'Say hello.',
     ]);
+  });
+
+  it('resumes a session by ID', () => {
+    expect(
+      buildClaudeCodeArgs('Next.', [], 'haiku', undefined, 'session-1'),
+    ).toEqual([
+      '-p',
+      '--verbose',
+      '--output-format',
+      'stream-json',
+      '--include-hook-events',
+      '--resume',
+      'session-1',
+      '--model',
+      'haiku',
+      '--',
+      'Next.',
+    ]);
+  });
+
+  it('extractResult reports the session ID for resuming', () => {
+    const result = new ClaudeCodeHarness().extractResult({
+      exitCode: 0,
+      durationMs: 1,
+      stderr: '',
+      stdout: jsonl(
+        {type: 'system', subtype: 'init', session_id: 'session-1'},
+        {type: 'result', result: 'Done.', session_id: 'session-1'},
+      ),
+    });
+
+    expect(result.sessionId).toBe('session-1');
   });
 
   it('extractResult returns transcript, final message, and tool events', () => {

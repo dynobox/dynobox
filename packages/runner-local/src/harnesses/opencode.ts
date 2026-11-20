@@ -6,6 +6,7 @@ import {execa} from 'execa';
 import {prepareMcpHarness} from '../mcpMocks/resolveExecutable.js';
 import {
   createToolEvent,
+  firstJsonLineString,
   isRecord,
   jsonLines,
   type JsonObject,
@@ -102,6 +103,7 @@ export class OpenCodeHarness implements Harness {
         this.extraArgs,
         input.model,
         input.permissionMode,
+        input.session?.resumeId,
       ),
       input: runInput,
       cwd: workDir,
@@ -124,6 +126,11 @@ export class OpenCodeHarness implements Harness {
       mcpPrefixesFromOutput(raw),
       typeof primary === 'string' ? primary : undefined,
     );
+    // Without MCP metadata, the first event belongs to the primary session.
+    const sessionId =
+      typeof primary === 'string'
+        ? primary
+        : firstJsonLineString(raw.stdout, (event) => event.sessionID);
     return {
       exitCode: raw.exitCode,
       durationMs: raw.durationMs,
@@ -133,6 +140,7 @@ export class OpenCodeHarness implements Harness {
       ...(parsed.errorMessage === undefined
         ? {}
         : {errorMessage: parsed.errorMessage}),
+      ...(sessionId === undefined ? {} : {sessionId}),
     };
   }
 }
@@ -140,18 +148,21 @@ export class OpenCodeHarness implements Harness {
 /**
  * OpenCode v2 removed `run --dir`; the process cwd (the job workDir) selects
  * the project. `--standalone` gives each job a private server, so jobs do not
- * share the user's background service, its config, or its session list.
+ * share the user's background service or its config. Sessions are still
+ * stored on disk, so `--session` resumes one from an earlier run.
  */
 export function buildOpenCodeArgs(
   extraArgs: readonly string[] = [],
   model?: string,
   permissionMode?: PermissionMode,
+  resumeId?: string,
 ): string[] {
   return [
     'run',
     '--standalone',
     '--format',
     'json',
+    ...(resumeId === undefined ? [] : ['--session', resumeId]),
     ...(permissionMode === 'dangerous' ? ['--auto'] : []),
     ...(model === undefined ? [] : ['--model', model]),
     ...extraArgs,
