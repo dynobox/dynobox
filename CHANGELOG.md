@@ -14,12 +14,14 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   and every reply resumes the same harness session, so the agent keeps its
   context. All six harnesses support it, with and without MCP mocks.
   Assertions cover every turn; `finalMessage.contains` checks the last one.
+  CLI mock lifecycle failures stop the conversation before another user reply.
 - A persona `user` is played by another harness run (Claude Code by default)
   in an empty directory. It sees the persona and each turn's messages, and
   ends the conversation by replying `DONE` or at `maxTurns`.
-- Run output shows `ran N turns` and each user reply. `--reporter json` emits
+- Default, verbose, and debug output retain `ran N turns` and each user reply
+  after a successful harness run. `--reporter json` emits
   `dynobox.report.v4` when a scenario declares a `user`, adding `turns` to job
-  records.
+  records (an empty array when no agent turn produced a result).
 
 ### `@dynobox/sdk`
 

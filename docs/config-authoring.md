@@ -215,6 +215,12 @@ turn. CLI and MCP mocks keep their state across turns, so ordered `responses`
 continue where the previous turn stopped. The job timeout covers the whole
 conversation, including persona replies.
 
+The conversation stops if an agent turn fails or a CLI mock reports a lifecycle
+failure, such as response exhaustion or a handler error. A configured nonzero
+mock exit code is an ordinary response and does not by itself stop the
+conversation. Reaching `maxTurns` ends the conversation; assertions still
+determine whether the job passes, even if the persona has not replied `DONE`.
+
 `replies` accepts 1 to 19 messages. `maxTurns` accepts 2 to 20.
 
 ## Harnesses
