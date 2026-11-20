@@ -322,11 +322,18 @@ scenario rows and verbose/debug details are printed in configured order. In
 non-interactive output, quiet mode, or incompatible terminals, it renders static
 output after jobs complete.
 
+Default, verbose, and debug text output retain multi-turn job details after
+completion: a successful harness phase shows `ran N turns`, and user replies
+appear as `turn N: ...`. Reply previews are escaped and clipped to the terminal
+width. Quiet output keeps its compact job summary.
+
 ## JSON Reporter
 
 Every JSON reporter object includes a `schema` field and a `type` field. The
-schema is `"dynobox.report.v2"`, or `"dynobox.report.v3"` when the run uses MCP
-mocks.
+schema is `"dynobox.report.v2"`, `"dynobox.report.v3"` when the run uses MCP
+mocks, or `"dynobox.report.v4"` when any scenario declares a `user`. v4
+includes the v3 fields. Every job and the summary use the same schema, including
+runs that mix single-turn and multi-turn scenarios.
 
 Job records include:
 
@@ -347,6 +354,12 @@ Job records include:
 - `mcp` for jobs that ran MCP mocks, with `ready`, `finalized`, `failures`,
   `callCount`, and `calls` (`sequence`, `server`, `tool`, and `category` per
   call)
+- `turns` for jobs whose scenario declares a `user`, one entry per agent turn
+  that produced a result, with `prompt` (the user message that started the turn),
+  `finalMessage` (or `null`), and `durationMs`. It is `[]` if no turn produced a
+  result, including setup failures. A harness invocation that throws has no
+  entry. Conversation text is included in full, without the text reporter's
+  escaping or clipping.
 - `assertions`, with `assertionId`, optional `label`, `type`, `passed`, and
   `message`. In v3 reports, MCP assertions add `mcp` evidence and `anyOf`
   assertions add `mcpBranches`.
