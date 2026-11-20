@@ -72,6 +72,7 @@ type ScenarioInput = {
   fixtures?: string | string[];
   cliMocks?: ScenarioCliMocks;
   mcpMocks?: ScenarioMcpMocks;
+  user?: ScenarioUser;
   endpoints?: Record<string, Endpoint>;
   assertions?: Assertion[];
 };
@@ -164,6 +165,57 @@ See [Mocked executables use call records](#mocked-executables-use-call-records)
 for assertion and reporting behavior. A configured nonzero exit is an ordinary
 response; sequence exhaustion, handler failures, timeouts, and unfinished calls
 fail the job even if the harness catches the command error.
+
+## Multi-Turn Conversations
+
+By default a scenario sends one prompt and the agent's first turn is the whole
+run. Add a scenario `user` to keep the conversation going: after each agent
+turn, Dynobox sends a user reply that resumes the same harness session, so the
+agent keeps its earlier context.
+
+Scripted replies are sent in order, one after each turn. The run ends after the
+last reply's turn:
+
+```ts
+{
+  name: 'asks before choosing a key type',
+  prompt: 'Add a users table. Ask me which primary key type to use first.',
+  user: {
+    replies: ['UUID keys.', 'Yes, add an index on email.'],
+  },
+  assertions: [artifact.contains('schema.sql', 'uuid')],
+}
+```
+
+A persona is played by another harness run. After each agent turn, that
+harness sees the persona and the conversation so far (each user message and
+the agent's final message) and writes the next reply. The run ends when the
+persona replies `DONE` or after `maxTurns` agent turns:
+
+```ts
+user: {
+  persona:
+    'A backend developer who wants UUID keys and an index on email. Answers in one sentence.',
+  harness: 'codex', // defaults to claude-code
+  model: 'gpt-5-mini', // defaults to the harness default
+  maxTurns: 4, // defaults to 5, including the first turn
+}
+```
+
+The persona harness runs in its own empty temporary directory with the
+harness default permission mode, outside CLI mocks, MCP mocks, and HTTP
+capture. Its runs are not part of the job's evidence. Persona replies come from
+a model, so they can vary between runs; use scripted replies when the test
+needs the same conversation every time.
+
+Every harness supports `user`. Assertions see the whole conversation: tool,
+command, MCP, and HTTP assertions cover every turn, `transcript.contains`
+searches every turn's transcript, and `finalMessage.contains` checks the last
+turn. CLI and MCP mocks keep their state across turns, so ordered `responses`
+continue where the previous turn stopped. The job timeout covers the whole
+conversation, including persona replies.
+
+`replies` accepts 1 to 19 messages. `maxTurns` accepts 2 to 20.
 
 ## Harnesses
 

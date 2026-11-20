@@ -325,8 +325,9 @@ output after jobs complete.
 ## JSON Reporter
 
 Every JSON reporter object includes a `schema` field and a `type` field. The
-schema is `"dynobox.report.v2"`, or `"dynobox.report.v3"` when the run uses MCP
-mocks.
+schema is `"dynobox.report.v2"`, `"dynobox.report.v3"` when the run uses MCP
+mocks, or `"dynobox.report.v4"` when any scenario declares a `user`. v4
+includes the v3 fields.
 
 Job records include:
 
@@ -347,6 +348,9 @@ Job records include:
 - `mcp` for jobs that ran MCP mocks, with `ready`, `finalized`, `failures`,
   `callCount`, and `calls` (`sequence`, `server`, `tool`, and `category` per
   call)
+- `turns` for jobs whose scenario declares a `user`, one entry per agent turn
+  with `prompt` (the user message that started the turn), `finalMessage` (or
+  `null`), and `durationMs`
 - `assertions`, with `assertionId`, optional `label`, `type`, `passed`, and
   `message`. In v3 reports, MCP assertions add `mcp` evidence and `anyOf`
   assertions add `mcpBranches`.

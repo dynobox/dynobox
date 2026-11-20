@@ -43,6 +43,11 @@ Use scenario `mcpMocks` for HTTP MCP tool fixtures and `mcp.called` /
 [MCP Mocks](https://docs.dynobox.xyz/mcp-mocking) for authoring and for which
 other MCP servers stay real.
 
+Add a scenario `user` to make a scenario multi-turn. Each reply resumes the
+agent's session: `user: {replies: ['UUID keys.']}` sends scripted replies, and
+`user: {persona: '...'}` has another harness play the user. See
+[Multi-Turn Conversations](https://docs.dynobox.xyz/config-authoring/#multi-turn-conversations).
+
 ## Experimental CLI Mocks
 
 Scenario `cliMocks` can replace bare executable calls with static or ordered
