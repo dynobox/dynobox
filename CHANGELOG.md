@@ -33,6 +33,13 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 ### `@dynobox/run-schema`
 
 - Add `multi_turn` to the telemetry run features.
+- Upload schema v7 adds an optional job `conversation` for multi-turn jobs:
+  who played the user (`{kind: 'scripted'}` or
+  `{kind: 'persona', harness, model}`), `maxTurns`, and one `{durationMs}`
+  per agent turn. Messages are never uploaded. `RUN_UPLOAD_SCHEMA_VERSION` is
+  now 7, and `RUN_UPLOAD_V6_SCHEMA_VERSION` is 6.
+- `RunJobDetail.conversation` is the job's conversation summary, or null for
+  single-turn jobs and runs uploaded before v7.
 
 ---
 

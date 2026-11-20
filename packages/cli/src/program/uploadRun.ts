@@ -7,7 +7,7 @@ import {
 } from '@dynobox/evaluators';
 import {
   RUN_UPLOAD_LIMITS,
-  RUN_UPLOAD_SCHEMA_VERSION,
+  RUN_UPLOAD_V6_SCHEMA_VERSION,
   type RunUploadAssertionDefinitionV2,
   type RunUploadAssertionDisplayChildV2,
   type RunUploadAssertionDisplayV2,
@@ -165,7 +165,7 @@ export function buildRunUploadPayload(input: {
 
   const failed = dynos.reduce((count, dyno) => count + dyno.totals.failed, 0);
   return {
-    schemaVersion: RUN_UPLOAD_SCHEMA_VERSION,
+    schemaVersion: RUN_UPLOAD_V6_SCHEMA_VERSION,
     createdAt: new Date().toISOString(),
     cliVersion: readPackageVersion(),
     gitHash: input.git?.commit ?? null,

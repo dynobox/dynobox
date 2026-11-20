@@ -7,17 +7,20 @@ import {
   RUN_UPLOAD_V3_SCHEMA_VERSION,
   RUN_UPLOAD_V4_SCHEMA_VERSION,
   RUN_UPLOAD_V5_SCHEMA_VERSION,
+  RUN_UPLOAD_V6_SCHEMA_VERSION,
   RunUpload,
   type RunUploadCreateInputV2,
   type RunUploadCreateInputV3,
   type RunUploadCreateInputV4,
   type RunUploadCreateInputV5,
   type RunUploadCreateInputV6,
+  type RunUploadCreateInputV7,
   RunUploadV2,
   RunUploadV3,
   RunUploadV4,
   RunUploadV5,
   RunUploadV6,
+  RunUploadV7,
 } from './index.js';
 
 function validPayload(): RunUploadCreateInputV2 {
@@ -584,7 +587,7 @@ function validV6Payload(): RunUploadCreateInputV6 {
   const payload = validV5Payload();
   return {
     ...payload,
-    schemaVersion: RUN_UPLOAD_SCHEMA_VERSION,
+    schemaVersion: RUN_UPLOAD_V6_SCHEMA_VERSION,
     git: {...payload.git!, repository: 'github.com/dynobox/dynobox'},
   };
 }
@@ -635,5 +638,89 @@ describe('RunUploadV6', () => {
   it('parses all supported upload versions', () => {
     expect(RunUpload.parse(validV5Payload()).schemaVersion).toBe(5);
     expect(RunUpload.parse(validV6Payload()).schemaVersion).toBe(6);
+  });
+});
+
+function validV7Payload(): RunUploadCreateInputV7 {
+  const payload = validV6Payload();
+  const job = payload.dynos[0]!.jobs[0]!;
+  return {
+    ...payload,
+    schemaVersion: RUN_UPLOAD_SCHEMA_VERSION,
+    dynos: [
+      {
+        ...payload.dynos[0]!,
+        jobs: [
+          {
+            ...job,
+            conversation: {
+              user: {kind: 'persona', harness: 'codex', model: 'gpt-6-luna'},
+              maxTurns: 4,
+              turns: [{durationMs: 1200}, {durationMs: 800}],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+describe('RunUploadV7', () => {
+  it('accepts a persona conversation summary', () => {
+    const parsed = RunUploadV7.parse(validV7Payload());
+
+    expect(parsed.schemaVersion).toBe(7);
+    expect(parsed.dynos[0]!.jobs[0]!.conversation).toEqual({
+      user: {kind: 'persona', harness: 'codex', model: 'gpt-6-luna'},
+      maxTurns: 4,
+      turns: [{durationMs: 1200}, {durationMs: 800}],
+    });
+  });
+
+  it('accepts scripted users and jobs without a conversation', () => {
+    const payload = validV7Payload();
+    const job = payload.dynos[0]!.jobs[0]!;
+    job.conversation = {user: {kind: 'scripted'}, maxTurns: 2, turns: []};
+    expect(RunUploadV7.safeParse(payload).success).toBe(true);
+
+    delete job.conversation;
+    expect(
+      RunUploadV7.parse(payload).dynos[0]!.jobs[0]!.conversation,
+    ).toBeUndefined();
+  });
+
+  it.each([
+    ['a message', {turns: [{durationMs: 1, prompt: 'Add a table.'}]}],
+    ['persona text', {user: {kind: 'scripted', persona: 'Someone.'}}],
+    ['an unknown user kind', {user: {kind: 'robot'}}],
+    ['too many turns', {maxTurns: RUN_UPLOAD_LIMITS.conversationTurns + 1}],
+    [
+      'more turn records than the limit',
+      {
+        turns: Array.from(
+          {length: RUN_UPLOAD_LIMITS.conversationTurns + 1},
+          () => ({durationMs: 1}),
+        ),
+      },
+    ],
+  ])('rejects %s', (_label, change) => {
+    const payload = validV7Payload();
+    const job = payload.dynos[0]!.jobs[0]!;
+    job.conversation = {...job.conversation!, ...change} as never;
+
+    expect(RunUploadV7.safeParse(payload).success).toBe(false);
+  });
+
+  it('rejects conversations on v6 uploads', () => {
+    const payload = validV7Payload();
+
+    expect(RunUploadV6.safeParse({...payload, schemaVersion: 6}).success).toBe(
+      false,
+    );
+  });
+
+  it('parses all supported upload versions', () => {
+    expect(RunUpload.parse(validV6Payload()).schemaVersion).toBe(6);
+    expect(RunUpload.parse(validV7Payload()).schemaVersion).toBe(7);
   });
 });

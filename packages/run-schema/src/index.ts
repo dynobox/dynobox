@@ -4,7 +4,8 @@ export const RUN_UPLOAD_V2_SCHEMA_VERSION = 2 as const;
 export const RUN_UPLOAD_V3_SCHEMA_VERSION = 3 as const;
 export const RUN_UPLOAD_V4_SCHEMA_VERSION = 4 as const;
 export const RUN_UPLOAD_V5_SCHEMA_VERSION = 5 as const;
-export const RUN_UPLOAD_SCHEMA_VERSION = 6 as const;
+export const RUN_UPLOAD_V6_SCHEMA_VERSION = 6 as const;
+export const RUN_UPLOAD_SCHEMA_VERSION = 7 as const;
 
 export const RUN_UPLOAD_STATUS = ['passed', 'failed'] as const;
 export const RUN_UPLOAD_JOB_STATUS = [
@@ -48,6 +49,7 @@ export const RUN_UPLOAD_LIMITS = {
   mcpCodeLength: 64,
   mcpFailuresPerJob: 20,
   mcpCallsPerJob: 200,
+  conversationTurns: 20,
 } as const;
 
 const countSchema = z.number().int().nonnegative();
@@ -378,8 +380,52 @@ export const runUploadGitV6Schema = runUploadGitV4Schema
   .strict();
 
 export const RunUploadV6 = RunUploadV5.extend({
-  schemaVersion: z.literal(RUN_UPLOAD_SCHEMA_VERSION),
+  schemaVersion: z.literal(RUN_UPLOAD_V6_SCHEMA_VERSION),
   git: runUploadGitV6Schema.nullable(),
+}).strict();
+
+/**
+ * How a multi-turn job's conversation ran. Messages are never uploaded; only
+ * who played the user, the turn limit, and each agent turn's duration.
+ */
+export const runUploadJobConversationV7Schema = z
+  .object({
+    user: z.discriminatedUnion('kind', [
+      z.object({kind: z.literal('scripted')}).strict(),
+      z
+        .object({
+          kind: z.literal('persona'),
+          /** The harness that played the persona. */
+          harness: z.string().min(1).max(RUN_UPLOAD_LIMITS.harnessIdLength),
+          model: optionalNullableString(RUN_UPLOAD_LIMITS.modelLength),
+        })
+        .strict(),
+    ]),
+    /** Most agent turns the scenario allowed, including the first. */
+    maxTurns: z.number().int().min(1).max(RUN_UPLOAD_LIMITS.conversationTurns),
+    /** Agent turns that produced a result, in order. */
+    turns: z
+      .array(z.object({durationMs: durationMsSchema}).strict())
+      .max(RUN_UPLOAD_LIMITS.conversationTurns),
+  })
+  .strict();
+
+export const runUploadJobV7Schema = runUploadJobV5Schema
+  .extend({
+    /** Present only when the job's scenario declared a `user`. */
+    conversation: runUploadJobConversationV7Schema.optional(),
+  })
+  .strict();
+
+export const runUploadDynoV7Schema = runUploadDynoV2Schema
+  .extend({
+    jobs: z.array(runUploadJobV7Schema).max(RUN_UPLOAD_LIMITS.jobsPerDyno),
+  })
+  .strict();
+
+export const RunUploadV7 = RunUploadV6.extend({
+  schemaVersion: z.literal(RUN_UPLOAD_SCHEMA_VERSION),
+  dynos: z.array(runUploadDynoV7Schema).max(RUN_UPLOAD_LIMITS.dynos),
 }).strict();
 
 export const RunUpload = z.discriminatedUnion('schemaVersion', [
@@ -388,6 +434,7 @@ export const RunUpload = z.discriminatedUnion('schemaVersion', [
   RunUploadV4,
   RunUploadV5,
   RunUploadV6,
+  RunUploadV7,
 ]);
 
 export const RunSharingUpdate = z
@@ -426,6 +473,12 @@ export type RunUploadDynoV5 = z.infer<typeof runUploadDynoV5Schema>;
 export type RunUploadV5 = z.infer<typeof RunUploadV5>;
 export type RunUploadGitV6 = z.infer<typeof runUploadGitV6Schema>;
 export type RunUploadV6 = z.infer<typeof RunUploadV6>;
+export type RunUploadJobConversationV7 = z.infer<
+  typeof runUploadJobConversationV7Schema
+>;
+export type RunUploadJobV7 = z.infer<typeof runUploadJobV7Schema>;
+export type RunUploadDynoV7 = z.infer<typeof runUploadDynoV7Schema>;
+export type RunUploadV7 = z.infer<typeof RunUploadV7>;
 export type RunUpload = z.infer<typeof RunUpload>;
 export type RunUploadSchemaVersion = RunUpload['schemaVersion'];
 
@@ -434,6 +487,7 @@ export type RunUploadCreateInputV3 = z.input<typeof RunUploadV3>;
 export type RunUploadCreateInputV4 = z.input<typeof RunUploadV4>;
 export type RunUploadCreateInputV5 = z.input<typeof RunUploadV5>;
 export type RunUploadCreateInputV6 = z.input<typeof RunUploadV6>;
+export type RunUploadCreateInputV7 = z.input<typeof RunUploadV7>;
 
 export type RunSharingUpdate = z.infer<typeof RunSharingUpdate>;
 
@@ -510,6 +564,11 @@ export type RunJobDetail = {
   warnings: string[];
   /** MCP mock summary; null when the job declared no mocks. */
   mcp: RunUploadJobMcpV5 | null;
+  /**
+   * Multi-turn conversation summary; null for single-turn jobs and runs
+   * uploaded before v7.
+   */
+  conversation: RunUploadJobConversationV7 | null;
   assertions: RunAssertionDetail[];
 };
 
