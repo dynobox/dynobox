@@ -12,6 +12,7 @@ import {
   TOOL_MATCHER_MESSAGES,
   validateToolAssertionNode,
 } from '../schema/toolMatcherValidation.js';
+import {irScenarioUserSchema} from '../schema/user.js';
 import {
   isShellCommandMatcher,
   type ShellCommandMatcher,
@@ -21,7 +22,7 @@ import type {CliMockHandlerContext, CliMockResponse} from '../types/config.js';
 import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/httpMethod.js';
 
-export const IR_VERSION = '0.4' as const;
+export const IR_VERSION = '0.5' as const;
 
 export const irVersionSchema = z.literal(IR_VERSION);
 
@@ -413,6 +414,7 @@ export const irScenarioSchema = z
       .record(cliMockExecutableSchema, irCliMockConfigSchema)
       .default({}),
     mcpMocks: mcpMocksSchema.optional(),
+    user: irScenarioUserSchema.optional(),
     endpoints: z.array(irEndpointSchema),
     assertions: z.array(irAssertionSchema),
   })

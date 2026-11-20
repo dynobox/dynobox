@@ -1,5 +1,6 @@
 import type {z} from 'zod';
 
+import type {irScenarioUserSchema} from '../schema/user.js';
 import {
   IR_VERSION,
   irAssertionSchema,
@@ -14,6 +15,7 @@ export type IrVersion = typeof IR_VERSION;
 
 export type IrEndpoint = z.infer<typeof irEndpointSchema>;
 export type IrHarnessConfig = z.infer<typeof irHarnessConfigSchema>;
+export type IrScenarioUser = z.infer<typeof irScenarioUserSchema>;
 type BaseIrAssertion = z.infer<typeof irAssertionSchema>;
 export type IrSequenceStep =
   | Omit<Extract<BaseIrAssertion, {type: 'tool.called'}>, 'id' | 'label'>

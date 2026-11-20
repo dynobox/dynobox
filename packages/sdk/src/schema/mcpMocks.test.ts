@@ -174,7 +174,7 @@ describe('JSON-only values', () => {
 });
 
 describe('MCP authoring and IR', () => {
-  it('compiles helpers and anyOf branches into IR 0.4', () => {
+  it('compiles helpers and anyOf branches into IR 0.5', () => {
     const config = defineDyno({
       scenarios: [
         {
@@ -194,7 +194,7 @@ describe('MCP authoring and IR', () => {
       ],
     });
     const ir = compile(config);
-    expect(ir.version).toBe('0.4');
+    expect(ir.version).toBe('0.5');
     expect(irSchema.parse(ir)).toEqual(ir);
     expect(ir.scenarios[0]!.assertions[0]).toMatchObject({
       type: 'mcp.called',
