@@ -102,7 +102,7 @@ export function renderHarnessPhase(
   return `${renderPhaseRow(ctx, {
     status: 'pass',
     label: 'harness',
-    detail: `ran prompt ${dim(ctx, formatToolCount(result))}`,
+    detail: `${formatRan(result.turns?.length)} ${dim(ctx, formatToolCount(result))}`,
     durationMs: result.timing.harnessMs,
     omitIcon,
   })}\n`;
@@ -165,6 +165,13 @@ function renderPhaseIcon(ctx: RenderContext, input: PhaseRowInput): string {
     iconText,
     input.status === 'running' ? 'plain' : input.status,
   );
+}
+
+/** `ran prompt`, or `ran N turns` for a multi-turn job. */
+export function formatRan(turnCount: number | undefined): string {
+  return turnCount === undefined
+    ? 'ran prompt'
+    : `ran ${formatCount(turnCount, 'turn')}`;
 }
 
 function formatToolCount(result: LocalRunnerResult): string {

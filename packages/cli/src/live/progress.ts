@@ -1,7 +1,8 @@
 import type {RunJobProgressEvent} from '@dynobox/runner-local';
 
 import {describeToolEvent} from '../render/describe.js';
-import {renderPhaseRow, setupDurationMs} from '../render/phases.js';
+import {formatRan, renderPhaseRow, setupDurationMs} from '../render/phases.js';
+import {formatTurnMessage} from '../render/turns.js';
 import {dim, formatCount, type RenderContext} from '../terminal/index.js';
 import type {LiveLine} from './dashboard.js';
 
@@ -11,6 +12,8 @@ export type LiveJobState = {
   toolCount: number;
   assertionCount: number;
   phaseStartedAtMs: number;
+  /** Latest turn of a multi-turn job. */
+  turnCount?: number;
 };
 
 /**
@@ -100,8 +103,22 @@ export function renderLiveProgressEvent(
     };
   }
 
-  // Turn progress is rendered once the CLI shows conversations.
-  if (event.type === 'harness.turn') return {kind: 'skip'};
+  if (event.type === 'harness.turn') {
+    state.turnCount = event.turn;
+    const label = `turn ${event.turn}: `;
+    const detail = `${label}${formatTurnMessage(event.prompt, 60)}`;
+    return {
+      kind: 'update',
+      render: (frame, nowMs) =>
+        renderPhaseRow(ctx, {
+          status: 'running',
+          label: 'harness',
+          detail,
+          spinnerFrame: frame,
+          durationMs: nowMs - state.phaseStartedAtMs,
+        }),
+    };
+  }
 
   if (event.type === 'harness.tool') {
     state.toolCount = event.toolCount;
@@ -129,7 +146,7 @@ export function renderLiveProgressEvent(
         status: event.success ? 'pass' : 'fail',
         label: 'harness',
         detail: event.success
-          ? `ran prompt ${dim(ctx, formatCount(event.toolCount, 'tool'))}`
+          ? `${formatRan(state.turnCount)} ${dim(ctx, formatCount(event.toolCount, 'tool'))}`
           : 'failed',
         durationMs: harnessDurationMs,
       }),
