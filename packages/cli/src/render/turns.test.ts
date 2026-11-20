@@ -1,7 +1,7 @@
 import type {LocalRunnerResult} from '@dynobox/runner-local';
 import {describe, expect, it} from 'vitest';
 
-import {createRenderContext} from '../terminal/index.js';
+import {createRenderContext, visibleLength} from '../terminal/index.js';
 import {formatTurnMessage, renderTurnDetails} from './turns.js';
 
 describe('formatTurnMessage', () => {
@@ -9,6 +9,12 @@ describe('formatTurnMessage', () => {
     expect(formatTurnMessage('Use\n  UUID\tkeys.', 40)).toBe('Use UUID keys.');
     expect(formatTurnMessage('a\u001b[31mred', 40)).toBe('a\\u001b[31mred');
     expect(formatTurnMessage('x'.repeat(20), 10)).toBe('xxxxxxx...');
+  });
+
+  it.each([-1, 0, 1, 2, 3])('fits a %i-character allowance', (width) => {
+    expect(formatTurnMessage('A long reply.', width)).toBe(
+      '.'.repeat(Math.max(0, width)),
+    );
   });
 });
 
@@ -32,4 +38,25 @@ describe('renderTurnDetails', () => {
   it('renders nothing for single-turn jobs', () => {
     expect(renderTurnDetails({} as LocalRunnerResult, ctx)).toBe('');
   });
+
+  it.each([12, 16, 18, 30])(
+    'fits replies within a %i-column terminal',
+    (width) => {
+      const output = renderTurnDetails(
+        {
+          turns: [
+            {prompt: 'Start.', durationMs: 1},
+            {
+              prompt: 'Use\nUUID\u001b[31m keys and add an index.',
+              durationMs: 1,
+            },
+          ],
+        } as LocalRunnerResult,
+        createRenderContext({color: false, terminalWidth: width}),
+      );
+
+      expect(visibleLength(output.trimEnd())).toBeLessThanOrEqual(width);
+      expect(output).not.toContain('\u001b');
+    },
+  );
 });

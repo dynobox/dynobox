@@ -534,8 +534,8 @@ async function runStatic(input: RunPathInput): Promise<RunPathResult> {
  * lines as groups begin, a spinner-driven row per harness group that advances
  * through phases as runner events arrive, and a grouped summary at the end.
  *
- * Passing groups in default mode collapse to a one-line grouped row;
- * failures and expanded modes keep their detail blocks.
+ * Passing single-turn groups in default mode collapse to a one-line grouped
+ * row; conversations, failures and expanded modes keep their detail blocks.
  */
 async function runLive(input: RunPathInput): Promise<RunPathResult> {
   const {dynos, runOptions, ctx, writeStdout} = input;
@@ -699,7 +699,10 @@ function writeLiveScenarioCompletion(
     writeStdout(`${renderHarnessGroupRow(entries, ctx, rowOptions)}\n`);
     const assertionById = assertionByIdForJobs(group.jobs);
 
-    if (!expanded) {
+    if (
+      !expanded &&
+      !entries.some((entry) => entry.result.turns !== undefined)
+    ) {
       writeStdout(
         entries.length === 1
           ? !entries[0]!.result.passed || entries[0]!.result.warnings.length > 0

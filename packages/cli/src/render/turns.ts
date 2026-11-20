@@ -9,10 +9,11 @@ import {
 
 /** One line of a user message, escaped and fitted to `maxLength`. */
 export function formatTurnMessage(message: string, maxLength: number): string {
-  return truncate(
-    escapeTerminalText(message.replace(/\s+/g, ' ').trim()),
-    Math.max(0, maxLength),
-  );
+  const text = escapeTerminalText(message.replace(/\s+/g, ' ').trim());
+  const available = Math.max(0, maxLength);
+  if (text.length <= available) return text;
+  if (available <= 3) return '.'.repeat(available);
+  return truncate(text, available);
 }
 
 /** The user's replies in a multi-turn job, one line per later turn. */
@@ -25,10 +26,10 @@ export function renderTurnDetails(
     .map((turn, index) => {
       const label = `turn ${index + 2}: `;
       const message = formatTurnMessage(
-        turn.prompt,
-        ctx.width - 8 - label.length,
+        `${label}${turn.prompt}`,
+        ctx.width - 8,
       );
-      return `        ${dim(ctx, `${label}${message}`)}\n`;
+      return `        ${dim(ctx, message)}\n`;
     })
     .join('');
 }

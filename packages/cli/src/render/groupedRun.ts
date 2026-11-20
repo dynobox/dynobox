@@ -352,7 +352,7 @@ function renderGroupDetails(
   );
   if (group.entries.length === 1) {
     const entry = group.entries[0]!;
-    if (expandAll) {
+    if (expandAll || entry.result.turns !== undefined) {
       return renderJobDetails(entry.result, assertionById, ctx, {
         configuredCliMockNames: Object.keys(entry.job.scenario.cliMocks),
         ...debugLogPathsOption(input, entry),
@@ -364,7 +364,10 @@ function renderGroupDetails(
     return '';
   }
 
-  if (!expandAll) {
+  if (
+    !expandAll &&
+    !group.entries.some((entry) => entry.result.turns !== undefined)
+  ) {
     return renderIterationDetailLines(group.entries, assertionById, ctx);
   }
 
