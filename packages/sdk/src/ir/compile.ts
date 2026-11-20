@@ -1,5 +1,12 @@
+import type {z} from 'zod';
+
 import {DynoboxConfigError} from '../errors.js';
 import {type AuthoredAssertion, configSchema} from '../schema/configSchema.js';
+import {
+  DEFAULT_USER_HARNESS,
+  DEFAULT_USER_MAX_TURNS,
+  type scenarioUserSchema,
+} from '../schema/user.js';
 import type {Endpoint} from '../types/brands.js';
 import type {DynoboxConfig} from '../types/config.js';
 import type {HarnessRunConfig} from '../types/harness.js';
@@ -12,10 +19,13 @@ import {
   type IrEndpoint,
   type IrHarnessConfig,
   type IrScenario,
+  type IrScenarioUser,
   type IrSequenceStep,
 } from './types.js';
 
 const SCENARIO_PREFIX = 'scenario.';
+
+type AuthoredUser = z.infer<typeof scenarioUserSchema>;
 
 type IrAssertionBody = IrAssertion extends infer Assertion
   ? Assertion extends IrAssertion
@@ -108,6 +118,9 @@ export function compile(config: DynoboxConfig): Ir {
       fixtures,
       cliMocks: scenario.cliMocks ?? {},
       ...(scenario.mcpMocks === undefined ? {} : {mcpMocks: scenario.mcpMocks}),
+      ...(scenario.user === undefined
+        ? {}
+        : {user: normalizeUser(scenario.user)}),
       endpoints: irEndpoints,
       assertions: irAssertions,
     };
@@ -124,6 +137,16 @@ export function compile(config: DynoboxConfig): Ir {
 
 function normalizeHarnessConfig(harness: HarnessRunConfig): IrHarnessConfig {
   return typeof harness === 'string' ? {id: harness} : harness;
+}
+
+function normalizeUser(user: AuthoredUser): IrScenarioUser {
+  if ('replies' in user) return {replies: [...user.replies]};
+  return {
+    persona: user.persona,
+    harness: user.harness ?? DEFAULT_USER_HARNESS,
+    ...(user.model === undefined ? {} : {model: user.model}),
+    maxTurns: user.maxTurns ?? DEFAULT_USER_MAX_TURNS,
+  };
 }
 
 function toStringArray(

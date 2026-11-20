@@ -21,6 +21,7 @@ import {
   TOOL_MATCHER_MESSAGES,
   validateToolAssertionNode,
 } from './toolMatcherValidation.js';
+import {scenarioUserSchema} from './user.js';
 
 const endpointKeySchema = z
   .string()
@@ -456,6 +457,7 @@ export const scenarioSchema = z
       .optional(),
     cliMocks: z.record(cliMockExecutableSchema, cliMockConfigSchema).optional(),
     mcpMocks: mcpMocksSchema.optional(),
+    user: scenarioUserSchema.optional(),
     endpoints: z.record(endpointKeySchema, endpointSchema).optional(),
     assertions: z.array(assertionSchema).optional(),
   })

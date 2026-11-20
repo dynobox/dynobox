@@ -508,6 +508,55 @@ export default defineDyno({
     expect(irSchema.parse(ir)).toEqual(ir);
   });
 
+  it('compiles scenario users with persona defaults resolved', () => {
+    const ir = compile(
+      defineDyno({
+        scenarios: [
+          {
+            name: 'scripted',
+            prompt: 'Add a users table.',
+            user: {
+              replies: ['UUID keys please.', 'Yes, add the index.'] as const,
+            },
+          },
+          {
+            name: 'persona',
+            prompt: 'Add a users table.',
+            user: {persona: 'A backend developer who wants UUID keys.'},
+          },
+          {
+            name: 'persona with options',
+            prompt: 'Add a users table.',
+            user: {
+              persona: 'A backend developer.',
+              harness: 'codex',
+              model: 'gpt-5-mini',
+              maxTurns: 3,
+            },
+          },
+          {name: 'single turn', prompt: 'Add a users table.'},
+        ],
+      }),
+    );
+
+    expect(ir.scenarios.map((scenario) => scenario.user)).toEqual([
+      {replies: ['UUID keys please.', 'Yes, add the index.']},
+      {
+        persona: 'A backend developer who wants UUID keys.',
+        harness: 'claude-code',
+        maxTurns: 5,
+      },
+      {
+        persona: 'A backend developer.',
+        harness: 'codex',
+        model: 'gpt-5-mini',
+        maxTurns: 3,
+      },
+      undefined,
+    ]);
+    expect(irSchema.parse(ir)).toEqual(ir);
+  });
+
   it('compile returns a deterministic IR for a minimal config', () => {
     const config = defineDyno({
       name: 'demo',
@@ -1563,7 +1612,7 @@ export default defineDyno({
             "setup": [],
           },
         ],
-        "version": "0.4",
+        "version": "0.5",
       }
     `);
   });

@@ -17,9 +17,16 @@ export {
   type IrEndpoint,
   type IrHarnessConfig,
   type IrScenario,
+  type IrScenarioUser,
   type IrVersion,
 } from './ir/types.js';
 export {mcpJsonObjectSchema, mcpMocksSchema} from './schema/mcpMocks.js';
+export {
+  DEFAULT_USER_HARNESS,
+  DEFAULT_USER_MAX_TURNS,
+  irScenarioUserSchema,
+  MAX_USER_TURNS,
+} from './schema/user.js';
 export type {
   McpCallCategory,
   McpCallRecord,

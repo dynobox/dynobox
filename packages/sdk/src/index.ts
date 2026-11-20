@@ -60,6 +60,7 @@ export type {
   DynoboxConfig,
   ScenarioCliMocks,
   ScenarioInput,
+  ScenarioUser,
 } from './types/config.js';
 export type {EndpointSpec} from './types/endpointSpec.js';
 export {
