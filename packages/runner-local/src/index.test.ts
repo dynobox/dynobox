@@ -2024,3 +2024,353 @@ function closeServer(server: Server): Promise<void> {
     });
   });
 }
+
+/** Answers each turn with `turn N`, one tool event, and a fixed session. */
+class ConversationHarness implements Harness {
+  readonly inputs: HarnessInput[] = [];
+
+  constructor(
+    readonly id: Harness['id'] = 'claude-code',
+    private readonly options: {
+      sessionId?: string;
+      exitCodes?: number[];
+      messages?: string[];
+    } = {},
+  ) {}
+
+  async run(input: HarnessInput): Promise<HarnessRunOutput> {
+    this.inputs.push(input);
+    const turn = this.inputs.length;
+    return {
+      exitCode: this.options.exitCodes?.[turn - 1] ?? 0,
+      stdout: this.options.messages?.[turn - 1] ?? `turn ${turn}`,
+      stderr: '',
+      durationMs: 10,
+    };
+  }
+
+  extractResult(raw: HarnessRunOutput): HarnessResult {
+    return {
+      exitCode: raw.exitCode,
+      durationMs: raw.durationMs,
+      transcript: raw.stdout,
+      finalMessage: raw.stdout,
+      toolEvents: [
+        {kind: 'read_file', rawName: 'Read', input: {path: raw.stdout}},
+      ],
+      ...(this.options.sessionId === undefined
+        ? {}
+        : {sessionId: this.options.sessionId}),
+    };
+  }
+}
+
+describe('runJob conversations', () => {
+  it('resumes the agent session with each scripted reply', async () => {
+    const agent = new ConversationHarness('claude-code', {
+      sessionId: 'session-1',
+    });
+    const events: RunJobProgressEvent[] = [];
+    const result = await runJob(
+      createJob({
+        user: {replies: ['UUID keys.', 'Yes, add the index.']},
+        assertions: [
+          {
+            id: 'assertion.final',
+            type: 'finalMessage.contains',
+            text: 'turn 3',
+          },
+        ],
+      }),
+      {
+        scratchRoot: createScratchRoot(),
+        harnesses: [agent],
+        onProgress: (event) => events.push(event),
+      },
+    );
+
+    expect(result.status).toBe('passed');
+    expect(
+      agent.inputs.map(({prompt, session}) => ({prompt, session})),
+    ).toEqual([
+      {prompt: 'Run pnpm test.', session: {}},
+      {prompt: 'UUID keys.', session: {resumeId: 'session-1'}},
+      {prompt: 'Yes, add the index.', session: {resumeId: 'session-1'}},
+    ]);
+    expect(result.turns).toEqual([
+      {prompt: 'Run pnpm test.', finalMessage: 'turn 1', durationMs: 10},
+      {prompt: 'UUID keys.', finalMessage: 'turn 2', durationMs: 10},
+      {prompt: 'Yes, add the index.', finalMessage: 'turn 3', durationMs: 10},
+    ]);
+    expect(result.harnessResult).toMatchObject({
+      finalMessage: 'turn 3',
+      transcript: 'turn 1\nturn 2\nturn 3',
+    });
+    // Wall time of the whole conversation, not only the agent turns.
+    expect(result.harnessResult?.durationMs).toBe(
+      result.harnessOutput?.durationMs,
+    );
+    expect(result.harnessResult?.toolEvents).toHaveLength(3);
+    expect(
+      events.flatMap((event) =>
+        event.type === 'harness.turn' ? [[event.turn, event.prompt]] : [],
+      ),
+    ).toEqual([
+      [1, 'Run pnpm test.'],
+      [2, 'UUID keys.'],
+      [3, 'Yes, add the index.'],
+    ]);
+  });
+
+  it('lets a persona harness reply until it says DONE', async () => {
+    const agent = new ConversationHarness('claude-code', {
+      sessionId: 'session-1',
+      messages: ['Which key type?', 'Created the table.'],
+    });
+    const persona = new ConversationHarness('codex', {
+      messages: ['UUIDs, please.', '`DONE.`'],
+    });
+    const result = await runJob(
+      createJob({
+        user: {
+          persona: 'A backend developer who wants UUID keys.',
+          harness: 'codex',
+          model: 'gpt-5-mini',
+          maxTurns: 5,
+        },
+      }),
+      {
+        scratchRoot: createScratchRoot(),
+        harnesses: [agent, persona],
+        env: {DYNOBOX_TEST_ENV: '1'},
+      },
+    );
+
+    expect(result.status).toBe('passed');
+    expect(agent.inputs.map((input) => input.prompt)).toEqual([
+      'Run pnpm test.',
+      'UUIDs, please.',
+    ]);
+    expect(persona.inputs).toHaveLength(2);
+    const [first] = persona.inputs;
+    expect(first).toMatchObject({
+      model: 'gpt-5-mini',
+      env: {DYNOBOX_TEST_ENV: '1'},
+    });
+    expect(first!.session).toBeUndefined();
+    expect(first!.workDir).not.toBe(result.workDir);
+    expect(existsSync(first!.workDir)).toBe(false);
+    expect(first!.prompt).toContain('A backend developer who wants UUID keys.');
+    expect(first!.prompt).toContain('[agent]\nWhich key type?');
+    expect(persona.inputs[1]!.prompt).toContain('[user]\nUUIDs, please.');
+    expect(result.turns).toHaveLength(2);
+  });
+
+  it('stops a persona conversation at maxTurns without asking again', async () => {
+    const agent = new ConversationHarness('claude-code', {
+      sessionId: 'session-1',
+    });
+    const persona = new ConversationHarness('codex');
+    const result = await runJob(
+      createJob({
+        user: {persona: 'Talkative.', harness: 'codex', maxTurns: 2},
+      }),
+      {scratchRoot: createScratchRoot(), harnesses: [agent, persona]},
+    );
+
+    expect(result.status).toBe('passed');
+    expect(agent.inputs).toHaveLength(2);
+    expect(persona.inputs).toHaveLength(1);
+  });
+
+  it('fails when the harness reports no session to resume', async () => {
+    const result = await runJob(createJob({user: {replies: ['Next.']}}), {
+      scratchRoot: createScratchRoot(),
+      harnesses: [new ConversationHarness()],
+    });
+
+    expect(result.status).toBe('harness_failed');
+    expect(result.diagnostics).toEqual([
+      'Harness "claude-code" did not report a session ID to resume.',
+    ]);
+    expect(result.turns).toHaveLength(1);
+    expect(result.harnessOutput?.stdout).toBe('turn 1');
+  });
+
+  it('rejects an unregistered persona harness before the first turn', async () => {
+    const agent = new ConversationHarness();
+    await expect(
+      runJob(
+        createJob({user: {persona: 'Someone.', harness: 'codex', maxTurns: 3}}),
+        {
+          scratchRoot: createScratchRoot(),
+          harnesses: [agent],
+        },
+      ),
+    ).rejects.toThrow(
+      'No harness registered for simulated user harness "codex".',
+    );
+    expect(agent.inputs).toHaveLength(0);
+  });
+
+  it('does not ask a persona for a reply that cannot be sent', async () => {
+    const persona = new ConversationHarness('codex');
+    const result = await runJob(
+      createJob({user: {persona: 'Someone.', harness: 'codex', maxTurns: 3}}),
+      {
+        scratchRoot: createScratchRoot(),
+        harnesses: [new ConversationHarness(), persona],
+      },
+    );
+
+    expect(result.status).toBe('harness_failed');
+    expect(result.diagnostics).toEqual([
+      'Harness "claude-code" did not report a session ID to resume.',
+    ]);
+    expect(persona.inputs).toHaveLength(0);
+  });
+
+  it('stops at a failed agent turn', async () => {
+    const agent = new ConversationHarness('claude-code', {
+      sessionId: 'session-1',
+      exitCodes: [0, 1],
+    });
+    const result = await runJob(
+      createJob({user: {replies: ['Next.', 'Never sent.']}}),
+      {scratchRoot: createScratchRoot(), harnesses: [agent]},
+    );
+
+    expect(result.status).toBe('harness_failed');
+    expect(agent.inputs).toHaveLength(2);
+    expect(result.turns).toHaveLength(2);
+    expect(result.harnessResult?.exitCode).toBe(1);
+  });
+
+  it('fails when the simulated user cannot reply', async () => {
+    const result = await runJob(
+      createJob({
+        user: {persona: 'Someone.', harness: 'codex', maxTurns: 3},
+      }),
+      {
+        scratchRoot: createScratchRoot(),
+        harnesses: [
+          new ConversationHarness('claude-code', {sessionId: 'session-1'}),
+          new ConversationHarness('codex', {exitCodes: [2]}),
+        ],
+      },
+    );
+
+    expect(result.status).toBe('harness_failed');
+    expect(result.diagnostics).toEqual([
+      'Simulated user (codex) exited with code 2.',
+    ]);
+  });
+
+  it('keeps single-turn jobs ephemeral', async () => {
+    const agent = new ConversationHarness('claude-code', {
+      sessionId: 'session-1',
+    });
+    const result = await runJob(createJob(), {
+      scratchRoot: createScratchRoot(),
+      harnesses: [agent],
+    });
+
+    expect(result.status).toBe('passed');
+    expect(agent.inputs).toHaveLength(1);
+    expect(agent.inputs[0]!.session).toBeUndefined();
+    expect(result.turns).toBeUndefined();
+  });
+});
+
+describe('runJob MCP conversations', () => {
+  it('keeps one mock controller and its evidence across turns', async () => {
+    const inputs: HarnessInput[] = [];
+    const harness: Harness = {
+      id: 'opencode',
+      run: async () => {
+        throw new Error('ordinary run must not start');
+      },
+      extractResult: (raw) => ({
+        ...raw,
+        transcript: raw.stdout,
+        finalMessage: raw.stdout,
+        toolEvents: [],
+        sessionId: 'ses_1',
+      }),
+      prepareMcp: async () => ({
+        run: async (input, servers) => {
+          inputs.push(input);
+          const turn = String(inputs.length);
+          const client = new Client({name: 'conversation-test', version: '1'});
+          try {
+            await client.connect(
+              new StreamableHTTPClientTransport(
+                new URL(servers.linear!.url),
+              ) as Transport,
+            );
+            await client.listTools();
+            await client.callTool({name: 'save', arguments: {id: turn}});
+          } finally {
+            await client.close();
+          }
+          return {
+            harnessReady: true,
+            version: 'fixture',
+            output: {
+              exitCode: 0,
+              stdout: `turn ${turn}`,
+              stderr: '',
+              durationMs: 1,
+            },
+            toolEvents: [
+              {
+                kind: 'mcp' as const,
+                rawName: 'mcp__linear__save',
+                input: {id: turn},
+                status: 'success' as const,
+              },
+            ],
+          };
+        },
+      }),
+    };
+    const result = await runJob(
+      {
+        ...createJob({
+          harnesses: [{id: 'opencode'}],
+          user: {replies: ['Save the second one.']},
+          mcpMocks: {
+            linear: {
+              tools: {
+                save: {
+                  inputSchema: {type: 'object'},
+                  response: {content: [{type: 'text', text: 'saved'}]},
+                },
+              },
+            },
+          },
+          assertions: [
+            {
+              id: 'second',
+              type: 'mcp.called',
+              server: 'linear',
+              tool: 'save',
+              input: {id: '2'},
+            },
+          ],
+        }),
+        harness: 'opencode',
+      },
+      {scratchRoot: createScratchRoot(), harnesses: [harness]},
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.status).toBe('passed');
+    expect(inputs.map(({prompt, session}) => ({prompt, session}))).toEqual([
+      {prompt: 'Run pnpm test.', session: {}},
+      {prompt: 'Save the second one.', session: {resumeId: 'ses_1'}},
+    ]);
+    expect(result.mcp?.calls).toHaveLength(2);
+    expect(result.harnessResult?.toolEvents).toHaveLength(2);
+  });
+});

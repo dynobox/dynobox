@@ -38,8 +38,13 @@ type ToolResult = Extract<ToolDefinition, {response: unknown}>['response'];
 
 export type McpMockController = {
   readonly urls: Readonly<Record<string, string>>;
-  /** Actual initialize + tools/list traffic, not permission or registry readiness. */
+  /**
+   * Actual initialize + tools/list traffic since the current turn began, not
+   * permission or registry readiness.
+   */
   isDiscovered(server: string): boolean;
+  /** Start a conversation turn: each turn's harness process must rediscover. */
+  beginTurn(): void;
   /** Seal the call log. Adapter confirmation must describe the actual child invocation. */
   finalize(outcome: {
     harnessReady: boolean;
@@ -66,6 +71,9 @@ export async function startMcpMockController(
   const failures = new Set<McpMockFailure>();
   const initialized = new Set<string>();
   const discovered = new Set<string>();
+  // The same evidence for the current turn; `finalize` uses the whole job's.
+  const turnInitialized = new Set<string>();
+  const turnDiscovered = new Set<string>();
   const active = new Set<RequestState>();
   const sockets = new Set<Socket>();
   let sealed = false;
@@ -261,9 +269,17 @@ export async function startMcpMockController(
       await transport.handleRequest(request, response, message);
       await finished;
       if (!sealed && response.statusCode < 400 && delivered) {
-        if (method === 'initialize' && server.getClientVersion() !== undefined)
+        if (
+          method === 'initialize' &&
+          server.getClientVersion() !== undefined
+        ) {
           initialized.add(name);
-        if (listedTools) discovered.add(name);
+          turnInitialized.add(name);
+        }
+        if (listedTools) {
+          discovered.add(name);
+          turnDiscovered.add(name);
+        }
       } else if (!sealed) failures.add('protocol_failed');
     } catch {
       if (!sealed) failures.add('protocol_failed');
@@ -327,7 +343,11 @@ export async function startMcpMockController(
 
   return {
     isDiscovered: (name) =>
-      !sealed && initialized.has(name) && discovered.has(name),
+      !sealed && turnInitialized.has(name) && turnDiscovered.has(name),
+    beginTurn() {
+      turnInitialized.clear();
+      turnDiscovered.clear();
+    },
     urls: Object.fromEntries(
       [...routes].map(([path, name]) => [name, `http://${host}${path}`]),
     ),

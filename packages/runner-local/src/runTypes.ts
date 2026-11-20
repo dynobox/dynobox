@@ -6,6 +6,7 @@ import type {
 import type {HarnessId, PermissionMode} from '@dynobox/sdk';
 import type {IrScenario, McpCallRecord, McpMockFailure} from '@dynobox/sdk/ir';
 
+import type {ConversationTurn} from './conversation.js';
 import type {
   Harness,
   HarnessResult,
@@ -61,6 +62,14 @@ export type RunJobProgressEvent =
       toolCount: number;
       exitCode?: number;
       durationMs?: number;
+    }
+  | {
+      /** A turn of a multi-turn job started with this user message. */
+      type: 'harness.turn';
+      job: LocalRunnerJob;
+      harnessId: string;
+      turn: number;
+      prompt: string;
     }
   | {
       type: 'harness.tool';
@@ -156,6 +165,11 @@ export type LocalRunnerResult = {
   cliMockCalls: readonly CliMockCall[];
   /** Safe MCP evidence. Arguments/responses and runtime URLs are not retained. */
   mcp?: LocalMcpSummary;
+  /**
+   * Agent turns that produced a result, present when the scenario declares a
+   * `user`. A turn whose harness run throws is not included.
+   */
+  turns?: ConversationTurn[];
   artifacts: LocalArtifact[];
   assertionResults: AssertionResult[];
   /** Whether post-harness verification produced a lifecycle failure. */
