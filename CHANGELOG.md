@@ -30,6 +30,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   `{persona, harness?, model?, maxTurns?}` for a simulated user. The IR version
   is now `0.5`.
 
+---
+
+## @dynobox/run-schema@0.8.0 — 2026-11-20
+
 ### `@dynobox/run-schema`
 
 - Add `multi_turn` to the telemetry run features.
