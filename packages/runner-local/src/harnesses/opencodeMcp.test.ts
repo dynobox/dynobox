@@ -110,7 +110,7 @@ const childMessage = (id = 2, timestamp = 5) => ({
 
 // Process-boundary fixture only. Native gates separately verify the real CLI.
 const CHILD = String.raw`
-import {appendFileSync, writeFileSync} from 'node:fs';
+import {appendFileSync, readFileSync, writeFileSync} from 'node:fs';
 import {createServer} from 'node:http';
 import {spawn} from 'node:child_process';
 const args = process.argv.slice(2);
@@ -166,7 +166,9 @@ const server=createServer(async(req,res)=>{
     const children=mode.startsWith('child-') && parent===sid && !paged ? [{id:'child'}] : mode==='child-nested' && parent==='child' ? [{id:'nested'},{id:sid}] : [];
     result={data:mode==='child-bad-list' ? {} : children,cursor:{next:paged ? 'next' : null}};
   }
-  if(path.endsWith('/export')) result={data:{messages:JSON.parse(process.env.DXB_CHILD_HISTORY || '[]')}};
+  // DXB_CHILD_HISTORY_BEFORE is the child history until the CLI turn runs.
+  const ran=readFileSync(process.env.DXB_LOG,'utf8').includes('"cli":true');
+  if(path.endsWith('/export')) result={data:{messages:JSON.parse((!ran && process.env.DXB_CHILD_HISTORY_BEFORE) || process.env.DXB_CHILD_HISTORY || '[]')}};
   res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));
 });
 server.listen(0,'127.0.0.1',()=>{
@@ -511,6 +513,25 @@ describe('OpenCode public CLI execution', () => {
         category: 'execution_failed',
       });
     }
+  });
+
+  it("resumes a session and reports only this turn's child tools", async () => {
+    const {options, records} = await fixture('child-single');
+    options.input.session = {resumeId: 'root'};
+    const earlier = childMessage(1);
+    const untimed = childMessage(2);
+    delete (untimed.content[0] as {time?: unknown}).time;
+    options.input.env.DXB_CHILD_HISTORY_BEFORE = JSON.stringify([earlier]);
+    options.input.env.DXB_CHILD_HISTORY = JSON.stringify([earlier, untimed]);
+    const result = await runOpenCodeWithMcp(options);
+
+    expect(result.toolEvents?.map((event) => event.input)).toEqual([{id: 2}]);
+    const log = await records();
+    // The session and its permission rules come from the first turn.
+    expect(log.some((entry) => entry.path === '/api/session')).toBe(false);
+    expect(log.find((entry) => entry.args?.[0] === 'run').args).toEqual(
+      expect.arrayContaining(['--session', 'root']),
+    );
   });
 
   it('encodes IDs in child control request paths', async () => {

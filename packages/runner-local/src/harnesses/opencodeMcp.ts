@@ -502,6 +502,16 @@ export async function runOpenCodeWithMcp(options: {
         'execution_failed',
         'OpenCode returned an invalid session.',
       );
+    // Child sessions keep earlier turns' tools. Note their IDs now so this
+    // turn reports only its own, whatever timestamps OpenCode records.
+    const earlierChildTools =
+      resumeId === undefined
+        ? new Set<unknown>()
+        : new Set(
+            (await childToolRecords(session.id, request)).map(
+              (record) => asRecord(record.part).id,
+            ),
+          );
     cli = startOwnedProcess(
       prepared.executable,
       [
@@ -536,11 +546,9 @@ export async function runOpenCodeWithMcp(options: {
         'execution_failed',
         'OpenCode exited without a completed assistant turn.',
       );
-    // Child sessions keep earlier turns' tools; report only this turn's.
     records.push(
       ...(await childToolRecords(session.id, request)).filter(
-        (record) =>
-          resumeId === undefined || Number(record.timestamp) >= started,
+        (record) => !earlierChildTools.has(asRecord(record.part).id),
       ),
     );
     records.sort((a, b) => Number(a.timestamp ?? 0) - Number(b.timestamp ?? 0));

@@ -595,7 +595,11 @@ export async function runJob(
           return {output: await harness.run(timed)};
         mcpController!.beginTurn();
         const run = await preparedMcp.run(timed, servers!);
-        mcpReady = run.harnessReady;
+        // Every turn must be ready; a later ready turn cannot hide an earlier one.
+        mcpReady =
+          turnOutputs.length === 0
+            ? run.harnessReady
+            : mcpReady && run.harnessReady;
         if (run.toolEvents !== undefined)
           mcpToolEvents = [...(mcpToolEvents ?? []), ...run.toolEvents];
         harnessVersion = Promise.resolve(run.version);
@@ -623,6 +627,8 @@ export async function runJob(
             : {session: resumeId === undefined ? {} : {resumeId}}),
         });
         turnOutputs.push(turn.output);
+        // execa resolves when cancelled; stop before extraction or a persona run.
+        options.signal?.throwIfAborted();
         let turnResult: HarnessResult;
         try {
           turnResult = harness.extractResult(turn.output);
@@ -650,8 +656,11 @@ export async function runJob(
           !canReply(user, turns)
         )
           break;
+        // A resumed turn may omit the session header; keep the known ID unless
+        // the harness reports a new one.
+        const sessionId = turnResult.sessionId ?? resumeId;
         // Fail before a persona spends a model call on a reply nobody can send.
-        if (turnResult.sessionId === undefined)
+        if (sessionId === undefined)
           throw new ConversationError(
             `Harness "${harness.id}" did not report a session ID to resume.`,
           );
@@ -670,7 +679,7 @@ export async function runJob(
         options.signal?.throwIfAborted();
         if (reply === undefined) break;
         prompt = reply;
-        resumeId = turnResult.sessionId;
+        resumeId = sessionId;
       }
       harnessOutput = mergeTurnOutputs(turnOutputs);
       // A conversation's harness time includes the user's replies.
@@ -714,6 +723,10 @@ export async function runJob(
           : turnOutputs.length > 0
             ? {harnessOutput: mergeTurnOutputs(turnOutputs)}
             : {}),
+        // Keep completed turns' evidence for JSON reports and --debug logs.
+        ...(turnResults.length === 0
+          ? {}
+          : {harnessResult: mergeTurnResults(turnResults)}),
         httpEvents: httpCapture?.events ?? [],
         cliMockCalls: cliMockController?.calls() ?? [],
         timing: buildTiming({

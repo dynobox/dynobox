@@ -83,7 +83,7 @@ export async function nextUserMessage(
   }
   if (result.exitCode !== 0)
     throw new ConversationError(
-      `Simulated user (${harness.id}) exited with code ${result.exitCode}${result.errorMessage === undefined ? '' : `: ${result.errorMessage}`}.`,
+      `Simulated user (${harness.id}) exited with code ${result.exitCode}${result.errorMessage === undefined ? '' : `: ${result.errorMessage.replace(/[.\s]+$/, '')}`}.`,
     );
   const reply = result.finalMessage?.trim();
   if (!reply)
@@ -98,6 +98,8 @@ export function canReply(
   user: IrScenarioUser,
   turns: readonly ConversationTurn[],
 ): boolean {
+  // The first turn is the scenario prompt; a reply only follows a turn.
+  if (turns.length === 0) return false;
   return 'replies' in user
     ? turns.length <= user.replies.length
     : turns.length < user.maxTurns;
@@ -138,11 +140,8 @@ export function mergeTurnOutputs(
   if (outputs.length === 1) return last;
   return {
     ...last,
-    stdout: outputs.map((output) => output.stdout).join('\n'),
-    stderr: outputs
-      .map((output) => output.stderr)
-      .filter(Boolean)
-      .join('\n'),
+    stdout: joinLines(outputs.map((output) => output.stdout)),
+    stderr: joinLines(outputs.map((output) => output.stderr)),
     durationMs: sum(outputs.map((output) => output.durationMs)),
   };
 }
@@ -159,9 +158,19 @@ export function mergeTurnResults(
   return {
     ...last,
     durationMs: sum(results.map((result) => result.durationMs)),
-    transcript: results.map((result) => result.transcript).join('\n'),
+    transcript: joinLines(results.map((result) => result.transcript)),
     toolEvents: results.flatMap((result) => result.toolEvents),
   };
+}
+
+/** Join per-turn text with one newline between turns, never a blank line. */
+function joinLines(values: readonly string[]): string {
+  return values
+    .filter(Boolean)
+    .map((value, index, all) =>
+      index === all.length - 1 || value.endsWith('\n') ? value : `${value}\n`,
+    )
+    .join('');
 }
 
 function sum(values: readonly number[]): number {

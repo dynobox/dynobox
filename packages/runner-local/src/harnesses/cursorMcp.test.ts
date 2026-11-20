@@ -65,6 +65,7 @@ if(args[0]==='mcp'){
  if(args[1]==='disable'){const names=existsSync(disabled)?JSON.parse(readFileSync(disabled)):[];if(!names.includes(args[2]))names.push(args[2]);writeFileSync(disabled,JSON.stringify(names))}
  process.exit(mode==='disable-failed'&&args[1]==='disable'?1:0);
 }
+if(mode==='write-chat'){mkdirSync(join(process.env.CURSOR_DATA_DIR,'chats','chat-1'),{recursive:true});writeFileSync(join(process.env.CURSOR_DATA_DIR,'chats','chat-1','store.db'),'turn')}
 if(mode==='hang'){setInterval(()=>{},1000)}else if(mode==='invalid'){console.log('{invalid');setInterval(()=>{},1000)}else{
  if(mode==='remove-workspace')rmSync(join(process.cwd(),'.cursor'),{recursive:true});
  const plugin=args[args.lastIndexOf('--plugin-dir')+1];
@@ -147,6 +148,36 @@ describe('Cursor MCP launch contract', () => {
     await expect(lstat(commands[1].data)).rejects.toMatchObject({
       code: 'ENOENT',
     });
+  });
+
+  it('keeps chats at the native path so a later turn can resume them', async () => {
+    const f = await fixture('write-chat');
+    await runCursorWithMcp({
+      ...f.options,
+      input: {...f.options.input, session: {resumeId: 'chat-1'}},
+    });
+    const commands = (await readFile(f.log, 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    const run = commands.find(({args}) => args.includes('--resume'));
+    expect(run.args[run.args.indexOf('--resume') + 1]).toBe('chat-1');
+    // The temporary data directory is gone; the chat it wrote is not.
+    await expect(lstat(run.data)).rejects.toMatchObject({code: 'ENOENT'});
+    expect(
+      await readFile(
+        join(f.root, 'native-data', 'chats', 'chat-1', 'store.db'),
+        'utf8',
+      ),
+    ).toBe('turn');
+  });
+
+  it('does not keep chats for a single-turn run', async () => {
+    const f = await fixture('write-chat');
+    await runCursorWithMcp(f.options);
+    await expect(
+      lstat(join(f.root, 'native-data', 'chats')),
+    ).rejects.toMatchObject({code: 'ENOENT'});
   });
 
   it('restores workspace permissions after the agent removes their folder', async () => {

@@ -16,7 +16,7 @@ afterEach(async () => {
   );
 });
 
-async function fixture(mode = 'call', mixed = false) {
+async function fixture(mode = 'call', mixed = false, user?: unknown) {
   const root = await mkdtemp(join(tmpdir(), 'dynobox-cli-mcp-'));
   roots.push(root);
   const path = join(root, 'linear.dyno.yaml');
@@ -33,6 +33,7 @@ async function fixture(mode = 'call', mixed = false) {
           name: 'Lookup',
           prompt: 'Read DYNO-1.',
           setup: [`touch ${join(root, 'setup-ran')}`],
+          ...(user === undefined ? {} : {user}),
           mcpMocks: {
             linear: {
               tools: {
@@ -177,6 +178,47 @@ describe('MCP CLI execution', () => {
       });
     },
   );
+
+  it('keeps every v3 MCP field in a v4 conversation report', async () => {
+    const {path, options, log} = await fixture('call', false, {
+      replies: ['Read it again.'],
+    });
+    const result = await executeCli(
+      ['run', path, '--reporter', 'json'],
+      options,
+    );
+    expect(result.exitCode).toBe(0);
+    const [job, summary] = result.stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(job.schema).toBe('dynobox.report.v4');
+    expect(summary.schema).toBe('dynobox.report.v4');
+    expect(job.turns).toEqual([
+      {
+        prompt: 'Read DYNO-1.',
+        finalMessage: 'done',
+        durationMs: expect.any(Number),
+      },
+      {
+        prompt: 'Read it again.',
+        finalMessage: 'done',
+        durationMs: expect.any(Number),
+      },
+    ]);
+    expect(job.mcp).toMatchObject({ready: true, failures: [], callCount: 2});
+    expect(job.assertions[0].mcp).toMatchObject({callCount: 2, matchCount: 2});
+    expect(job.assertions[3].mcpBranches).toEqual([
+      expect.objectContaining({branchIndex: 1, passed: true, callCount: 2}),
+    ]);
+    const launches = (await readFile(log, 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(launches.at(-1).args).toEqual(
+      expect.arrayContaining(['--resume', 'session-1']),
+    );
+  });
 
   it('runs a YAML dyno through Claude preparation, controller, assertions and v3 JSON', async () => {
     const {path, options, log} = await fixture();
@@ -411,7 +453,7 @@ await rpc('initialize', {protocolVersion: '2025-03-26', capabilities: {}, client
 await rpc('tools/list', {});
 // Emit stderr before the init event can make the adapter stop this process.
 if (mode === 'failed') writeSync(2, 'PRIVATE_ERROR ' + url + '\\n');
-console.log(JSON.stringify({type: 'system', subtype: 'init', tools: ['mcp__linear__get_issue', 'mcp__linear__save_issue'], mcp_servers: [{name: 'linear', status: mode === 'failed' ? 'failed' : 'connected'}]}));
+console.log(JSON.stringify({type: 'system', subtype: 'init', session_id: 'session-1', tools: ['mcp__linear__get_issue', 'mcp__linear__save_issue'], mcp_servers: [{name: 'linear', status: mode === 'failed' ? 'failed' : 'connected'}]}));
 if (mode === 'failed') process.exit(1);
 if (mode === 'call') {
   await rpc('tools/call', {name: 'get_issue', arguments: {id: 'INPUT_SENTINEL'}});

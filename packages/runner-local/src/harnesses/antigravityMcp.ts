@@ -109,6 +109,19 @@ async function inTurn<T>(
   }
 }
 
+/**
+ * The ACP request that starts a turn. `session/resume` continues an earlier
+ * turn without replaying it; mock servers come from configuration, not ACP.
+ */
+export function acpSessionRequest(
+  workDir: string,
+  resumeId?: string,
+): [method: string, params: Record<string, unknown>] {
+  return resumeId === undefined
+    ? ['session/new', {cwd: workDir, mcpServers: []}]
+    : ['session/resume', {sessionId: resumeId, cwd: workDir, mcpServers: []}];
+}
+
 export function logicalMcpToolEvents(
   events: readonly ToolEvent[],
   servers: McpServerConnections,
@@ -384,15 +397,9 @@ async function runSession(options: {
         'unsupported_version',
         'Antigravity ACP does not support HTTP MCP sessions.',
       );
-    // `session/resume` continues an earlier turn without replaying it.
     const resumeId = input.session?.resumeId;
     const session = await rpc(
-      resumeId === undefined ? 'session/new' : 'session/resume',
-      {
-        ...(resumeId === undefined ? {} : {sessionId: resumeId}),
-        cwd: input.workDir,
-        mcpServers: [],
-      },
+      ...acpSessionRequest(input.workDir, resumeId),
       5000,
     );
     const sessionId = resumeId ?? session.sessionId;

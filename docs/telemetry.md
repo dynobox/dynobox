@@ -17,7 +17,8 @@ with:
   `config` or `auth`, and whether this was the first command for the install.
 - **Run** (for `dynobox run`): counts of dynos, scenarios, jobs, and
   iterations, whether the run passed, the config formats (`js`, `ts`, `yaml`),
-  and which features were used (`save_run`, `cli_mocks`, `mcp_mocks`, `http`).
+  and which features were used (`save_run`, `cli_mocks`, `mcp_mocks`, `http`,
+  `multi_turn`).
 - **Harness runs** (for `dynobox run`, one per harness and model): the harness
   ID and version, the model name, job counts by outcome, total job time, and
   the number of tool calls Dynobox could not classify.

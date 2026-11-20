@@ -77,6 +77,25 @@ describe('nextUserMessage', () => {
     ).rejects.toThrow(new ConversationError(message));
   });
 
+  it('ends an exit diagnostic with one period', async () => {
+    const harness = new FakeHarness();
+    harness.extractResult = () => ({
+      exitCode: 1,
+      durationMs: 1,
+      transcript: '',
+      toolEvents: [],
+      finalMessage: undefined,
+      errorMessage: 'Model not supported. ',
+    });
+    await expect(
+      nextUserMessage(persona, turns, {harnesses: [harness]}),
+    ).rejects.toThrow(
+      new ConversationError(
+        'Simulated user (claude-code) exited with code 1: Model not supported.',
+      ),
+    );
+  });
+
   it('reports a persona harness that throws', async () => {
     const harness = new FakeHarness();
     harness.run = async () => {
@@ -93,6 +112,11 @@ describe('nextUserMessage', () => {
 });
 
 describe('canReply', () => {
+  it('never replies before the first turn', () => {
+    expect(canReply({replies: ['First.']}, [])).toBe(false);
+    expect(canReply(persona, [])).toBe(false);
+  });
+
   it('allows one reply per scripted message', () => {
     const user = {replies: ['First.']};
     expect(canReply(user, turns)).toBe(true);
@@ -158,5 +182,14 @@ describe('merging turns', () => {
         {exitCode: 2, stdout: 'b', stderr: 'oops', durationMs: 2},
       ]),
     ).toEqual({exitCode: 2, stdout: 'a\nb', stderr: 'oops', durationMs: 3});
+  });
+
+  it('adds no blank line between JSONL turns', () => {
+    expect(
+      mergeTurnOutputs([
+        {exitCode: 0, stdout: '{"turn":1}\n', stderr: 'w\n', durationMs: 1},
+        {exitCode: 0, stdout: '{"turn":2}\n', stderr: 'x', durationMs: 1},
+      ]),
+    ).toMatchObject({stdout: '{"turn":1}\n{"turn":2}\n', stderr: 'w\nx'});
   });
 });

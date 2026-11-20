@@ -2033,6 +2033,8 @@ class ConversationHarness implements Harness {
     readonly id: Harness['id'] = 'claude-code',
     private readonly options: {
       sessionId?: string;
+      /** Per-turn session IDs; overrides `sessionId`. */
+      sessionIds?: (string | undefined)[];
       exitCodes?: number[];
       messages?: string[];
     } = {},
@@ -2058,10 +2060,17 @@ class ConversationHarness implements Harness {
       toolEvents: [
         {kind: 'read_file', rawName: 'Read', input: {path: raw.stdout}},
       ],
-      ...(this.options.sessionId === undefined
-        ? {}
-        : {sessionId: this.options.sessionId}),
+      ...this.sessionFor(raw.stdout),
     };
+  }
+
+  private sessionFor(stdout: string): {sessionId?: string} {
+    const turn = Number(stdout.replace('turn ', ''));
+    const sessionId =
+      this.options.sessionIds === undefined
+        ? this.options.sessionId
+        : this.options.sessionIds[turn - 1];
+    return sessionId === undefined ? {} : {sessionId};
   }
 }
 
@@ -2404,6 +2413,54 @@ describe('runJob conversations', () => {
     expect(result.diagnostics).toEqual([
       'Simulated user (codex) exited with code 2.',
     ]);
+    // The completed turn's evidence survives for reports and debug logs.
+    expect(result.harnessResult?.toolEvents).toHaveLength(1);
+  });
+
+  it('keeps the known session when a resumed turn omits its ID', async () => {
+    const agent = new ConversationHarness('claude-code', {
+      sessionIds: ['session-1', undefined, undefined],
+    });
+    const result = await runJob(
+      createJob({user: {replies: ['Second.', 'Third.']}}),
+      {scratchRoot: createScratchRoot(), harnesses: [agent]},
+    );
+
+    expect(result.status).toBe('passed');
+    expect(agent.inputs.map((input) => input.session)).toEqual([
+      {},
+      {resumeId: 'session-1'},
+      {resumeId: 'session-1'},
+    ]);
+  });
+
+  it('stops before the simulated user when a turn is cancelled', async () => {
+    const controller = new AbortController();
+    const agent = new ConversationHarness('claude-code', {
+      sessionId: 'session-1',
+    });
+    const run = agent.run.bind(agent);
+    agent.run = async (input) => {
+      const output = await run(input);
+      // execa resolves instead of rejecting when its signal aborts.
+      controller.abort(new Error('cancel turn'));
+      return output;
+    };
+    const persona = new ConversationHarness('codex');
+
+    await expect(
+      runJob(
+        createJob({
+          user: {persona: 'Someone.', harness: 'codex', maxTurns: 3},
+        }),
+        {
+          scratchRoot: createScratchRoot(),
+          harnesses: [agent, persona],
+          signal: controller.signal,
+        },
+      ),
+    ).rejects.toThrow('cancel turn');
+    expect(persona.inputs).toHaveLength(0);
   });
 
   it('keeps single-turn jobs ephemeral', async () => {
@@ -2423,6 +2480,76 @@ describe('runJob conversations', () => {
 });
 
 describe('runJob MCP conversations', () => {
+  it('requires MCP readiness on every turn', async () => {
+    let turn = 0;
+    const harness: Harness = {
+      id: 'opencode',
+      run: async () => {
+        throw new Error('ordinary run must not start');
+      },
+      extractResult: (raw) => ({
+        ...raw,
+        transcript: raw.stdout,
+        finalMessage: raw.stdout,
+        toolEvents: [],
+        sessionId: 'ses_1',
+      }),
+      prepareMcp: async () => ({
+        run: async (_input, servers) => {
+          turn += 1;
+          const client = new Client({name: 'readiness-test', version: '1'});
+          try {
+            await client.connect(
+              new StreamableHTTPClientTransport(
+                new URL(servers.linear!.url),
+              ) as Transport,
+            );
+            await client.listTools();
+          } finally {
+            await client.close();
+          }
+          return {
+            // Only the last turn reports ready; the first must still count.
+            harnessReady: turn > 1,
+            version: 'fixture',
+            output: {
+              exitCode: 0,
+              stdout: `turn ${turn}`,
+              stderr: '',
+              durationMs: 1,
+            },
+            toolEvents: [],
+          };
+        },
+      }),
+    };
+    const result = await runJob(
+      {
+        ...createJob({
+          harnesses: [{id: 'opencode'}],
+          user: {replies: ['Again.']},
+          mcpMocks: {
+            linear: {
+              tools: {
+                save: {
+                  inputSchema: {type: 'object'},
+                  response: {content: [{type: 'text', text: 'saved'}]},
+                },
+              },
+            },
+          },
+        }),
+        harness: 'opencode',
+      },
+      {scratchRoot: createScratchRoot(), harnesses: [harness]},
+    );
+
+    expect(turn).toBe(2);
+    expect(result.mcp?.ready).toBe(false);
+    expect(result.mcp?.failures).toContain('not_ready');
+    expect(result.passed).toBe(false);
+  });
+
   it('keeps one mock controller and its evidence across turns', async () => {
     const inputs: HarnessInput[] = [];
     const harness: Harness = {
