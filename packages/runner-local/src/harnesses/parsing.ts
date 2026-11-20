@@ -14,6 +14,25 @@ export function* jsonLines(
   }
 }
 
+/** First non-empty string `pick` returns for a JSON object line, if any. */
+export function firstJsonLineString(
+  stdout: string,
+  pick: (event: JsonObject) => unknown,
+): string | undefined {
+  for (const {line} of jsonLines(stdout)) {
+    let event: unknown;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!isRecord(event)) continue;
+    const value = pick(event);
+    if (typeof value === 'string' && value !== '') return value;
+  }
+  return undefined;
+}
+
 export function parseJsonObjectLine(
   line: string,
   lineNumber: number,

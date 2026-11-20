@@ -140,6 +140,7 @@ export async function runPiWithMcp(options: {
         ['--no-mcp', '-e', bridge, ...extraArgs],
         input.model,
         input.permissionMode,
+        input.session,
       ),
       {...processOptions, input: input.prompt, timeout: remaining()},
     );

@@ -310,6 +310,13 @@ export async function runCursorWithMcp(options: {
   const data = await mkdtemp(join(tmpdir(), 'dynobox-cursor-mcp-'));
   env.CURSOR_DATA_DIR = data;
   try {
+    if (input.session !== undefined) {
+      // Chats live in the data directory, which this run deletes. Keep them
+      // at the normal path so a later turn can resume this one.
+      const chats = join(originalData, 'chats');
+      await mkdir(chats, {recursive: true});
+      await symlink(chats, join(data, 'chats'));
+    }
     const plugin = join(data, pluginName);
     await mkdir(join(plugin, '.cursor-plugin'), {recursive: true});
     await writeFile(
@@ -362,6 +369,7 @@ export async function runCursorWithMcp(options: {
         [...extras, '--plugin-dir', plugin],
         input.model,
         input.permissionMode,
+        input.session?.resumeId,
       ),
       {...processOptions, timeout: remaining()},
     );

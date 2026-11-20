@@ -111,10 +111,13 @@ export async function runClaudeCodeWithMcp(
     const child = startOwnedProcess(
       executable,
       [
-        ...buildClaudeCodeArgs('', [], input.model, input.permissionMode).slice(
-          0,
-          -1,
-        ),
+        ...buildClaudeCodeArgs(
+          '',
+          [],
+          input.model,
+          input.permissionMode,
+          input.session?.resumeId,
+        ).slice(0, -2), // Drop the trailing `--` and empty prompt.
         ...extraArgs,
         '--mcp-config',
         configPath,

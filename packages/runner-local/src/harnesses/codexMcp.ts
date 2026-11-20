@@ -173,7 +173,16 @@ export async function runCodexWithMcp(
   }
   const child = startOwnedProcess(
     executable,
-    ['exec', ...ordinary, ...extras, ...overlay, '--', input.prompt],
+    [
+      'exec',
+      ...ordinary,
+      ...extras,
+      ...overlay,
+      ...(input.session?.resumeId === undefined
+        ? ['--']
+        : ['resume', '--', input.session.resumeId]),
+      input.prompt,
+    ],
     {...processOptions, stdin: 'ignore', timeout: remaining()},
   );
   let completed = false;

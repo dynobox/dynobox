@@ -3,6 +3,7 @@ import type {PermissionMode} from '@dynobox/sdk';
 import {prepareMcpHarness} from '../mcpMocks/resolveExecutable.js';
 import {
   createToolEvent,
+  firstJsonLineString,
   isRecord,
   jsonLines,
   type JsonObject,
@@ -98,7 +99,12 @@ export class PiHarness implements Harness {
       );
     return runStreamingHarness({
       executable: this.executable,
-      args: buildPiArgs(this.extraArgs, input.model, input.permissionMode),
+      args: buildPiArgs(
+        this.extraArgs,
+        input.model,
+        input.permissionMode,
+        input.session,
+      ),
       input: {
         ...input,
         env: {...input.env, PI_OFFLINE: '1'},
@@ -114,6 +120,10 @@ export class PiHarness implements Harness {
       raw.stdout,
       mcpToolsFromMetadata(raw.metadata?.piMcpTools),
     );
+    // JSON mode opens with a session header.
+    const sessionId = firstJsonLineString(raw.stdout, (event) =>
+      event.type === 'session' ? event.id : undefined,
+    );
     return {
       exitCode: raw.exitCode === 0 && parsed.terminalFailure ? 1 : raw.exitCode,
       durationMs: raw.durationMs,
@@ -123,6 +133,7 @@ export class PiHarness implements Harness {
       ...(parsed.errorMessage === undefined
         ? {}
         : {errorMessage: parsed.errorMessage}),
+      ...(sessionId === undefined ? {} : {sessionId}),
     };
   }
 }
@@ -131,11 +142,17 @@ export function buildPiArgs(
   extraArgs: readonly string[] = [],
   model?: string,
   permissionMode?: PermissionMode,
+  session?: HarnessInput['session'],
 ): string[] {
   return [
     '--mode',
     'json',
-    '--no-session',
+    // Single-turn runs stay ephemeral; multi-turn runs keep a resumable session.
+    ...(session === undefined
+      ? ['--no-session']
+      : session.resumeId === undefined
+        ? []
+        : ['--session', session.resumeId]),
     ...piPermissionArgs(permissionMode),
     ...(model === undefined ? [] : ['--model', model]),
     ...extraArgs,

@@ -28,6 +28,11 @@ export type HarnessInput = {
   permissionMode?: PermissionMode;
   /** Optional live callback for tool events observed while the harness runs. */
   onToolEvent?: (event: SdkToolEvent) => void;
+  /**
+   * Multi-turn runs: keep the session resumable and, when `resumeId` is set,
+   * continue that session with `prompt` as the next user message.
+   */
+  session?: {resumeId?: string};
 };
 
 /** Raw output from a harness invocation, before any extraction. */
@@ -52,6 +57,8 @@ export type HarnessResult = {
   toolEvents: SdkToolEvent[];
   /** Structured harness error text when the process output exposes one. */
   errorMessage?: string;
+  /** Native session ID to pass back as `session.resumeId` for the next turn. */
+  sessionId?: string;
 };
 
 /** Loopback mock server URLs and declared tool names for one invocation. */

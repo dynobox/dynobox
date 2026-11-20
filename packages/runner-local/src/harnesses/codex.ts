@@ -5,6 +5,7 @@ import type {PermissionMode} from '@dynobox/sdk';
 import {prepareMcpHarness} from '../mcpMocks/resolveExecutable.js';
 import {
   createToolEvent,
+  firstJsonLineString,
   isRecord,
   jsonLines,
   type JsonObject,
@@ -79,6 +80,7 @@ export class CodexHarness implements Harness {
         input.model,
         input.permissionMode,
         input.cliMocksEnabled ? input.env : undefined,
+        input.session?.resumeId,
       ),
       input,
       cwd: realpathSync(input.workDir),
@@ -101,6 +103,7 @@ export class CodexHarness implements Harness {
           )
         : {},
     );
+    const sessionId = codexSessionId(raw.stdout);
     return {
       exitCode: raw.exitCode,
       durationMs: raw.durationMs,
@@ -110,8 +113,16 @@ export class CodexHarness implements Harness {
       ...(parsed.errorMessage === undefined
         ? {}
         : {errorMessage: parsed.errorMessage}),
+      ...(sessionId === undefined ? {} : {sessionId}),
     };
   }
+}
+
+/** The thread ID from `thread.started`, which `codex exec resume` accepts. */
+export function codexSessionId(stdout: string): string | undefined {
+  return firstJsonLineString(stdout, (event) =>
+    event.type === 'thread.started' ? event.thread_id : undefined,
+  );
 }
 
 export function buildCodexArgs(
@@ -120,10 +131,14 @@ export function buildCodexArgs(
   model?: string,
   permissionMode?: PermissionMode,
   cliMockEnv?: Readonly<Record<string, string>>,
+  resumeId?: string,
 ): string[] {
   return [
     'exec',
     ...codexExecOptions(model, permissionMode, cliMockEnv, extraArgs),
+    // `exec` options stay before the subcommand; `resume` accepts fewer.
+    // `--` keeps a prompt such as "- Use UUIDs" from parsing as an option.
+    ...(resumeId === undefined ? ['--'] : ['resume', '--', resumeId]),
     prompt,
   ];
 }

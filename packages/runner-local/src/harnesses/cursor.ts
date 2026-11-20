@@ -5,6 +5,7 @@ import type {PermissionMode} from '@dynobox/sdk';
 import {prepareMcpHarness} from '../mcpMocks/resolveExecutable.js';
 import {
   createToolEvent,
+  firstJsonLineString,
   isRecord,
   jsonLines,
   type JsonObject,
@@ -85,6 +86,7 @@ export class CursorHarness implements Harness {
         this.extraArgs,
         input.model,
         input.permissionMode,
+        input.session?.resumeId,
       ),
       input,
       cwd: workDir,
@@ -108,6 +110,10 @@ export class CursorHarness implements Harness {
           )
         : {},
     );
+    const sessionId = firstJsonLineString(
+      raw.stdout,
+      (event) => event.session_id,
+    );
     return {
       exitCode: raw.exitCode === 0 && parsed.terminalFailure ? 1 : raw.exitCode,
       durationMs: raw.durationMs,
@@ -117,6 +123,7 @@ export class CursorHarness implements Harness {
       ...(parsed.errorMessage === undefined
         ? {}
         : {errorMessage: parsed.errorMessage}),
+      ...(sessionId === undefined ? {} : {sessionId}),
     };
   }
 }
@@ -127,6 +134,7 @@ export function buildCursorArgs(
   extraArgs: readonly string[] = [],
   model?: string,
   permissionMode?: PermissionMode,
+  resumeId?: string,
 ): string[] {
   return [
     '-p',
@@ -135,9 +143,12 @@ export function buildCursorArgs(
     '--trust',
     '--workspace',
     workDir,
+    ...(resumeId === undefined ? [] : ['--resume', resumeId]),
     ...cursorPermissionArgs(permissionMode),
     ...(model === undefined ? [] : ['--model', model]),
     ...extraArgs,
+    // A prompt or reply such as "- Use UUIDs" is not an option.
+    '--',
     prompt,
   ];
 }

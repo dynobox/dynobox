@@ -478,19 +478,25 @@ export async function runOpenCodeWithMcp(options: {
       undefined,
       input.signal ? {signal: input.signal} : {},
     );
-    const session = asRecord(
-      asRecord(
-        await request('/api/session', {
-          location: {directory: prepared.cwd},
-          agent: agentId,
-          ...(prepared.model ? {model: prepared.model} : {}),
-          permissions: [
-            ...prepared.grants,
-            {action: 'question', resource: '*', effect: 'deny'},
-          ],
-        }),
-      ).data,
-    );
+    // A later turn continues the session the first turn created with its
+    // agent, model and permission rules.
+    const resumeId = input.session?.resumeId;
+    const session =
+      resumeId === undefined
+        ? asRecord(
+            asRecord(
+              await request('/api/session', {
+                location: {directory: prepared.cwd},
+                agent: agentId,
+                ...(prepared.model ? {model: prepared.model} : {}),
+                permissions: [
+                  ...prepared.grants,
+                  {action: 'question', resource: '*', effect: 'deny'},
+                ],
+              }),
+            ).data,
+          )
+        : {id: resumeId};
     if (typeof session.id !== 'string')
       throw new McpHarnessError(
         'execution_failed',
@@ -530,7 +536,13 @@ export async function runOpenCodeWithMcp(options: {
         'execution_failed',
         'OpenCode exited without a completed assistant turn.',
       );
-    records.push(...(await childToolRecords(session.id, request)));
+    // Child sessions keep earlier turns' tools; report only this turn's.
+    records.push(
+      ...(await childToolRecords(session.id, request)).filter(
+        (record) =>
+          resumeId === undefined || Number(record.timestamp) >= started,
+      ),
+    );
     records.sort((a, b) => Number(a.timestamp ?? 0) - Number(b.timestamp ?? 0));
     for (const record of records) {
       const part = asRecord(record.part);
