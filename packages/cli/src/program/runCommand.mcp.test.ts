@@ -401,7 +401,7 @@ describe('MCP CLI execution', () => {
     expect(result.stderr).toContain(
       'Saved run: https://uploads.example/runs/1',
     );
-    expect(JSON.parse(body).schemaVersion).toBe(6);
+    expect(JSON.parse(body).schemaVersion).toBe(7);
     expect(job.mcp).toEqual({
       ready: true,
       finalized: true,

@@ -7,19 +7,20 @@ import {
 } from '@dynobox/evaluators';
 import {
   RUN_UPLOAD_LIMITS,
-  RUN_UPLOAD_V6_SCHEMA_VERSION,
+  RUN_UPLOAD_SCHEMA_VERSION,
   type RunUploadAssertionDefinitionV2,
   type RunUploadAssertionDisplayChildV2,
   type RunUploadAssertionDisplayV2,
   type RunUploadAssertionEvidenceV2,
   type RunUploadAssertionV2,
-  type RunUploadDynoV5,
+  type RunUploadDynoV7,
   runUploadGitRepositorySchema,
   type RunUploadGitV6,
+  type RunUploadJobConversationV7,
   type RunUploadJobMcpV5,
-  type RunUploadJobV5,
-  type RunUploadV6 as RunUploadPayloadV6,
-  RunUploadV6,
+  type RunUploadJobV7,
+  type RunUploadV7 as RunUploadPayloadV7,
+  RunUploadV7,
 } from '@dynobox/run-schema';
 import type {
   LocalRunnerJob,
@@ -105,7 +106,7 @@ export async function uploadRun(input: UploadRunInput): Promise<void> {
     inputPath: input.inputPath,
     git,
   });
-  const payloadResult = RunUploadV6.safeParse(payload);
+  const payloadResult = RunUploadV7.safeParse(payload);
   if (!payloadResult.success) {
     input.writeStderr(
       `warning: could not save run; generated payload failed validation (${payloadResult.error.issues[0]?.path.join('.') || 'payload'}).\n`,
@@ -149,7 +150,7 @@ export function buildRunUploadPayload(input: {
   runFailed?: boolean;
   inputPath: string;
   git: RunUploadGitV6 | null;
-}): RunUploadPayloadV6 {
+}): RunUploadPayloadV7 {
   const allJobs = input.dynos.flatMap((dyno) => dyno.jobs);
   if (input.results.length !== allJobs.length) {
     throw new Error(
@@ -165,7 +166,7 @@ export function buildRunUploadPayload(input: {
 
   const failed = dynos.reduce((count, dyno) => count + dyno.totals.failed, 0);
   return {
-    schemaVersion: RUN_UPLOAD_V6_SCHEMA_VERSION,
+    schemaVersion: RUN_UPLOAD_SCHEMA_VERSION,
     createdAt: new Date().toISOString(),
     cliVersion: readPackageVersion(),
     gitHash: input.git?.commit ?? null,
@@ -189,7 +190,7 @@ export function buildRunUploadPayload(input: {
 function buildRunUploadDyno(
   dyno: UploadRunDynoInput,
   results: readonly LocalRunnerResult[],
-): RunUploadDynoV5 {
+): RunUploadDynoV7 {
   const jobs = dyno.jobs.map((job, index) => {
     const result = results[index]!;
     return buildRunUploadJob(job, result);
@@ -319,7 +320,7 @@ function truncateNullable(
 function buildRunUploadJob(
   job: LocalRunnerJob,
   result: LocalRunnerResult,
-): RunUploadJobV5 {
+): RunUploadJobV7 {
   const assertionById = assertionByIdForJobs([job]);
   return {
     jobId: truncate(result.jobId, RUN_UPLOAD_LIMITS.scenarioIdLength),
@@ -369,6 +370,33 @@ function buildRunUploadJob(
         truncate(warning.message, RUN_UPLOAD_LIMITS.warningLength),
       ),
     ...(result.mcp === undefined ? {} : {mcp: jobMcpSummary(result.mcp)}),
+    ...(job.scenario.user === undefined
+      ? {}
+      : {conversation: jobConversationSummary(job.scenario.user, result)}),
+  };
+}
+
+/** Who played the user and each turn's duration; never the messages. */
+function jobConversationSummary(
+  user: NonNullable<LocalRunnerJob['scenario']['user']>,
+  result: LocalRunnerResult,
+): RunUploadJobConversationV7 {
+  return {
+    user:
+      'replies' in user
+        ? {kind: 'scripted'}
+        : {
+            kind: 'persona',
+            harness: truncate(user.harness, RUN_UPLOAD_LIMITS.harnessIdLength),
+            model:
+              user.model === undefined
+                ? null
+                : truncate(user.model, RUN_UPLOAD_LIMITS.modelLength),
+          },
+    maxTurns: 'replies' in user ? user.replies.length + 1 : user.maxTurns,
+    turns: (result.turns ?? [])
+      .slice(0, RUN_UPLOAD_LIMITS.conversationTurns)
+      .map((turn) => ({durationMs: durationMs(turn.durationMs)})),
   };
 }
 

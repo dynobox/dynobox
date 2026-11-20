@@ -39,7 +39,7 @@ Authenticated CLI runs can upload compact summaries with
 for reviewing or sharing the saved run. Run owners can compare compatible jobs
 across saved runs to inspect assertion outcome and evidence changes.
 
-Set `DYNOBOX_UPLOAD_URL` to post the same schema v6 JSON payload to your own
+Set `DYNOBOX_UPLOAD_URL` to post the same schema v7 JSON payload to your own
 endpoint without Dynobox authentication. Saved-run data is not redacted, so do
 not upload runs that may contain secrets. See [Saving Runs](./cli.md#saving-runs)
 for the payload and custom-endpoint contract.
