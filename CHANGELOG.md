@@ -22,12 +22,17 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   after a successful harness run. `--reporter json` emits
   `dynobox.report.v4` when a scenario declares a `user`, adding `turns` to job
   records (an empty array when no agent turn produced a result).
+- Run telemetry reports `multi_turn` when a scenario declares a `user`.
 
 ### `@dynobox/sdk`
 
 - Add the scenario `user` field: `{replies: [...]}` for scripted replies, or
   `{persona, harness?, model?, maxTurns?}` for a simulated user. The IR version
   is now `0.5`.
+
+### `@dynobox/run-schema`
+
+- Add `multi_turn` to the telemetry run features.
 
 ---
 

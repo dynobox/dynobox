@@ -361,7 +361,7 @@ Job records include:
   entry. Conversation text is included in full, without the text reporter's
   escaping or clipping.
 - `assertions`, with `assertionId`, optional `label`, `type`, `passed`, and
-  `message`. In v3 reports, MCP assertions add `mcp` evidence and `anyOf`
+  `message`. In v3 and v4 reports, MCP assertions add `mcp` evidence and `anyOf`
   assertions add `mcpBranches`.
 
 `observations.cliMockCallCount` includes every completed mock call in the job,

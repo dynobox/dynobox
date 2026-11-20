@@ -47,6 +47,7 @@ export const TELEMETRY_FEATURES = [
   'cli_mocks',
   'mcp_mocks',
   'http',
+  'multi_turn',
 ] as const;
 
 const count = z.number().int().nonnegative();

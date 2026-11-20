@@ -17,7 +17,11 @@ import {runJob} from '../index.js';
 import {startMcpMockController} from '../mcpMocks/controller.js';
 import type {LocalRunnerJob} from '../runTypes.js';
 import {AntigravityHarness} from './antigravity.js';
-import {logicalMcpToolEvents, runAntigravityWithMcp} from './antigravityMcp.js';
+import {
+  acpSessionRequest,
+  logicalMcpToolEvents,
+  runAntigravityWithMcp,
+} from './antigravityMcp.js';
 import {createToolEvent} from './parsing.js';
 import type {ToolEvent} from './types.js';
 
@@ -182,6 +186,19 @@ async function globalConfig(home: string, value: unknown) {
 }
 
 // All native model/MCP traffic uses loopback and synthetic API keys.
+describe('acpSessionRequest', () => {
+  it('starts a new session, or resumes one without replaying it', () => {
+    expect(acpSessionRequest('/work')).toEqual([
+      'session/new',
+      {cwd: '/work', mcpServers: []},
+    ]);
+    expect(acpSessionRequest('/work', 'conversation-1')).toEqual([
+      'session/resume',
+      {sessionId: 'conversation-1', cwd: '/work', mcpServers: []},
+    ]);
+  });
+});
+
 describe.skipIf(!executable)(
   'native Antigravity selective MCP runtime',
   {timeout: 30_000},

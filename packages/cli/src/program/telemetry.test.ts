@@ -8,7 +8,7 @@ import {
 import {dirname, join} from 'node:path';
 
 import {TelemetryBatch} from '@dynobox/run-schema';
-import {FakeHarness} from '@dynobox/runner-local';
+import {FakeHarness, type LocalRunnerJob} from '@dynobox/runner-local';
 import {CommanderError} from 'commander';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 
@@ -498,6 +498,34 @@ describe('buildRunTelemetryEvents', () => {
       harnessVersion: null,
       model: null,
     });
+  });
+
+  it('reports multi-turn scenarios as a feature', () => {
+    const job = {
+      id: 'job-1',
+      harness: 'claude-code',
+      iteration: 0,
+      scenario: {
+        id: 'scenario-1',
+        name: 'conversation',
+        prompt: 'Add a users table.',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        cliMocks: {},
+        endpoints: [],
+        assertions: [],
+        user: {replies: ['UUIDs.']},
+      },
+    } satisfies LocalRunnerJob;
+    const [run] = buildRunTelemetryEvents({
+      dynos: [{filePath: 'conversation.dyno.ts', jobs: [job]}],
+      results: [],
+      iterations: 1,
+      passed: true,
+      saveRun: false,
+    });
+    expect(run).toMatchObject({type: 'run', features: ['multi_turn']});
   });
 });
 

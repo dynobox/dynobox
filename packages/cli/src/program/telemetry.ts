@@ -270,6 +270,7 @@ export function buildRunTelemetryEvents(
     if (Object.keys(scenario.cliMocks).length > 0) features.add('cli_mocks');
     if (scenario.mcpMocks !== undefined) features.add('mcp_mocks');
     if (scenario.endpoints.length > 0) features.add('http');
+    if (scenario.user !== undefined) features.add('multi_turn');
   }
 
   const harnessRuns = new Map<string, TelemetryHarnessRunEvent>();
