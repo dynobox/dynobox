@@ -8,6 +8,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.19.0 — 2026-11-21
+
 ### `dynobox` (CLI)
 
 - Add multi-turn scenarios. A scenario `user` replies after each agent turn,
@@ -25,7 +29,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Run telemetry reports `multi_turn` when a scenario declares a `user`.
 - `--save-run` sends upload schema v7. Multi-turn jobs add a `conversation`
   summary: who played the user, `maxTurns`, and each agent turn's duration.
-  Messages are never uploaded. The dashboard shows the turn count and summary.
+  Messages are never uploaded. The dashboard's job dialog shows the turn count
+  and summary.
+
+## @dynobox/sdk@0.11.0 — 2026-11-21
 
 ### `@dynobox/sdk`
 
