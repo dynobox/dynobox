@@ -1,6 +1,7 @@
 import {existsSync, mkdtempSync, readFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {rootCertificates} from 'node:tls';
 
 import {afterEach, describe, expect, it} from 'vitest';
 
@@ -37,6 +38,19 @@ describe('ensureDynoboxCA', () => {
     expect(existsSync(first.keyPath)).toBe(true);
     expect(readFileSync(second.certPath, 'utf8')).toBe(firstCert);
     expect(readFileSync(second.keyPath, 'utf8')).toBe(firstKey);
+  });
+
+  it('writes a bundle of the public roots and the Dynobox CA', async () => {
+    const homeDir = createHomeDir();
+
+    const ca = await ensureDynoboxCA({homeDir});
+    const bundle = readFileSync(ca.bundlePath, 'utf8');
+
+    expect(ca.bundlePath).toBe(join(homeDir, '.dynobox', 'ca-bundle.pem'));
+    expect(bundle).toContain(rootCertificates[0]);
+    expect(
+      bundle.trimEnd().endsWith(readFileSync(ca.certPath, 'utf8').trimEnd()),
+    ).toBe(true);
   });
 
   it('shares concurrent first-time initialization', async () => {

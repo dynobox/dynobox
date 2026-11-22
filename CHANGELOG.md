@@ -15,6 +15,11 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   `handler`, never to the real host. Handlers get the job's `workDir` to keep
   state per job. A handler error or invalid response fails the job.
 - The proxy sets `NODE_USE_ENV_PROXY=1`, so Node 24's built-in `fetch` uses it.
+- Fix TLS failures to hosts the proxy does not intercept. `SSL_CERT_FILE`,
+  `REQUESTS_CA_BUNDLE`, and `CURL_CA_BUNDLE` now point at
+  `~/.dynobox/ca-bundle.pem` (public roots plus the Dynobox CA) instead of the
+  Dynobox CA alone, which broke clients that trust only that file, such as the
+  Antigravity CLI.
 
 ### `@dynobox/sdk`
 

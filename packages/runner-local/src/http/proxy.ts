@@ -10,7 +10,7 @@ import type {
 import {getLocal} from 'mockttp';
 
 import {errorMessage} from '../diagnostics.js';
-import {ensureDynoboxCA} from './ca.js';
+import {type DynoboxCA, ensureDynoboxCA} from './ca.js';
 import {
   buildHttpRoutes,
   createHttpEvent,
@@ -76,7 +76,7 @@ export async function startHttpCapture(
 
   const proxyUrl = `http://127.0.0.1:${server.port}`;
   return {
-    env: buildProxyEnv(proxyUrl, ca.certPath),
+    env: buildProxyEnv(proxyUrl, ca),
     events,
     failures,
     stop: async () => {
@@ -153,7 +153,7 @@ function eventFromRequest(
 
 function buildProxyEnv(
   proxyUrl: string,
-  caPath: string,
+  ca: DynoboxCA,
 ): Record<string, string> {
   return {
     HTTP_PROXY: proxyUrl,
@@ -164,10 +164,11 @@ function buildProxyEnv(
     no_proxy: mergeNoProxy(process.env.no_proxy),
     // Node's built-in fetch ignores the proxy variables without this (Node 24+).
     NODE_USE_ENV_PROXY: '1',
-    NODE_EXTRA_CA_CERTS: caPath,
-    SSL_CERT_FILE: caPath,
-    REQUESTS_CA_BUNDLE: caPath,
-    CURL_CA_BUNDLE: caPath,
+    // Node adds these to its own roots; the others replace the trust store.
+    NODE_EXTRA_CA_CERTS: ca.certPath,
+    SSL_CERT_FILE: ca.bundlePath,
+    REQUESTS_CA_BUNDLE: ca.bundlePath,
+    CURL_CA_BUNDLE: ca.bundlePath,
   };
 }
 

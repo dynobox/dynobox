@@ -65,11 +65,13 @@ describe('startHttpCapture with HTTP mocks', () => {
     await rm(home, {recursive: true, force: true});
   });
 
-  it('sets the proxy env, with Node fetch opted in', () => {
+  it('sets the proxy env, with Node fetch opted in and a full CA bundle', () => {
     expect(capture.env).toMatchObject({
       HTTPS_PROXY: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
       NODE_USE_ENV_PROXY: '1',
-      CURL_CA_BUNDLE: join(home, '.dynobox', 'ca.pem'),
+      NODE_EXTRA_CA_CERTS: join(home, '.dynobox', 'ca.pem'),
+      SSL_CERT_FILE: join(home, '.dynobox', 'ca-bundle.pem'),
+      CURL_CA_BUNDLE: join(home, '.dynobox', 'ca-bundle.pem'),
     });
   });
 

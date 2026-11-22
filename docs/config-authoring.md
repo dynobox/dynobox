@@ -641,8 +641,10 @@ starts a per-job local proxy and sets `HTTP_PROXY`, `HTTPS_PROXY`, and their
 lowercase variants on the harness child process. Existing `NO_PROXY` and
 `no_proxy` values are preserved, and local loopback values (`localhost`,
 `127.0.0.1`, and `::1`) are added. A generated CA at `~/.dynobox/ca.pem` is
-exposed through `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, and
-`CURL_CA_BUNDLE`. `NODE_USE_ENV_PROXY=1` opts Node's built-in `fetch` into the
+exposed through `NODE_EXTRA_CA_CERTS`. Because clients that read
+`SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, or `CURL_CA_BUNDLE` trust only that file,
+those point at `~/.dynobox/ca-bundle.pem`: Node's public roots plus the Dynobox
+CA. `NODE_USE_ENV_PROXY=1` opts Node's built-in `fetch` into the
 proxy. Node 24 reads it; on older Node, `fetch` may go straight to the
 network. Capture covers traffic that honors those settings;
 harness-native web tools and clients with their own trust stores may bypass it.
