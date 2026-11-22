@@ -58,7 +58,11 @@ export type {
   CliMockHandlerContext,
   CliMockResponse,
   DynoboxConfig,
+  HttpMockConfig,
+  HttpMockRequest,
+  HttpMockResponse,
   ScenarioCliMocks,
+  ScenarioHttpMocks,
   ScenarioInput,
   ScenarioUser,
 } from './types/config.js';

@@ -20,6 +20,7 @@ export {
   type IrScenarioUser,
   type IrVersion,
 } from './ir/types.js';
+export {httpMockResponseSchema, httpMocksSchema} from './schema/httpMocks.js';
 export {mcpJsonObjectSchema, mcpMocksSchema} from './schema/mcpMocks.js';
 export {
   DEFAULT_USER_HARNESS,

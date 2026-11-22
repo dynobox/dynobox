@@ -117,6 +117,9 @@ export function compile(config: DynoboxConfig): Ir {
       setup,
       fixtures,
       cliMocks: scenario.cliMocks ?? {},
+      ...(scenario.httpMocks === undefined
+        ? {}
+        : {httpMocks: scenario.httpMocks}),
       ...(scenario.mcpMocks === undefined ? {} : {mcpMocks: scenario.mcpMocks}),
       ...(scenario.user === undefined
         ? {}

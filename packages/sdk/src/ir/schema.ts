@@ -1,5 +1,6 @@
 import {z} from 'zod';
 
+import {httpMocksSchema} from '../schema/httpMocks.js';
 import {
   mcpInputMatcherSchema,
   mcpMocksSchema,
@@ -413,6 +414,7 @@ export const irScenarioSchema = z
     cliMocks: z
       .record(cliMockExecutableSchema, irCliMockConfigSchema)
       .default({}),
+    httpMocks: httpMocksSchema.optional(),
     mcpMocks: mcpMocksSchema.optional(),
     user: irScenarioUserSchema.optional(),
     endpoints: z.array(irEndpointSchema),
