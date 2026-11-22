@@ -51,6 +51,13 @@ describe('HTTP event helpers', () => {
         ],
       }),
     ).toBe(false);
+    expect(
+      scenarioNeedsHttpCapture({
+        ...scenario,
+        assertions: [],
+        httpMocks: {'api.example.test': {response: {status: 200}}},
+      }),
+    ).toBe(true);
   });
 
   it('builds routes only for asserted endpoints', () => {

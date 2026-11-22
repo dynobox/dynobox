@@ -9,9 +9,12 @@ export type HttpRoute = {
 };
 
 export function scenarioNeedsHttpCapture(scenario: IrScenario): boolean {
-  return scenario.assertions.some(
-    (assertion) =>
-      assertion.type === 'http.called' || assertion.type === 'http.notCalled',
+  return (
+    Object.keys(scenario.httpMocks ?? {}).length > 0 ||
+    scenario.assertions.some(
+      (assertion) =>
+        assertion.type === 'http.called' || assertion.type === 'http.notCalled',
+    )
   );
 }
 

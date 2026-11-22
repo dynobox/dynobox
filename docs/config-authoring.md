@@ -71,6 +71,7 @@ type ScenarioInput = {
   setup?: string[];
   fixtures?: string | string[];
   cliMocks?: ScenarioCliMocks;
+  httpMocks?: ScenarioHttpMocks;
   mcpMocks?: ScenarioMcpMocks;
   user?: ScenarioUser;
   endpoints?: Record<string, Endpoint>;
@@ -635,14 +636,75 @@ numbers, underscores, and hyphens.
 Endpoint specs include only `method` and `url`. HTTP assertions match observed
 requests by endpoint URL/method and optional response status.
 
-When a scenario includes HTTP assertions, Dynobox starts a per-job local proxy
-and sets `HTTP_PROXY`, `HTTPS_PROXY`, and their lowercase variants on the harness
-child process. Existing `NO_PROXY` and `no_proxy` values are preserved, and local
-loopback values (`localhost`, `127.0.0.1`, and `::1`) are added. A generated CA
-at `~/.dynobox/ca.pem` is exposed through `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`,
-`REQUESTS_CA_BUNDLE`, and `CURL_CA_BUNDLE`. Capture covers traffic that honors
-those settings; harness-native web tools and clients with their own trust stores
-may bypass it.
+When a scenario includes HTTP assertions or [HTTP mocks](#http-mocks), Dynobox
+starts a per-job local proxy and sets `HTTP_PROXY`, `HTTPS_PROXY`, and their
+lowercase variants on the harness child process. Existing `NO_PROXY` and
+`no_proxy` values are preserved, and local loopback values (`localhost`,
+`127.0.0.1`, and `::1`) are added. A generated CA at `~/.dynobox/ca.pem` is
+exposed through `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, and
+`CURL_CA_BUNDLE`. `NODE_USE_ENV_PROXY=1` opts Node's built-in `fetch` into the
+proxy. Node 24 reads it; on older Node, `fetch` may go straight to the
+network. Capture covers traffic that honors those settings;
+harness-native web tools and clients with their own trust stores may bypass it.
+
+## HTTP Mocks
+
+> **Experimental:** HTTP mocking is an experimental feature. Its authoring and
+> reporting contracts may change between releases.
+
+Use scenario `httpMocks` to answer requests to a host instead of the real
+server. Keys are hostnames. Every request to a mocked host, over HTTP or HTTPS
+and on any path, goes to its mock and never reaches the real host.
+
+```ts
+import {defineDyno, http} from '@dynobox/sdk';
+
+export default defineDyno({
+  scenarios: [
+    {
+      name: 'recalls from the memory API',
+      prompt: 'Ask the memory API what it knows about checkout timeouts.',
+      httpMocks: {
+        'api.example.com': {
+          handler: async ({method, path, body}) => {
+            if (method === 'POST' && path === '/v1/recall') {
+              return {status: 200, json: {results: [JSON.parse(body).query]}};
+            }
+            return {status: 404, json: {error: 'not-found'}};
+          },
+        },
+        'exfil.example.net': {response: {status: 200, body: 'ok'}},
+      },
+      endpoints: {
+        recall: http.endpoint({
+          method: 'POST',
+          url: 'https://api.example.com/v1/recall',
+        }),
+      },
+      assertions: [http.called('recall', {status: 200})],
+    },
+  ],
+});
+```
+
+Configuration rules:
+
+- Keys are lowercase hostnames, with no scheme, port, or path. Loopback hosts
+  bypass the proxy, so they cannot be mocked.
+- Each host configures exactly one of `response` or `handler`. A response needs
+  a `status` from 100 through 599 and may set `headers` and either `body` (a
+  string) or `json`.
+- Handlers receive `method`, `url`, `path` (without the query string),
+  `headers`, `body` (as text), and the job's `workDir`. Handlers in one scenario
+  are shared by its jobs, which can run at the same time, so key any state by
+  `workDir`.
+- A handler that throws or returns an invalid response sends the client a 500
+  and fails the job.
+
+Requests to mocked hosts are recorded like other HTTP events, so `http.called`
+and `http.notCalled` work against them. Mocks only see clients that honor the
+proxy settings above; to catch a client that bypasses the proxy, assert that an
+endpoint you expect was called.
 
 ## Path Helpers
 

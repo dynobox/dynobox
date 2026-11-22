@@ -8,6 +8,19 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Add experimental scenario `httpMocks`, keyed by hostname. Every request to a
+  mocked host goes through the per-job proxy to a static `response` or a
+  `handler`, never to the real host. Handlers get the job's `workDir` to keep
+  state per job. A handler error or invalid response fails the job.
+- The proxy sets `NODE_USE_ENV_PROXY=1`, so Node 24's built-in `fetch` uses it.
+
+### `@dynobox/sdk`
+
+- Add `httpMocks` to scenarios, with the `HttpMockConfig`, `HttpMockRequest`,
+  `HttpMockResponse`, and `ScenarioHttpMocks` types.
+
 ---
 
 ## dynobox@0.19.0 — 2026-11-21
