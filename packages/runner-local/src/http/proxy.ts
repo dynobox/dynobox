@@ -1,3 +1,5 @@
+import {validateHeaderName, validateHeaderValue} from 'node:http';
+
 import type {HttpEvent} from '@dynobox/evaluators';
 import type {IrScenario} from '@dynobox/sdk/ir';
 import {httpMockResponseSchema} from '@dynobox/sdk/ir';
@@ -21,7 +23,7 @@ import {
 export type HttpCapture = {
   env: Record<string, string>;
   events: readonly HttpEvent[];
-  /** Handler errors and invalid handler responses. They fail the job. */
+  /** Handler errors, invalid responses, and unfinished mocks fail the job. */
   failures: readonly string[];
   stop(): Promise<void>;
 };
@@ -51,6 +53,8 @@ export async function startHttpCapture(
   const events: HttpEvent[] = [];
   const failures: string[] = [];
   const byRequestId = new Map<string, HttpEvent>();
+  const pendingMocks = new Map<string, string>();
+  let stopPromise: Promise<void> | undefined;
 
   await server.start();
   const mockedHosts = new Set(mocks.map(([hostname]) => hostname));
@@ -64,12 +68,21 @@ export async function startHttpCapture(
       .forHostname(hostname)
       .always()
       .thenCallback(async (request) => {
+        if (stopPromise !== undefined)
+          return {statusCode: 500, body: 'HTTP mock capture has stopped.'};
+        const url = new URL(request.url);
+        const description = `HTTP mock for ${hostname} failed on ${request.method} ${url.origin}${url.pathname}`;
+        pendingMocks.set(request.id, description);
         try {
           return await mockResponse(mock, request, workDir);
         } catch (error) {
-          const message = `HTTP mock for ${hostname} failed on ${request.method} ${request.url}: ${errorMessage(error)}`;
-          failures.push(message);
+          const message = `${description}: ${errorMessage(error)}`;
+          // stop() already records unfinished callbacks. Their eventual
+          // rejection must not change the finalized evidence.
+          if (pendingMocks.has(request.id)) failures.push(message);
           return {statusCode: 500, body: message};
+        } finally {
+          pendingMocks.delete(request.id);
         }
       });
   }
@@ -80,8 +93,16 @@ export async function startHttpCapture(
     env: buildProxyEnv(proxyUrl, ca),
     events,
     failures,
-    stop: async () => {
-      await server.stop();
+    stop: () => {
+      if (stopPromise !== undefined) return stopPromise;
+      for (const description of pendingMocks.values()) {
+        failures.push(
+          `${description}: did not complete before the harness finished.`,
+        );
+      }
+      pendingMocks.clear();
+      stopPromise = server.stop();
+      return stopPromise;
     },
   };
 }
@@ -109,10 +130,26 @@ async function mockResponse(
     );
   }
   const {status, headers, body, json} = parsed.data;
+  const responseHeaders: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    validateHeaderName(name);
+    validateHeaderValue(name, value);
+    responseHeaders[name.toLowerCase()] = value;
+  }
+  let responseBody = body ?? '';
+  if (json !== undefined) {
+    const serialized = JSON.stringify(json);
+    if (serialized === undefined)
+      throw new Error('invalid response: json must be JSON-serializable.');
+    responseBody = serialized;
+    responseHeaders['content-type'] = 'application/json';
+  }
   return {
     statusCode: status,
-    ...(headers === undefined ? {} : {headers}),
-    ...(json === undefined ? {body: body ?? ''} : {json}),
+    ...(headers === undefined && json === undefined
+      ? {}
+      : {headers: responseHeaders}),
+    body: responseBody,
   };
 }
 

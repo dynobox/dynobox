@@ -13,7 +13,9 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Add experimental scenario `httpMocks`, keyed by hostname. Every request to a
   mocked host goes through the per-job proxy to a static `response` or a
   `handler`, never to the real host. Handlers get the job's `workDir` to keep
-  state per job. A handler error or invalid response fails the job.
+  state per job. Handler errors, invalid JSON or response headers, and handlers
+  still running when the harness finishes fail the job. Generated mock failure
+  diagnostics omit request query strings.
 - The proxy sets `NODE_USE_ENV_PROXY=1`, so Node 24's built-in `fetch` uses it.
   On older Node, `dynobox run` warns when a scenario has `httpMocks`, since
   Node programs would reach the real hosts.
