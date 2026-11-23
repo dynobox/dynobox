@@ -74,7 +74,8 @@ export type HttpMockConfig =
 
 /**
  * Mocks keyed by hostname, such as `api.example.com`. Every request to a
- * mocked host goes to its mock and never reaches the real host.
+ * mocked host that goes through the proxy goes to its mock and never reaches
+ * the real host. Node programs need Node 24 or later for `fetch` to use it.
  */
 export type ScenarioHttpMocks = Record<string, HttpMockConfig>;
 

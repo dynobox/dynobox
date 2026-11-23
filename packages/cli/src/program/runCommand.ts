@@ -76,6 +76,7 @@ import {
   configErrorExitCode,
   terminatedExitCode,
 } from './exitCodes.js';
+import {httpMockNodeWarning} from './httpMockNodeWarning.js';
 import {
   fetchAuthenticatedIdentity,
   type IdentityResult,
@@ -229,6 +230,8 @@ export async function runCommandAction(
       'no scenarios matched',
     );
   }
+  const nodeWarning = httpMockNodeWarning(jobs);
+  if (nodeWarning !== undefined) writeStderr(nodeWarning);
   // Check upload authentication before setup or harness execution.
   if (
     commandFlags.saveRun === true &&

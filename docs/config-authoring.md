@@ -655,8 +655,11 @@ harness-native web tools and clients with their own trust stores may bypass it.
 > reporting contracts may change between releases.
 
 Use scenario `httpMocks` to answer requests to a host instead of the real
-server. Keys are hostnames. Every request to a mocked host, over HTTP or HTTPS
-and on any path, goes to its mock and never reaches the real host.
+server. Keys are hostnames. Every request to a mocked host that goes through
+the proxy, over HTTP or HTTPS and on any path, goes to its mock and never
+reaches the real host. Node programs need Node 24 or later: on older Node,
+their `fetch` ignores the proxy and reaches the real host, and `dynobox run`
+prints a warning.
 
 ```ts
 import {defineDyno, http} from '@dynobox/sdk';
