@@ -11,6 +11,8 @@ export type HttpEvent = {
   host: string;
   timestamp: string;
   status?: number;
+  /** True when a scenario HTTP mock answered the request. */
+  mocked?: boolean;
 };
 
 /** One completed invocation of a scenario CLI mock. */

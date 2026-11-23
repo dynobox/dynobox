@@ -50,6 +50,7 @@ export function renderJobDetails(
   lines.push(
     renderCliMockDetails(result, options.configuredCliMockNames ?? [], ctx),
   );
+  lines.push(renderHttpMockDetails(result, ctx));
 
   if (result.status === 'setup_failed') {
     lines.push(renderSetupFailureDetails(result, ctx));
@@ -103,6 +104,24 @@ export function renderCliMockDetails(
     );
   }
   return lines.join('');
+}
+
+/** One line per request that an HTTP mock answered, without the query. */
+export function renderHttpMockDetails(
+  result: LocalRunnerResult,
+  ctx: RenderContext,
+): string {
+  return result.httpEvents
+    .filter((event) => event.mocked === true)
+    .map((event) => {
+      const {host, pathname} = new URL(event.url);
+      const status = event.status === undefined ? 'no response' : event.status;
+      const detail = escapeTerminalText(
+        `http mock: ${event.method} ${host}${pathname} -> ${status}`,
+      );
+      return `        ${dim(ctx, truncateCliText(detail, Math.max(0, ctx.width - 8)))}\n`;
+    })
+    .join('');
 }
 
 function formatCliMockToken(value: string): string {

@@ -13,14 +13,15 @@ import {
   type RunUploadAssertionDisplayV2,
   type RunUploadAssertionEvidenceV2,
   type RunUploadAssertionV2,
-  type RunUploadDynoV7,
+  type RunUploadDynoV8,
   runUploadGitRepositorySchema,
   type RunUploadGitV6,
   type RunUploadJobConversationV7,
+  type RunUploadJobHttpV8,
   type RunUploadJobMcpV5,
-  type RunUploadJobV7,
-  type RunUploadV7 as RunUploadPayloadV7,
-  RunUploadV7,
+  type RunUploadJobV8,
+  type RunUploadV8 as RunUploadPayloadV8,
+  RunUploadV8,
 } from '@dynobox/run-schema';
 import type {
   LocalRunnerJob,
@@ -106,7 +107,7 @@ export async function uploadRun(input: UploadRunInput): Promise<void> {
     inputPath: input.inputPath,
     git,
   });
-  const payloadResult = RunUploadV7.safeParse(payload);
+  const payloadResult = RunUploadV8.safeParse(payload);
   if (!payloadResult.success) {
     input.writeStderr(
       `warning: could not save run; generated payload failed validation (${payloadResult.error.issues[0]?.path.join('.') || 'payload'}).\n`,
@@ -150,7 +151,7 @@ export function buildRunUploadPayload(input: {
   runFailed?: boolean;
   inputPath: string;
   git: RunUploadGitV6 | null;
-}): RunUploadPayloadV7 {
+}): RunUploadPayloadV8 {
   const allJobs = input.dynos.flatMap((dyno) => dyno.jobs);
   if (input.results.length !== allJobs.length) {
     throw new Error(
@@ -190,7 +191,7 @@ export function buildRunUploadPayload(input: {
 function buildRunUploadDyno(
   dyno: UploadRunDynoInput,
   results: readonly LocalRunnerResult[],
-): RunUploadDynoV7 {
+): RunUploadDynoV8 {
   const jobs = dyno.jobs.map((job, index) => {
     const result = results[index]!;
     return buildRunUploadJob(job, result);
@@ -320,7 +321,7 @@ function truncateNullable(
 function buildRunUploadJob(
   job: LocalRunnerJob,
   result: LocalRunnerResult,
-): RunUploadJobV7 {
+): RunUploadJobV8 {
   const assertionById = assertionByIdForJobs([job]);
   return {
     jobId: truncate(result.jobId, RUN_UPLOAD_LIMITS.scenarioIdLength),
@@ -373,6 +374,9 @@ function buildRunUploadJob(
     ...(job.scenario.user === undefined
       ? {}
       : {conversation: jobConversationSummary(job.scenario.user, result)}),
+    ...(job.scenario.httpMocks === undefined
+      ? {}
+      : {http: jobHttpSummary(job.scenario.httpMocks, result)}),
   };
 }
 
@@ -397,6 +401,32 @@ function jobConversationSummary(
     turns: (result.turns ?? [])
       .slice(0, RUN_UPLOAD_LIMITS.conversationTurns)
       .map((turn) => ({durationMs: durationMs(turn.durationMs)})),
+  };
+}
+
+/** The requests that HTTP mocks answered: the path, never the query or body. */
+function jobHttpSummary(
+  httpMocks: NonNullable<LocalRunnerJob['scenario']['httpMocks']>,
+  result: LocalRunnerResult,
+): RunUploadJobHttpV8 {
+  const calls = result.httpEvents.filter((event) => event.mocked === true);
+  return {
+    hosts: Object.keys(httpMocks)
+      .slice(0, RUN_UPLOAD_LIMITS.httpHostsPerJob)
+      .map((host) => truncate(host, RUN_UPLOAD_LIMITS.httpHostLength)),
+    callCount: calls.length,
+    calls: calls
+      .slice(0, RUN_UPLOAD_LIMITS.httpCallsPerJob)
+      .map((event, index) => ({
+        sequence: index + 1,
+        method: truncate(event.method, RUN_UPLOAD_LIMITS.httpMethodLength),
+        host: truncate(event.host, RUN_UPLOAD_LIMITS.httpHostLength),
+        path: truncate(
+          new URL(event.url).pathname,
+          RUN_UPLOAD_LIMITS.httpPathLength,
+        ),
+        status: event.status ?? null,
+      })),
   };
 }
 

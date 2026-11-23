@@ -5,7 +5,8 @@ export const RUN_UPLOAD_V3_SCHEMA_VERSION = 3 as const;
 export const RUN_UPLOAD_V4_SCHEMA_VERSION = 4 as const;
 export const RUN_UPLOAD_V5_SCHEMA_VERSION = 5 as const;
 export const RUN_UPLOAD_V6_SCHEMA_VERSION = 6 as const;
-export const RUN_UPLOAD_SCHEMA_VERSION = 7 as const;
+export const RUN_UPLOAD_V7_SCHEMA_VERSION = 7 as const;
+export const RUN_UPLOAD_SCHEMA_VERSION = 8 as const;
 
 export const RUN_UPLOAD_STATUS = ['passed', 'failed'] as const;
 export const RUN_UPLOAD_JOB_STATUS = [
@@ -50,6 +51,11 @@ export const RUN_UPLOAD_LIMITS = {
   mcpFailuresPerJob: 20,
   mcpCallsPerJob: 200,
   conversationTurns: 20,
+  httpMethodLength: 16,
+  httpHostLength: 253,
+  httpPathLength: 2_048,
+  httpHostsPerJob: 50,
+  httpCallsPerJob: 200,
 } as const;
 
 const countSchema = z.number().int().nonnegative();
@@ -424,8 +430,55 @@ export const runUploadDynoV7Schema = runUploadDynoV2Schema
   .strict();
 
 export const RunUploadV7 = RunUploadV6.extend({
-  schemaVersion: z.literal(RUN_UPLOAD_SCHEMA_VERSION),
+  schemaVersion: z.literal(RUN_UPLOAD_V7_SCHEMA_VERSION),
   dynos: z.array(runUploadDynoV7Schema).max(RUN_UPLOAD_LIMITS.dynos),
+}).strict();
+
+const httpHostString = z.string().min(1).max(RUN_UPLOAD_LIMITS.httpHostLength);
+
+/**
+ * The requests that a job's HTTP mocks answered. Each call has its URL path,
+ * but never the query string, headers, or body. `callCount` is the true total;
+ * `calls` may be truncated.
+ */
+export const runUploadJobHttpV8Schema = z
+  .object({
+    /** The hostnames that the scenario mocks. */
+    hosts: z.array(httpHostString).max(RUN_UPLOAD_LIMITS.httpHostsPerJob),
+    callCount: countSchema,
+    calls: z
+      .array(
+        z
+          .object({
+            sequence: countSchema,
+            method: z.string().min(1).max(RUN_UPLOAD_LIMITS.httpMethodLength),
+            host: httpHostString,
+            path: z.string().min(1).max(RUN_UPLOAD_LIMITS.httpPathLength),
+            /** Null when the proxy recorded no response. */
+            status: z.number().int().min(100).max(599).nullable(),
+          })
+          .strict(),
+      )
+      .max(RUN_UPLOAD_LIMITS.httpCallsPerJob),
+  })
+  .strict();
+
+export const runUploadJobV8Schema = runUploadJobV7Schema
+  .extend({
+    /** Present only when the job's scenario declared HTTP mocks. */
+    http: runUploadJobHttpV8Schema.optional(),
+  })
+  .strict();
+
+export const runUploadDynoV8Schema = runUploadDynoV2Schema
+  .extend({
+    jobs: z.array(runUploadJobV8Schema).max(RUN_UPLOAD_LIMITS.jobsPerDyno),
+  })
+  .strict();
+
+export const RunUploadV8 = RunUploadV7.extend({
+  schemaVersion: z.literal(RUN_UPLOAD_SCHEMA_VERSION),
+  dynos: z.array(runUploadDynoV8Schema).max(RUN_UPLOAD_LIMITS.dynos),
 }).strict();
 
 export const RunUpload = z.discriminatedUnion('schemaVersion', [
@@ -435,6 +488,7 @@ export const RunUpload = z.discriminatedUnion('schemaVersion', [
   RunUploadV5,
   RunUploadV6,
   RunUploadV7,
+  RunUploadV8,
 ]);
 
 export const RunSharingUpdate = z
@@ -479,6 +533,10 @@ export type RunUploadJobConversationV7 = z.infer<
 export type RunUploadJobV7 = z.infer<typeof runUploadJobV7Schema>;
 export type RunUploadDynoV7 = z.infer<typeof runUploadDynoV7Schema>;
 export type RunUploadV7 = z.infer<typeof RunUploadV7>;
+export type RunUploadJobHttpV8 = z.infer<typeof runUploadJobHttpV8Schema>;
+export type RunUploadJobV8 = z.infer<typeof runUploadJobV8Schema>;
+export type RunUploadDynoV8 = z.infer<typeof runUploadDynoV8Schema>;
+export type RunUploadV8 = z.infer<typeof RunUploadV8>;
 export type RunUpload = z.infer<typeof RunUpload>;
 export type RunUploadSchemaVersion = RunUpload['schemaVersion'];
 
@@ -488,6 +546,7 @@ export type RunUploadCreateInputV4 = z.input<typeof RunUploadV4>;
 export type RunUploadCreateInputV5 = z.input<typeof RunUploadV5>;
 export type RunUploadCreateInputV6 = z.input<typeof RunUploadV6>;
 export type RunUploadCreateInputV7 = z.input<typeof RunUploadV7>;
+export type RunUploadCreateInputV8 = z.input<typeof RunUploadV8>;
 
 export type RunSharingUpdate = z.infer<typeof RunSharingUpdate>;
 
@@ -569,6 +628,11 @@ export type RunJobDetail = {
    * uploaded before v7.
    */
   conversation: RunUploadJobConversationV7 | null;
+  /**
+   * The requests that HTTP mocks answered; null when the job declared no HTTP
+   * mocks and for runs uploaded before v8.
+   */
+  http: RunUploadJobHttpV8 | null;
   assertions: RunAssertionDetail[];
 };
 

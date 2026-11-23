@@ -46,6 +46,7 @@ export const TELEMETRY_FEATURES = [
   'save_run',
   'cli_mocks',
   'mcp_mocks',
+  'http_mocks',
   'http',
   'multi_turn',
 ] as const;

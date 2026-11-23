@@ -53,7 +53,8 @@ export async function startHttpCapture(
   const byRequestId = new Map<string, HttpEvent>();
 
   await server.start();
-  await subscribeToEvents(server, routes, events, byRequestId);
+  const mockedHosts = new Set(mocks.map(([hostname]) => hostname));
+  await subscribeToEvents(server, routes, mockedHosts, events, byRequestId);
   // Every request to a mocked host goes to its mock, never to the real host.
   // `always()`: by default mockttp prefers an unused rule after the first
   // match, which would send later requests to the pass-through.
@@ -118,11 +119,12 @@ async function mockResponse(
 async function subscribeToEvents(
   server: Mockttp,
   routes: readonly HttpRoute[],
+  mockedHosts: ReadonlySet<string>,
   events: HttpEvent[],
   byRequestId: Map<string, HttpEvent>,
 ): Promise<void> {
   await server.on('request-initiated', (request) => {
-    const event = eventFromRequest(routes, request);
+    const event = eventFromRequest(routes, mockedHosts, request);
     events.push(event);
     byRequestId.set(request.id, event);
   });
@@ -140,6 +142,7 @@ async function subscribeToEvents(
 
 function eventFromRequest(
   routes: readonly HttpRoute[],
+  mockedHosts: ReadonlySet<string>,
   request: InitiatedRequest,
 ): HttpEvent {
   return createHttpEvent({
@@ -148,6 +151,7 @@ function eventFromRequest(
     url: request.url,
     host: request.destination.hostname,
     timestamp: new Date(request.timingEvents.startTime).toISOString(),
+    mocked: mockedHosts.has(request.destination.hostname),
   });
 }
 

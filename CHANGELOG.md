@@ -17,6 +17,12 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - The proxy sets `NODE_USE_ENV_PROXY=1`, so Node 24's built-in `fetch` uses it.
   On older Node, `dynobox run` warns when a scenario has `httpMocks`, since
   Node programs would reach the real hosts.
+- Verbose and debug output list each request that an HTTP mock answered, as
+  `http mock: <method> <host><path> -> <status>`.
+- `--save-run` sends upload schema v8. Jobs with HTTP mocks add an `http`
+  summary: the mocked hosts and, per mocked request, the method, host, URL
+  path, and status. Query strings, headers, and bodies are never uploaded.
+- Run telemetry reports `http_mocks` when a scenario declares HTTP mocks.
 - Fix TLS failures to hosts the proxy does not intercept. `SSL_CERT_FILE`,
   `REQUESTS_CA_BUNDLE`, and `CURL_CA_BUNDLE` now point at
   `~/.dynobox/ca-bundle.pem` (public roots plus the Dynobox CA) instead of the
@@ -27,6 +33,17 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 - Add `httpMocks` to scenarios, with the `HttpMockConfig`, `HttpMockRequest`,
   `HttpMockResponse`, and `ScenarioHttpMocks` types.
+
+### `@dynobox/run-schema`
+
+- Add `http_mocks` to the telemetry run features.
+- Upload schema v8 adds an optional job `http` for jobs with HTTP mocks:
+  `hosts`, `callCount`, and `calls` with `sequence`, `method`, `host`, `path`,
+  and `status` (null when no response was recorded). Query strings, headers,
+  and bodies are never uploaded. `RUN_UPLOAD_SCHEMA_VERSION` is now 8, and
+  `RUN_UPLOAD_V7_SCHEMA_VERSION` is 7.
+- `RunJobDetail.http` is the job's HTTP mock summary, or null for jobs without
+  HTTP mocks and runs uploaded before v8.
 
 ---
 

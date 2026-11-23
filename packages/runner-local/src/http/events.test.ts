@@ -100,4 +100,17 @@ describe('HTTP event helpers', () => {
       timestamp: '2026-01-01T00:00:00.000Z',
     });
   });
+
+  it('marks events that a mock answered', () => {
+    const input = {
+      routes: [],
+      method: 'POST',
+      url: 'https://api.example.test/user',
+    };
+
+    expect(createHttpEvent({...input, mocked: true}).mocked).toBe(true);
+    expect(createHttpEvent({...input, mocked: false})).not.toHaveProperty(
+      'mocked',
+    );
+  });
 });

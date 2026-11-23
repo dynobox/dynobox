@@ -8,6 +8,7 @@ import {
   RUN_UPLOAD_V4_SCHEMA_VERSION,
   RUN_UPLOAD_V5_SCHEMA_VERSION,
   RUN_UPLOAD_V6_SCHEMA_VERSION,
+  RUN_UPLOAD_V7_SCHEMA_VERSION,
   RunUpload,
   type RunUploadCreateInputV2,
   type RunUploadCreateInputV3,
@@ -15,12 +16,14 @@ import {
   type RunUploadCreateInputV5,
   type RunUploadCreateInputV6,
   type RunUploadCreateInputV7,
+  type RunUploadCreateInputV8,
   RunUploadV2,
   RunUploadV3,
   RunUploadV4,
   RunUploadV5,
   RunUploadV6,
   RunUploadV7,
+  RunUploadV8,
 } from './index.js';
 
 function validPayload(): RunUploadCreateInputV2 {
@@ -646,7 +649,7 @@ function validV7Payload(): RunUploadCreateInputV7 {
   const job = payload.dynos[0]!.jobs[0]!;
   return {
     ...payload,
-    schemaVersion: RUN_UPLOAD_SCHEMA_VERSION,
+    schemaVersion: RUN_UPLOAD_V7_SCHEMA_VERSION,
     dynos: [
       {
         ...payload.dynos[0]!,
@@ -722,5 +725,95 @@ describe('RunUploadV7', () => {
   it('parses all supported upload versions', () => {
     expect(RunUpload.parse(validV6Payload()).schemaVersion).toBe(6);
     expect(RunUpload.parse(validV7Payload()).schemaVersion).toBe(7);
+  });
+});
+
+function validV8Payload(): RunUploadCreateInputV8 {
+  const payload = validV7Payload();
+  const job = payload.dynos[0]!.jobs[0]!;
+  return {
+    ...payload,
+    schemaVersion: RUN_UPLOAD_SCHEMA_VERSION,
+    dynos: [
+      {
+        ...payload.dynos[0]!,
+        jobs: [
+          {
+            ...job,
+            http: {
+              hosts: ['api.example.com'],
+              callCount: 2,
+              calls: [
+                {
+                  sequence: 1,
+                  method: 'POST',
+                  host: 'api.example.com',
+                  path: '/v1/items',
+                  status: 201,
+                },
+                {
+                  sequence: 2,
+                  method: 'GET',
+                  host: 'api.example.com',
+                  path: '/v1/items/42',
+                  status: null,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+describe('RunUploadV8', () => {
+  it('accepts an HTTP mock summary', () => {
+    const parsed = RunUploadV8.parse(validV8Payload());
+
+    expect(parsed.schemaVersion).toBe(8);
+    expect(parsed.dynos[0]!.jobs[0]!.http?.calls).toHaveLength(2);
+  });
+
+  it('accepts jobs without HTTP mocks', () => {
+    const payload = validV8Payload();
+    delete payload.dynos[0]!.jobs[0]!.http;
+
+    expect(RunUploadV8.parse(payload).dynos[0]!.jobs[0]!.http).toBeUndefined();
+  });
+
+  it.each([
+    ['a request body', {body: '{"secret":true}'}],
+    ['a query string field', {query: 'token=abc'}],
+    ['an invalid status', {status: 42}],
+    ['an empty path', {path: ''}],
+  ])('rejects a call with %s', (_label, change) => {
+    const payload = validV8Payload();
+    const http = payload.dynos[0]!.jobs[0]!.http!;
+    http.calls[0] = {...http.calls[0]!, ...change} as never;
+
+    expect(RunUploadV8.safeParse(payload).success).toBe(false);
+  });
+
+  it('rejects more calls than the limit', () => {
+    const payload = validV8Payload();
+    const http = payload.dynos[0]!.jobs[0]!.http!;
+    http.calls = Array.from(
+      {length: RUN_UPLOAD_LIMITS.httpCallsPerJob + 1},
+      (_, index) => ({...http.calls[0]!, sequence: index + 1}),
+    );
+
+    expect(RunUploadV8.safeParse(payload).success).toBe(false);
+  });
+
+  it('rejects HTTP summaries on v7 uploads', () => {
+    expect(
+      RunUploadV7.safeParse({...validV8Payload(), schemaVersion: 7}).success,
+    ).toBe(false);
+  });
+
+  it('parses all supported upload versions', () => {
+    expect(RunUpload.parse(validV7Payload()).schemaVersion).toBe(7);
+    expect(RunUpload.parse(validV8Payload()).schemaVersion).toBe(8);
   });
 });
