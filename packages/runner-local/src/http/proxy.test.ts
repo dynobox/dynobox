@@ -1,4 +1,5 @@
 import {mkdtemp, rm} from 'node:fs/promises';
+import {request as httpRequest} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -116,6 +117,38 @@ describe('startHttpCapture with HTTP mocks', () => {
     expect(output.toLowerCase()).toContain('x-mock: yes');
     expect(output).toContain('teapot');
   });
+
+  it.each(['API.EXAMPLE.TEST', 'Api.Example.Test'])(
+    'records requests to %s as mocked with a normalized hostname',
+    async (hostname) => {
+      const status = await new Promise<number | undefined>(
+        (resolve, reject) => {
+          const request = httpRequest(
+            capture.env.HTTP_PROXY!,
+            {path: `http://${hostname}/case-check`},
+            (response) => {
+              response.resume();
+              response.on('end', () => resolve(response.statusCode));
+              response.on('error', reject);
+            },
+          );
+          request.setTimeout(2_000, () =>
+            request.destroy(new Error('timed out')),
+          );
+          request.on('error', reject);
+          request.end();
+        },
+      );
+
+      expect(status).toBe(201);
+      expect(capture.events.at(-1)).toMatchObject({
+        host: 'api.example.test',
+        url: 'http://api.example.test/case-check',
+        status: 201,
+        mocked: true,
+      });
+    },
+  );
 
   it('records handler errors and invalid responses as failures', async () => {
     const output = await curl(

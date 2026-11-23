@@ -182,13 +182,14 @@ function eventFromRequest(
   mockedHosts: ReadonlySet<string>,
   request: InitiatedRequest,
 ): HttpEvent {
+  const hostname = request.destination.hostname.toLowerCase();
   return createHttpEvent({
     routes,
     method: request.method,
     url: request.url,
-    host: request.destination.hostname,
+    host: hostname,
     timestamp: new Date(request.timingEvents.startTime).toISOString(),
-    mocked: mockedHosts.has(request.destination.hostname),
+    mocked: mockedHosts.has(hostname),
   });
 }
 

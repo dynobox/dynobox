@@ -20,7 +20,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   On older Node, `dynobox run` warns when a scenario has `httpMocks`, since
   Node programs would reach the real hosts.
 - Verbose and debug output list each request that an HTTP mock answered, as
-  `http mock: <method> <host><path> -> <status>`.
+  `http mock: <method> <host><path> -> <status>`. Mock reporting normalizes
+  request hostnames so mixed-case hosts are included in output and saved runs.
 - `--save-run` sends upload schema v8. Jobs with HTTP mocks add an `http`
   summary: the mocked hosts and, per mocked request, the method, host, URL
   path, and status. Query strings, headers, and bodies are never uploaded.
