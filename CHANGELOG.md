@@ -22,9 +22,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   state per job. Handler errors, invalid JSON or response headers, and handlers
   still running when the harness finishes fail the job. Generated mock failure
   diagnostics omit request query strings.
-- The proxy sets `NODE_USE_ENV_PROXY=1`, so Node 24's built-in `fetch` uses it.
-  On older Node, `dynobox run` warns when a scenario has `httpMocks`, since
-  Node programs would reach the real hosts.
+- The proxy sets `NODE_USE_ENV_PROXY=1`, so Node programs send `fetch`,
+  `http`, and `https` requests through it on Node 24.5+ and 22.21+. On other
+  Node versions, `dynobox run` warns when a scenario has `httpMocks`, since
+  some requests from Node programs would reach the real hosts.
 - `dynobox run` refuses to run `httpMocks` when `NO_PROXY` or `no_proxy` has a
   non-loopback entry, since clients connect directly to those hosts and could
   reach a real mocked host.

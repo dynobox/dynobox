@@ -644,9 +644,9 @@ lowercase variants on the harness child process. Existing `NO_PROXY` and
 exposed through `NODE_EXTRA_CA_CERTS`. Because clients that read
 `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, or `CURL_CA_BUNDLE` trust only that file,
 those point at `~/.dynobox/ca-bundle.pem`: Node's public roots plus the Dynobox
-CA. `NODE_USE_ENV_PROXY=1` opts Node's built-in `fetch` into the
-proxy. Node 24 reads it; on older Node, `fetch` may go straight to the
-network. Capture covers traffic that honors those settings;
+CA. `NODE_USE_ENV_PROXY=1` opts Node's `fetch`, `http`, and `https` into the
+proxy. Node 24.5 and later, and 22.21 and later on 22.x, apply it to all three.
+Node 24.0 to 24.4 apply it to `fetch` only, and older Node ignores it. Capture covers traffic that honors those settings;
 harness-native web tools and clients with their own trust stores may bypass it.
 
 ## HTTP Mocks
@@ -657,9 +657,9 @@ harness-native web tools and clients with their own trust stores may bypass it.
 Use scenario `httpMocks` to answer requests to a host instead of the real
 server. Keys are hostnames. Every request to a mocked host that goes through
 the proxy, over HTTP or HTTPS and on any path, goes to its mock and never
-reaches the real host. Node programs need Node 24 or later: on older Node,
-their `fetch` ignores the proxy and reaches the real host, and `dynobox run`
-prints a warning. Clients connect directly to hosts in `NO_PROXY`, so
+reaches the real host. Node programs need Node 24.5 or later, or 22.21 or
+later on 22.x. On other Node versions, some of their requests skip the proxy
+and reach the real host, and `dynobox run` prints a warning. Clients connect directly to hosts in `NO_PROXY`, so
 `dynobox run` refuses to run HTTP mocks when `NO_PROXY` or `no_proxy` has any
 entry other than loopback. Clear it for the run: `NO_PROXY= dynobox run`.
 

@@ -11,18 +11,25 @@ function mockedHosts(jobs: readonly LocalRunnerJob[]): string[] {
 }
 
 /**
- * Node's built-in `fetch` uses the HTTP mock proxy only from Node 24
- * (`NODE_USE_ENV_PROXY`). Jobs run the `node` on PATH, which is the one that
- * runs this CLI. On older Node, Node programs reach the real mocked hosts.
+ * Node programs use the HTTP mock proxy through `NODE_USE_ENV_PROXY`. Node
+ * 22.21+ and 24.5+ apply it to fetch, http, and https. Node 24.0 to 24.4 apply
+ * it to fetch only, and older Node ignores it. Jobs run the `node` on PATH,
+ * which is the one that runs this CLI.
  */
 export function httpMockNodeWarning(
   jobs: readonly LocalRunnerJob[],
   nodeVersion: string = process.versions.node,
 ): string | undefined {
-  if (Number(nodeVersion.split('.')[0]) >= 24) return undefined;
+  const [major = 0, minor = 0] = nodeVersion.split('.').map(Number);
+  if (
+    major > 24 ||
+    (major === 24 && minor >= 5) ||
+    (major === 22 && minor >= 21)
+  )
+    return undefined;
   const hosts = mockedHosts(jobs);
   if (hosts.length === 0) return undefined;
-  return `warning: HTTP mocks need Node 24 or later, and this is Node ${nodeVersion}. On older Node, fetch in Node programs ignores the proxy, so their requests to ${hosts.join(', ')} reach the real hosts.\n`;
+  return `warning: Node ${nodeVersion} does not send all requests through the HTTP mock proxy. Node programs can reach the real hosts: ${hosts.join(', ')}. Use Node 24.5 or later.\n`;
 }
 
 /**

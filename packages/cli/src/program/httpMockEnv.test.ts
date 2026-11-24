@@ -27,22 +27,28 @@ function job(httpMocks?: IrScenario['httpMocks']): LocalRunnerJob {
 }
 
 describe('httpMockNodeWarning', () => {
-  it('names each mocked host once on Node before 24', () => {
-    const jobs = [
-      job({'api.example.com': MOCK}),
-      job({'api.example.com': MOCK, 'other.example.com': MOCK}),
-    ];
+  it.each(['20.19.0', '22.20.0', '23.11.0', '24.0.0', '24.4.1'])(
+    'names each mocked host once on Node %s',
+    (version) => {
+      const jobs = [
+        job({'api.example.com': MOCK}),
+        job({'api.example.com': MOCK, 'other.example.com': MOCK}),
+      ];
 
-    expect(httpMockNodeWarning(jobs, '22.20.0')).toBe(
-      'warning: HTTP mocks need Node 24 or later, and this is Node 22.20.0. On older Node, fetch in Node programs ignores the proxy, so their requests to api.example.com, other.example.com reach the real hosts.\n',
-    );
-  });
+      expect(httpMockNodeWarning(jobs, version)).toBe(
+        `warning: Node ${version} does not send all requests through the HTTP mock proxy. Node programs can reach the real hosts: api.example.com, other.example.com. Use Node 24.5 or later.\n`,
+      );
+    },
+  );
 
-  it('says nothing on Node 24 or later', () => {
-    expect(
-      httpMockNodeWarning([job({'api.example.com': MOCK})], '24.0.0'),
-    ).toBeUndefined();
-  });
+  it.each(['22.21.0', '24.5.0', '25.0.0', '26.13.1'])(
+    'says nothing on Node %s',
+    (version) => {
+      expect(
+        httpMockNodeWarning([job({'api.example.com': MOCK})], version),
+      ).toBeUndefined();
+    },
+  );
 
   it('says nothing when no job mocks a host', () => {
     expect(httpMockNodeWarning([job(), job({})], '22.20.0')).toBeUndefined();
