@@ -50,6 +50,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - Add `httpMocks` to scenarios, with the `HttpMockConfig`, `HttpMockRequest`,
   `HttpMockResponse`, and `ScenarioHttpMocks` types.
 
+---
+
+## @dynobox/run-schema@0.9.0 — 2026-11-24
+
 ### `@dynobox/run-schema`
 
 - Add `http_mocks` to the telemetry run features.
