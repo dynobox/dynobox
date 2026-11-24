@@ -508,6 +508,26 @@ export default defineDyno({
     expect(irSchema.parse(ir)).toEqual(ir);
   });
 
+  it('compiles scenario HTTP mocks into canonical IR', () => {
+    const handler = () => ({status: 200, json: {ok: true}});
+    const ir = compile(
+      defineDyno({
+        scenarios: [
+          {
+            name: 'mocked api',
+            prompt: 'Call the API.',
+            httpMocks: {'api.example.com': {handler}},
+          },
+          {name: 'no mocks', prompt: 'Do nothing.'},
+        ],
+      }),
+    );
+
+    expect(ir.scenarios[0]!.httpMocks).toEqual({'api.example.com': {handler}});
+    expect(ir.scenarios[1]!.httpMocks).toBeUndefined();
+    expect(irSchema.parse(ir)).toEqual(ir);
+  });
+
   it('compiles scenario users with persona defaults resolved', () => {
     const ir = compile(
       defineDyno({

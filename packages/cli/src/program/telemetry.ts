@@ -269,6 +269,8 @@ export function buildRunTelemetryEvents(
   for (const scenario of scenarios) {
     if (Object.keys(scenario.cliMocks).length > 0) features.add('cli_mocks');
     if (scenario.mcpMocks !== undefined) features.add('mcp_mocks');
+    if (Object.keys(scenario.httpMocks ?? {}).length > 0)
+      features.add('http_mocks');
     if (scenario.endpoints.length > 0) features.add('http');
     if (scenario.user !== undefined) features.add('multi_turn');
   }

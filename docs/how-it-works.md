@@ -90,8 +90,9 @@ Dynobox assembles several evidence sources from the harness run:
   after fixtures and setup.
 - **Transcript and final message:** text assertions can inspect either the full
   harness transcript or the extracted final assistant response.
-- **HTTP events:** when a scenario has HTTP assertions, Dynobox starts a local
-  per-job proxy and gives the harness child process proxy environment variables.
+- **HTTP events:** when a scenario has HTTP assertions or HTTP mocks, Dynobox
+  starts a local per-job proxy and gives the harness child process proxy
+  environment variables. Requests to mocked hosts are answered by the mock.
   A generated local CA, exposed through common CA environment variables, lets
   compatible child-process clients make HTTPS requests through that proxy.
 

@@ -527,6 +527,34 @@ describe('buildRunTelemetryEvents', () => {
     });
     expect(run).toMatchObject({type: 'run', features: ['multi_turn']});
   });
+
+  it('reports HTTP mocks as a feature', () => {
+    const job = {
+      id: 'job-1',
+      harness: 'claude-code',
+      iteration: 0,
+      scenario: {
+        id: 'scenario-1',
+        name: 'http mocks',
+        prompt: 'Call the API.',
+        harnesses: [{id: 'claude-code'}],
+        setup: [],
+        fixtures: [],
+        cliMocks: {},
+        httpMocks: {'api.example.com': {response: {status: 200}}},
+        endpoints: [],
+        assertions: [],
+      },
+    } satisfies LocalRunnerJob;
+    const [run] = buildRunTelemetryEvents({
+      dynos: [{filePath: 'http.dyno.ts', jobs: [job]}],
+      results: [],
+      iterations: 1,
+      passed: true,
+      saveRun: false,
+    });
+    expect(run).toMatchObject({type: 'run', features: ['http_mocks']});
+  });
 });
 
 describe('runCli telemetry', () => {

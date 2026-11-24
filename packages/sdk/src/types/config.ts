@@ -38,6 +38,48 @@ export type CliMockConfig =
 
 export type ScenarioCliMocks = Record<string, CliMockConfig>;
 
+/** A request that reached a mocked host through the Dynobox proxy. */
+export type HttpMockRequest = {
+  method: string;
+  /** The full URL, with the query string. */
+  url: string;
+  /** The URL path, without the query string. */
+  path: string;
+  headers: Record<string, string | string[] | undefined>;
+  body: string;
+  /** The job's work directory, so a handler can keep state per job. */
+  workDir: string;
+};
+
+export type HttpMockResponse = {
+  status: number;
+  headers?: Record<string, string>;
+  /** Sent as is. Set `body` or `json`, not both. */
+  body?: string;
+  /** Sent as JSON, with a JSON content type. */
+  json?: unknown;
+};
+
+export type HttpMockConfig =
+  | {
+      response: HttpMockResponse;
+      handler?: never;
+    }
+  | {
+      response?: never;
+      handler: (
+        request: HttpMockRequest,
+      ) => HttpMockResponse | Promise<HttpMockResponse>;
+    };
+
+/**
+ * Mocks keyed by hostname, such as `api.example.com`. Every request to a
+ * mocked host that goes through the proxy goes to its mock and never reaches
+ * the real host. Node programs need Node 24.5 or later, or 22.21 or later on
+ * 22.x, to send all requests through it.
+ */
+export type ScenarioHttpMocks = Record<string, HttpMockConfig>;
+
 /**
  * Continue the conversation after the agent's first turn. Each reply resumes
  * the agent's session as the next user message.
@@ -86,6 +128,7 @@ export type ScenarioInput<
   setup?: string[];
   fixtures?: string | readonly string[];
   cliMocks?: ScenarioCliMocks;
+  httpMocks?: ScenarioHttpMocks;
   mcpMocks?: ScenarioMcpMocks;
   /** Make the scenario multi-turn: reply to the agent after each turn. */
   user?: ScenarioUser;

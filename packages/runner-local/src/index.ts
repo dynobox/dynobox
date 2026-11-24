@@ -501,7 +501,7 @@ export async function runJob(
     );
 
     try {
-      httpCapture = await startHttpCapture(job.scenario);
+      httpCapture = await startHttpCapture(job.scenario, workDir);
     } catch (error) {
       emitProgress(options, {
         type: 'harness.completed',
@@ -653,6 +653,7 @@ export async function runJob(
         if (
           turnResult.exitCode !== 0 ||
           (cliMockController?.failures().length ?? 0) > 0 ||
+          (httpCapture?.failures.length ?? 0) > 0 ||
           !canReply(user, turns)
         )
           break;
@@ -697,6 +698,8 @@ export async function runJob(
       await finalizeMcp(false);
       await cliMockController?.finalizePendingCalls();
       const cliMockFailures = cliMockController?.failures() ?? [];
+      // Stopping records handlers still pending, often the timeout's cause.
+      await stopHttpCapture(httpCapture);
       emitProgress(options, {
         type: 'harness.completed',
         job,
@@ -717,6 +720,7 @@ export async function runJob(
               ? `MCP harness execution failed: ${mcpMessage}`
               : `Harness "${harness.id}" failed to run: ${errorMessage(error)}`,
           ...cliMockFailures.map((failure) => failure.message),
+          ...(httpCapture?.failures ?? []),
         ],
         ...(error instanceof McpHarnessError && error.output !== undefined
           ? {harnessOutput: mergeTurnOutputs([...turnOutputs, error.output])}
@@ -744,6 +748,7 @@ export async function runJob(
     // --- Finalize other harness-phase mocks; extract + validate result -----
     await cliMockController?.finalizePendingCalls();
     const httpEvents = httpCapture?.events ?? [];
+    const httpMockFailures = httpCapture?.failures ?? [];
     // Stop proxy before verify so verification traffic is not recorded as
     // harness HTTP events. `finally` still calls stopHttpCapture safely.
     await stopHttpCapture(httpCapture);
@@ -752,7 +757,11 @@ export async function runJob(
     // Lifecycle failures (exhaustion, pending calls, handler errors) fail the
     // harness even when the process exited 0.
     const harnessCliMockFailures = cliMockController?.failures() ?? [];
-    if (harnessCliMockFailures.length > 0 || mcpFailures.size > 0) {
+    if (
+      harnessCliMockFailures.length > 0 ||
+      httpMockFailures.length > 0 ||
+      mcpFailures.size > 0
+    ) {
       emitProgress(options, {
         type: 'harness.completed',
         job,
@@ -771,7 +780,10 @@ export async function runJob(
         harnessOutput,
         httpEvents,
         cliMockCalls: cliMockController?.calls() ?? [],
-        diagnostics: harnessCliMockFailures.map((failure) => failure.message),
+        diagnostics: [
+          ...harnessCliMockFailures.map((failure) => failure.message),
+          ...httpMockFailures,
+        ],
         timing: buildTiming({
           setupMs,
           harnessMs: harnessOutput.durationMs,

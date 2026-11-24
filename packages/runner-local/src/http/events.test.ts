@@ -51,6 +51,13 @@ describe('HTTP event helpers', () => {
         ],
       }),
     ).toBe(false);
+    expect(
+      scenarioNeedsHttpCapture({
+        ...scenario,
+        assertions: [],
+        httpMocks: {'api.example.test': {response: {status: 200}}},
+      }),
+    ).toBe(true);
   });
 
   it('builds routes only for asserted endpoints', () => {
@@ -92,5 +99,18 @@ describe('HTTP event helpers', () => {
       status: 200,
       timestamp: '2026-01-01T00:00:00.000Z',
     });
+  });
+
+  it('marks events that a mock answered', () => {
+    const input = {
+      routes: [],
+      method: 'POST',
+      url: 'https://api.example.test/user',
+    };
+
+    expect(createHttpEvent({...input, mocked: true}).mocked).toBe(true);
+    expect(createHttpEvent({...input, mocked: false})).not.toHaveProperty(
+      'mocked',
+    );
   });
 });

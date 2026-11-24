@@ -310,7 +310,7 @@ describe('dynobox run — upload', () => {
       }),
     );
     expect(payload).toMatchObject({
-      schemaVersion: 7,
+      schemaVersion: 8,
       git: expect.objectContaining({
         commit: expect.any(String),
         dirty: expect.any(Boolean),
@@ -369,7 +369,7 @@ describe('dynobox run — upload', () => {
         method: 'POST',
       }),
     );
-    expect(payload).toMatchObject({schemaVersion: 7});
+    expect(payload).toMatchObject({schemaVersion: 8});
   });
 
   it('removes run signal handlers before uploading', async () => {
@@ -1348,6 +1348,49 @@ export default defineDyno({
 describe('dynobox run — live output', () => {
   beforeAll(fixtures.setup);
   afterAll(fixtures.teardown);
+
+  it.each([false, true])(
+    'prints external stderr between dashboard frames and restores stderr (harness fails: %s)',
+    async (fails) => {
+      const writes: string[] = [];
+      const stderrWrite = vi
+        .spyOn(process.stderr, 'write')
+        .mockImplementation((chunk) => {
+          writes.push(String(chunk));
+          return true;
+        });
+      const message =
+        'Failed to handle request: Passthrough loop detected.\n\nTarget: http://127.0.0.1:8000/\n';
+      const harness = createPassingHarness();
+      const run = harness.run.bind(harness);
+      vi.spyOn(harness, 'run').mockImplementation(async (input) => {
+        process.stderr.write(message);
+        if (fails) throw new Error('harness failed');
+        return run(input);
+      });
+      try {
+        const result = await executeCli(
+          ['run', fixtures.validConfigPath, '--verbose'],
+          {
+            harnesses: [harness],
+            live: true,
+            color: true,
+            writeStdout: (value) => writes.push(value),
+          },
+        );
+        const messageIndex = writes.indexOf(message);
+
+        expect(result.exitCode).toBe(fails ? runFailureExitCode : 0);
+        expect(messageIndex).toBeGreaterThan(0);
+        expect(writes[messageIndex - 1]?.endsWith('A\r\x1b[J')).toBe(true);
+        expect(stripAnsi(writes[messageIndex + 1]!)).toContain('running');
+        expect(stderrWrite).toHaveBeenCalledWith(message);
+        expect(process.stderr.write).toBe(stderrWrite);
+      } finally {
+        vi.restoreAllMocks();
+      }
+    },
+  );
 
   it('prints live tool progress when live output is enabled', async () => {
     const writes: string[] = [];

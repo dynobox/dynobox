@@ -76,6 +76,7 @@ import {
   configErrorExitCode,
   terminatedExitCode,
 } from './exitCodes.js';
+import {httpMockNodeWarning, httpMockNoProxyError} from './httpMockEnv.js';
 import {
   fetchAuthenticatedIdentity,
   type IdentityResult,
@@ -229,6 +230,17 @@ export async function runCommandAction(
       'no scenarios matched',
     );
   }
+  const noProxyError = httpMockNoProxyError(jobs);
+  if (noProxyError !== undefined) {
+    writeStderr(renderRunConfigErrorMessage(inputLabel, noProxyError));
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.httpMocks',
+      'NO_PROXY is set',
+    );
+  }
+  const nodeWarning = httpMockNodeWarning(jobs);
+  if (nodeWarning !== undefined) writeStderr(nodeWarning);
   // Check upload authentication before setup or harness execution.
   if (
     commandFlags.saveRun === true &&

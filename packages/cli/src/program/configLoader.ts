@@ -14,7 +14,7 @@
  * the SDK resolver always sees a plain `{default: …}` module shape.
  */
 
-import {register} from 'node:module';
+import * as nodeModule from 'node:module';
 import {extname, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
@@ -65,14 +65,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function registerDynoboxSdkResolver() {
   if (dynoboxSdkResolverRegistered) return;
 
-  const resolutions = Object.fromEntries(
+  const resolutions = new Map<string, string>(
     CLI_OWNED_SDK_SPECIFIERS.map((specifier) => [
       specifier,
       import.meta.resolve(specifier),
     ]),
   );
-  const loaderSource = `
-const resolutions = new Map(${JSON.stringify(Object.entries(resolutions))});
+  if (typeof nodeModule.registerHooks === 'function') {
+    nodeModule.registerHooks({
+      resolve(specifier, context, nextResolve) {
+        const url = resolutions.get(specifier);
+        return url === undefined
+          ? nextResolve(specifier, context)
+          : {url, shortCircuit: true};
+      },
+    });
+  } else {
+    // Node 22.12–22.14 do not have synchronous module hooks.
+    const loaderSource = `
+const resolutions = new Map(${JSON.stringify([...resolutions])});
 
 export async function resolve(specifier, context, nextResolve) {
   const resolved = resolutions.get(specifier);
@@ -81,9 +92,10 @@ export async function resolve(specifier, context, nextResolve) {
 }
 `;
 
-  register(
-    `data:text/javascript,${encodeURIComponent(loaderSource)}`,
-    import.meta.url,
-  );
+    nodeModule.register(
+      `data:text/javascript,${encodeURIComponent(loaderSource)}`,
+      import.meta.url,
+    );
+  }
   dynoboxSdkResolverRegistered = true;
 }

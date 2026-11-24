@@ -82,6 +82,7 @@ type ResultSpec = {
   totalMs?: number;
   assertionsMs?: number;
   cliMockCalls?: LocalRunnerResult['cliMockCalls'];
+  httpEvents?: LocalRunnerResult['httpEvents'];
   diagnostics?: string[];
   verificationFailed?: boolean;
 };
@@ -111,7 +112,7 @@ function makeResult(
     passed: status === 'passed',
     workDir: '/tmp/work',
     setupResult: {success: status !== 'setup_failed', logs: []},
-    httpEvents: [],
+    httpEvents: spec.httpEvents ?? [],
     harnessCliMockCallCount: 0,
     cliMockCalls: spec.cliMockCalls ?? [],
     artifacts: [],
@@ -632,6 +633,52 @@ describe('renderGroupedRun', () => {
     expect(output).toContain('cli mocks: vitest, vercel');
     expect(output).toContain('cli mock: vitest run -> exit 1');
     expect(output).toContain('cli mock: vitest run -> exit 0');
+  });
+
+  it('lists the requests that HTTP mocks answered in verbose mode', () => {
+    const jobs = [makeJob({})];
+    const event = {
+      endpointId: null,
+      method: 'POST',
+      host: 'api.example.test',
+      timestamp: '2026-11-10T00:00:00.000Z',
+    };
+    const output = renderGroupedRun({
+      dynos: [dynoOf(jobs)],
+      results: [
+        makeResult(jobs[0]!, {
+          httpEvents: [
+            {
+              ...event,
+              url: 'https://api.example.test/v1/items?token=secret',
+              status: 202,
+              mocked: true,
+            },
+            {
+              ...event,
+              url: 'https://registry.npmjs.org/past-dev',
+              host: 'registry.npmjs.org',
+              status: 200,
+            },
+            {
+              ...event,
+              url: 'https://api.example.test/v1/items/42',
+              mocked: true,
+            },
+          ],
+        }),
+      ],
+      ctx: createRenderContext({mode: 'verbose'}),
+    });
+
+    expect(output).toContain(
+      'http mock: POST api.example.test/v1/items -> 202',
+    );
+    expect(output).toContain(
+      'http mock: POST api.example.test/v1/items/42 -> no response',
+    );
+    expect(output).not.toContain('registry.npmjs.org');
+    expect(output).not.toContain('token=secret');
   });
 
   it('quotes unsafe CLI mock arguments and bounds the rendered call width', () => {

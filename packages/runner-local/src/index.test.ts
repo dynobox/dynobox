@@ -26,11 +26,38 @@ import type {
   ShellToolEvent,
   ToolEvent,
 } from './harnesses/index.js';
+import {type HttpCapture, startHttpCapture} from './http/proxy.js';
 import {
   type LocalRunnerJob,
   runJob,
   type RunJobProgressEvent,
 } from './index.js';
+
+// Tests that need HTTP mock failures swap in a fake capture for one job.
+vi.mock('./http/proxy.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./http/proxy.js')>();
+  return {...actual, startHttpCapture: vi.fn(actual.startHttpCapture)};
+});
+
+const PENDING_HTTP_MOCK =
+  'HTTP mock for api.example.com failed on GET https://api.example.com/: did not complete before the harness finished.';
+
+/** Uses a fake HTTP capture for the next job and returns its failures. */
+function fakeHttpCapture(failureOnStop?: string): string[] {
+  const failures: string[] = [];
+  let stopped = false;
+  const capture: HttpCapture = {
+    env: {},
+    events: [],
+    failures,
+    stop: async () => {
+      if (!stopped && failureOnStop !== undefined) failures.push(failureOnStop);
+      stopped = true;
+    },
+  };
+  vi.mocked(startHttpCapture).mockResolvedValueOnce(capture);
+  return failures;
+}
 
 const scratchRoots: string[] = [];
 
@@ -1932,6 +1959,33 @@ describe('runJob', () => {
     expect(result.harnessOutput).toBeUndefined();
   });
 
+  it('fails the job when an HTTP mock fails, even after a clean exit', async () => {
+    fakeHttpCapture(PENDING_HTTP_MOCK);
+
+    const result = await runJob(createJob(), {
+      scratchRoot: createScratchRoot(),
+      harnesses: [new FakeHarness()],
+    });
+
+    expect(result.status).toBe('harness_failed');
+    expect(result.diagnostics).toEqual([PENDING_HTTP_MOCK]);
+  });
+
+  it('reports HTTP mocks still pending when the harness throws', async () => {
+    fakeHttpCapture(PENDING_HTTP_MOCK);
+
+    const result = await runJob(createJob(), {
+      scratchRoot: createScratchRoot(),
+      harnesses: [new ThrowingHarness()],
+    });
+
+    expect(result.status).toBe('harness_failed');
+    expect(result.diagnostics).toEqual([
+      'Harness "claude-code" failed to run: agent crashed',
+      PENDING_HTTP_MOCK,
+    ]);
+  });
+
   it('returns harness_failed when harness exits nonzero', async () => {
     const scratchRoot = createScratchRoot();
     const harness = new RecordingHarness({
@@ -2186,6 +2240,29 @@ describe('runJob conversations', () => {
       expect(result.turns).toHaveLength(1);
     },
   );
+
+  it('stops the conversation after an HTTP mock failure', async () => {
+    const failures = fakeHttpCapture();
+    const agent = new ConversationHarness('claude-code', {
+      sessionId: 'session-1',
+    });
+    const run = agent.run.bind(agent);
+    agent.run = async (input) => {
+      failures.push('HTTP mock for api.example.com failed: boom');
+      return run(input);
+    };
+
+    const result = await runJob(createJob({user: {replies: ['Next.']}}), {
+      scratchRoot: createScratchRoot(),
+      harnesses: [agent],
+    });
+
+    expect(result.status).toBe('harness_failed');
+    expect(result.diagnostics).toEqual([
+      'HTTP mock for api.example.com failed: boom',
+    ]);
+    expect(agent.inputs).toHaveLength(1);
+  });
 
   it('continues after a configured nonzero CLI mock response', async () => {
     const agent = new ConversationHarness('claude-code', {

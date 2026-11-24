@@ -9,9 +9,12 @@ export type HttpRoute = {
 };
 
 export function scenarioNeedsHttpCapture(scenario: IrScenario): boolean {
-  return scenario.assertions.some(
-    (assertion) =>
-      assertion.type === 'http.called' || assertion.type === 'http.notCalled',
+  return (
+    Object.keys(scenario.httpMocks ?? {}).length > 0 ||
+    scenario.assertions.some(
+      (assertion) =>
+        assertion.type === 'http.called' || assertion.type === 'http.notCalled',
+    )
   );
 }
 
@@ -51,6 +54,7 @@ export function createHttpEvent(input: {
   host?: string | undefined;
   status?: number | undefined;
   timestamp?: string | undefined;
+  mocked?: boolean | undefined;
 }): HttpEvent {
   const event: HttpEvent = {
     endpointId: matchHttpEndpointId(input.routes, input.method, input.url),
@@ -60,6 +64,7 @@ export function createHttpEvent(input: {
     timestamp: input.timestamp ?? new Date().toISOString(),
   };
   if (input.status !== undefined) event.status = input.status;
+  if (input.mocked === true) event.mocked = true;
   return event;
 }
 

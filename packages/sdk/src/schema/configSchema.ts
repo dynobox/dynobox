@@ -9,6 +9,7 @@ import {
 import type {CliMockHandlerContext, CliMockResponse} from '../types/config.js';
 import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/httpMethod.js';
+import {httpMocksSchema} from './httpMocks.js';
 import {
   mcpInputMatcherSchema,
   mcpMocksSchema,
@@ -456,6 +457,7 @@ export const scenarioSchema = z
       .union([z.string().min(1), z.array(z.string().min(1))])
       .optional(),
     cliMocks: z.record(cliMockExecutableSchema, cliMockConfigSchema).optional(),
+    httpMocks: httpMocksSchema.optional(),
     mcpMocks: mcpMocksSchema.optional(),
     user: scenarioUserSchema.optional(),
     endpoints: z.record(endpointKeySchema, endpointSchema).optional(),
