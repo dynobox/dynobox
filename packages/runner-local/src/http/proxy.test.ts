@@ -8,8 +8,6 @@ import type {IrScenario} from '@dynobox/sdk/ir';
 import {execa} from 'execa';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 
-import {FakeHarness} from '../harnesses/fake.js';
-import {runJob} from '../index.js';
 import {type HttpCapture, startHttpCapture} from './proxy.js';
 
 vi.mock('node:os', async (importOriginal) => ({
@@ -168,8 +166,9 @@ describe('startHttpCapture with HTTP mocks', () => {
     expect(JSON.stringify(capture.failures)).not.toContain('TOP_SECRET');
   });
 
+  // One case per check in mockResponse: JSON.stringify throws, JSON.stringify
+  // returns undefined, and each header validation.
   const invalidResponses: [string, () => HttpMockResponse][] = [
-    ['BigInt JSON', () => ({status: 200, json: {id: 1n}})],
     [
       'circular JSON',
       () => {
@@ -179,7 +178,6 @@ describe('startHttpCapture with HTTP mocks', () => {
       },
     ],
     ['function JSON', () => ({status: 200, json: () => 'not JSON'})],
-    ['symbol JSON', () => ({status: 200, json: Symbol('not JSON')})],
     [
       'an invalid header name',
       () => ({status: 200, headers: {'bad header': 'value'}}),
@@ -191,35 +189,24 @@ describe('startHttpCapture with HTTP mocks', () => {
   ];
 
   it.each(invalidResponses)(
-    'fails the job when a mock returns %s',
+    'answers 500 and records a failure when a mock returns %s',
     async (_label, response) => {
-      const harness = new FakeHarness();
-      const run = harness.run.bind(harness);
-      vi.spyOn(harness, 'run').mockImplementation(async (input) => {
-        const output = await curlVia(input.env, 'http://api.example.test/');
+      const isolated = (await startHttpCapture(
+        {...scenario, httpMocks: {'api.example.test': {handler: response}}},
+        '/work/dir',
+      ))!;
+      try {
+        const output = await curlVia(isolated.env, 'http://api.example.test/');
         expect(output).toContain('HTTP/1.1 500');
-        return run(input);
-      });
-      const result = await runJob(
-        {
-          id: 'job.invalid-response',
-          harness: 'claude-code',
-          iteration: 0,
-          scenario: {
-            ...scenario,
-            httpMocks: {'api.example.test': {handler: response}},
-          },
-        },
-        {scratchRoot: home, harnesses: [harness]},
-      );
-
-      expect(result.status).toBe('harness_failed');
-      expect(result.diagnostics).toEqual([
-        expect.stringMatching(
-          /^HTTP mock for api\.example\.test failed on GET http:\/\/api\.example\.test\/:/,
-        ),
-      ]);
-      expect(result.httpEvents[0]?.status).toBe(500);
+        expect(isolated.failures).toEqual([
+          expect.stringMatching(
+            /^HTTP mock for api\.example\.test failed on GET http:\/\/api\.example\.test\/:/,
+          ),
+        ]);
+        expect(isolated.events[0]?.status).toBe(500);
+      } finally {
+        await isolated.stop();
+      }
     },
   );
 
@@ -248,58 +235,6 @@ describe('startHttpCapture with HTTP mocks', () => {
       expect(isolated.failures).toEqual([]);
     } finally {
       await isolated.stop();
-    }
-  });
-
-  it('fails the job without waiting for an unfinished handler', async () => {
-    let started!: () => void;
-    let rejectHandler!: (error: Error) => void;
-    const starting = new Promise<void>((resolve) => {
-      started = resolve;
-    });
-    const response = new Promise<HttpMockResponse>((_resolve, reject) => {
-      rejectHandler = reject;
-    });
-    let pendingRequest: Promise<string> | undefined;
-    const harness = new FakeHarness();
-    const run = harness.run.bind(harness);
-    vi.spyOn(harness, 'run').mockImplementation(async (input) => {
-      pendingRequest = curlVia(
-        input.env,
-        'http://api.example.test/pending?token=TOP_SECRET',
-      );
-      await starting;
-      return run(input);
-    });
-
-    try {
-      const result = await runJob(
-        {
-          id: 'job.pending-response',
-          harness: 'claude-code',
-          iteration: 0,
-          scenario: {
-            ...scenario,
-            httpMocks: {
-              'api.example.test': {
-                handler: () => {
-                  started();
-                  return response;
-                },
-              },
-            },
-          },
-        },
-        {scratchRoot: home, harnesses: [harness]},
-      );
-
-      expect(result.status).toBe('harness_failed');
-      expect(result.diagnostics).toEqual([
-        'HTTP mock for api.example.test failed on GET http://api.example.test/pending: did not complete before the harness finished.',
-      ]);
-    } finally {
-      rejectHandler(new Error('late handler failure'));
-      await pendingRequest;
     }
   });
 

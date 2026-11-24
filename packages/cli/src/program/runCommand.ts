@@ -76,7 +76,7 @@ import {
   configErrorExitCode,
   terminatedExitCode,
 } from './exitCodes.js';
-import {httpMockNodeWarning} from './httpMockNodeWarning.js';
+import {httpMockNodeWarning, httpMockNoProxyError} from './httpMockEnv.js';
 import {
   fetchAuthenticatedIdentity,
   type IdentityResult,
@@ -228,6 +228,15 @@ export async function runCommandAction(
       configErrorExitCode,
       'dynobox.scenario',
       'no scenarios matched',
+    );
+  }
+  const noProxyError = httpMockNoProxyError(jobs);
+  if (noProxyError !== undefined) {
+    writeStderr(renderRunConfigErrorMessage(inputLabel, noProxyError));
+    throw new CommanderError(
+      configErrorExitCode,
+      'dynobox.httpMocks',
+      'NO_PROXY is set',
     );
   }
   const nodeWarning = httpMockNodeWarning(jobs);

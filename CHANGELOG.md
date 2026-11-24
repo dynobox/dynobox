@@ -25,6 +25,11 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - The proxy sets `NODE_USE_ENV_PROXY=1`, so Node 24's built-in `fetch` uses it.
   On older Node, `dynobox run` warns when a scenario has `httpMocks`, since
   Node programs would reach the real hosts.
+- `dynobox run` refuses to run `httpMocks` when `NO_PROXY` or `no_proxy` has a
+  non-loopback entry, since clients connect directly to those hosts and could
+  reach a real mocked host.
+- Stop a multi-turn scenario after an HTTP mock failure, and report HTTP mocks
+  still pending when the harness fails or times out.
 - Verbose and debug output list each request that an HTTP mock answered, as
   `http mock: <method> <host><path> -> <status>`. Long paths are shortened while
   keeping the response status visible. Mock reporting normalizes request

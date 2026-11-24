@@ -2,7 +2,7 @@ import type {LocalRunnerJob} from '@dynobox/runner-local';
 import type {IrScenario} from '@dynobox/sdk/ir';
 import {describe, expect, it} from 'vitest';
 
-import {httpMockNodeWarning} from './httpMockNodeWarning.js';
+import {httpMockNodeWarning, httpMockNoProxyError} from './httpMockEnv.js';
 
 const MOCK = {response: {status: 200}};
 
@@ -46,5 +46,33 @@ describe('httpMockNodeWarning', () => {
 
   it('says nothing when no job mocks a host', () => {
     expect(httpMockNodeWarning([job(), job({})], '22.20.0')).toBeUndefined();
+  });
+});
+
+describe('httpMockNoProxyError', () => {
+  const mocked = [job({'api.example.com': MOCK})];
+
+  it('names each NO_PROXY variable that has a non-loopback entry', () => {
+    expect(
+      httpMockNoProxyError(mocked, {
+        NO_PROXY: 'localhost,.corp.example.com',
+        no_proxy: '*',
+      }),
+    ).toBe(
+      'HTTP mocks cannot run with NO_PROXY and no_proxy set. Clients connect directly to hosts in it, so a mocked host there would reach the real server. Clear it for this run: NO_PROXY= no_proxy= dynobox run ...',
+    );
+  });
+
+  it('allows empty and loopback-only values', () => {
+    expect(
+      httpMockNoProxyError(mocked, {
+        NO_PROXY: 'localhost, 127.0.0.1,::1',
+        no_proxy: '',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('says nothing when no job mocks a host', () => {
+    expect(httpMockNoProxyError([job()], {NO_PROXY: '*'})).toBeUndefined();
   });
 });

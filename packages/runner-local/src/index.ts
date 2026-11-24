@@ -653,6 +653,7 @@ export async function runJob(
         if (
           turnResult.exitCode !== 0 ||
           (cliMockController?.failures().length ?? 0) > 0 ||
+          (httpCapture?.failures.length ?? 0) > 0 ||
           !canReply(user, turns)
         )
           break;
@@ -697,6 +698,8 @@ export async function runJob(
       await finalizeMcp(false);
       await cliMockController?.finalizePendingCalls();
       const cliMockFailures = cliMockController?.failures() ?? [];
+      // Stopping records handlers still pending, often the timeout's cause.
+      await stopHttpCapture(httpCapture);
       emitProgress(options, {
         type: 'harness.completed',
         job,

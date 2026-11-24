@@ -659,7 +659,9 @@ server. Keys are hostnames. Every request to a mocked host that goes through
 the proxy, over HTTP or HTTPS and on any path, goes to its mock and never
 reaches the real host. Node programs need Node 24 or later: on older Node,
 their `fetch` ignores the proxy and reaches the real host, and `dynobox run`
-prints a warning.
+prints a warning. Clients connect directly to hosts in `NO_PROXY`, so
+`dynobox run` refuses to run HTTP mocks when `NO_PROXY` or `no_proxy` has any
+entry other than loopback. Clear it for the run: `NO_PROXY= dynobox run`.
 
 ```ts
 import {defineDyno, http} from '@dynobox/sdk';

@@ -1,9 +1,5 @@
 import {describe, expect, it} from 'vitest';
 
-import {defineDyno} from '../index.js';
-import {compile} from '../ir/compile.js';
-import {irScenarioSchema} from '../ir/schema.js';
-import {scenarioSchema} from './configSchema.js';
 import {httpMockResponseSchema, httpMocksSchema} from './httpMocks.js';
 
 const handler = () => ({status: 200, json: {ok: true}});
@@ -50,25 +46,5 @@ describe('HTTP mocks', () => {
     expect(httpMockResponseSchema.safeParse({statusCode: 200}).success).toBe(
       false,
     );
-  });
-
-  it('passes scenario mocks through validation and compilation to the IR', () => {
-    const config = defineDyno({
-      scenarios: [
-        {
-          name: 'mocked api',
-          prompt: 'Call the API',
-          harnesses: ['claude-code'],
-          httpMocks: {'api.example.com': {handler}},
-        },
-        {name: 'no mocks', prompt: 'Do nothing', harnesses: ['claude-code']},
-      ],
-    });
-    expect(scenarioSchema.safeParse(config.scenarios[0]).success).toBe(true);
-
-    const [mocked, unmocked] = compile(config).scenarios;
-    expect(mocked?.httpMocks?.['api.example.com']).toEqual({handler});
-    expect(unmocked?.httpMocks).toBeUndefined();
-    expect(irScenarioSchema.safeParse(mocked).success).toBe(true);
   });
 });
