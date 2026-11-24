@@ -117,9 +117,15 @@ export function renderHttpMockDetails(
       const {host, pathname} = new URL(event.url);
       const status = event.status === undefined ? 'no response' : event.status;
       const detail = escapeTerminalText(
-        `http mock: ${event.method} ${host}${pathname} -> ${status}`,
+        `http mock: ${event.method} ${host}${pathname}`,
       );
-      return `        ${dim(ctx, truncateCliText(detail, Math.max(0, ctx.width - 8)))}\n`;
+      const suffix = ` -> ${status}`;
+      const available = Math.max(0, ctx.width - 8);
+      const line =
+        available <= suffix.length
+          ? suffix.slice(suffix.length - available)
+          : `${truncateCliText(detail, available - suffix.length)}${suffix}`;
+      return `        ${dim(ctx, line)}\n`;
     })
     .join('');
 }

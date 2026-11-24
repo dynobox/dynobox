@@ -56,7 +56,8 @@ export async function startHttpCapture(
   const pendingMocks = new Map<string, string>();
   let stopPromise: Promise<void> | undefined;
 
-  await server.start();
+  // Avoid well-known development ports that unrelated clients may poll.
+  await server.start(0);
   const mockedHosts = new Set(mocks.map(([hostname]) => hostname));
   await subscribeToEvents(server, routes, mockedHosts, events, byRequestId);
   // Every request to a mocked host goes to its mock, never to the real host.

@@ -26,10 +26,14 @@ type DashboardBlockState = {
 export function createLiveDashboard(
   write: (value: string) => void,
   initialFrame: string,
+  options: {stderr?: Pick<NodeJS.WriteStream, 'write'>} = {},
 ): LiveDashboard {
   let blocks: DashboardBlockState[] = [];
   let renderedLineCount = 0;
   let frame = initialFrame;
+  let stderrLineOpen = false;
+  let restoreStderr: (() => void) | undefined;
+  const stderr = options.stderr ?? process.stderr;
 
   const renderBlock = (block: DashboardBlockState, nowMs: number): string[] => {
     const lines = block.headline.split('\n');
@@ -43,18 +47,64 @@ export function createLiveDashboard(
     return lines;
   };
 
-  const redraw = (): void => {
-    const lines = blocks.flatMap((block) => renderBlock(block, Date.now()));
+  const erase = (): void => {
     if (renderedLineCount > 0) {
       write(`\x1b[${renderedLineCount}A\r\x1b[J`);
     }
+    renderedLineCount = 0;
+  };
+
+  const redraw = (): void => {
+    if (stderrLineOpen) return;
+    const lines = blocks.flatMap((block) => renderBlock(block, Date.now()));
+    erase();
     if (lines.length > 0) write(`${lines.join('\n')}\n`);
     renderedLineCount = lines.length;
+  };
+
+  const watchStderr = (): void => {
+    if (restoreStderr !== undefined) return;
+    const originalWrite = stderr.write;
+    let writing = false;
+    const writeStderr = function (this: unknown, ...args: unknown[]): boolean {
+      const [chunk, encoding] = args;
+      const bytes =
+        typeof chunk === 'string'
+          ? Buffer.from(
+              chunk,
+              typeof encoding === 'string'
+                ? (encoding as BufferEncoding)
+                : undefined,
+            )
+          : chunk instanceof Uint8Array
+            ? chunk
+            : undefined;
+      if (writing || bytes === undefined || bytes.length === 0)
+        return Reflect.apply(originalWrite, this, args) as boolean;
+
+      writing = true;
+      try {
+        // Third-party console errors bypass CLI writers. Remove the live
+        // region before printing, then anchor it below the complete message.
+        erase();
+        const accepted = Reflect.apply(originalWrite, this, args) as boolean;
+        stderrLineOpen = bytes[bytes.length - 1] !== 0x0a;
+        return accepted;
+      } finally {
+        writing = false;
+        redraw();
+      }
+    };
+    stderr.write = writeStderr;
+    restoreStderr = () => {
+      if (stderr.write === writeStderr) stderr.write = originalWrite;
+    };
   };
 
   return {
     start(nextBlocks): void {
       blocks = nextBlocks.map((block) => ({headline: block.headline}));
+      watchStderr();
       redraw();
     },
 
@@ -82,11 +132,16 @@ export function createLiveDashboard(
     },
 
     clear(): void {
-      if (renderedLineCount > 0) {
-        write(`\x1b[${renderedLineCount}A\r\x1b[J`);
+      try {
+        erase();
+        if (stderrLineOpen) write('\n');
+      } finally {
+        blocks = [];
+        renderedLineCount = 0;
+        stderrLineOpen = false;
+        restoreStderr?.();
+        restoreStderr = undefined;
       }
-      blocks = [];
-      renderedLineCount = 0;
     },
   };
 }
