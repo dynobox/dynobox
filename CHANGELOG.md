@@ -8,42 +8,28 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+---
+
+## dynobox@0.20.0 — 2026-11-25
+
 ### `dynobox` (CLI)
 
-- Use synchronous SDK resolution hooks where available to avoid Node 26's
-  `DEP0205` warning, with a fallback for older Node versions.
-- Keep stderr diagnostics visible above live progress, including multiline
-  proxy errors, instead of overwriting them during redraws.
-- Let the OS assign HTTP proxy ports so unrelated health checks on common
-  development ports do not reach the proxy.
-- Add experimental scenario `httpMocks`, keyed by hostname. Every request to a
-  mocked host goes through the per-job proxy to a static `response` or a
-  `handler`, never to the real host. Handlers get the job's `workDir` to keep
-  state per job. Handler errors, invalid JSON or response headers, and handlers
-  still running when the harness finishes fail the job. Generated mock failure
-  diagnostics omit request query strings.
-- The proxy sets `NODE_USE_ENV_PROXY=1`, so Node programs send `fetch`,
-  `http`, and `https` requests through it on Node 24.5+ and 22.21+. On other
-  Node versions, `dynobox run` warns when a scenario has `httpMocks`, since
-  some requests from Node programs would reach the real hosts.
-- `dynobox run` refuses to run `httpMocks` when `NO_PROXY` or `no_proxy` has a
-  non-loopback entry, since clients connect directly to those hosts and could
-  reach a real mocked host.
-- Stop a multi-turn scenario after an HTTP mock failure, and report HTTP mocks
-  still pending when the harness fails or times out.
-- Verbose and debug output list each request that an HTTP mock answered, as
-  `http mock: <method> <host><path> -> <status>`. Long paths are shortened while
-  keeping the response status visible. Mock reporting normalizes request
-  hostnames so mixed-case hosts are included in output and saved runs.
-- `--save-run` sends upload schema v8. Jobs with HTTP mocks add an `http`
-  summary: the mocked hosts and, per mocked request, the method, host, URL
-  path, and status. Query strings, headers, and bodies are never uploaded.
-- Run telemetry reports `http_mocks` when a scenario declares HTTP mocks.
-- Fix TLS failures to hosts the proxy does not intercept. `SSL_CERT_FILE`,
-  `REQUESTS_CA_BUNDLE`, and `CURL_CA_BUNDLE` now point at
-  `~/.dynobox/ca-bundle.pem` (public roots plus the Dynobox CA) instead of the
-  Dynobox CA alone, which broke clients that trust only that file, such as the
+- Add experimental scenario `httpMocks`, keyed by hostname. Requests to a
+  mocked host get a static `response` or a `handler` result and never reach
+  the real host. Handler errors and unfinished handlers fail the job.
+- `dynobox run` warns on Node versions where Node programs can skip the mock
+  proxy, and refuses to run HTTP mocks when `NO_PROXY` has non-loopback
+  entries.
+- Verbose output lists each mocked request. `--save-run` sends upload schema
+  v8 with each mocked request's method, host, path, and status; query strings,
+  headers, and bodies are never uploaded. Run telemetry reports `http_mocks`.
+- Fix TLS failures to hosts the proxy does not intercept, such as from the
   Antigravity CLI.
+- Keep stderr diagnostics visible above live progress.
+- Let the OS assign HTTP proxy ports.
+- Avoid Node 26's `DEP0205` warning when loading dynos.
+
+## @dynobox/sdk@0.12.0 — 2026-11-25
 
 ### `@dynobox/sdk`
 
