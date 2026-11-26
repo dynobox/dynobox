@@ -32,3 +32,24 @@ it('describes a shell tool event that has no command', () => {
     'Bash',
   );
 });
+
+it('shows the text that contains assertions look for', () => {
+  expect(
+    describeAssertion({id: 'a', type: 'transcript.contains', text: 'not ok'}),
+  ).toBe('transcript.contains("not ok")');
+  expect(
+    describeAssertion({
+      id: 'b',
+      type: 'finalMessage.contains',
+      text: 'say "hi"\nthen stop',
+    }),
+  ).toBe('finalMessage.contains("say \\"hi\\"\\nthen stop")');
+  expect(
+    describeAssertion({
+      id: 'c',
+      type: 'artifact.contains',
+      path: '.env',
+      text: 'PAST_API_KEY=',
+    }),
+  ).toBe('artifact.contains(.env, "PAST_API_KEY=")');
+});

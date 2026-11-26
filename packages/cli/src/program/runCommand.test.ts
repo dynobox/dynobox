@@ -1564,9 +1564,13 @@ describe('dynobox run — failures and diagnostics', () => {
       '✓ tool.notCalled(shell, includes: npm publish)',
     );
     expect(result.stdout).toContain('✓ artifact.exists(CHANGELOG.md)');
-    expect(result.stdout).toContain('✓ artifact.contains(CHANGELOG.md)');
-    expect(result.stdout).toContain('✓ transcript.contains');
-    expect(result.stdout).toContain('✓ finalMessage.contains');
+    expect(result.stdout).toContain(
+      '✓ artifact.contains(CHANGELOG.md, "dynobox@0.0.5")',
+    );
+    expect(result.stdout).toContain('✓ transcript.contains("EOTP")');
+    expect(result.stdout).toContain(
+      '✓ finalMessage.contains("working tree is dirty")',
+    );
     expect(result.stdout).toContain('✓ sequence.inOrder(2 steps)');
     expect(result.stdout).toContain('✓ skill.referenced(commit)');
   });
