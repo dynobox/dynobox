@@ -8,6 +8,13 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 
 ## [Unreleased]
 
+### `dynobox` (CLI)
+
+- Assertion titles for `transcript.contains`, `finalMessage.contains`, and
+  `artifact.contains` now include the text they look for, for example
+  `finalMessage.contains("done")`. This applies to terminal output and to
+  uploaded run summaries.
+
 ---
 
 ## dynobox@0.20.0 — 2026-11-25

@@ -20,7 +20,8 @@ const SHELL_PREVIEW_MAX = 42;
  * Compact, parenthesized rendering of an assertion.
  *
  * Examples: `tool.called(shell)`, `tool.called(shell, includes: pnpm test)`,
- * `sequence.inOrder(2 steps)`, `artifact.exists(README.md)`.
+ * `sequence.inOrder(2 steps)`, `artifact.exists(README.md)`,
+ * `finalMessage.contains("done")`.
  */
 export function describeAssertion(assertion: IrAssertion): string {
   if (assertion.type === 'mcp.called' || assertion.type === 'mcp.notCalled') {
@@ -83,7 +84,7 @@ export function describeAssertion(assertion: IrAssertion): string {
   }
 
   if (assertion.type === 'artifact.contains') {
-    return `artifact.contains(${assertion.path})`;
+    return `artifact.contains(${assertion.path}, ${JSON.stringify(assertion.text)})`;
   }
 
   if (assertion.type === 'artifact.unchanged') {
@@ -91,11 +92,11 @@ export function describeAssertion(assertion: IrAssertion): string {
   }
 
   if (assertion.type === 'transcript.contains') {
-    return 'transcript.contains';
+    return `transcript.contains(${JSON.stringify(assertion.text)})`;
   }
 
   if (assertion.type === 'finalMessage.contains') {
-    return 'finalMessage.contains';
+    return `finalMessage.contains(${JSON.stringify(assertion.text)})`;
   }
 
   if (assertion.type === 'http.called') {
