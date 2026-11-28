@@ -11,6 +11,8 @@ export type HttpEvent = {
   host: string;
   timestamp: string;
   status?: number;
+  /** Recorded UTF-8 request body text, when present. */
+  requestBody?: string;
   /** True when a scenario HTTP mock answered the request. */
   mocked?: boolean;
 };

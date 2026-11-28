@@ -53,3 +53,25 @@ it('shows the text that contains assertions look for', () => {
     }),
   ).toBe('artifact.contains(.env, "PAST_API_KEY=")');
 });
+
+it('describes HTTP body matchers', () => {
+  expect(
+    describeAssertion({
+      id: 'h1',
+      type: 'http.called',
+      endpointId: 'endpoint.recall',
+      status: 200,
+      json: {identity: 'sam@example.com'},
+    }),
+  ).toBe(
+    'http.called(endpoint.recall, status: 200, json: {"identity":"sam@example.com"})',
+  );
+  expect(
+    describeAssertion({
+      id: 'h2',
+      type: 'http.notCalled',
+      endpointId: 'endpoint.ingest',
+      bodyIncludes: 'secret',
+    }),
+  ).toBe('http.notCalled(endpoint.ingest, bodyIncludes: "secret")');
+});

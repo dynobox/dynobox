@@ -307,16 +307,24 @@ function buildIrAssertionNode(
   }
 
   if (assertion.type === 'http.called') {
-    const base = {
+    return {
       type: 'http.called' as const,
       endpointId,
+      ...(assertion.status === undefined ? {} : {status: assertion.status}),
+      ...(assertion.json === undefined ? {} : {json: assertion.json}),
+      ...(assertion.bodyIncludes === undefined
+        ? {}
+        : {bodyIncludes: assertion.bodyIncludes}),
     };
-    if (assertion.status !== undefined) {
-      return {...base, status: assertion.status};
-    }
-    return base;
   }
-  return {type: 'http.notCalled', endpointId};
+  return {
+    type: 'http.notCalled' as const,
+    endpointId,
+    ...(assertion.json === undefined ? {} : {json: assertion.json}),
+    ...(assertion.bodyIncludes === undefined
+      ? {}
+      : {bodyIncludes: assertion.bodyIncludes}),
+  };
 }
 
 function buildIrSequenceStep(assertion: AuthoredSequenceStep): IrSequenceStep {

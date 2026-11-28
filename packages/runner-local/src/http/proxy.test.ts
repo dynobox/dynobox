@@ -104,6 +104,7 @@ describe('startHttpCapture with HTTP mocks', () => {
       method: 'POST',
       host: 'api.example.test',
       status: 201,
+      requestBody: 'hello',
       mocked: true,
     });
   });

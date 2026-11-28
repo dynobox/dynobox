@@ -33,6 +33,8 @@ export type {
   Endpoint,
   FileToolKind,
   FinalMessageContainsAssertion,
+  HttpCalledOptions,
+  HttpNotCalledOptions,
   McpCalledAssertion,
   McpNotCalledAssertion,
   NotCalledAssertion,

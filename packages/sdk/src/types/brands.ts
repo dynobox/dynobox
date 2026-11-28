@@ -1,5 +1,5 @@
 import type {EndpointSpec} from './endpointSpec.js';
-import type {JsonObject} from './mcp.js';
+import type {JsonObject, JsonValue} from './mcp.js';
 
 /**
  * Brand symbols backing opaque authoring types. Endpoint and assertion objects
@@ -82,6 +82,19 @@ export type ToolPathMatcher = {
   readonly path: string;
 };
 
+/** Options for `http.called` assertions. */
+export type HttpCalledOptions = {
+  readonly status?: number;
+  readonly json?: JsonValue;
+  readonly bodyIncludes?: string;
+};
+
+/** Options for `http.notCalled` assertions. */
+export type HttpNotCalledOptions = {
+  readonly json?: JsonValue;
+  readonly bodyIncludes?: string;
+};
+
 /** Matcher for normalized observed shell command segments. */
 export type CommandMatcher = {
   readonly args?: readonly string[];
@@ -133,6 +146,8 @@ export type CalledAssertion<K extends string = string> = {
   readonly type: 'http.called';
   readonly endpoint: K;
   readonly status?: number;
+  readonly json?: JsonValue;
+  readonly bodyIncludes?: string;
 };
 
 /** Assertion that a named HTTP endpoint should not be observed. */
@@ -142,6 +157,8 @@ export type NotCalledAssertion<K extends string = string> = {
   readonly label?: string;
   readonly type: 'http.notCalled';
   readonly endpoint: K;
+  readonly json?: JsonValue;
+  readonly bodyIncludes?: string;
 };
 
 /** Assertion that a harness should call a tool, optionally matching shell text. */

@@ -11,6 +11,8 @@ import type {
   CommandNotCalledAssertion,
   Endpoint,
   FinalMessageContainsAssertion,
+  HttpCalledOptions,
+  HttpNotCalledOptions,
   NotCalledAssertion,
   SequenceInOrderAssertion,
   SequenceStepAssertion,
@@ -44,27 +46,34 @@ export function createEndpoint(spec: EndpointSpec): Endpoint {
 /** Create an `http.called` assertion for a declared endpoint key. */
 export function createHttpCalledAssertion<K extends string>(
   endpoint: K,
-  opts?: {status?: number},
+  opts?: HttpCalledOptions,
 ): CalledAssertion<K> {
-  const base = {
+  return {
     [ASSERTION_BRAND]: true as const,
     type: 'http.called' as const,
     endpoint,
-  };
-  return opts?.status === undefined
-    ? (base as CalledAssertion<K>)
-    : ({...base, status: opts.status} as CalledAssertion<K>);
+    ...(opts?.status === undefined ? {} : {status: opts.status}),
+    ...(opts?.json === undefined ? {} : {json: opts.json}),
+    ...(opts?.bodyIncludes === undefined
+      ? {}
+      : {bodyIncludes: opts.bodyIncludes}),
+  } as CalledAssertion<K>;
 }
 
 /** Create an `http.notCalled` assertion for a declared endpoint key. */
 export function createHttpNotCalledAssertion<K extends string>(
   endpoint: K,
+  opts?: HttpNotCalledOptions,
 ): NotCalledAssertion<K> {
   return {
     [ASSERTION_BRAND]: true as const,
     type: 'http.notCalled' as const,
     endpoint,
-  };
+    ...(opts?.json === undefined ? {} : {json: opts.json}),
+    ...(opts?.bodyIncludes === undefined
+      ? {}
+      : {bodyIncludes: opts.bodyIncludes}),
+  } as NotCalledAssertion<K>;
 }
 
 /** Create a positive tool-use assertion, optionally scoped by shell command matcher. */
