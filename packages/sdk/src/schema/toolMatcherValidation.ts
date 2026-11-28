@@ -13,6 +13,7 @@ export const FILE_TOOL_KINDS = new Set<FileToolKind>([
 export type ToolMatcherValidationMessages = {
   shellMatcherOnlyOnShell: string;
   pathMatcherOnlyOnFileTools: string;
+  urlMatcherOnlyOnWebFetch: string;
   notBoth: string;
 };
 
@@ -20,12 +21,14 @@ export type ToolMatcherValidationMessages = {
 export const SHELL_COMMAND_MATCHER_SHAPE_MESSAGE =
   'Shell command matcher must specify exactly one string field: equals, includes, startsWith, or matches.';
 
-/** Semantic validation errors for tool assertion shell/path matcher placement. */
+/** Semantic validation errors for tool assertion shell/path/url matcher placement. */
 export const TOOL_MATCHER_MESSAGES: ToolMatcherValidationMessages = {
   shellMatcherOnlyOnShell:
     'Shell command matchers are only supported on shell tool assertions.',
   pathMatcherOnlyOnFileTools:
     'Path matchers are only supported on file-oriented tool assertions.',
+  urlMatcherOnlyOnWebFetch:
+    'URL matchers are only supported on web_fetch tool assertions.',
   notBoth:
     'Tool assertions may specify a shell command matcher or a path matcher, not both.',
 };
@@ -43,6 +46,7 @@ export function addToolMatcherIssues(
     toolKind: string;
     shellMatcher?: unknown;
     pathMatcher?: unknown;
+    urlMatcher?: unknown;
   },
   fieldNames: {
     shellMatcherField: string;
@@ -50,7 +54,7 @@ export function addToolMatcherIssues(
   },
   messages: ToolMatcherValidationMessages,
 ): void {
-  const {toolKind, shellMatcher, pathMatcher} = fields;
+  const {toolKind, shellMatcher, pathMatcher, urlMatcher} = fields;
   const {shellMatcherField, pathMatcherField} = fieldNames;
 
   if (shellMatcher !== undefined && toolKind !== 'shell') {
@@ -69,6 +73,14 @@ export function addToolMatcherIssues(
       code: 'custom',
       path: [...path, pathMatcherField],
       message: messages.pathMatcherOnlyOnFileTools,
+    });
+  }
+
+  if (urlMatcher !== undefined && toolKind !== 'web_fetch') {
+    ctx.addIssue({
+      code: 'custom',
+      path: [...path, 'url'],
+      message: messages.urlMatcherOnlyOnWebFetch,
     });
   }
 
@@ -110,6 +122,7 @@ export function validateToolAssertionNode(
       toolKind: String(record[options.toolKindField] ?? ''),
       shellMatcher: record[options.shellMatcherField],
       pathMatcher: record[options.pathMatcherField],
+      urlMatcher: record.url,
     },
     {
       shellMatcherField: options.shellMatcherField,

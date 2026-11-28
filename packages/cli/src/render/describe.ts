@@ -34,6 +34,9 @@ export function describeAssertion(assertion: IrAssertion): string {
     if (assertion.path !== undefined) {
       return `tool.called(${assertion.tool}, path: ${assertion.path})`;
     }
+    if (assertion.url !== undefined) {
+      return `tool.called(${assertion.tool}, url: ${assertion.url})`;
+    }
     return `tool.called(${assertion.tool})`;
   }
 
@@ -43,6 +46,9 @@ export function describeAssertion(assertion: IrAssertion): string {
     }
     if (assertion.path !== undefined) {
       return `tool.notCalled(${assertion.tool}, path: ${assertion.path})`;
+    }
+    if (assertion.url !== undefined) {
+      return `tool.notCalled(${assertion.tool}, url: ${assertion.url})`;
     }
     return `tool.notCalled(${assertion.tool})`;
   }
@@ -127,6 +133,9 @@ export function describeExpectation(assertion: IrAssertion): string {
     if (assertion.path !== undefined) {
       return `no ${assertion.tool} tool call for path "${assertion.path}"`;
     }
+    if (assertion.url !== undefined) {
+      return `no ${assertion.tool} tool call for url "${assertion.url}"`;
+    }
     return `no ${assertion.tool} tool call`;
   }
 
@@ -190,6 +199,9 @@ export function describeExpectation(assertion: IrAssertion): string {
   if (assertion.path !== undefined) {
     return `${assertion.tool} tool call for path "${assertion.path}"`;
   }
+  if (assertion.url !== undefined) {
+    return `${assertion.tool} tool call for url "${assertion.url}"`;
+  }
   if (assertion.command === undefined) return `${assertion.tool} tool call`;
   return describeShellMatcherExpectation(assertion.command);
 }
@@ -236,6 +248,9 @@ function describeToolStepExpectation(
   }
   if (step.path !== undefined) {
     return `${step.tool} tool call for path "${step.path}"`;
+  }
+  if (step.url !== undefined) {
+    return `${step.tool} tool call for url "${step.url}"`;
   }
   if (step.command === undefined) return `${step.tool} tool call`;
   return describeShellMatcherExpectation(step.command);

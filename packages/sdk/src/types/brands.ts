@@ -82,6 +82,11 @@ export type ToolPathMatcher = {
   readonly path: string;
 };
 
+/** Matcher for `web_fetch` tool assertions: the exact URL that was fetched. */
+export type WebFetchMatcher = {
+  readonly url: string;
+};
+
 /** Options for `http.called` assertions. */
 export type HttpCalledOptions = {
   readonly status?: number;
@@ -181,13 +186,22 @@ export type ToolCalledAssertion<K extends ToolKind = ToolKind> =
           readonly tool: K;
           readonly path?: string;
         }
-      : {
-          readonly [ASSERTION_BRAND]: true;
-          readonly id?: string;
-          readonly label?: string;
-          readonly type: 'tool.called';
-          readonly tool: K;
-        };
+      : K extends 'web_fetch'
+        ? {
+            readonly [ASSERTION_BRAND]: true;
+            readonly id?: string;
+            readonly label?: string;
+            readonly type: 'tool.called';
+            readonly tool: 'web_fetch';
+            readonly url?: string;
+          }
+        : {
+            readonly [ASSERTION_BRAND]: true;
+            readonly id?: string;
+            readonly label?: string;
+            readonly type: 'tool.called';
+            readonly tool: K;
+          };
 
 /** Assertion that a harness should not call a tool. */
 export type ToolNotCalledAssertion<K extends ToolKind = ToolKind> =
@@ -209,13 +223,22 @@ export type ToolNotCalledAssertion<K extends ToolKind = ToolKind> =
           readonly tool: K;
           readonly path?: string;
         }
-      : {
-          readonly [ASSERTION_BRAND]: true;
-          readonly id?: string;
-          readonly label?: string;
-          readonly type: 'tool.notCalled';
-          readonly tool: K;
-        };
+      : K extends 'web_fetch'
+        ? {
+            readonly [ASSERTION_BRAND]: true;
+            readonly id?: string;
+            readonly label?: string;
+            readonly type: 'tool.notCalled';
+            readonly tool: 'web_fetch';
+            readonly url?: string;
+          }
+        : {
+            readonly [ASSERTION_BRAND]: true;
+            readonly id?: string;
+            readonly label?: string;
+            readonly type: 'tool.notCalled';
+            readonly tool: K;
+          };
 
 /** Assertion that a normalized command segment should be observed. */
 export type CommandCalledAssertion = {

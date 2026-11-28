@@ -75,3 +75,22 @@ it('describes HTTP body matchers', () => {
     }),
   ).toBe('http.notCalled(endpoint.ingest, bodyIncludes: "secret")');
 });
+
+it('describes web_fetch url matchers', () => {
+  expect(
+    describeAssertion({
+      id: 'w1',
+      type: 'tool.called',
+      tool: 'web_fetch',
+      url: 'https://past.dev/SKILL.md',
+    }),
+  ).toBe('tool.called(web_fetch, url: https://past.dev/SKILL.md)');
+  expect(
+    describeExpectation({
+      id: 'w1',
+      type: 'tool.called',
+      tool: 'web_fetch',
+      url: 'https://past.dev/SKILL.md',
+    }),
+  ).toBe('web_fetch tool call for url "https://past.dev/SKILL.md"');
+});

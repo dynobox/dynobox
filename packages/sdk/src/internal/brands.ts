@@ -25,6 +25,7 @@ import type {
   TranscriptContainsAssertion,
   VerifyCommandAssertion,
   VerifyCommandOptions,
+  WebFetchMatcher,
 } from '../types/brands.js';
 import {ASSERTION_BRAND, ENDPOINT_BRAND} from '../types/brands.js';
 import type {EndpointSpec} from '../types/endpointSpec.js';
@@ -76,38 +77,46 @@ export function createHttpNotCalledAssertion<K extends string>(
   } as NotCalledAssertion<K>;
 }
 
-/** Create a positive tool-use assertion, optionally scoped by shell command matcher. */
+function isToolFieldMatcher(
+  matcher: ShellCommandMatcher | ToolPathMatcher | WebFetchMatcher,
+): matcher is ToolPathMatcher | WebFetchMatcher {
+  return 'path' in matcher || 'url' in matcher;
+}
+
+/** Create a positive tool-use assertion, optionally scoped by matcher. */
 export function createToolCalledAssertion<K extends ToolKind>(
   tool: K,
-  matcher?: ShellCommandMatcher | ToolPathMatcher,
+  matcher?: ShellCommandMatcher | ToolPathMatcher | WebFetchMatcher,
 ): ToolCalledAssertion<K> {
   const base = {
     [ASSERTION_BRAND]: true as const,
     type: 'tool.called' as const,
     tool,
   };
-  return (matcher === undefined
-    ? base
-    : 'path' in matcher
-      ? {...base, ...matcher}
-      : {...base, command: matcher}) as unknown as ToolCalledAssertion<K>;
+  if (matcher === undefined) return base as unknown as ToolCalledAssertion<K>;
+  if (tool === 'web_fetch' || isToolFieldMatcher(matcher)) {
+    return {...base, ...matcher} as unknown as ToolCalledAssertion<K>;
+  }
+  return {...base, command: matcher} as unknown as ToolCalledAssertion<K>;
 }
 
-/** Create a negative tool-use assertion, optionally scoped by shell command matcher. */
+/** Create a negative tool-use assertion, optionally scoped by matcher. */
 export function createToolNotCalledAssertion<K extends ToolKind>(
   tool: K,
-  matcher?: ShellCommandMatcher | ToolPathMatcher,
+  matcher?: ShellCommandMatcher | ToolPathMatcher | WebFetchMatcher,
 ): ToolNotCalledAssertion<K> {
   const base = {
     [ASSERTION_BRAND]: true as const,
     type: 'tool.notCalled' as const,
     tool,
   };
-  return (matcher === undefined
-    ? base
-    : 'path' in matcher
-      ? {...base, ...matcher}
-      : {...base, command: matcher}) as unknown as ToolNotCalledAssertion<K>;
+  if (matcher === undefined) {
+    return base as unknown as ToolNotCalledAssertion<K>;
+  }
+  if (tool === 'web_fetch' || isToolFieldMatcher(matcher)) {
+    return {...base, ...matcher} as unknown as ToolNotCalledAssertion<K>;
+  }
+  return {...base, command: matcher} as unknown as ToolNotCalledAssertion<K>;
 }
 
 /** Create a positive normalized command assertion. */

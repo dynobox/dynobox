@@ -195,6 +195,7 @@ const toolCalledStepSchema = z
     tool: z.enum(TOOL_KINDS),
     command: shellCommandMatcherSchema.optional(),
     path: z.string().min(1).optional(),
+    url: z.string().min(1).optional(),
   })
   .strict();
 
@@ -255,6 +256,7 @@ const toolNotCalledAssertionSchema = z
     tool: z.enum(TOOL_KINDS),
     command: shellCommandMatcherSchema.optional(),
     path: z.string().min(1).optional(),
+    url: z.string().min(1).optional(),
   })
   .merge(assertionBaseSchema)
   .strict();

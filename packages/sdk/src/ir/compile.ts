@@ -216,17 +216,13 @@ function buildIrAssertionNode(
   }
 
   if (assertion.type === 'tool.notCalled') {
-    const base = {
+    return {
       type: 'tool.notCalled' as const,
       tool: assertion.tool,
+      ...(assertion.command === undefined ? {} : {command: assertion.command}),
+      ...(assertion.path === undefined ? {} : {path: assertion.path}),
+      ...(assertion.url === undefined ? {} : {url: assertion.url}),
     };
-    if (assertion.command !== undefined) {
-      return {...base, command: assertion.command};
-    }
-    if (assertion.path !== undefined) {
-      return {...base, path: assertion.path};
-    }
-    return base;
   }
 
   if (assertion.type === 'command.called') {
@@ -354,23 +350,13 @@ function buildIrAnyOfBranch(
 function buildIrToolCalledStep(
   assertion: Extract<AuthoredAssertion, {type: 'tool.called'}>,
 ): Omit<Extract<IrAssertion, {type: 'tool.called'}>, 'id'> {
-  const base = {
+  return {
     type: 'tool.called' as const,
     tool: assertion.tool,
-  };
-  if (assertion.command !== undefined) {
-    return {...base, command: assertion.command} as Omit<
-      Extract<IrAssertion, {type: 'tool.called'}>,
-      'id'
-    >;
-  }
-  if (assertion.path !== undefined) {
-    return {...base, path: assertion.path} as Omit<
-      Extract<IrAssertion, {type: 'tool.called'}>,
-      'id'
-    >;
-  }
-  return base as Omit<Extract<IrAssertion, {type: 'tool.called'}>, 'id'>;
+    ...(assertion.command === undefined ? {} : {command: assertion.command}),
+    ...(assertion.path === undefined ? {} : {path: assertion.path}),
+    ...(assertion.url === undefined ? {} : {url: assertion.url}),
+  } as Omit<Extract<IrAssertion, {type: 'tool.called'}>, 'id'>;
 }
 
 function buildIrCommandCalledStep(

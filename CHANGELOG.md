@@ -23,11 +23,15 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   request bodies from the HTTP proxy.
 - Codex `web_search` items with `action.type: "open_page"` are now recorded as
   `web_fetch` events with `input.url` set to `action.url`.
+- `tool.called("web_fetch", ...)` and `tool.notCalled("web_fetch", ...)` now
+  support an exact `url` matcher.
 
 ### `@dynobox/sdk`
 
 - Add `json` and `bodyIncludes` options to `http.called` and `http.notCalled`
   (`HttpCalledOptions`, `HttpNotCalledOptions`).
+- Add an exact `url` matcher to `tool.called("web_fetch", ...)` and
+  `tool.notCalled("web_fetch", ...)` (`WebFetchMatcher`).
 
 ---
 
