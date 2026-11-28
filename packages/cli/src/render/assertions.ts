@@ -239,6 +239,9 @@ function describeObservedFailure(
       (event) => event.endpointId === assertion.endpointId,
     );
     if (matches.length === 0) return 'no matching HTTP requests observed';
+    if (assertion.json !== undefined || assertion.bodyIncludes !== undefined) {
+      return fallback;
+    }
     if (assertion.status === undefined) return fallback;
     return `matching endpoint statuses: ${[
       ...new Set(matches.map((event) => event.status ?? 'unknown')),

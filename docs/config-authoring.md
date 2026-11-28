@@ -641,6 +641,18 @@ numbers, underscores, and hyphens.
 Endpoint specs include only `method` and `url`. HTTP assertions match observed
 requests by endpoint URL/method and optional response status.
 
+`http.called` and `http.notCalled` can also match the request body:
+
+```ts
+http.called('recall', {json: {identity: 'sam@example.com'}});
+http.notCalled('ingest', {bodyIncludes: 'PAST_API_KEY'});
+```
+
+`json` is a partial deep match against the body parsed as JSON. `bodyIncludes`
+is a substring match against the UTF-8 body text. Failure messages do not
+include observed bodies, because assertion messages are part of uploaded run
+summaries.
+
 When a scenario includes HTTP assertions or [HTTP mocks](#http-mocks), Dynobox
 starts a per-job local proxy and sets `HTTP_PROXY`, `HTTPS_PROXY`, and their
 lowercase variants on the harness child process. Existing `NO_PROXY` and

@@ -2,6 +2,7 @@ import {z} from 'zod';
 
 import {httpMocksSchema} from '../schema/httpMocks.js';
 import {
+  jsonValueSchema,
   mcpInputMatcherSchema,
   mcpMocksSchema,
   mcpNameSchema,
@@ -138,6 +139,8 @@ const irHttpCalledAssertionNodeSchema = z.object({
   type: z.literal('http.called'),
   endpointId: z.string().min(1),
   status: z.number().int().optional(),
+  json: jsonValueSchema.optional(),
+  bodyIncludes: z.string().min(1).optional(),
 });
 
 const irHttpCalledAssertionSchema = irAssertionBaseSchema.merge(
@@ -147,6 +150,8 @@ const irHttpCalledAssertionSchema = irAssertionBaseSchema.merge(
 const irHttpNotCalledAssertionNodeSchema = z.object({
   type: z.literal('http.notCalled'),
   endpointId: z.string().min(1),
+  json: jsonValueSchema.optional(),
+  bodyIncludes: z.string().min(1).optional(),
 });
 
 const irHttpNotCalledAssertionSchema = irAssertionBaseSchema.merge(

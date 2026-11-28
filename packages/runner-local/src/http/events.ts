@@ -53,6 +53,7 @@ export function createHttpEvent(input: {
   url: string;
   host?: string | undefined;
   status?: number | undefined;
+  requestBody?: string | undefined;
   timestamp?: string | undefined;
   mocked?: boolean | undefined;
 }): HttpEvent {
@@ -64,6 +65,9 @@ export function createHttpEvent(input: {
     timestamp: input.timestamp ?? new Date().toISOString(),
   };
   if (input.status !== undefined) event.status = input.status;
+  if (input.requestBody !== undefined && input.requestBody.length > 0) {
+    event.requestBody = input.requestBody;
+  }
   if (input.mocked === true) event.mocked = true;
   return event;
 }

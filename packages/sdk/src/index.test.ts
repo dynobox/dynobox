@@ -1921,3 +1921,66 @@ export default defineDyno({
     tool.called('not_real');
   }
 });
+
+describe('HTTP body matcher compilation', () => {
+  it('compiles http.called and http.notCalled body matchers into IR', () => {
+    const compiled = compile(
+      defineDyno({
+        name: 'http-body-test',
+        endpoints: {
+          recall: http.endpoint({
+            method: 'POST',
+            url: 'https://api.past.dev/v1/recall',
+          }),
+          ingest: http.endpoint({
+            method: 'POST',
+            url: 'https://api.past.dev/v1/ingest',
+          }),
+        },
+        scenarios: [
+          {
+            name: 'checks-body',
+            prompt: 'Recall and ingest',
+            assertions: [
+              http.called('recall', {
+                status: 200,
+                json: {identity: 'sam@example.com'},
+              }),
+              http.called('ingest', {bodyIncludes: 'Postgres'}),
+              http.notCalled('recall', {json: {identity: 'other@example.com'}}),
+              http.notCalled('ingest', {bodyIncludes: 'secret'}),
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(compiled.scenarios[0]?.assertions).toEqual([
+      {
+        id: 'assertion.checks-body.0',
+        type: 'http.called',
+        endpointId: 'endpoint.checks-body.recall',
+        status: 200,
+        json: {identity: 'sam@example.com'},
+      },
+      {
+        id: 'assertion.checks-body.1',
+        type: 'http.called',
+        endpointId: 'endpoint.checks-body.ingest',
+        bodyIncludes: 'Postgres',
+      },
+      {
+        id: 'assertion.checks-body.2',
+        type: 'http.notCalled',
+        endpointId: 'endpoint.checks-body.recall',
+        json: {identity: 'other@example.com'},
+      },
+      {
+        id: 'assertion.checks-body.3',
+        type: 'http.notCalled',
+        endpointId: 'endpoint.checks-body.ingest',
+        bodyIncludes: 'secret',
+      },
+    ]);
+  });
+});

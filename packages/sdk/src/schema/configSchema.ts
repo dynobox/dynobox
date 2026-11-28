@@ -11,6 +11,7 @@ import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/httpMethod.js';
 import {httpMocksSchema} from './httpMocks.js';
 import {
+  jsonValueSchema,
   mcpInputMatcherSchema,
   mcpMocksSchema,
   mcpNameSchema,
@@ -128,6 +129,8 @@ const calledAssertionSchema = z
     type: z.literal('http.called'),
     endpoint: z.string(),
     status: z.number().int().optional(),
+    json: jsonValueSchema.optional(),
+    bodyIncludes: z.string().min(1).optional(),
   })
   .merge(assertionBaseSchema)
   .strict();
@@ -136,6 +139,8 @@ const notCalledAssertionSchema = z
   .object({
     type: z.literal('http.notCalled'),
     endpoint: z.string(),
+    json: jsonValueSchema.optional(),
+    bodyIncludes: z.string().min(1).optional(),
   })
   .merge(assertionBaseSchema)
   .strict();

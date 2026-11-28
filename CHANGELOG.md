@@ -18,6 +18,14 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   commands inside shell control-flow blocks (`if`/`elif`/`else`/`fi`, `for`,
   `while`, `until`), including condition commands. Heredoc bodies and `#`
   comments are not parsed as commands. `case` blocks are not supported.
+- `http.called` and `http.notCalled` now support `json` (partial deep match) and
+  `bodyIncludes` (substring match) request body assertions, backed by recorded
+  request bodies from the HTTP proxy.
+
+### `@dynobox/sdk`
+
+- Add `json` and `bodyIncludes` options to `http.called` and `http.notCalled`
+  (`HttpCalledOptions`, `HttpNotCalledOptions`).
 
 ---
 

@@ -100,12 +100,16 @@ export function describeAssertion(assertion: IrAssertion): string {
   }
 
   if (assertion.type === 'http.called') {
-    return assertion.status === undefined
+    const details = describeHttpDetails(assertion);
+    return details.length === 0
       ? `http.called(${assertion.endpointId})`
-      : `http.called(${assertion.endpointId}, status: ${assertion.status})`;
+      : `http.called(${assertion.endpointId}, ${details.join(', ')})`;
   }
 
-  return `http.notCalled(${assertion.endpointId})`;
+  const details = describeHttpDetails(assertion);
+  return details.length === 0
+    ? `http.notCalled(${assertion.endpointId})`
+    : `http.notCalled(${assertion.endpointId}, ${details.join(', ')})`;
 }
 
 /**
@@ -235,6 +239,24 @@ function describeToolStepExpectation(
   }
   if (step.command === undefined) return `${step.tool} tool call`;
   return describeShellMatcherExpectation(step.command);
+}
+
+function describeHttpDetails(assertion: {
+  status?: number | undefined;
+  json?: unknown;
+  bodyIncludes?: string | undefined;
+}): string[] {
+  const details: string[] = [];
+  if (assertion.status !== undefined) {
+    details.push(`status: ${assertion.status}`);
+  }
+  if (assertion.json !== undefined) {
+    details.push(`json: ${JSON.stringify(assertion.json)}`);
+  }
+  if (assertion.bodyIncludes !== undefined) {
+    details.push(`bodyIncludes: ${JSON.stringify(assertion.bodyIncludes)}`);
+  }
+  return details;
 }
 
 function describeAssertionNodeExpectation(
