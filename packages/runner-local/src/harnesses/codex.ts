@@ -379,6 +379,22 @@ function parseToolEvent(
     );
   }
 
+  // Codex reports page reads as web_search items with an open_page action.
+  // Promote action.url to the top-level `url` that web_fetch matchers read.
+  if (candidate.type === 'web_search' && isOpenPageAction(candidate.action)) {
+    const url =
+      typeof candidate.action.url === 'string'
+        ? candidate.action.url
+        : undefined;
+    return createToolEvent(
+      'web_search',
+      {...candidate, ...(url === undefined ? {} : {url})},
+      parseStatus(candidate, event),
+      parseFailureMessage(candidate, event),
+      'web_fetch',
+    );
+  }
+
   const command = parseCommand(candidate);
   if (command !== undefined) {
     return createToolEvent(
@@ -398,6 +414,10 @@ function parseToolEvent(
     parseStatus(candidate, event),
     parseFailureMessage(candidate, event),
   );
+}
+
+function isOpenPageAction(value: unknown): value is JsonObject {
+  return isRecord(value) && value.type === 'open_page';
 }
 
 function parseRawToolName(candidate: JsonObject): string | undefined {
