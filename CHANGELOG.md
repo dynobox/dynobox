@@ -21,6 +21,8 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
 - `http.called` and `http.notCalled` now support `json` (partial deep match) and
   `bodyIncludes` (substring match) request body assertions, backed by recorded
   request bodies from the HTTP proxy.
+- Codex `web_search` items with `action.type: "open_page"` are now recorded as
+  `web_fetch` events with `input.url` set to `action.url`.
 
 ### `@dynobox/sdk`
 
