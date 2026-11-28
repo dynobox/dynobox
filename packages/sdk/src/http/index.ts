@@ -6,6 +6,8 @@ import {
 import type {
   CalledAssertion,
   Endpoint,
+  HttpCalledOptions,
+  HttpNotCalledOptions,
   NotCalledAssertion,
 } from '../types/brands.js';
 import type {EndpointSpec} from '../types/endpointSpec.js';
@@ -25,12 +27,15 @@ export const http = {
 
   called<K extends string>(
     endpoint: K,
-    opts?: {status?: number},
+    opts?: HttpCalledOptions,
   ): CalledAssertion<K> {
     return createHttpCalledAssertion(endpoint, opts);
   },
 
-  notCalled<K extends string>(endpoint: K): NotCalledAssertion<K> {
-    return createHttpNotCalledAssertion(endpoint);
+  notCalled<K extends string>(
+    endpoint: K,
+    opts?: HttpNotCalledOptions,
+  ): NotCalledAssertion<K> {
+    return createHttpNotCalledAssertion(endpoint, opts);
   },
 };

@@ -335,11 +335,17 @@ function parseCommand(
 
   const commands: ObservedCommand[] = [];
   let segmentIndex = segmentStart;
+  const controlFlowState = {caseDepth: 0};
 
   for (const segment of splitCommandSegments(command)) {
+    const normalized = stripShellControlFlow(segment.command, controlFlowState);
+    if (normalized === undefined) continue;
+    const segmentCommand = normalized.command;
+    const segmentOffset = segment.start + normalized.offset;
+
     // Unwrap a whole-segment `(…)` / `{…}`, then re-parse so inner separators
     // become normal top-level splits.
-    const grouping = unwrapShellGrouping(segment.command);
+    const grouping = unwrapShellGrouping(segmentCommand);
     if (grouping !== undefined) {
       const nested = parseCommand(
         grouping.command,
@@ -348,14 +354,14 @@ function parseCommand(
         segmentIndex,
         shell,
         depth,
-        sourceOffset + segment.start + grouping.offset,
+        sourceOffset + segmentOffset + grouping.offset,
       );
       commands.push(...nested);
       segmentIndex += Math.max(1, nested.length);
       continue;
     }
 
-    const parsed = parseSegment(segment.command);
+    const parsed = parseSegment(segmentCommand);
     if (parsed === undefined) continue;
 
     const shellCommand = shellWrappedCommand(parsed);
@@ -377,7 +383,7 @@ function parseCommand(
         segmentIndex,
         shellCommand.shell,
         depth + 1,
-        sourceOffset + segment.start,
+        sourceOffset + segmentOffset,
       );
       commands.push(...nested);
       segmentIndex += Math.max(1, nested.length);
@@ -396,16 +402,77 @@ function parseCommand(
       ...(cwd === undefined ? {} : {cwd}),
       ...(cwdFlag === undefined ? {} : {cwdFlag}),
       ...(shell === undefined ? {} : {shell}),
-      original: segment.command,
+      original: segmentCommand,
       eventIndex,
       segmentIndex,
-      start: sourceOffset + segment.start,
+      start: sourceOffset + segmentOffset,
       end: sourceOffset + segment.end,
     });
     segmentIndex += 1;
   }
 
   return commands;
+}
+
+const SHELL_PREFIX_RE =
+  /^(?:(?:if|then|elif|else|while|until|do)(?=$|\s|[({])|!(?=\s|[({]))\s*/;
+const SHELL_CLOSING_RE = /^(?:fi|done|esac)(?=$|\s|[<>]|\d+[<>])/;
+const SHELL_FOR_HEADER_RE = /^for(?=\s|\(\()/;
+const SHELL_CASE_HEADER_RE = /^case\s+(?:'[^']*'|"[^"]*"|\S+)\s+in(?=$|\s)\s*/;
+const SHELL_CASE_PATTERN_RE = /^\(?(?:'[^']*'|"[^"]*"|[^'"\s;()])*\)\s*/;
+
+/**
+ * Strip leading shell control-flow reserved words (`if`, `then`, `elif`,
+ * `else`, `while`, `until`, `do`, `!`, `case … in`, case patterns) and drop
+ * header/closing-only segments (`for …`, `fi`, `done`, `esac`).
+ */
+function stripShellControlFlow(
+  segment: string,
+  state: {caseDepth: number},
+): {command: string; offset: number} | undefined {
+  let text = segment;
+  let offset = 0;
+
+  while (true) {
+    const prefix = SHELL_PREFIX_RE.exec(text);
+    if (prefix !== null) {
+      offset += prefix[0].length;
+      text = text.slice(prefix[0].length);
+      continue;
+    }
+
+    const caseHeader = SHELL_CASE_HEADER_RE.exec(text);
+    if (caseHeader !== null) {
+      state.caseDepth += 1;
+      offset += caseHeader[0].length;
+      text = text.slice(caseHeader[0].length);
+      continue;
+    }
+
+    if (state.caseDepth > 0) {
+      const pattern = SHELL_CASE_PATTERN_RE.exec(text);
+      if (pattern !== null) {
+        offset += pattern[0].length;
+        text = text.slice(pattern[0].length);
+        continue;
+      }
+    }
+
+    break;
+  }
+
+  if (text.length === 0 || SHELL_FOR_HEADER_RE.test(text)) return undefined;
+
+  const closing = SHELL_CLOSING_RE.exec(text);
+  if (
+    closing !== null &&
+    isTrailingRedirectionOnly(text.slice(closing[0].length))
+  ) {
+    if (closing[0] === 'esac' && state.caseDepth > 0) state.caseDepth -= 1;
+    return undefined;
+  }
+
+  return {command: text, offset};
 }
 
 /**
@@ -633,7 +700,10 @@ function splitCommandSegments(
       continue;
     }
 
-    if (groupStack.length === 0 && (char === ';' || char === '|')) {
+    if (
+      groupStack.length === 0 &&
+      (char === ';' || char === '|' || char === '\n')
+    ) {
       pushCommandSegment(segments, current, currentStart, index);
       current = '';
       currentStart = index + 1;

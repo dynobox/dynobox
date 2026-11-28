@@ -14,6 +14,24 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   `artifact.contains` now include the text they look for, for example
   `finalMessage.contains("done")`. This applies to terminal output and to
   uploaded run summaries.
+- `command.called` and `command.notCalled` now parse commands inside shell
+  control-flow blocks (`if`/`elif`/`else`/`fi`, `for`, `while`, `until`, and
+  `case`/`esac`), including condition commands and multi-line scripts.
+- `http.called` and `http.notCalled` now support `json` (partial deep match) and
+  `bodyIncludes` (substring match) request body assertions, backed by recorded
+  request bodies from the HTTP proxy.
+- Codex `web_search` items with `action.type: "open_page"` are now recorded as
+  `web_fetch` events with `input.url` set to `action.url` and `status: "failure"`
+  when results contain only errors.
+- `tool.called("web_fetch", ...)` and `tool.notCalled("web_fetch", ...)` now
+  support `url` and `status` (`"success" | "failure"`) matchers.
+
+### `@dynobox/sdk`
+
+- Add `json` and `bodyIncludes` options to `http.called` and `http.notCalled`
+  (`HttpCalledOptions`, `HttpNotCalledOptions`).
+- Add `url` and `status` matcher support to `tool.called("web_fetch", ...)` and
+  `tool.notCalled("web_fetch", ...)` (`WebFetchMatcher`, `WebFetchStatus`).
 
 ---
 

@@ -379,6 +379,26 @@ function parseToolEvent(
     );
   }
 
+  if (candidate.type === 'web_search' && isOpenPageAction(candidate.action)) {
+    const errorMessage = openPageErrorOnlyMessage(candidate);
+    const parsedStatus = parseStatus(candidate, event);
+    const status =
+      parsedStatus === 'failure' || errorMessage !== undefined
+        ? 'failure'
+        : (parsedStatus ?? 'success');
+    const url =
+      typeof candidate.action.url === 'string'
+        ? candidate.action.url
+        : undefined;
+    return createToolEvent(
+      'web_search',
+      {...candidate, ...(url === undefined ? {} : {url})},
+      status,
+      parseFailureMessage(candidate, event) ?? errorMessage,
+      'web_fetch',
+    );
+  }
+
   const command = parseCommand(candidate);
   if (command !== undefined) {
     return createToolEvent(
@@ -398,6 +418,60 @@ function parseToolEvent(
     parseStatus(candidate, event),
     parseFailureMessage(candidate, event),
   );
+}
+
+function isOpenPageAction(value: unknown): value is JsonObject {
+  return isRecord(value) && value.type === 'open_page';
+}
+
+function openPageErrorOnlyMessage(candidate: JsonObject): string | undefined {
+  if (!Array.isArray(candidate.results) || candidate.results.length === 0) {
+    return undefined;
+  }
+  const errorMessages: string[] = [];
+  for (const result of candidate.results) {
+    const message = errorResultMessage(result);
+    if (message === undefined) return undefined;
+    errorMessages.push(message);
+  }
+  return errorMessages[0];
+}
+
+function errorResultMessage(result: unknown): string | undefined {
+  if (!isRecord(result)) return undefined;
+  if (typeof result.error === 'string' && result.error.trim().length > 0) {
+    return result.error.trim();
+  }
+  if (
+    result.type === 'error' ||
+    result.isError === true ||
+    result.is_error === true
+  ) {
+    if (
+      typeof result.message === 'string' &&
+      result.message.trim().length > 0
+    ) {
+      return result.message.trim();
+    }
+    if (typeof result.title === 'string' && result.title.trim().length > 0) {
+      return result.title.trim();
+    }
+    return 'Error';
+  }
+  const hasContent =
+    (typeof result.snippet === 'string' && result.snippet.trim().length > 0) ||
+    (typeof result.text === 'string' && result.text.trim().length > 0) ||
+    (typeof result.content === 'string' && result.content.trim().length > 0);
+  if (
+    !hasContent &&
+    typeof result.title === 'string' &&
+    /\berror\b|not found|forbidden|unauthorized|unavailable|timeout/i.test(
+      result.title,
+    )
+  ) {
+    return result.title.trim();
+  }
+  return undefined;
 }
 
 function parseRawToolName(candidate: JsonObject): string | undefined {

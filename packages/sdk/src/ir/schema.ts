@@ -2,6 +2,7 @@ import {z} from 'zod';
 
 import {httpMocksSchema} from '../schema/httpMocks.js';
 import {
+  jsonValueSchema,
   mcpInputMatcherSchema,
   mcpMocksSchema,
   mcpNameSchema,
@@ -134,10 +135,14 @@ const irMcpNotCalledSchema = irAssertionBaseSchema.merge(
   irMcpNotCalledNodeSchema,
 );
 
+const webFetchStatusSchema = z.enum(['success', 'failure']);
+
 const irHttpCalledAssertionNodeSchema = z.object({
   type: z.literal('http.called'),
   endpointId: z.string().min(1),
   status: z.number().int().optional(),
+  json: jsonValueSchema.optional(),
+  bodyIncludes: z.string().min(1).optional(),
 });
 
 const irHttpCalledAssertionSchema = irAssertionBaseSchema.merge(
@@ -147,6 +152,8 @@ const irHttpCalledAssertionSchema = irAssertionBaseSchema.merge(
 const irHttpNotCalledAssertionNodeSchema = z.object({
   type: z.literal('http.notCalled'),
   endpointId: z.string().min(1),
+  json: jsonValueSchema.optional(),
+  bodyIncludes: z.string().min(1).optional(),
 });
 
 const irHttpNotCalledAssertionSchema = irAssertionBaseSchema.merge(
@@ -158,6 +165,8 @@ const irToolCalledAssertionNodeSchema = z.object({
   tool: z.enum(TOOL_KINDS),
   command: shellCommandMatcherSchema.optional(),
   path: z.string().min(1).optional(),
+  url: z.string().min(1).optional(),
+  status: webFetchStatusSchema.optional(),
 });
 
 const irToolCalledAssertionSchema = irAssertionBaseSchema.merge(
@@ -169,6 +178,8 @@ const irToolNotCalledAssertionNodeSchema = z.object({
   tool: z.enum(TOOL_KINDS),
   command: shellCommandMatcherSchema.optional(),
   path: z.string().min(1).optional(),
+  url: z.string().min(1).optional(),
+  status: webFetchStatusSchema.optional(),
 });
 
 const irToolNotCalledAssertionSchema = irAssertionBaseSchema.merge(

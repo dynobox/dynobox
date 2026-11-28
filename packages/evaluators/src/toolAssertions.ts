@@ -8,7 +8,10 @@ import {
   extractObservedCommands,
   type ObservedCommand,
 } from './commandAssertions.js';
-import {pathStringsFromToolInput} from './inspection.js';
+import {
+  pathStringsFromToolInput,
+  urlStringsFromToolInput,
+} from './inspection.js';
 import {passed} from './results.js';
 import {
   describeShellMatcher,
@@ -260,6 +263,12 @@ function findMatchingSequenceStep(
       if (step.path !== undefined && !toolEventMatchesPath(event, step.path)) {
         continue;
       }
+      if (step.url !== undefined && !toolEventMatchesUrl(event, step.url)) {
+        continue;
+      }
+      if (step.status !== undefined && event.status !== step.status) {
+        continue;
+      }
       if (cursor.lastMatch === 'unpaired-mock') {
         return {error: UNPAIRED_MOCK_ORDER_ERROR};
       }
@@ -393,14 +402,37 @@ function toolEventMatchesAssertion(
   if (assertion.path !== undefined) {
     return toolEventMatchesPath(event, assertion.path);
   }
+  if (
+    assertion.url !== undefined &&
+    !toolEventMatchesUrl(event, assertion.url)
+  ) {
+    return false;
+  }
+  if (assertion.status !== undefined && event.status !== assertion.status) {
+    return false;
+  }
   if (assertion.command === undefined) return true;
   if (event.kind !== 'shell' || typeof event.command !== 'string') return false;
   return shellCommandMatches(event.command, assertion.command).passed;
 }
 
+function describeWebFetchCriteria(
+  assertion: ToolCalledStep | ToolNotCalledStep,
+): string | undefined {
+  const parts: string[] = [];
+  if (assertion.url !== undefined) parts.push(`url "${assertion.url}"`);
+  if (assertion.status !== undefined)
+    parts.push(`status "${assertion.status}"`);
+  return parts.length === 0 ? undefined : parts.join(', ');
+}
+
 function toolCalledPassMessage(assertion: ToolCalledStep): string {
   if (assertion.path !== undefined) {
     return `Observed tool "${assertion.tool}" with path "${assertion.path}".`;
+  }
+  const webFetch = describeWebFetchCriteria(assertion);
+  if (webFetch !== undefined) {
+    return `Observed tool "${assertion.tool}" with ${webFetch}.`;
   }
   if (assertion.command === undefined) {
     return `Observed tool "${assertion.tool}".`;
@@ -412,6 +444,10 @@ function toolCalledFailMessage(assertion: ToolCalledStep): string {
   if (assertion.path !== undefined) {
     return `Expected tool "${assertion.tool}" with path "${assertion.path}" to be called, but observed none.`;
   }
+  const webFetch = describeWebFetchCriteria(assertion);
+  if (webFetch !== undefined) {
+    return `Expected tool "${assertion.tool}" with ${webFetch} to be called, but observed none.`;
+  }
   if (assertion.command === undefined) {
     return `Expected tool "${assertion.tool}" to be called, but observed none.`;
   }
@@ -421,6 +457,10 @@ function toolCalledFailMessage(assertion: ToolCalledStep): string {
 function toolNotCalledPassMessage(assertion: ToolNotCalledStep): string {
   if (assertion.path !== undefined) {
     return `Observed no tool "${assertion.tool}" calls with path "${assertion.path}".`;
+  }
+  const webFetch = describeWebFetchCriteria(assertion);
+  if (webFetch !== undefined) {
+    return `Observed no tool "${assertion.tool}" calls with ${webFetch}.`;
   }
   if (assertion.command === undefined) {
     return `Observed no tool "${assertion.tool}" calls.`;
@@ -432,6 +472,10 @@ function toolNotCalledFailMessage(assertion: ToolNotCalledStep): string {
   if (assertion.path !== undefined) {
     return `Expected tool "${assertion.tool}" not to be called with path "${assertion.path}", but observed a matching call.`;
   }
+  const webFetch = describeWebFetchCriteria(assertion);
+  if (webFetch !== undefined) {
+    return `Expected tool "${assertion.tool}" not to be called with ${webFetch}, but observed a matching call.`;
+  }
   if (assertion.command === undefined) {
     return `Expected tool "${assertion.tool}" not to be called, but observed a matching call.`;
   }
@@ -441,6 +485,10 @@ function toolNotCalledFailMessage(assertion: ToolNotCalledStep): string {
 function describeToolStep(step: ToolCalledStep): string {
   if (step.path !== undefined) {
     return `tool.called(${step.tool}, path "${step.path}")`;
+  }
+  const webFetch = describeWebFetchCriteria(step);
+  if (webFetch !== undefined) {
+    return `tool.called(${step.tool}, ${webFetch})`;
   }
   if (step.command === undefined) return `tool.called(${step.tool})`;
   return `tool.called(${step.tool}, ${describeShellMatcher(step.command)})`;
@@ -462,4 +510,19 @@ function toolEventMatchesPath(event: ToolEvent, expectedPath: string): boolean {
 
 function normalizePathForMatch(value: string): string {
   return value.replaceAll('\\', '/').replace(/^\.\/+/, '');
+}
+
+function toolEventMatchesUrl(event: ToolEvent, expectedUrl: string): boolean {
+  const expected = normalizeUrlForMatch(expectedUrl);
+  return urlStringsFromToolInput(event.input).some(
+    (value) => normalizeUrlForMatch(value) === expected,
+  );
+}
+
+function normalizeUrlForMatch(value: string): string {
+  try {
+    return new URL(value).toString();
+  } catch {
+    return value.trim();
+  }
 }

@@ -170,6 +170,9 @@ function describeObservedFailure(
     if (assertion.path !== undefined) {
       return `${formatCount(sameKind.length, `${assertion.tool} tool call`)} observed, none for path "${assertion.path}"`;
     }
+    if (assertion.url !== undefined || assertion.status !== undefined) {
+      return `${formatCount(sameKind.length, `${assertion.tool} tool call`)} observed, none matching`;
+    }
     return fallback;
   }
 
@@ -239,6 +242,9 @@ function describeObservedFailure(
       (event) => event.endpointId === assertion.endpointId,
     );
     if (matches.length === 0) return 'no matching HTTP requests observed';
+    if (assertion.json !== undefined || assertion.bodyIncludes !== undefined) {
+      return fallback;
+    }
     if (assertion.status === undefined) return fallback;
     return `matching endpoint statuses: ${[
       ...new Set(matches.map((event) => event.status ?? 'unknown')),

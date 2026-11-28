@@ -1893,8 +1893,13 @@ export default defineDyno({
             tool.called('shell', {includes: 'pnpm test'}),
             tool.called('read_file', {path: 'package.json'}),
             tool.called('edit_file'),
+            tool.called('web_fetch', {
+              url: 'https://past.dev/SKILL.md',
+              status: 'success',
+            }),
             tool.notCalled('shell', {includes: 'git push'}),
             tool.notCalled('read_file', {path: 'secrets.txt'}),
+            tool.notCalled('web_fetch', {url: 'https://evil.example'}),
             artifact.exists('CHANGELOG.md'),
             artifact.contains('CHANGELOG.md', 'dynobox@0.0.4'),
             transcript.contains('EOTP'),
@@ -1914,10 +1919,135 @@ export default defineDyno({
     // @ts-expect-error path matchers are only valid for file-oriented tools
     tool.called('web_search', {path: 'src/index.ts'});
 
+    // @ts-expect-error url/status matchers are only valid for web_fetch
+    tool.called('web_search', {url: 'https://past.dev/SKILL.md'});
+
     // @ts-expect-error sequence.inOrder v0 only accepts tool.called steps
     sequence.inOrder([artifact.exists('CHANGELOG.md')]);
 
     // @ts-expect-error invalid tool kinds are rejected at authoring time
     tool.called('not_real');
   }
+});
+
+describe('HTTP body matchers and web_fetch matchers compilation', () => {
+  it('compiles http.called and http.notCalled body matchers into IR', () => {
+    const compiled = compile(
+      defineDyno({
+        name: 'http-body-test',
+        endpoints: {
+          recall: http.endpoint({
+            method: 'POST',
+            url: 'https://api.past.dev/v1/recall',
+          }),
+          ingest: http.endpoint({
+            method: 'POST',
+            url: 'https://api.past.dev/v1/ingest',
+          }),
+        },
+        scenarios: [
+          {
+            name: 'checks-body',
+            prompt: 'Recall and ingest',
+            assertions: [
+              http.called('recall', {
+                status: 200,
+                json: {identity: 'sam@example.com'},
+              }),
+              http.called('ingest', {bodyIncludes: 'Postgres'}),
+              http.notCalled('recall', {json: {identity: 'other@example.com'}}),
+              http.notCalled('ingest', {bodyIncludes: 'secret'}),
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(compiled.scenarios[0]?.assertions).toEqual([
+      {
+        id: 'assertion.checks-body.0',
+        type: 'http.called',
+        endpointId: 'endpoint.checks-body.recall',
+        status: 200,
+        json: {identity: 'sam@example.com'},
+      },
+      {
+        id: 'assertion.checks-body.1',
+        type: 'http.called',
+        endpointId: 'endpoint.checks-body.ingest',
+        bodyIncludes: 'Postgres',
+      },
+      {
+        id: 'assertion.checks-body.2',
+        type: 'http.notCalled',
+        endpointId: 'endpoint.checks-body.recall',
+        json: {identity: 'other@example.com'},
+      },
+      {
+        id: 'assertion.checks-body.3',
+        type: 'http.notCalled',
+        endpointId: 'endpoint.checks-body.ingest',
+        bodyIncludes: 'secret',
+      },
+    ]);
+  });
+
+  it('compiles web_fetch url and status matchers into IR', () => {
+    const compiled = compile(
+      defineDyno({
+        name: 'web-fetch-test',
+        scenarios: [
+          {
+            name: 'reads-skill',
+            prompt: 'Read the skill',
+            assertions: [
+              tool.called('web_fetch', {
+                url: 'https://past.dev/SKILL.md',
+                status: 'success',
+              }),
+              tool.notCalled('web_fetch', {
+                url: 'https://past.dev/SKILL.md',
+                status: 'failure',
+              }),
+              sequence.inOrder([
+                tool.called('web_fetch', {
+                  url: 'https://past.dev/SKILL.md',
+                  status: 'success',
+                }),
+              ]),
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(compiled.scenarios[0]?.assertions).toEqual([
+      {
+        id: 'assertion.reads-skill.0',
+        type: 'tool.called',
+        tool: 'web_fetch',
+        url: 'https://past.dev/SKILL.md',
+        status: 'success',
+      },
+      {
+        id: 'assertion.reads-skill.1',
+        type: 'tool.notCalled',
+        tool: 'web_fetch',
+        url: 'https://past.dev/SKILL.md',
+        status: 'failure',
+      },
+      {
+        id: 'assertion.reads-skill.2',
+        type: 'sequence.inOrder',
+        steps: [
+          {
+            type: 'tool.called',
+            tool: 'web_fetch',
+            url: 'https://past.dev/SKILL.md',
+            status: 'success',
+          },
+        ],
+      },
+    ]);
+  });
 });

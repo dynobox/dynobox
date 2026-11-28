@@ -615,6 +615,50 @@ describe('parseCodexJson', () => {
     ]);
   });
 
+  it('maps Codex web_search open_page items to web_fetch with url and error-only failure status', () => {
+    const parsed = parseCodexJson(
+      jsonl(
+        {
+          type: 'item.completed',
+          item: {
+            type: 'web_search',
+            query: 'https://past.dev/SKILL.md',
+            action: {type: 'open_page', url: 'https://past.dev/SKILL.md'},
+            results: [{type: 'text_result', title: 'Internal Error'}],
+          },
+        },
+        {
+          type: 'item.completed',
+          item: {
+            type: 'web_search',
+            action: {
+              type: 'open_page',
+              url: 'https://past.dev/agent-setup/prompt.md',
+            },
+            results: [{type: 'text_result', snippet: 'Total lines: 111'}],
+          },
+        },
+      ),
+    );
+
+    expect(parsed.toolEvents).toHaveLength(2);
+    expect(parsed.toolEvents[0]).toMatchObject({
+      kind: 'web_fetch',
+      rawName: 'web_search',
+      status: 'failure',
+      message: 'Internal Error',
+      input: expect.objectContaining({url: 'https://past.dev/SKILL.md'}),
+    });
+    expect(parsed.toolEvents[1]).toMatchObject({
+      kind: 'web_fetch',
+      rawName: 'web_search',
+      status: 'success',
+      input: expect.objectContaining({
+        url: 'https://past.dev/agent-setup/prompt.md',
+      }),
+    });
+  });
+
   it('emits one file event per path of a file_change item', () => {
     const parsed = parseCodexJson(
       jsonl({

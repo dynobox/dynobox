@@ -898,6 +898,13 @@ function describeToolStep(
   if (step.path !== undefined) {
     return `tool.called(${step.tool}, path: ${step.path})`;
   }
+  if (step.url !== undefined || step.status !== undefined) {
+    const details = [
+      ...(step.url === undefined ? [] : [`url: ${step.url}`]),
+      ...(step.status === undefined ? [] : [`status: ${step.status}`]),
+    ];
+    return `tool.called(${step.tool}, ${details.join(', ')})`;
+  }
   if (step.command === undefined) return `tool.called(${step.tool})`;
   return `tool.called(${step.tool}, ${describeMatcher(step.command)})`;
 }
@@ -911,6 +918,13 @@ function describeToolStepExpectation(
   }
   if (step.path !== undefined) {
     return `${step.tool} tool call for path "${step.path}"`;
+  }
+  if (step.url !== undefined || step.status !== undefined) {
+    const details = [
+      ...(step.url === undefined ? [] : [`for url "${step.url}"`]),
+      ...(step.status === undefined ? [] : [`with status "${step.status}"`]),
+    ];
+    return `${step.tool} tool call ${details.join(' ')}`;
   }
   if (step.command === undefined) return `${step.tool} tool call`;
   return describeMatcherExpectation(step.command);

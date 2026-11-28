@@ -11,6 +11,8 @@ import type {
   CommandNotCalledAssertion,
   Endpoint,
   FinalMessageContainsAssertion,
+  HttpCalledOptions,
+  HttpNotCalledOptions,
   NotCalledAssertion,
   SequenceInOrderAssertion,
   SequenceStepAssertion,
@@ -23,6 +25,7 @@ import type {
   TranscriptContainsAssertion,
   VerifyCommandAssertion,
   VerifyCommandOptions,
+  WebFetchMatcher,
 } from '../types/brands.js';
 import {ASSERTION_BRAND, ENDPOINT_BRAND} from '../types/brands.js';
 import type {EndpointSpec} from '../types/endpointSpec.js';
@@ -44,61 +47,76 @@ export function createEndpoint(spec: EndpointSpec): Endpoint {
 /** Create an `http.called` assertion for a declared endpoint key. */
 export function createHttpCalledAssertion<K extends string>(
   endpoint: K,
-  opts?: {status?: number},
+  opts?: HttpCalledOptions,
 ): CalledAssertion<K> {
-  const base = {
+  return {
     [ASSERTION_BRAND]: true as const,
     type: 'http.called' as const,
     endpoint,
-  };
-  return opts?.status === undefined
-    ? (base as CalledAssertion<K>)
-    : ({...base, status: opts.status} as CalledAssertion<K>);
+    ...(opts?.status === undefined ? {} : {status: opts.status}),
+    ...(opts?.json === undefined ? {} : {json: opts.json}),
+    ...(opts?.bodyIncludes === undefined
+      ? {}
+      : {bodyIncludes: opts.bodyIncludes}),
+  } as CalledAssertion<K>;
 }
 
 /** Create an `http.notCalled` assertion for a declared endpoint key. */
 export function createHttpNotCalledAssertion<K extends string>(
   endpoint: K,
+  opts?: HttpNotCalledOptions,
 ): NotCalledAssertion<K> {
   return {
     [ASSERTION_BRAND]: true as const,
     type: 'http.notCalled' as const,
     endpoint,
-  };
+    ...(opts?.json === undefined ? {} : {json: opts.json}),
+    ...(opts?.bodyIncludes === undefined
+      ? {}
+      : {bodyIncludes: opts.bodyIncludes}),
+  } as NotCalledAssertion<K>;
 }
 
-/** Create a positive tool-use assertion, optionally scoped by shell command matcher. */
+function isToolFieldMatcher(
+  matcher: ShellCommandMatcher | ToolPathMatcher | WebFetchMatcher,
+): matcher is ToolPathMatcher | WebFetchMatcher {
+  return 'path' in matcher || 'url' in matcher || 'status' in matcher;
+}
+
+/** Create a positive tool-use assertion, optionally scoped by matcher. */
 export function createToolCalledAssertion<K extends ToolKind>(
   tool: K,
-  matcher?: ShellCommandMatcher | ToolPathMatcher,
+  matcher?: ShellCommandMatcher | ToolPathMatcher | WebFetchMatcher,
 ): ToolCalledAssertion<K> {
   const base = {
     [ASSERTION_BRAND]: true as const,
     type: 'tool.called' as const,
     tool,
   };
-  return (matcher === undefined
-    ? base
-    : 'path' in matcher
-      ? {...base, ...matcher}
-      : {...base, command: matcher}) as unknown as ToolCalledAssertion<K>;
+  if (matcher === undefined) return base as unknown as ToolCalledAssertion<K>;
+  if (tool === 'web_fetch' || isToolFieldMatcher(matcher)) {
+    return {...base, ...matcher} as unknown as ToolCalledAssertion<K>;
+  }
+  return {...base, command: matcher} as unknown as ToolCalledAssertion<K>;
 }
 
-/** Create a negative tool-use assertion, optionally scoped by shell command matcher. */
+/** Create a negative tool-use assertion, optionally scoped by matcher. */
 export function createToolNotCalledAssertion<K extends ToolKind>(
   tool: K,
-  matcher?: ShellCommandMatcher | ToolPathMatcher,
+  matcher?: ShellCommandMatcher | ToolPathMatcher | WebFetchMatcher,
 ): ToolNotCalledAssertion<K> {
   const base = {
     [ASSERTION_BRAND]: true as const,
     type: 'tool.notCalled' as const,
     tool,
   };
-  return (matcher === undefined
-    ? base
-    : 'path' in matcher
-      ? {...base, ...matcher}
-      : {...base, command: matcher}) as unknown as ToolNotCalledAssertion<K>;
+  if (matcher === undefined) {
+    return base as unknown as ToolNotCalledAssertion<K>;
+  }
+  if (tool === 'web_fetch' || isToolFieldMatcher(matcher)) {
+    return {...base, ...matcher} as unknown as ToolNotCalledAssertion<K>;
+  }
+  return {...base, command: matcher} as unknown as ToolNotCalledAssertion<K>;
 }
 
 /** Create a positive normalized command assertion. */

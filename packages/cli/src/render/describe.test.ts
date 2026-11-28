@@ -53,3 +53,47 @@ it('shows the text that contains assertions look for', () => {
     }),
   ).toBe('artifact.contains(.env, "PAST_API_KEY=")');
 });
+
+it('describes HTTP body matchers and web_fetch url/status matchers', () => {
+  expect(
+    describeAssertion({
+      id: 'h1',
+      type: 'http.called',
+      endpointId: 'endpoint.recall',
+      status: 200,
+      json: {identity: 'sam@example.com'},
+    }),
+  ).toBe(
+    'http.called(endpoint.recall, status: 200, json: {"identity":"sam@example.com"})',
+  );
+  expect(
+    describeAssertion({
+      id: 'h2',
+      type: 'http.notCalled',
+      endpointId: 'endpoint.ingest',
+      bodyIncludes: 'secret',
+    }),
+  ).toBe('http.notCalled(endpoint.ingest, bodyIncludes: "secret")');
+  expect(
+    describeAssertion({
+      id: 'w1',
+      type: 'tool.called',
+      tool: 'web_fetch',
+      url: 'https://past.dev/SKILL.md',
+      status: 'success',
+    }),
+  ).toBe(
+    'tool.called(web_fetch, url: https://past.dev/SKILL.md, status: success)',
+  );
+  expect(
+    describeExpectation({
+      id: 'w1',
+      type: 'tool.called',
+      tool: 'web_fetch',
+      url: 'https://past.dev/SKILL.md',
+      status: 'success',
+    }),
+  ).toBe(
+    'web_fetch tool call for url "https://past.dev/SKILL.md" with status "success"',
+  );
+});

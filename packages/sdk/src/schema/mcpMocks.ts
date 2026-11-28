@@ -42,6 +42,10 @@ function isJson(
   }
 }
 
+export const jsonValueSchema = z
+  .custom<JsonValue>((value) => isJson(value), 'Expected a JSON-only value.')
+  .transform((value) => JSON.parse(JSON.stringify(value)) as JsonValue);
+
 export const mcpJsonObjectSchema = z
   .custom<JsonObject>(
     (value) =>

@@ -11,6 +11,7 @@ import {HARNESS_IDS, PERMISSION_MODES} from '../types/harness.js';
 import {HTTP_METHODS} from '../types/httpMethod.js';
 import {httpMocksSchema} from './httpMocks.js';
 import {
+  jsonValueSchema,
   mcpInputMatcherSchema,
   mcpMocksSchema,
   mcpNameSchema,
@@ -123,11 +124,15 @@ const harnessRunConfigSchema = z.union([
   }),
 ]);
 
+const webFetchStatusSchema = z.enum(['success', 'failure']);
+
 const calledAssertionSchema = z
   .object({
     type: z.literal('http.called'),
     endpoint: z.string(),
     status: z.number().int().optional(),
+    json: jsonValueSchema.optional(),
+    bodyIncludes: z.string().min(1).optional(),
   })
   .merge(assertionBaseSchema)
   .strict();
@@ -136,6 +141,8 @@ const notCalledAssertionSchema = z
   .object({
     type: z.literal('http.notCalled'),
     endpoint: z.string(),
+    json: jsonValueSchema.optional(),
+    bodyIncludes: z.string().min(1).optional(),
   })
   .merge(assertionBaseSchema)
   .strict();
@@ -190,6 +197,8 @@ const toolCalledStepSchema = z
     tool: z.enum(TOOL_KINDS),
     command: shellCommandMatcherSchema.optional(),
     path: z.string().min(1).optional(),
+    url: z.string().min(1).optional(),
+    status: webFetchStatusSchema.optional(),
   })
   .strict();
 
@@ -250,6 +259,8 @@ const toolNotCalledAssertionSchema = z
     tool: z.enum(TOOL_KINDS),
     command: shellCommandMatcherSchema.optional(),
     path: z.string().min(1).optional(),
+    url: z.string().min(1).optional(),
+    status: webFetchStatusSchema.optional(),
   })
   .merge(assertionBaseSchema)
   .strict();

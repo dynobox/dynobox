@@ -34,6 +34,10 @@ export function describeAssertion(assertion: IrAssertion): string {
     if (assertion.path !== undefined) {
       return `tool.called(${assertion.tool}, path: ${assertion.path})`;
     }
+    const webFetch = describeWebFetchCompact(assertion);
+    if (webFetch !== undefined) {
+      return `tool.called(${assertion.tool}, ${webFetch})`;
+    }
     return `tool.called(${assertion.tool})`;
   }
 
@@ -43,6 +47,10 @@ export function describeAssertion(assertion: IrAssertion): string {
     }
     if (assertion.path !== undefined) {
       return `tool.notCalled(${assertion.tool}, path: ${assertion.path})`;
+    }
+    const webFetch = describeWebFetchCompact(assertion);
+    if (webFetch !== undefined) {
+      return `tool.notCalled(${assertion.tool}, ${webFetch})`;
     }
     return `tool.notCalled(${assertion.tool})`;
   }
@@ -100,12 +108,16 @@ export function describeAssertion(assertion: IrAssertion): string {
   }
 
   if (assertion.type === 'http.called') {
-    return assertion.status === undefined
+    const details = describeHttpDetails(assertion);
+    return details.length === 0
       ? `http.called(${assertion.endpointId})`
-      : `http.called(${assertion.endpointId}, status: ${assertion.status})`;
+      : `http.called(${assertion.endpointId}, ${details.join(', ')})`;
   }
 
-  return `http.notCalled(${assertion.endpointId})`;
+  const details = describeHttpDetails(assertion);
+  return details.length === 0
+    ? `http.notCalled(${assertion.endpointId})`
+    : `http.notCalled(${assertion.endpointId}, ${details.join(', ')})`;
 }
 
 /**
@@ -122,6 +134,10 @@ export function describeExpectation(assertion: IrAssertion): string {
     }
     if (assertion.path !== undefined) {
       return `no ${assertion.tool} tool call for path "${assertion.path}"`;
+    }
+    const webFetch = describeWebFetchExpectation(assertion);
+    if (webFetch !== undefined) {
+      return `no ${assertion.tool} tool call ${webFetch}`;
     }
     return `no ${assertion.tool} tool call`;
   }
@@ -186,6 +202,10 @@ export function describeExpectation(assertion: IrAssertion): string {
   if (assertion.path !== undefined) {
     return `${assertion.tool} tool call for path "${assertion.path}"`;
   }
+  const webFetch = describeWebFetchExpectation(assertion);
+  if (webFetch !== undefined) {
+    return `${assertion.tool} tool call ${webFetch}`;
+  }
   if (assertion.command === undefined) return `${assertion.tool} tool call`;
   return describeShellMatcherExpectation(assertion.command);
 }
@@ -233,8 +253,54 @@ function describeToolStepExpectation(
   if (step.path !== undefined) {
     return `${step.tool} tool call for path "${step.path}"`;
   }
+  const webFetch = describeWebFetchExpectation(step);
+  if (webFetch !== undefined) {
+    return `${step.tool} tool call ${webFetch}`;
+  }
   if (step.command === undefined) return `${step.tool} tool call`;
   return describeShellMatcherExpectation(step.command);
+}
+
+function describeHttpDetails(assertion: {
+  status?: number | undefined;
+  json?: unknown;
+  bodyIncludes?: string | undefined;
+}): string[] {
+  const details: string[] = [];
+  if (assertion.status !== undefined) {
+    details.push(`status: ${assertion.status}`);
+  }
+  if (assertion.json !== undefined) {
+    details.push(`json: ${JSON.stringify(assertion.json)}`);
+  }
+  if (assertion.bodyIncludes !== undefined) {
+    details.push(`bodyIncludes: ${JSON.stringify(assertion.bodyIncludes)}`);
+  }
+  return details;
+}
+
+function describeWebFetchCompact(assertion: {
+  url?: string | undefined;
+  status?: string | undefined;
+}): string | undefined {
+  const details: string[] = [];
+  if (assertion.url !== undefined) details.push(`url: ${assertion.url}`);
+  if (assertion.status !== undefined) {
+    details.push(`status: ${assertion.status}`);
+  }
+  return details.length === 0 ? undefined : details.join(', ');
+}
+
+function describeWebFetchExpectation(assertion: {
+  url?: string | undefined;
+  status?: string | undefined;
+}): string | undefined {
+  const details: string[] = [];
+  if (assertion.url !== undefined) details.push(`for url "${assertion.url}"`);
+  if (assertion.status !== undefined) {
+    details.push(`with status "${assertion.status}"`);
+  }
+  return details.length === 0 ? undefined : details.join(' ');
 }
 
 function describeAssertionNodeExpectation(

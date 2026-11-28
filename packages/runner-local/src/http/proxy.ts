@@ -53,13 +53,21 @@ export async function startHttpCapture(
   const events: HttpEvent[] = [];
   const failures: string[] = [];
   const byRequestId = new Map<string, HttpEvent>();
+  const pendingBodyReads = new Set<Promise<void>>();
   const pendingMocks = new Map<string, string>();
   let stopPromise: Promise<void> | undefined;
 
   // Avoid well-known development ports that unrelated clients may poll.
   await server.start(0);
   const mockedHosts = new Set(mocks.map(([hostname]) => hostname));
-  await subscribeToEvents(server, routes, mockedHosts, events, byRequestId);
+  await subscribeToEvents(
+    server,
+    routes,
+    mockedHosts,
+    events,
+    byRequestId,
+    pendingBodyReads,
+  );
   // Every request to a mocked host goes to its mock, never to the real host.
   // `always()`: by default mockttp prefers an unused rule after the first
   // match, which would send later requests to the pass-through.
@@ -102,7 +110,9 @@ export async function startHttpCapture(
         );
       }
       pendingMocks.clear();
-      stopPromise = server.stop();
+      stopPromise = Promise.allSettled([...pendingBodyReads]).then(() =>
+        server.stop(),
+      );
       return stopPromise;
     },
   };
@@ -160,11 +170,29 @@ async function subscribeToEvents(
   mockedHosts: ReadonlySet<string>,
   events: HttpEvent[],
   byRequestId: Map<string, HttpEvent>,
+  pendingBodyReads: Set<Promise<void>>,
 ): Promise<void> {
   await server.on('request-initiated', (request) => {
     const event = eventFromRequest(routes, mockedHosts, request);
     events.push(event);
     byRequestId.set(request.id, event);
+  });
+
+  await server.on('request', (request) => {
+    const event = byRequestId.get(request.id);
+    if (event === undefined) return;
+    const read = request.body
+      .getText()
+      .then((text) => {
+        if (text !== undefined && text.length > 0) {
+          event.requestBody = text;
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        pendingBodyReads.delete(read);
+      });
+    pendingBodyReads.add(read);
   });
 
   await server.on('response-initiated', (response) => {

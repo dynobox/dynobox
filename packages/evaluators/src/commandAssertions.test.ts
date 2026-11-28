@@ -150,6 +150,123 @@ describe('extractObservedCommands shell grouping', () => {
   });
 });
 
+describe('extractObservedCommands shell control flow', () => {
+  it('parses condition, then, and else commands inside an if block wrapped in zsh -c', () => {
+    const command =
+      "/bin/zsh -c \"if rg -q '^PAST_API_KEY=.' .env; then npx -y past-dev@latest recall 'checkout timeouts' --identity test@dynobox.xyz; else printf 'No PAST_API_KEY configured in .env.\\n'; fi\"";
+
+    expect(
+      observedSummary(extractObservedCommands([shellEvent(command)])),
+    ).toEqual([
+      {executable: 'rg', argv: ['-q', '^PAST_API_KEY=.', '.env']},
+      {
+        executable: 'npx',
+        argv: [
+          '-y',
+          'past-dev@latest',
+          'recall',
+          'checkout timeouts',
+          '--identity',
+          'test@dynobox.xyz',
+        ],
+      },
+      {
+        executable: 'printf',
+        argv: ['No PAST_API_KEY configured in .env.\\n'],
+      },
+    ]);
+
+    const result = evaluateCommandCalledAssertion(
+      {
+        id: 'assertion.test.if',
+        type: 'command.called',
+        executable: 'npx',
+        command: {
+          args: ['recall', '--identity', 'test@dynobox.xyz'],
+          argsMatching: [{source: '^past-dev(@.*)?$', flags: ''}],
+        },
+      },
+      [shellEvent(command)],
+    );
+
+    expect(result.passed).toBe(true);
+  });
+
+  it('handles elif, nested if, negated conditions, grouped bodies, and multiline blocks', () => {
+    const command = [
+      'if ! test -f .env; then',
+      '  if rg -q key .env.local; then (echo nested; echo ok); fi',
+      'elif test -f .env.example; then',
+      '  cp .env.example .env',
+      'else',
+      '  echo missing',
+      'fi 2>&1 && echo done',
+    ].join('\n');
+
+    expect(
+      observedSummary(extractObservedCommands([shellEvent(command)])),
+    ).toEqual([
+      {executable: 'test', argv: ['-f', '.env']},
+      {executable: 'rg', argv: ['-q', 'key', '.env.local']},
+      {executable: 'echo', argv: ['nested']},
+      {executable: 'echo', argv: ['ok']},
+      {executable: 'test', argv: ['-f', '.env.example']},
+      {executable: 'cp', argv: ['.env.example', '.env']},
+      {executable: 'echo', argv: ['missing']},
+      {executable: 'echo', argv: ['done']},
+    ]);
+  });
+
+  it('parses commands inside for, while, and until loops', () => {
+    expect(
+      observedSummary(
+        extractObservedCommands([
+          shellEvent('for f in a b c; do echo "$f"; done'),
+          shellEvent('for ((i=0; i<3; i++)); do printf "%s" "$i"; done'),
+          shellEvent(
+            'while read -r line; do echo "$line"; done < input.txt | wc -l',
+          ),
+          shellEvent('until curl -sf http://localhost:3000; do sleep 1; done'),
+        ]),
+      ),
+    ).toEqual([
+      {executable: 'echo', argv: ['$f']},
+      {executable: 'printf', argv: ['%s', '$i']},
+      {executable: 'read', argv: ['-r', 'line']},
+      {executable: 'echo', argv: ['$line']},
+      {executable: 'wc', argv: ['-l']},
+      {executable: 'curl', argv: ['-sf', 'http://localhost:3000']},
+      {executable: 'sleep', argv: ['1']},
+    ]);
+  });
+
+  it('parses commands inside case blocks', () => {
+    const command =
+      'case "$env" in prod) npx deploy --prod ;; *) echo skip ;; esac';
+
+    expect(
+      observedSummary(extractObservedCommands([shellEvent(command)])),
+    ).toEqual([
+      {executable: 'npx', argv: ['deploy', '--prod']},
+      {executable: 'echo', argv: ['skip']},
+    ]);
+  });
+
+  it('does not strip commands or arguments that start with reserved-word prefixes', () => {
+    expect(
+      observedSummary(
+        extractObservedCommands([
+          shellEvent('ifconfig -a && docker ps && echo if then else fi done'),
+        ]),
+      ),
+    ).toEqual([
+      {executable: 'ifconfig', argv: ['-a']},
+      {executable: 'docker', argv: ['ps']},
+      {executable: 'echo', argv: ['if', 'then', 'else', 'fi', 'done']},
+    ]);
+  });
+});
+
 describe('evaluateCommandCalledAssertion grouping and diagnostics', () => {
   it('passes command.called for npx inside a subshell exit-code capture', () => {
     const result = evaluateCommandCalledAssertion(

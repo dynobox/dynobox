@@ -33,6 +33,8 @@ export type {
   Endpoint,
   FileToolKind,
   FinalMessageContainsAssertion,
+  HttpCalledOptions,
+  HttpNotCalledOptions,
   McpCalledAssertion,
   McpNotCalledAssertion,
   NotCalledAssertion,
@@ -51,6 +53,8 @@ export type {
   TranscriptContainsAssertion,
   VerifyCommandAssertion,
   VerifyCommandOptions,
+  WebFetchMatcher,
+  WebFetchStatus,
 } from './types/brands.js';
 export {isShellToolEvent} from './types/brands.js';
 export type {
