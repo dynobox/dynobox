@@ -421,8 +421,8 @@ executable is `git`.
 
 #### What normalization handles
 
-- **Compound commands** are split on `;`, `&&`, `||`, `|`, and `|&` into
-  separate command segments, so each side of a pipe or operator is matched
+- **Compound commands** are split on `;`, `&&`, `||`, `|`, `|&`, and newlines
+  into separate command segments, so each side of a pipe or operator is matched
   independently. Separators inside `(...)` subshells and `{...}` brace groups
   are left intact until those wrappers are unwrapped.
 - **Subshell and brace-group wrappers** are unwrapped:  
@@ -432,6 +432,13 @@ executable is `git`.
   redirections on the group are allowed
   (`{ …; } 2>&1`, `(…; echo done) >out`). This covers the common agent pattern
   of capturing exit codes in a group.
+- **Control-flow keywords** are stripped, so condition and body commands are
+  observed: `if test -f .env; then npm test; fi` yields `test` and `npm`. This
+  covers `if`/`then`/`elif`/`else`/`fi`, `while`/`until`/`do`/`done`, `for`
+  headers, and `!`.
+- **Heredoc bodies and comments are skipped**: the lines between
+  `cat > notes.md <<'EOF'` and `EOF` are file content, not commands. Text after
+  an unquoted `#` at the start of a word is ignored up to the end of the line.
 - **Leading environment assignments** are skipped: `NODE_ENV=test pnpm test`
   normalizes to executable `pnpm`.
 - **Shell wrappers** are unwrapped: `bash -lc "git status"` (and `sh`/`zsh`,
@@ -457,11 +464,9 @@ not observed:
   `&` is not.)
 - **Command/process substitution** (`$(...)`, `` `...` ``, `<(...)`) and
   `eval`, and commands invoked via wrappers like `xargs`, are not expanded.
-- **Heredocs** and other multi-line constructs are not interpreted.
+- **`case` blocks** are not supported. Patterns such as `npm|npx)` can be
+  observed as commands.
 - **Shell wrappers** deeper than two levels are not unwrapped.
-- **Shell comments** are dropped from a command's args, but a separator inside a
-  comment (for example `git status # do it && rm -rf`) can still split the line,
-  so text after it may be observed as its own command.
 - `originalIncludes` / `originalMatches` match the text of a **single** command
   segment, not the whole compound line.
 

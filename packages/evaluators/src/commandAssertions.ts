@@ -337,9 +337,14 @@ function parseCommand(
   let segmentIndex = segmentStart;
 
   for (const segment of splitCommandSegments(command)) {
+    const normalized = stripShellControlFlow(segment.command);
+    if (normalized === undefined) continue;
+    const segmentCommand = normalized.command;
+    const segmentOffset = segment.start + normalized.offset;
+
     // Unwrap a whole-segment `(…)` / `{…}`, then re-parse so inner separators
     // become normal top-level splits.
-    const grouping = unwrapShellGrouping(segment.command);
+    const grouping = unwrapShellGrouping(segmentCommand);
     if (grouping !== undefined) {
       const nested = parseCommand(
         grouping.command,
@@ -348,14 +353,14 @@ function parseCommand(
         segmentIndex,
         shell,
         depth,
-        sourceOffset + segment.start + grouping.offset,
+        sourceOffset + segmentOffset + grouping.offset,
       );
       commands.push(...nested);
       segmentIndex += Math.max(1, nested.length);
       continue;
     }
 
-    const parsed = parseSegment(segment.command);
+    const parsed = parseSegment(segmentCommand);
     if (parsed === undefined) continue;
 
     const shellCommand = shellWrappedCommand(parsed);
@@ -377,7 +382,7 @@ function parseCommand(
         segmentIndex,
         shellCommand.shell,
         depth + 1,
-        sourceOffset + segment.start,
+        sourceOffset + segmentOffset,
       );
       commands.push(...nested);
       segmentIndex += Math.max(1, nested.length);
@@ -396,16 +401,44 @@ function parseCommand(
       ...(cwd === undefined ? {} : {cwd}),
       ...(cwdFlag === undefined ? {} : {cwdFlag}),
       ...(shell === undefined ? {} : {shell}),
-      original: segment.command,
+      original: segmentCommand,
       eventIndex,
       segmentIndex,
-      start: sourceOffset + segment.start,
+      start: sourceOffset + segmentOffset,
       end: sourceOffset + segment.end,
     });
     segmentIndex += 1;
   }
 
   return commands;
+}
+
+const SHELL_PREFIX_RE =
+  /^(?:(?:(?:if|then|elif|else|while|until|do)(?=$|\s|[({])|!(?=\s|[({]))\s*)+/;
+const SHELL_CLOSING_RE = /^(?:fi|done)(?=$|\s|[<>]|\d+[<>])/;
+const SHELL_FOR_HEADER_RE = /^for(?=\s|\(\()/;
+
+/**
+ * Strip leading shell control-flow reserved words (`if`, `then`, `elif`,
+ * `else`, `while`, `until`, `do`, `!`) and drop header/closing-only segments
+ * (`for …`, `fi`, `done`). `case` is not supported.
+ */
+function stripShellControlFlow(
+  segment: string,
+): {command: string; offset: number} | undefined {
+  const offset = SHELL_PREFIX_RE.exec(segment)?.[0].length ?? 0;
+  const text = segment.slice(offset);
+  if (text.length === 0 || SHELL_FOR_HEADER_RE.test(text)) return undefined;
+
+  const closing = SHELL_CLOSING_RE.exec(text);
+  if (
+    closing !== null &&
+    isTrailingRedirectionOnly(text.slice(closing[0].length))
+  ) {
+    return undefined;
+  }
+
+  return {command: text, offset};
 }
 
 /**
@@ -578,6 +611,8 @@ function splitCommandSegments(
   // Expected closers for open `(…)` / `{…}` groups. Separators only split when
   // this is empty; groups are unwrapped later in parseCommand.
   const groupStack: string[] = [];
+  // Heredocs opened on the current line; their bodies start at the next newline.
+  const heredocs: {delimiter: string; stripTabs: boolean}[] = [];
 
   for (let index = 0; index < command.length; index += 1) {
     const char = command[index]!;
@@ -607,6 +642,43 @@ function splitCommandSegments(
       continue;
     }
 
+    // Comments and heredoc bodies are not commands. Blank them (keeping
+    // offsets) so their lines are not split out and an apostrophe in them
+    // does not open a quote.
+    if (char === '#' && (index === 0 || /\s/.test(command[index - 1]!))) {
+      const newline = command.indexOf('\n', index);
+      const end = newline === -1 ? command.length : newline;
+      current += ' '.repeat(end - index);
+      index = end - 1;
+      continue;
+    }
+    if (char === '\n' && heredocs.length > 0) {
+      const end = heredocBodyEnd(command, index + 1, heredocs);
+      current += ' '.repeat(end - index);
+      index = end - 1;
+      heredocs.length = 0;
+      continue;
+    }
+    if (command.startsWith('<<<', index)) {
+      // A here-string, not a heredoc.
+      current += '<<<';
+      index += 2;
+      continue;
+    }
+    const heredoc =
+      groupStack.length === 0 && char === '<'
+        ? HEREDOC_RE.exec(command.slice(index))
+        : null;
+    if (heredoc !== null) {
+      heredocs.push({
+        delimiter: heredoc[2]!.replace(/['"\\]/g, ''),
+        stripTabs: heredoc[1] === '-',
+      });
+      current += heredoc[0];
+      index += heredoc[0].length - 1;
+      continue;
+    }
+
     const expectedClose = GROUP_CLOSE_FOR[char];
     if (expectedClose !== undefined) {
       groupStack.push(expectedClose);
@@ -633,7 +705,10 @@ function splitCommandSegments(
       continue;
     }
 
-    if (groupStack.length === 0 && (char === ';' || char === '|')) {
+    if (
+      groupStack.length === 0 &&
+      (char === ';' || char === '|' || char === '\n')
+    ) {
       pushCommandSegment(segments, current, currentStart, index);
       current = '';
       currentStart = index + 1;
@@ -645,6 +720,31 @@ function splitCommandSegments(
 
   pushCommandSegment(segments, current, currentStart, command.length);
   return segments;
+}
+
+/** `<<WORD` / `<<-WORD`, with the delimiter word optionally quoted. */
+const HEREDOC_RE = /^<<(-?)[ \t]*((?:'[^']*'|"[^"]*"|\\.|[^\s;&|<>()'"\\])+)/;
+
+/**
+ * Index of the newline that ends the last heredoc's delimiter line (or the end
+ * of `command` when a heredoc is not closed). Bodies follow in open order.
+ */
+function heredocBodyEnd(
+  command: string,
+  start: number,
+  heredocs: readonly {delimiter: string; stripTabs: boolean}[],
+): number {
+  let lineStart = start;
+  for (const {delimiter, stripTabs} of heredocs) {
+    while (lineStart <= command.length) {
+      const newline = command.indexOf('\n', lineStart);
+      const lineEnd = newline === -1 ? command.length : newline;
+      const line = command.slice(lineStart, lineEnd);
+      lineStart = lineEnd + 1;
+      if ((stripTabs ? line.replace(/^\t+/, '') : line) === delimiter) break;
+    }
+  }
+  return Math.min(lineStart - 1, command.length);
 }
 
 function pushCommandSegment(
