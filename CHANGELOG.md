@@ -14,6 +14,10 @@ Dynobox uses per-package versioning. Tags follow `<package-name>@<version>` (e.g
   `artifact.contains` now include the text they look for, for example
   `finalMessage.contains("done")`. This applies to terminal output and to
   uploaded run summaries.
+- `command.called` and `command.notCalled` now parse multi-line scripts and
+  commands inside shell control-flow blocks (`if`/`elif`/`else`/`fi`, `for`,
+  `while`, `until`), including condition commands. Heredoc bodies and `#`
+  comments are not parsed as commands. `case` blocks are not supported.
 
 ---
 
