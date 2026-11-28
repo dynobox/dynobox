@@ -135,8 +135,6 @@ const irMcpNotCalledSchema = irAssertionBaseSchema.merge(
   irMcpNotCalledNodeSchema,
 );
 
-const webFetchStatusSchema = z.enum(['success', 'failure']);
-
 const irHttpCalledAssertionNodeSchema = z.object({
   type: z.literal('http.called'),
   endpointId: z.string().min(1),
@@ -166,7 +164,6 @@ const irToolCalledAssertionNodeSchema = z.object({
   command: shellCommandMatcherSchema.optional(),
   path: z.string().min(1).optional(),
   url: z.string().min(1).optional(),
-  status: webFetchStatusSchema.optional(),
 });
 
 const irToolCalledAssertionSchema = irAssertionBaseSchema.merge(
@@ -179,7 +176,6 @@ const irToolNotCalledAssertionNodeSchema = z.object({
   command: shellCommandMatcherSchema.optional(),
   path: z.string().min(1).optional(),
   url: z.string().min(1).optional(),
-  status: webFetchStatusSchema.optional(),
 });
 
 const irToolNotCalledAssertionSchema = irAssertionBaseSchema.merge(

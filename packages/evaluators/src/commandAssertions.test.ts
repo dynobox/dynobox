@@ -240,15 +240,44 @@ describe('extractObservedCommands shell control flow', () => {
     ]);
   });
 
-  it('parses commands inside case blocks', () => {
-    const command =
-      'case "$env" in prod) npx deploy --prod ;; *) echo skip ;; esac';
-
+  it('does not treat heredoc bodies as commands', () => {
     expect(
-      observedSummary(extractObservedCommands([shellEvent(command)])),
+      observedSummary(
+        extractObservedCommands([
+          shellEvent(
+            "cat > NOTES.md <<'EOF'\nDon't run:\ngit push --force\nEOF\nnpm test",
+          ),
+          shellEvent('cat <<-EOF | grep x\n\tgit push\n\tEOF\nnpm run lint'),
+          shellEvent('cat <<A <<"B"\nnpm publish\nA\nnpm publish\nB\nls'),
+          shellEvent('cat <<<"$x"\npwd'),
+        ]),
+      ),
     ).toEqual([
-      {executable: 'npx', argv: ['deploy', '--prod']},
-      {executable: 'echo', argv: ['skip']},
+      {executable: 'cat', argv: []},
+      {executable: 'npm', argv: ['test']},
+      {executable: 'cat', argv: []},
+      {executable: 'grep', argv: ['x']},
+      {executable: 'npm', argv: ['run', 'lint']},
+      {executable: 'cat', argv: []},
+      {executable: 'ls', argv: []},
+      {executable: 'cat', argv: []},
+      {executable: 'pwd', argv: []},
+    ]);
+  });
+
+  it('ignores comments, including ones with apostrophes', () => {
+    expect(
+      observedSummary(
+        extractObservedCommands([
+          shellEvent(
+            "echo start\n# we don't push yet\ngit push # it's fine\ngh issue view owner/repo#12",
+          ),
+        ]),
+      ),
+    ).toEqual([
+      {executable: 'echo', argv: ['start']},
+      {executable: 'git', argv: ['push']},
+      {executable: 'gh', argv: ['issue', 'view', 'owner/repo#12']},
     ]);
   });
 

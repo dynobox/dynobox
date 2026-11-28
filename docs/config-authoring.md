@@ -347,6 +347,18 @@ including common nested fields such as `path`, `file_path`, `filepath`, and
 `file`. Tool assertions may specify either a shell command matcher or a path
 matcher, not both.
 
+`web_fetch` tool assertions can include a URL matcher:
+
+- `tool.called('web_fetch', {url: 'https://past.dev/SKILL.md'})`
+- `tool.notCalled('web_fetch', {url: 'https://evil.example/payload'})`
+
+The URL must match the fetched URL exactly after normalization (for example,
+the host is lowercased and `https://past.dev` equals `https://past.dev/`). It is
+not a host or prefix match: `{url: 'https://evil.example'}` does not match a
+fetch of `https://evil.example/payload`. The matcher reads the top-level `url`
+field of the tool input. Codex page reads (`web_search` items with an
+`open_page` action) are recorded as `web_fetch` with that URL.
+
 ### Commands
 
 > **Experimental.** Command assertions are new; their matching behavior and
@@ -421,8 +433,8 @@ executable is `git`.
 
 #### What normalization handles
 
-- **Compound commands** are split on `;`, `&&`, `||`, `|`, and `|&` into
-  separate command segments, so each side of a pipe or operator is matched
+- **Compound commands** are split on `;`, `&&`, `||`, `|`, `|&`, and newlines
+  into separate command segments, so each side of a pipe or operator is matched
   independently. Separators inside `(...)` subshells and `{...}` brace groups
   are left intact until those wrappers are unwrapped.
 - **Subshell and brace-group wrappers** are unwrapped:  
@@ -432,6 +444,13 @@ executable is `git`.
   redirections on the group are allowed
   (`{ …; } 2>&1`, `(…; echo done) >out`). This covers the common agent pattern
   of capturing exit codes in a group.
+- **Control-flow keywords** are stripped, so condition and body commands are
+  observed: `if test -f .env; then npm test; fi` yields `test` and `npm`. This
+  covers `if`/`then`/`elif`/`else`/`fi`, `while`/`until`/`do`/`done`, `for`
+  headers, and `!`.
+- **Heredoc bodies and comments are skipped**: the lines between
+  `cat > notes.md <<'EOF'` and `EOF` are file content, not commands. Text after
+  an unquoted `#` at the start of a word is ignored up to the end of the line.
 - **Leading environment assignments** are skipped: `NODE_ENV=test pnpm test`
   normalizes to executable `pnpm`.
 - **Shell wrappers** are unwrapped: `bash -lc "git status"` (and `sh`/`zsh`,
@@ -457,11 +476,9 @@ not observed:
   `&` is not.)
 - **Command/process substitution** (`$(...)`, `` `...` ``, `<(...)`) and
   `eval`, and commands invoked via wrappers like `xargs`, are not expanded.
-- **Heredocs** and other multi-line constructs are not interpreted.
+- **`case` blocks** are not supported. Patterns such as `npm|npx)` can be
+  observed as commands.
 - **Shell wrappers** deeper than two levels are not unwrapped.
-- **Shell comments** are dropped from a command's args, but a separator inside a
-  comment (for example `git status # do it && rm -rf`) can still split the line,
-  so text after it may be observed as its own command.
 - `originalIncludes` / `originalMatches` match the text of a **single** command
   segment, not the whole compound line.
 
@@ -635,6 +652,18 @@ numbers, underscores, and hyphens.
 
 Endpoint specs include only `method` and `url`. HTTP assertions match observed
 requests by endpoint URL/method and optional response status.
+
+`http.called` and `http.notCalled` can also match the request body:
+
+```ts
+http.called('recall', {json: {identity: 'sam@example.com'}});
+http.notCalled('ingest', {bodyIncludes: 'PAST_API_KEY'});
+```
+
+`json` is a partial deep match against the body parsed as JSON. `bodyIncludes`
+is a substring match against the UTF-8 body text. Failure messages do not
+include observed bodies, because assertion messages are part of uploaded run
+summaries.
 
 When a scenario includes HTTP assertions or [HTTP mocks](#http-mocks), Dynobox
 starts a per-job local proxy and sets `HTTP_PROXY`, `HTTPS_PROXY`, and their

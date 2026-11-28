@@ -72,7 +72,7 @@ export function evaluateHttpCalled(
 
   return failed(
     assertion,
-    `Expected HTTP endpoint "${assertion.endpointId}" with ${describeHttpCriteria(assertion)}, but observed request body did not match (${formatObservedBodies(statusMatches)}).`,
+    `Expected HTTP endpoint "${assertion.endpointId}" with ${describeHttpCriteria(assertion)}, but no request body matched (${statusMatches.length} ${statusMatches.length === 1 ? 'request' : 'requests'} observed).`,
   );
 }
 
@@ -153,16 +153,4 @@ function describeHttpCriteria(criteria: {
     parts.push(`body including ${JSON.stringify(criteria.bodyIncludes)}`);
   }
   return parts.join(', ');
-}
-
-function formatObservedBodies(events: readonly HttpEvent[]): string {
-  const bodies = events.map((event) => {
-    if (event.requestBody === undefined || event.requestBody.length === 0) {
-      return '(empty)';
-    }
-    return event.requestBody.length > 160
-      ? `${event.requestBody.slice(0, 157)}...`
-      : event.requestBody;
-  });
-  return `observed: ${bodies.join('; ')}`;
 }

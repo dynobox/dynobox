@@ -80,20 +80,14 @@ it('describes HTTP body matchers and web_fetch url/status matchers', () => {
       type: 'tool.called',
       tool: 'web_fetch',
       url: 'https://past.dev/SKILL.md',
-      status: 'success',
     }),
-  ).toBe(
-    'tool.called(web_fetch, url: https://past.dev/SKILL.md, status: success)',
-  );
+  ).toBe('tool.called(web_fetch, url: https://past.dev/SKILL.md)');
   expect(
     describeExpectation({
       id: 'w1',
       type: 'tool.called',
       tool: 'web_fetch',
       url: 'https://past.dev/SKILL.md',
-      status: 'success',
     }),
-  ).toBe(
-    'web_fetch tool call for url "https://past.dev/SKILL.md" with status "success"',
-  );
+  ).toBe('web_fetch tool call for url "https://past.dev/SKILL.md"');
 });

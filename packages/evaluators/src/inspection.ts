@@ -149,39 +149,6 @@ export function pathStringsFromToolInput(value: unknown): string[] {
   return paths;
 }
 
-export function urlStringsFromToolInput(value: unknown): string[] {
-  const urls: string[] = [];
-  const seen = new WeakSet<object>();
-  const urlKeys = new Set(['url', 'uri', 'href', 'target_url', 'targeturl']);
-
-  function visit(current: unknown): void {
-    if (typeof current === 'string') {
-      urls.push(current);
-      return;
-    }
-
-    if (typeof current !== 'object' || current === null) return;
-    if (seen.has(current)) return;
-    seen.add(current);
-
-    if (Array.isArray(current)) {
-      for (const item of current) visit(item);
-      return;
-    }
-
-    for (const [key, nested] of Object.entries(current)) {
-      if (urlKeys.has(key.toLowerCase()) && typeof nested === 'string') {
-        urls.push(nested);
-        continue;
-      }
-      if (typeof nested === 'object' && nested !== null) visit(nested);
-    }
-  }
-
-  visit(value);
-  return urls;
-}
-
 export function stringsFromUnknown(value: unknown): string[] {
   const strings: string[] = [];
   const seen = new WeakSet<object>();

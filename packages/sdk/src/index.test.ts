@@ -1893,10 +1893,7 @@ export default defineDyno({
             tool.called('shell', {includes: 'pnpm test'}),
             tool.called('read_file', {path: 'package.json'}),
             tool.called('edit_file'),
-            tool.called('web_fetch', {
-              url: 'https://past.dev/SKILL.md',
-              status: 'success',
-            }),
+            tool.called('web_fetch', {url: 'https://past.dev/SKILL.md'}),
             tool.notCalled('shell', {includes: 'git push'}),
             tool.notCalled('read_file', {path: 'secrets.txt'}),
             tool.notCalled('web_fetch', {url: 'https://evil.example'}),
@@ -1992,7 +1989,7 @@ describe('HTTP body matchers and web_fetch matchers compilation', () => {
     ]);
   });
 
-  it('compiles web_fetch url and status matchers into IR', () => {
+  it('compiles web_fetch url matchers into IR', () => {
     const compiled = compile(
       defineDyno({
         name: 'web-fetch-test',
@@ -2001,19 +1998,10 @@ describe('HTTP body matchers and web_fetch matchers compilation', () => {
             name: 'reads-skill',
             prompt: 'Read the skill',
             assertions: [
-              tool.called('web_fetch', {
-                url: 'https://past.dev/SKILL.md',
-                status: 'success',
-              }),
-              tool.notCalled('web_fetch', {
-                url: 'https://past.dev/SKILL.md',
-                status: 'failure',
-              }),
+              tool.called('web_fetch', {url: 'https://past.dev/SKILL.md'}),
+              tool.notCalled('web_fetch', {url: 'https://past.dev/SKILL.md'}),
               sequence.inOrder([
-                tool.called('web_fetch', {
-                  url: 'https://past.dev/SKILL.md',
-                  status: 'success',
-                }),
+                tool.called('web_fetch', {url: 'https://past.dev/SKILL.md'}),
               ]),
             ],
           },
@@ -2027,14 +2015,12 @@ describe('HTTP body matchers and web_fetch matchers compilation', () => {
         type: 'tool.called',
         tool: 'web_fetch',
         url: 'https://past.dev/SKILL.md',
-        status: 'success',
       },
       {
         id: 'assertion.reads-skill.1',
         type: 'tool.notCalled',
         tool: 'web_fetch',
         url: 'https://past.dev/SKILL.md',
-        status: 'failure',
       },
       {
         id: 'assertion.reads-skill.2',
@@ -2044,7 +2030,6 @@ describe('HTTP body matchers and web_fetch matchers compilation', () => {
             type: 'tool.called',
             tool: 'web_fetch',
             url: 'https://past.dev/SKILL.md',
-            status: 'success',
           },
         ],
       },

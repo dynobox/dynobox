@@ -7,97 +7,75 @@ import {
 } from './toolAssertions.js';
 import type {ToolEvent} from './types.js';
 
-function webFetchEvent(
-  url: string,
-  status?: 'success' | 'failure',
-  inputKey: 'url' | 'Url' = 'url',
-): ToolEvent {
+function webFetchEvent(url: string, extra: object = {}): ToolEvent {
   return {
     kind: 'web_fetch',
     rawName: 'web_fetch',
-    input: {[inputKey]: url},
-    ...(status === undefined ? {} : {status}),
+    input: {url, ...extra},
   };
 }
 
-describe('web_fetch URL and status matchers', () => {
-  it('matches url and status on tool.called("web_fetch")', () => {
-    const failedRead = webFetchEvent('https://past.dev/SKILL.md', 'failure');
-    const otherRead = webFetchEvent(
-      'https://past.dev/agent-setup/prompt.md',
-      'success',
-    );
-    const successRead = webFetchEvent('https://past.dev/SKILL.md', 'success');
+describe('web_fetch URL matcher', () => {
+  it('matches the normalized top-level url on tool.called("web_fetch")', () => {
+    const skillRead = webFetchEvent('https://past.dev/SKILL.md');
 
-    const failOnError = evaluateToolCalledAssertion(
+    const pass = evaluateToolCalledAssertion(
       {
         id: 'assertion.test.0',
         type: 'tool.called',
         tool: 'web_fetch',
-        url: 'https://past.dev/SKILL.md',
-        status: 'success',
+        url: 'https://PAST.dev/SKILL.md',
       },
-      [failedRead, otherRead],
+      [webFetchEvent('https://past.dev/agent-setup/prompt.md'), skillRead],
     );
-    expect(failOnError.passed).toBe(false);
-    expect(failOnError.message).toContain('url "https://past.dev/SKILL.md"');
-    expect(failOnError.message).toContain('status "success"');
+    expect(pass.passed).toBe(true);
+    expect(pass.evidence).toBe(skillRead);
 
-    const passOnSuccess = evaluateToolCalledAssertion(
+    const fail = evaluateToolCalledAssertion(
       {
         id: 'assertion.test.1',
         type: 'tool.called',
         tool: 'web_fetch',
-        url: 'https://past.dev/SKILL.md',
-        status: 'success',
+        url: 'https://past.dev/missing.md',
       },
-      [failedRead, successRead],
+      [skillRead],
     );
-    expect(passOnSuccess.passed).toBe(true);
-    expect(passOnSuccess.evidence).toBe(successRead);
+    expect(fail.passed).toBe(false);
+    expect(fail.message).toContain('url "https://past.dev/missing.md"');
   });
 
-  it('extracts case-insensitive URL fields such as Url and normalizes origins', () => {
-    const event = webFetchEvent('https://past.dev', 'success', 'Url');
+  it('matches the exact URL, not other paths or nested result URLs', () => {
+    const events = [
+      webFetchEvent('https://docs.example/a', {
+        results: [{url: 'https://evil.example/'}],
+      }),
+      webFetchEvent('https://evil.example/payload'),
+    ];
 
-    const result = evaluateToolCalledAssertion(
+    const result = evaluateToolNotCalledAssertion(
       {
         id: 'assertion.test.2',
-        type: 'tool.called',
+        type: 'tool.notCalled',
         tool: 'web_fetch',
-        url: 'https://past.dev/',
-        status: 'success',
+        url: 'https://evil.example/',
       },
-      [event],
+      events,
     );
     expect(result.passed).toBe(true);
   });
 
-  it('supports url and status matchers on tool.notCalled and sequence.inOrder', () => {
+  it('supports url matchers on tool.notCalled and sequence.inOrder', () => {
     const events = [
-      webFetchEvent('https://past.dev/SKILL.md', 'failure'),
-      webFetchEvent('https://past.dev/agent-setup/prompt.md', 'success'),
+      webFetchEvent('https://past.dev/SKILL.md'),
+      webFetchEvent('https://past.dev/agent-setup/prompt.md'),
     ];
 
-    const notCalledPass = evaluateToolNotCalledAssertion(
+    const notCalledFail = evaluateToolNotCalledAssertion(
       {
         id: 'assertion.test.3',
         type: 'tool.notCalled',
         tool: 'web_fetch',
         url: 'https://past.dev/SKILL.md',
-        status: 'success',
-      },
-      events,
-    );
-    expect(notCalledPass.passed).toBe(true);
-
-    const notCalledFail = evaluateToolNotCalledAssertion(
-      {
-        id: 'assertion.test.4',
-        type: 'tool.notCalled',
-        tool: 'web_fetch',
-        url: 'https://past.dev/SKILL.md',
-        status: 'failure',
       },
       events,
     );
@@ -105,25 +83,44 @@ describe('web_fetch URL and status matchers', () => {
 
     const sequencePass = evaluateSequenceInOrder(
       {
-        id: 'assertion.test.5',
+        id: 'assertion.test.4',
         type: 'sequence.inOrder',
         steps: [
           {
             type: 'tool.called',
             tool: 'web_fetch',
             url: 'https://past.dev/SKILL.md',
-            status: 'failure',
           },
           {
             type: 'tool.called',
             tool: 'web_fetch',
             url: 'https://past.dev/agent-setup/prompt.md',
-            status: 'success',
           },
         ],
       },
       events,
     );
     expect(sequencePass.passed).toBe(true);
+
+    const sequenceFail = evaluateSequenceInOrder(
+      {
+        id: 'assertion.test.5',
+        type: 'sequence.inOrder',
+        steps: [
+          {
+            type: 'tool.called',
+            tool: 'web_fetch',
+            url: 'https://past.dev/agent-setup/prompt.md',
+          },
+          {
+            type: 'tool.called',
+            tool: 'web_fetch',
+            url: 'https://past.dev/SKILL.md',
+          },
+        ],
+      },
+      events,
+    );
+    expect(sequenceFail.passed).toBe(false);
   });
 });

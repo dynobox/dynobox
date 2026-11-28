@@ -222,7 +222,6 @@ function buildIrAssertionNode(
       ...(assertion.command === undefined ? {} : {command: assertion.command}),
       ...(assertion.path === undefined ? {} : {path: assertion.path}),
       ...(assertion.url === undefined ? {} : {url: assertion.url}),
-      ...(assertion.status === undefined ? {} : {status: assertion.status}),
     };
   }
 
@@ -357,7 +356,6 @@ function buildIrToolCalledStep(
     ...(assertion.command === undefined ? {} : {command: assertion.command}),
     ...(assertion.path === undefined ? {} : {path: assertion.path}),
     ...(assertion.url === undefined ? {} : {url: assertion.url}),
-    ...(assertion.status === undefined ? {} : {status: assertion.status}),
   } as Omit<Extract<IrAssertion, {type: 'tool.called'}>, 'id'>;
 }
 

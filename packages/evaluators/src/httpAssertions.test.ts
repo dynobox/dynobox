@@ -52,7 +52,8 @@ describe('evaluateHttpCalled body matchers', () => {
     expect(fail.passed).toBe(false);
     expect(fail.message).toContain('JSON body matching');
     expect(fail.message).toContain('other@example.com');
-    expect(fail.message).toContain('sam@example.com');
+    // Observed bodies stay out of the message: it is uploaded.
+    expect(fail.message).not.toContain('sam@example.com');
   });
 
   it('fails json matcher when request body is missing or invalid JSON', () => {
@@ -68,8 +69,8 @@ describe('evaluateHttpCalled body matchers', () => {
       events,
     );
     expect(result.passed).toBe(false);
-    expect(result.message).toContain('not json');
-    expect(result.message).toContain('(empty)');
+    expect(result.message).toContain('2 requests observed');
+    expect(result.message).not.toContain('not json');
   });
 
   it('matches bodyIncludes substring in the request body', () => {

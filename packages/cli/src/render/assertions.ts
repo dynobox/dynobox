@@ -170,7 +170,7 @@ function describeObservedFailure(
     if (assertion.path !== undefined) {
       return `${formatCount(sameKind.length, `${assertion.tool} tool call`)} observed, none for path "${assertion.path}"`;
     }
-    if (assertion.url !== undefined || assertion.status !== undefined) {
+    if (assertion.url !== undefined) {
       return `${formatCount(sameKind.length, `${assertion.tool} tool call`)} observed, none matching`;
     }
     return fallback;

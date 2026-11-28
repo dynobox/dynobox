@@ -82,13 +82,9 @@ export type ToolPathMatcher = {
   readonly path: string;
 };
 
-/** Status filter for `web_fetch` tool assertions. */
-export type WebFetchStatus = 'success' | 'failure';
-
-/** Matcher for `web_fetch` tool assertions. */
+/** Matcher for `web_fetch` tool assertions: the exact URL that was fetched. */
 export type WebFetchMatcher = {
-  readonly url?: string;
-  readonly status?: WebFetchStatus;
+  readonly url: string;
 };
 
 /** Options for `http.called` assertions. */
@@ -198,7 +194,6 @@ export type ToolCalledAssertion<K extends ToolKind = ToolKind> =
             readonly type: 'tool.called';
             readonly tool: 'web_fetch';
             readonly url?: string;
-            readonly status?: WebFetchStatus;
           }
         : {
             readonly [ASSERTION_BRAND]: true;
@@ -236,7 +231,6 @@ export type ToolNotCalledAssertion<K extends ToolKind = ToolKind> =
             readonly type: 'tool.notCalled';
             readonly tool: 'web_fetch';
             readonly url?: string;
-            readonly status?: WebFetchStatus;
           }
         : {
             readonly [ASSERTION_BRAND]: true;

@@ -124,8 +124,6 @@ const harnessRunConfigSchema = z.union([
   }),
 ]);
 
-const webFetchStatusSchema = z.enum(['success', 'failure']);
-
 const calledAssertionSchema = z
   .object({
     type: z.literal('http.called'),
@@ -198,7 +196,6 @@ const toolCalledStepSchema = z
     command: shellCommandMatcherSchema.optional(),
     path: z.string().min(1).optional(),
     url: z.string().min(1).optional(),
-    status: webFetchStatusSchema.optional(),
   })
   .strict();
 
@@ -260,7 +257,6 @@ const toolNotCalledAssertionSchema = z
     command: shellCommandMatcherSchema.optional(),
     path: z.string().min(1).optional(),
     url: z.string().min(1).optional(),
-    status: webFetchStatusSchema.optional(),
   })
   .merge(assertionBaseSchema)
   .strict();

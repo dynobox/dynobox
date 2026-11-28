@@ -80,7 +80,7 @@ export function createHttpNotCalledAssertion<K extends string>(
 function isToolFieldMatcher(
   matcher: ShellCommandMatcher | ToolPathMatcher | WebFetchMatcher,
 ): matcher is ToolPathMatcher | WebFetchMatcher {
-  return 'path' in matcher || 'url' in matcher || 'status' in matcher;
+  return 'path' in matcher || 'url' in matcher;
 }
 
 /** Create a positive tool-use assertion, optionally scoped by matcher. */

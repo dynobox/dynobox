@@ -615,7 +615,7 @@ describe('parseCodexJson', () => {
     ]);
   });
 
-  it('maps Codex web_search open_page items to web_fetch with url and error-only failure status', () => {
+  it('maps Codex web_search open_page items to web_fetch with the page url', () => {
     const parsed = parseCodexJson(
       jsonl(
         {
@@ -645,14 +645,11 @@ describe('parseCodexJson', () => {
     expect(parsed.toolEvents[0]).toMatchObject({
       kind: 'web_fetch',
       rawName: 'web_search',
-      status: 'failure',
-      message: 'Internal Error',
       input: expect.objectContaining({url: 'https://past.dev/SKILL.md'}),
     });
     expect(parsed.toolEvents[1]).toMatchObject({
       kind: 'web_fetch',
       rawName: 'web_search',
-      status: 'success',
       input: expect.objectContaining({
         url: 'https://past.dev/agent-setup/prompt.md',
       }),
