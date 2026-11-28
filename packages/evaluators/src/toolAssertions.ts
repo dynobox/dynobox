@@ -260,6 +260,9 @@ function findMatchingSequenceStep(
       if (step.path !== undefined && !toolEventMatchesPath(event, step.path)) {
         continue;
       }
+      if (step.url !== undefined && !toolEventMatchesUrl(event, step.url)) {
+        continue;
+      }
       if (cursor.lastMatch === 'unpaired-mock') {
         return {error: UNPAIRED_MOCK_ORDER_ERROR};
       }
@@ -393,14 +396,27 @@ function toolEventMatchesAssertion(
   if (assertion.path !== undefined) {
     return toolEventMatchesPath(event, assertion.path);
   }
+  if (assertion.url !== undefined) {
+    return toolEventMatchesUrl(event, assertion.url);
+  }
   if (assertion.command === undefined) return true;
   if (event.kind !== 'shell' || typeof event.command !== 'string') return false;
   return shellCommandMatches(event.command, assertion.command).passed;
 }
 
+/** `path "…"` or `url "…"` when the assertion has a field matcher. */
+function describeFieldMatcher(
+  assertion: ToolCalledStep | ToolNotCalledStep,
+): string | undefined {
+  if (assertion.path !== undefined) return `path "${assertion.path}"`;
+  if (assertion.url !== undefined) return `url "${assertion.url}"`;
+  return undefined;
+}
+
 function toolCalledPassMessage(assertion: ToolCalledStep): string {
-  if (assertion.path !== undefined) {
-    return `Observed tool "${assertion.tool}" with path "${assertion.path}".`;
+  const field = describeFieldMatcher(assertion);
+  if (field !== undefined) {
+    return `Observed tool "${assertion.tool}" with ${field}.`;
   }
   if (assertion.command === undefined) {
     return `Observed tool "${assertion.tool}".`;
@@ -409,8 +425,9 @@ function toolCalledPassMessage(assertion: ToolCalledStep): string {
 }
 
 function toolCalledFailMessage(assertion: ToolCalledStep): string {
-  if (assertion.path !== undefined) {
-    return `Expected tool "${assertion.tool}" with path "${assertion.path}" to be called, but observed none.`;
+  const field = describeFieldMatcher(assertion);
+  if (field !== undefined) {
+    return `Expected tool "${assertion.tool}" with ${field} to be called, but observed none.`;
   }
   if (assertion.command === undefined) {
     return `Expected tool "${assertion.tool}" to be called, but observed none.`;
@@ -419,8 +436,9 @@ function toolCalledFailMessage(assertion: ToolCalledStep): string {
 }
 
 function toolNotCalledPassMessage(assertion: ToolNotCalledStep): string {
-  if (assertion.path !== undefined) {
-    return `Observed no tool "${assertion.tool}" calls with path "${assertion.path}".`;
+  const field = describeFieldMatcher(assertion);
+  if (field !== undefined) {
+    return `Observed no tool "${assertion.tool}" calls with ${field}.`;
   }
   if (assertion.command === undefined) {
     return `Observed no tool "${assertion.tool}" calls.`;
@@ -429,8 +447,9 @@ function toolNotCalledPassMessage(assertion: ToolNotCalledStep): string {
 }
 
 function toolNotCalledFailMessage(assertion: ToolNotCalledStep): string {
-  if (assertion.path !== undefined) {
-    return `Expected tool "${assertion.tool}" not to be called with path "${assertion.path}", but observed a matching call.`;
+  const field = describeFieldMatcher(assertion);
+  if (field !== undefined) {
+    return `Expected tool "${assertion.tool}" not to be called with ${field}, but observed a matching call.`;
   }
   if (assertion.command === undefined) {
     return `Expected tool "${assertion.tool}" not to be called, but observed a matching call.`;
@@ -439,9 +458,8 @@ function toolNotCalledFailMessage(assertion: ToolNotCalledStep): string {
 }
 
 function describeToolStep(step: ToolCalledStep): string {
-  if (step.path !== undefined) {
-    return `tool.called(${step.tool}, path "${step.path}")`;
-  }
+  const field = describeFieldMatcher(step);
+  if (field !== undefined) return `tool.called(${step.tool}, ${field})`;
   if (step.command === undefined) return `tool.called(${step.tool})`;
   return `tool.called(${step.tool}, ${describeShellMatcher(step.command)})`;
 }
@@ -462,4 +480,26 @@ function toolEventMatchesPath(event: ToolEvent, expectedPath: string): boolean {
 
 function normalizePathForMatch(value: string): string {
   return value.replaceAll('\\', '/').replace(/^\.\/+/, '');
+}
+
+/** Exact match on the top-level `url` field that harness adapters emit. */
+function toolEventMatchesUrl(event: ToolEvent, expectedUrl: string): boolean {
+  const url =
+    typeof event.input === 'object' &&
+    event.input !== null &&
+    'url' in event.input
+      ? event.input.url
+      : undefined;
+  return (
+    typeof url === 'string' &&
+    normalizeUrlForMatch(url) === normalizeUrlForMatch(expectedUrl)
+  );
+}
+
+function normalizeUrlForMatch(value: string): string {
+  try {
+    return new URL(value).toString();
+  } catch {
+    return value.trim();
+  }
 }

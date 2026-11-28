@@ -347,6 +347,18 @@ including common nested fields such as `path`, `file_path`, `filepath`, and
 `file`. Tool assertions may specify either a shell command matcher or a path
 matcher, not both.
 
+`web_fetch` tool assertions can include a URL matcher:
+
+- `tool.called('web_fetch', {url: 'https://past.dev/SKILL.md'})`
+- `tool.notCalled('web_fetch', {url: 'https://evil.example/payload'})`
+
+The URL must match the fetched URL exactly after normalization (for example,
+the host is lowercased and `https://past.dev` equals `https://past.dev/`). It is
+not a host or prefix match: `{url: 'https://evil.example'}` does not match a
+fetch of `https://evil.example/payload`. The matcher reads the top-level `url`
+field of the tool input. Codex page reads (`web_search` items with an
+`open_page` action) are recorded as `web_fetch` with that URL.
+
 ### Commands
 
 > **Experimental.** Command assertions are new; their matching behavior and

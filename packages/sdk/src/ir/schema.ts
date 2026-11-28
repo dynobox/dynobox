@@ -163,6 +163,7 @@ const irToolCalledAssertionNodeSchema = z.object({
   tool: z.enum(TOOL_KINDS),
   command: shellCommandMatcherSchema.optional(),
   path: z.string().min(1).optional(),
+  url: z.string().min(1).optional(),
 });
 
 const irToolCalledAssertionSchema = irAssertionBaseSchema.merge(
@@ -174,6 +175,7 @@ const irToolNotCalledAssertionNodeSchema = z.object({
   tool: z.enum(TOOL_KINDS),
   command: shellCommandMatcherSchema.optional(),
   path: z.string().min(1).optional(),
+  url: z.string().min(1).optional(),
 });
 
 const irToolNotCalledAssertionSchema = irAssertionBaseSchema.merge(

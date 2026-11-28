@@ -53,6 +53,7 @@ export type {
   TranscriptContainsAssertion,
   VerifyCommandAssertion,
   VerifyCommandOptions,
+  WebFetchMatcher,
 } from './types/brands.js';
 export {isShellToolEvent} from './types/brands.js';
 export type {

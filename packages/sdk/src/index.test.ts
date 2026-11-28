@@ -1893,8 +1893,10 @@ export default defineDyno({
             tool.called('shell', {includes: 'pnpm test'}),
             tool.called('read_file', {path: 'package.json'}),
             tool.called('edit_file'),
+            tool.called('web_fetch', {url: 'https://past.dev/SKILL.md'}),
             tool.notCalled('shell', {includes: 'git push'}),
             tool.notCalled('read_file', {path: 'secrets.txt'}),
+            tool.notCalled('web_fetch', {url: 'https://evil.example'}),
             artifact.exists('CHANGELOG.md'),
             artifact.contains('CHANGELOG.md', 'dynobox@0.0.4'),
             transcript.contains('EOTP'),
@@ -1913,6 +1915,9 @@ export default defineDyno({
 
     // @ts-expect-error path matchers are only valid for file-oriented tools
     tool.called('web_search', {path: 'src/index.ts'});
+
+    // @ts-expect-error url matchers are only valid for web_fetch
+    tool.called('web_search', {url: 'https://past.dev/SKILL.md'});
 
     // @ts-expect-error sequence.inOrder v0 only accepts tool.called steps
     sequence.inOrder([artifact.exists('CHANGELOG.md')]);
@@ -1980,6 +1985,55 @@ describe('HTTP body matcher compilation', () => {
         type: 'http.notCalled',
         endpointId: 'endpoint.checks-body.ingest',
         bodyIncludes: 'secret',
+      },
+    ]);
+  });
+});
+
+describe('web_fetch url matcher compilation', () => {
+  it('compiles web_fetch url matchers into IR', () => {
+    const compiled = compile(
+      defineDyno({
+        name: 'web-fetch-test',
+        scenarios: [
+          {
+            name: 'reads-skill',
+            prompt: 'Read the skill',
+            assertions: [
+              tool.called('web_fetch', {url: 'https://past.dev/SKILL.md'}),
+              tool.notCalled('web_fetch', {url: 'https://past.dev/SKILL.md'}),
+              sequence.inOrder([
+                tool.called('web_fetch', {url: 'https://past.dev/SKILL.md'}),
+              ]),
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(compiled.scenarios[0]?.assertions).toEqual([
+      {
+        id: 'assertion.reads-skill.0',
+        type: 'tool.called',
+        tool: 'web_fetch',
+        url: 'https://past.dev/SKILL.md',
+      },
+      {
+        id: 'assertion.reads-skill.1',
+        type: 'tool.notCalled',
+        tool: 'web_fetch',
+        url: 'https://past.dev/SKILL.md',
+      },
+      {
+        id: 'assertion.reads-skill.2',
+        type: 'sequence.inOrder',
+        steps: [
+          {
+            type: 'tool.called',
+            tool: 'web_fetch',
+            url: 'https://past.dev/SKILL.md',
+          },
+        ],
       },
     ]);
   });

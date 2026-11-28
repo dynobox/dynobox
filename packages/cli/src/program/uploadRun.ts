@@ -898,6 +898,9 @@ function describeToolStep(
   if (step.path !== undefined) {
     return `tool.called(${step.tool}, path: ${step.path})`;
   }
+  if (step.url !== undefined) {
+    return `tool.called(${step.tool}, url: ${step.url})`;
+  }
   if (step.command === undefined) return `tool.called(${step.tool})`;
   return `tool.called(${step.tool}, ${describeMatcher(step.command)})`;
 }
@@ -911,6 +914,9 @@ function describeToolStepExpectation(
   }
   if (step.path !== undefined) {
     return `${step.tool} tool call for path "${step.path}"`;
+  }
+  if (step.url !== undefined) {
+    return `${step.tool} tool call for url "${step.url}"`;
   }
   if (step.command === undefined) return `${step.tool} tool call`;
   return describeMatcherExpectation(step.command);

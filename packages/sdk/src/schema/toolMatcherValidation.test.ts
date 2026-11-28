@@ -175,4 +175,39 @@ describe('toolMatcherValidation', () => {
 
     expect(issues).toHaveLength(0);
   });
+
+  it('rejects url matchers on non-web_fetch tools and allows them on web_fetch', () => {
+    const rejected = collectIssues((ctx) => {
+      addToolMatcherIssues(
+        ctx,
+        [],
+        {
+          toolKind: 'web_search',
+          urlMatcher: 'https://past.dev/SKILL.md',
+        },
+        {shellMatcherField: 'command', pathMatcherField: 'path'},
+        TOOL_MATCHER_MESSAGES,
+      );
+    });
+    const allowed = collectIssues((ctx) => {
+      addToolMatcherIssues(
+        ctx,
+        [],
+        {
+          toolKind: 'web_fetch',
+          urlMatcher: 'https://past.dev/SKILL.md',
+        },
+        {shellMatcherField: 'command', pathMatcherField: 'path'},
+        TOOL_MATCHER_MESSAGES,
+      );
+    });
+
+    expect(rejected).toEqual([
+      expect.objectContaining({
+        path: ['url'],
+        message: TOOL_MATCHER_MESSAGES.urlMatcherOnlyOnWebFetch,
+      }),
+    ]);
+    expect(allowed).toHaveLength(0);
+  });
 });

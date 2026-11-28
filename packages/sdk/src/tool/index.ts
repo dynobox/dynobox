@@ -9,9 +9,10 @@ import type {
   ToolKind,
   ToolNotCalledAssertion,
   ToolPathMatcher,
+  WebFetchMatcher,
 } from '../types/brands.js';
 
-type PlainToolKind = Exclude<ToolKind, 'shell' | FileToolKind>;
+type PlainToolKind = Exclude<ToolKind, 'shell' | FileToolKind | 'web_fetch'>;
 
 /** Assert that the harness should call a tool. */
 function called(
@@ -22,10 +23,14 @@ function called<K extends FileToolKind>(
   kind: K,
   matcher?: ToolPathMatcher,
 ): ToolCalledAssertion<K>;
+function called(
+  kind: 'web_fetch',
+  matcher?: WebFetchMatcher,
+): ToolCalledAssertion<'web_fetch'>;
 function called<K extends PlainToolKind>(kind: K): ToolCalledAssertion<K>;
 function called(
   kind: ToolKind,
-  matcher?: ShellCommandMatcher | ToolPathMatcher,
+  matcher?: ShellCommandMatcher | ToolPathMatcher | WebFetchMatcher,
 ): ToolCalledAssertion {
   return createToolCalledAssertion(kind, matcher);
 }
@@ -39,10 +44,14 @@ function notCalled<K extends FileToolKind>(
   kind: K,
   matcher?: ToolPathMatcher,
 ): ToolNotCalledAssertion<K>;
+function notCalled(
+  kind: 'web_fetch',
+  matcher?: WebFetchMatcher,
+): ToolNotCalledAssertion<'web_fetch'>;
 function notCalled<K extends PlainToolKind>(kind: K): ToolNotCalledAssertion<K>;
 function notCalled(
   kind: ToolKind,
-  matcher?: ShellCommandMatcher | ToolPathMatcher,
+  matcher?: ShellCommandMatcher | ToolPathMatcher | WebFetchMatcher,
 ): ToolNotCalledAssertion {
   return createToolNotCalledAssertion(kind, matcher);
 }
